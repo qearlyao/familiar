@@ -5,6 +5,7 @@ import { isAbsolute, resolve } from "node:path";
 import { parse } from "smol-toml";
 
 export type CacheRetention = "none" | "short" | "long";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface Config {
 	workspacePath: string;
@@ -20,6 +21,7 @@ export interface Config {
 		apiKeyEnv: string;
 		provider: string;
 		cacheRetention: CacheRetention;
+		thinkingLevel: ThinkingLevel;
 	};
 	persona: {
 		soul: string;
@@ -70,6 +72,22 @@ function readCacheRetention(value: unknown): CacheRetention {
 	throw new Error('Config value agent.cacheRetention must be one of "none", "short", or "long"');
 }
 
+function readThinkingLevel(value: unknown): ThinkingLevel {
+	if (
+		value === "off" ||
+		value === "minimal" ||
+		value === "low" ||
+		value === "medium" ||
+		value === "high" ||
+		value === "xhigh"
+	) {
+		return value;
+	}
+	throw new Error(
+		'Config value agent.thinking_level must be one of "off", "minimal", "low", "medium", "high", or "xhigh"',
+	);
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
 }
@@ -110,6 +128,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			apiKeyEnv,
 			provider,
 			cacheRetention: readCacheRetention(readOptionalString(agent.cacheRetention, "long")),
+			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
 		},
 		persona: {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),

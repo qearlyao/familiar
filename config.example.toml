@@ -9,6 +9,7 @@ base_url = "${FAMILIAR_BASE_URL:-https://api.anthropic.com}"
 api_key_env = "${FAMILIAR_API_KEY_ENV:-ANTHROPIC_API_KEY}"
 provider = "${FAMILIAR_PROVIDER:-anthropic}"
 cacheRetention = "${FAMILIAR_CACHE_RETENTION:-long}"
+thinking_level = "${FAMILIAR_THINKING_LEVEL:-medium}"
 
 [persona]
 soul = "${FAMILIAR_SOUL:-SOUL.md}"

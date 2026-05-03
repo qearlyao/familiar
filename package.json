@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"dev": "tsx watch src/cli.ts",
-		"build": "tsc",
+		"build": "tsc -p tsconfig.build.json",
 		"lint": "biome check",
 		"format": "biome format --write",
 		"typecheck": "tsc --noEmit"

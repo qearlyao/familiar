@@ -7,12 +7,30 @@ import { type Model, streamSimple } from "@mariozechner/pi-ai";
 import { createBashTool, createEditTool, createReadTool } from "@mariozechner/pi-coding-agent";
 
 import type { Config } from "./config.js";
+import {
+	clampConfiguredThinkingLevel,
+	createConfiguredModel,
+	describeModelAuth,
+	isAllowedModel,
+	isThinkingLevel,
+	type ModelRef,
+	parseModelRef,
+	resolveModel,
+	resolveModelApiKey,
+	supportedThinkingLevels,
+} from "./models.js";
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 
 export interface FamiliarAgent {
 	agent: Agent;
 	sessionId: string;
 	prompt(input: string): Promise<string>;
+	abort(): void;
+	reset(): void;
+	getModelName(): string;
+	getThinkingLevel(): string;
+	setModel(input: string): string;
+	setThinkingLevel(input: string): string;
 }
 
 function deriveSessionId(workspacePath: string): string {
@@ -48,10 +66,24 @@ type StoredMessageRecord = {
 	message: AgentMessage;
 };
 
+type StoredResetRecord = {
+	ts: string;
+	sessionId: string;
+	type: "reset";
+};
+
+type StoredTranscriptRecord = StoredMessageRecord | StoredResetRecord;
+
 function isStoredMessageRecord(value: unknown): value is StoredMessageRecord {
 	if (!value || typeof value !== "object") return false;
 	const record = value as Record<string, unknown>;
 	return typeof record.ts === "string" && typeof record.sessionId === "string" && !!record.message;
+}
+
+function isStoredResetRecord(value: unknown): value is StoredResetRecord {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return record.type === "reset" && typeof record.ts === "string" && typeof record.sessionId === "string";
 }
 
 async function loadStoredMessages(dataDir: string, sessionId: string): Promise<AgentMessage[]> {
@@ -65,7 +97,7 @@ async function loadStoredMessages(dataDir: string, sessionId: string): Promise<A
 		return [];
 	}
 
-	const records: StoredMessageRecord[] = [];
+	const records: StoredTranscriptRecord[] = [];
 	for (const file of files.filter((entry) => entry.endsWith(".jsonl")).sort()) {
 		const path = resolve(transcriptsDir, file);
 		let contents: string;
@@ -79,7 +111,7 @@ async function loadStoredMessages(dataDir: string, sessionId: string): Promise<A
 			if (!line.trim()) continue;
 			try {
 				const parsed = JSON.parse(line) as unknown;
-				if (!isStoredMessageRecord(parsed)) {
+				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed)) {
 					console.error(`skipping malformed transcript line: ${path}:${index + 1}`);
 					continue;
 				}
@@ -92,35 +124,32 @@ async function loadStoredMessages(dataDir: string, sessionId: string): Promise<A
 	}
 
 	records.sort((a, b) => a.ts.localeCompare(b.ts));
-	return records.map((record) => record.message);
+	let lastResetIndex = -1;
+	for (let index = records.length - 1; index >= 0; index--) {
+		const record = records[index];
+		if (record && "type" in record && record.type === "reset") {
+			lastResetIndex = index;
+			break;
+		}
+	}
+	const activeRecords = lastResetIndex >= 0 ? records.slice(lastResetIndex + 1) : records;
+	return activeRecords.flatMap((record) => ("message" in record ? [record.message] : []));
 }
 
-function createConfiguredModel(config: Config): Model<any> {
-	return {
-		id: config.agent.modelId,
-		name: config.agent.modelId,
-		api: config.agent.api,
-		provider: config.agent.provider,
-		baseUrl: config.agent.baseUrl,
-		reasoning: true,
-		input: ["text", "image"],
-		cost: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-		},
-		contextWindow: 200000,
-		maxTokens: 8192,
-	};
-}
-
-function getConfiguredApiKey(config: Config): string {
-	const apiKey = process.env[config.agent.apiKeyEnv];
+function getRequiredApiKey(config: Config, model: Model<any>): string {
+	const apiKey = resolveModelApiKey(config, model);
 	if (!apiKey) {
-		throw new Error(`Missing LLM API key environment variable: ${config.agent.apiKeyEnv}`);
+		throw new Error(`Missing API key for ${model.provider}/${model.id}: ${describeModelAuth(config, model)}`);
 	}
 	return apiKey;
+}
+
+function formatModel(model: Model<any>): string {
+	return `${model.provider}/${model.id}`;
+}
+
+function assertModelAllowed(config: Config, ref: ModelRef): void {
+	if (!isAllowedModel(config, ref)) throw new Error(`Model is not allowlisted: ${ref.key}`);
 }
 
 function extractText(message: unknown): string {
@@ -166,7 +195,8 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
 	const model = createConfiguredModel(config);
-	const apiKey = getConfiguredApiKey(config);
+	// Fail fast during startup if the configured default model cannot authenticate.
+	getRequiredApiKey(config, model);
 
 	const sessionId = deriveSessionId(config.workspacePath);
 	const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
@@ -187,7 +217,7 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 		streamFn: (streamModel, context, options) =>
 			streamSimple(streamModel, context, {
 				...options,
-				apiKey,
+				apiKey: getRequiredApiKey(config, streamModel),
 				cacheRetention: config.agent.cacheRetention,
 				onPayload: (payload, payloadModel) => {
 					writePayloadLog(config, {
@@ -226,6 +256,54 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 	return {
 		agent,
 		sessionId,
+		abort(): void {
+			agent.abort();
+			agent.clearAllQueues();
+		},
+		reset(): void {
+			agent.abort();
+			agent.reset();
+			writeTranscriptLog(config, {
+				ts: new Date().toISOString(),
+				sessionId,
+				type: "reset",
+			});
+			agent.state.systemPrompt = systemPrompt;
+			agent.state.model = model;
+			agent.state.tools = [
+				createBashTool(config.workspacePath),
+				createReadTool(config.workspacePath),
+				createEditTool(config.workspacePath),
+			];
+			agent.state.thinkingLevel = config.agent.thinkingLevel;
+		},
+		getModelName(): string {
+			return formatModel(agent.state.model);
+		},
+		getThinkingLevel(): string {
+			return agent.state.thinkingLevel;
+		},
+		setModel(input: string): string {
+			const ref = parseModelRef(input);
+			if (!ref) throw new Error("Usage: /model provider/model-id");
+			assertModelAllowed(config, ref);
+			const nextModel = resolveModel(ref, config);
+			getRequiredApiKey(config, nextModel);
+			agent.state.model = nextModel;
+			const nextThinking = clampConfiguredThinkingLevel(nextModel, agent.state.thinkingLevel);
+			agent.state.thinkingLevel = nextThinking;
+			return `Model set to ${formatModel(nextModel)}\nThinking: ${nextThinking}`;
+		},
+		setThinkingLevel(input: string): string {
+			const level = input.trim().toLowerCase();
+			if (!isThinkingLevel(level)) {
+				throw new Error("Usage: /thinking off|minimal|low|medium|high|xhigh");
+			}
+			const clamped = clampConfiguredThinkingLevel(agent.state.model, level);
+			agent.state.thinkingLevel = clamped;
+			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
+			return `Thinking set to ${clamped}${suffix}\nSupported: ${supportedThinkingLevels(agent.state.model).join(", ")}`;
+		},
 		async prompt(input: string): Promise<string> {
 			const run = promptQueue.then(async () => {
 				await agent.prompt(input);

@@ -23,6 +23,11 @@ export interface Config {
 		cacheRetention: CacheRetention;
 		thinkingLevel: ThinkingLevel;
 	};
+	models: {
+		allow: string[];
+		baseUrls: Record<string, string>;
+		apiKeyEnvs: Record<string, string>;
+	};
 	persona: {
 		soul: string;
 		user: string;
@@ -67,6 +72,18 @@ function readStringArray(value: unknown, path: string): string[] {
 	return value;
 }
 
+function readStringRecord(value: unknown, path: string): Record<string, string> {
+	if (value === undefined) return {};
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new Error(`Config value must be a string map: ${path}`);
+	}
+	const entries = Object.entries(value);
+	for (const [key, child] of entries) {
+		if (typeof child !== "string") throw new Error(`Config value must be a string map: ${path}.${key}`);
+	}
+	return Object.fromEntries(entries) as Record<string, string>;
+}
+
 function readCacheRetention(value: unknown): CacheRetention {
 	if (value === "none" || value === "short" || value === "long") return value;
 	throw new Error('Config value agent.cacheRetention must be one of "none", "short", or "long"');
@@ -104,6 +121,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
+	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
@@ -129,6 +147,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			provider,
 			cacheRetention: readCacheRetention(readOptionalString(agent.cacheRetention, "long")),
 			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
+		},
+		models: {
+			allow: readStringArray(models.allow, "models.allow"),
+			baseUrls: readStringRecord(models.base_urls, "models.base_urls"),
+			apiKeyEnvs: readStringRecord(models.api_key_envs, "models.api_key_envs"),
 		},
 		persona: {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),

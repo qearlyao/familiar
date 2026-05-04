@@ -11,6 +11,28 @@ provider = "${FAMILIAR_PROVIDER:-anthropic}"
 cacheRetention = "${FAMILIAR_CACHE_RETENTION:-long}"
 thinking_level = "${FAMILIAR_THINKING_LEVEL:-medium}"
 
+[models]
+allow = [
+	"anthropic/claude-opus-4-7",
+	"google/gemini-3.1-pro-preview",
+	"google/gemini-3-flash-preview",
+	"openai/gpt-5.5",
+	"google-vertex/gemini-3.1-pro-preview",
+	"google-vertex/gemini-3-flash-preview",
+]
+
+[models.base_urls]
+# anthropic = "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+# google = "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
+# openai = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+# google-vertex = "${GOOGLE_VERTEX_BASE_URL:-https://{location}-aiplatform.googleapis.com}"
+
+[models.api_key_envs]
+# anthropic = "ANTHROPIC_API_KEY"
+# google = "GEMINI_API_KEY"
+# openai = "OPENAI_API_KEY"
+# google-vertex = "GOOGLE_CLOUD_API_KEY"
+
 [persona]
 soul = "${FAMILIAR_SOUL:-SOUL.md}"
 user = "${FAMILIAR_USER:-USER.md}"

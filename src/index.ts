@@ -1,4 +1,38 @@
 export { createFamiliarAgent, type FamiliarAgent } from "./agent.js";
+export {
+	buildRecordBase,
+	type ChatChannelRef,
+	type ChatLog,
+	type ChatLogRecord,
+	type ChatScope,
+	type ChatService,
+	type ControlCommand,
+	chatChannelKey,
+	chatLogPath,
+	createChatLog,
+	type JobTrigger,
+	type StoredAttachment,
+} from "./chat-log.js";
 export { type CacheRetention, type Config, loadConfig } from "./config.js";
 export { type DiscordDaemon, startDiscordDaemon } from "./discord.js";
+export {
+	clampConfiguredThinkingLevel,
+	createConfiguredModel,
+	describeModelAuth,
+	formatAllowedModels,
+	isAllowedModel,
+	isThinkingLevel,
+	type ModelRef,
+	parseModelRef,
+	resolveModel,
+	resolveModelApiKey,
+	supportedThinkingLevels,
+} from "./models.js";
 export { buildSystemPrompt, loadPersona, type Persona } from "./persona.js";
+export {
+	ConversationRuntime,
+	type ConversationStatus,
+	type DispatchableJob,
+	type InboundMessageInput,
+	type QueuedJob,
+} from "./runtime.js";

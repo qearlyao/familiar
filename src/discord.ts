@@ -455,11 +455,13 @@ export async function startDiscordDaemon(
 						throw new Error("Usage: /channel-trigger mention|always");
 					}
 					const trigger = triggerInput === "mention" || triggerInput === "always" ? triggerInput : undefined;
-					const text = trigger
-						? await settings
-								.setChannelTrigger(runtime.channelKey, trigger)
-								.then(() => `Channel trigger set to ${trigger} for this channel`)
-						: `Current channel trigger: ${formatSetting(channelTrigger)}`;
+					let text: string;
+					if (trigger) {
+						await settings.setChannelTrigger(runtime.channelKey, trigger);
+						text = `Channel trigger set to ${trigger} for this channel`;
+					} else {
+						text = `Current channel trigger: ${formatSetting(channelTrigger)}`;
+					}
 					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;

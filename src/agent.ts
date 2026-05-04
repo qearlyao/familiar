@@ -414,7 +414,6 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			const previousThinking = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel).value;
 			const nextThinking = clampConfiguredThinkingLevel(nextModel, previousThinking);
 			await settings.setChannelModel(sessionKey, formatModel(nextModel));
-			if (nextThinking !== previousThinking) await settings.setChannelThinkingLevel(sessionKey, nextThinking);
 			const sessionPromise = sessions.get(sessionKey);
 			if (sessionPromise) {
 				const session = await sessionPromise;

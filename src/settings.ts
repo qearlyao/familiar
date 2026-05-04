@@ -105,7 +105,7 @@ export async function loadSettingsStore(config: Config): Promise<SettingsStore> 
 	};
 
 	const enqueuePersist = (): Promise<void> => {
-		const run = writeQueue.then(persist, persist);
+		const run = writeQueue.then(persist, () => persist());
 		writeQueue = run.then(
 			() => undefined,
 			() => undefined,
@@ -115,14 +115,13 @@ export async function loadSettingsStore(config: Config): Promise<SettingsStore> 
 
 	const updateChannel = async (channelKey: string, patch: ChannelSettings): Promise<void> => {
 		const next = pruneChannel({ ...file.channels[channelKey], ...patch });
+		const channels = { ...file.channels };
+		if (next) channels[channelKey] = next;
+		else delete channels[channelKey];
 		file = {
 			version: 1,
-			channels: {
-				...file.channels,
-				[channelKey]: next ?? {},
-			},
+			channels,
 		};
-		if (!next) delete file.channels[channelKey];
 		await enqueuePersist();
 	};
 

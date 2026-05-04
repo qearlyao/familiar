@@ -22,20 +22,24 @@ import {
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 
 export interface FamiliarAgent {
-	agent: Agent;
-	sessionId: string;
-	prompt(input: string): Promise<string>;
-	steer(input: string): void;
-	abort(): void;
-	reset(): void;
+	prompt(sessionKey: string, input: string): Promise<string>;
+	steer(sessionKey: string, input: string): void;
+	abort(sessionKey: string): void;
+	reset(sessionKey: string): Promise<void>;
 	getModelName(): string;
 	getThinkingLevel(): string;
 	setModel(input: string): string;
 	setThinkingLevel(input: string): string;
 }
 
-function deriveSessionId(workspacePath: string): string {
-	const digest = createHash("sha256").update(workspacePath).digest("hex").slice(0, 32);
+interface FamiliarAgentSession {
+	agent: Agent;
+	sessionId: string;
+	promptQueue: Promise<void>;
+}
+
+function deriveSessionId(workspacePath: string, sessionKey: string): string {
+	const digest = createHash("sha256").update(`${workspacePath}\0${sessionKey}`).digest("hex").slice(0, 32);
 	return `familiar-${digest}`;
 }
 
@@ -243,95 +247,131 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
-	const model = createConfiguredModel(config);
+	let currentModel = createConfiguredModel(config);
+	let currentThinkingLevel = config.agent.thinkingLevel;
 	// Fail fast during startup if the configured default model cannot authenticate.
-	getRequestApiKey(config, model);
+	getRequestApiKey(config, currentModel);
+	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
 
-	const sessionId = deriveSessionId(config.workspacePath);
-	const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
-	console.log(`Loaded ${messages.length} prior messages from session history`);
-	const agent = new Agent({
-		initialState: {
-			systemPrompt,
-			model,
-			messages,
-			tools: [
-				createBashTool(config.workspacePath),
-				createReadTool(config.workspacePath),
-				createEditTool(config.workspacePath),
-			],
-			thinkingLevel: config.agent.thinkingLevel,
-		},
-		sessionId,
-		streamFn: (streamModel, context, options) =>
-			streamSimple(streamModel, context, {
-				...options,
-				apiKey: getRequestApiKey(config, streamModel),
-				cacheRetention: config.agent.cacheRetention,
-				onPayload: (payload, payloadModel) => {
-					const requestPayload = keepOnlyLatestUserCacheControl(payload, payloadModel);
-					writePayloadLog(config, {
-						ts: new Date().toISOString(),
-						direction: "request",
-						model: payloadModel.id,
-						payload: requestPayload,
-					});
-					return requestPayload;
-				},
-				onResponse: (response, responseModel) => {
-					writePayloadLog(config, {
-						ts: new Date().toISOString(),
-						direction: "response_meta",
-						model: responseModel.id,
-						status: response.status,
-						headers: response.headers,
-					});
-				},
-			}),
-	});
+	const createSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
+		const sessionId = deriveSessionId(config.workspacePath, sessionKey);
+		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
+		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
+		const agent = new Agent({
+			initialState: {
+				systemPrompt,
+				model: currentModel,
+				messages,
+				tools: [
+					createBashTool(config.workspacePath),
+					createReadTool(config.workspacePath),
+					createEditTool(config.workspacePath),
+				],
+				thinkingLevel: currentThinkingLevel,
+			},
+			sessionId,
+			streamFn: (streamModel, context, options) =>
+				streamSimple(streamModel, context, {
+					...options,
+					apiKey: getRequestApiKey(config, streamModel),
+					cacheRetention: config.agent.cacheRetention,
+					onPayload: (payload, payloadModel) => {
+						const requestPayload = keepOnlyLatestUserCacheControl(payload, payloadModel);
+						writePayloadLog(config, {
+							ts: new Date().toISOString(),
+							direction: "request",
+							sessionId,
+							sessionKey,
+							model: payloadModel.id,
+							payload: requestPayload,
+						});
+						return requestPayload;
+					},
+					onResponse: (response, responseModel) => {
+						writePayloadLog(config, {
+							ts: new Date().toISOString(),
+							direction: "response_meta",
+							sessionId,
+							sessionKey,
+							model: responseModel.id,
+							status: response.status,
+							headers: response.headers,
+						});
+					},
+				}),
+		});
 
-	agent.subscribe((event) => {
-		logUsage(event);
-		if (event.type === "message_end") {
-			writeTranscriptLog(config, {
-				ts: new Date().toISOString(),
-				sessionId,
-				message: event.message,
-			});
+		agent.subscribe((event) => {
+			logUsage(event);
+			if (event.type === "message_end") {
+				writeTranscriptLog(config, {
+					ts: new Date().toISOString(),
+					sessionId,
+					sessionKey,
+					message: event.message,
+				});
+			}
+		});
+
+		return {
+			agent,
+			sessionId,
+			promptQueue: Promise.resolve(),
+		};
+	};
+
+	const getSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
+		const existing = sessions.get(sessionKey);
+		if (existing) return existing;
+		const sessionPromise = createSession(sessionKey);
+		sessions.set(sessionKey, sessionPromise);
+		try {
+			return await sessionPromise;
+		} catch (error) {
+			sessions.delete(sessionKey);
+			throw error;
 		}
-	});
+	};
 
-	let promptQueue = Promise.resolve();
+	const resetSession = (session: FamiliarAgentSession): void => {
+		session.agent.abort();
+		session.agent.reset();
+		writeTranscriptLog(config, {
+			ts: new Date().toISOString(),
+			sessionId: session.sessionId,
+			type: "reset",
+		});
+		session.agent.state.systemPrompt = systemPrompt;
+		session.agent.state.model = currentModel;
+		session.agent.state.tools = [
+			createBashTool(config.workspacePath),
+			createReadTool(config.workspacePath),
+			createEditTool(config.workspacePath),
+		];
+		session.agent.state.thinkingLevel = currentThinkingLevel;
+	};
 
 	return {
-		agent,
-		sessionId,
-		abort(): void {
-			agent.abort();
-			agent.clearAllQueues();
+		abort(sessionKey: string): void {
+			const session = sessions.get(sessionKey);
+			void session
+				?.then((resolved) => {
+					resolved.agent.abort();
+					resolved.agent.clearAllQueues();
+				})
+				.catch((error) => console.error(`failed to abort familiar session ${sessionKey}`, error));
 		},
-		reset(): void {
-			agent.abort();
-			agent.reset();
-			writeTranscriptLog(config, {
-				ts: new Date().toISOString(),
-				sessionId,
-				type: "reset",
-			});
-			agent.state.systemPrompt = systemPrompt;
-			agent.state.model = model;
-			agent.state.tools = [
-				createBashTool(config.workspacePath),
-				createReadTool(config.workspacePath),
-				createEditTool(config.workspacePath),
-			];
-			agent.state.thinkingLevel = config.agent.thinkingLevel;
+		async reset(sessionKey: string): Promise<void> {
+			const existing = sessions.get(sessionKey);
+			if (!existing) return;
+			const session = await existing;
+			resetSession(session);
 		},
 		getModelName(): string {
-			return formatModel(agent.state.model);
+			return formatModel(currentModel);
 		},
 		getThinkingLevel(): string {
-			return agent.state.thinkingLevel;
+			return currentThinkingLevel;
 		},
 		setModel(input: string): string {
 			const ref = parseModelRef(input);
@@ -339,38 +379,59 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 			assertModelAllowed(config, ref);
 			const nextModel = resolveModel(ref, config);
 			getRequestApiKey(config, nextModel);
-			agent.state.model = nextModel;
-			const nextThinking = clampConfiguredThinkingLevel(nextModel, agent.state.thinkingLevel);
-			agent.state.thinkingLevel = nextThinking;
-			return `Model set to ${formatModel(nextModel)}\nThinking: ${nextThinking}`;
+			currentModel = nextModel;
+			currentThinkingLevel = clampConfiguredThinkingLevel(nextModel, currentThinkingLevel);
+			for (const sessionPromise of sessions.values()) {
+				sessionPromise
+					.then((session) => {
+						session.agent.state.model = currentModel;
+						session.agent.state.thinkingLevel = currentThinkingLevel;
+					})
+					.catch(() => undefined);
+			}
+			return `Model set to ${formatModel(nextModel)}\nThinking: ${currentThinkingLevel}`;
 		},
 		setThinkingLevel(input: string): string {
 			const level = input.trim().toLowerCase();
 			if (!isThinkingLevel(level)) {
 				throw new Error("Usage: /thinking off|minimal|low|medium|high|xhigh");
 			}
-			const clamped = clampConfiguredThinkingLevel(agent.state.model, level);
-			agent.state.thinkingLevel = clamped;
+			const clamped = clampConfiguredThinkingLevel(currentModel, level);
+			currentThinkingLevel = clamped;
+			for (const sessionPromise of sessions.values()) {
+				sessionPromise
+					.then((session) => {
+						session.agent.state.thinkingLevel = currentThinkingLevel;
+					})
+					.catch(() => undefined);
+			}
 			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
-			return `Thinking set to ${clamped}${suffix}\nSupported: ${supportedThinkingLevels(agent.state.model).join(", ")}`;
+			return `Thinking set to ${clamped}${suffix}\nSupported: ${supportedThinkingLevels(currentModel).join(", ")}`;
 		},
-		async prompt(input: string): Promise<string> {
-			const run = promptQueue.then(async () => {
-				await agent.prompt(input);
-				return getLastAssistantText(agent);
+		async prompt(sessionKey: string, input: string): Promise<string> {
+			const session = await getSession(sessionKey);
+			const run = session.promptQueue.then(async () => {
+				await session.agent.prompt(input);
+				return getLastAssistantText(session.agent);
 			});
-			promptQueue = run.then(
+			session.promptQueue = run.then(
 				() => undefined,
 				() => undefined,
 			);
 			return run;
 		},
-		steer(input: string): void {
-			agent.steer({
-				role: "user",
-				content: [{ type: "text", text: input }],
-				timestamp: Date.now(),
-			});
+		steer(sessionKey: string, input: string): void {
+			const session = sessions.get(sessionKey);
+			if (!session) return;
+			void session
+				.then((resolved) => {
+					resolved.agent.steer({
+						role: "user",
+						content: [{ type: "text", text: input }],
+						timestamp: Date.now(),
+					});
+				})
+				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
 		},
 	};
 }

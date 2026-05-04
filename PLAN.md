@@ -9,14 +9,14 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 Implemented or recently added:
 
 - Stage 0 and Stage 1 are effectively done: direct upstream `Agent`, Discord DM path, persona files, stable session/cache logging.
-- Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, and payload inspection tooling.
+- Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, per-channel agent transcripts, and payload inspection tooling.
 - Anthropic cache normalization is implemented in `src/agent.ts`: Familiar strips extra upstream `cache_control` points and keeps the latest user-message checkpoint, matching Claude Code's stable cache shape.
 - Payload inspection exists: `npm run payload:pretty -- --messages 12`, `--full`, `--date`, `--model`.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next Stage 2 implementation chunk:
 
-- Add durable settings overrides and separate per-channel agent transcript/session history. Start at **Stage 2 Polish** below before Stage 3.
+- Add durable settings overrides. Start at **Stage 2 Polish** below before Stage 3.
 
 Important caution:
 
@@ -92,7 +92,7 @@ Discord adapter       WebUI adapter       future event sources
                     v
             upstream Agent + pi-ai + tools
             - prompt/steer/followUp
-            - per-channel transcripts/sessions before LCM
+- per-channel transcripts/sessions before LCM
             - usage/cache telemetry
             - bash/read/write/edit
             - task/media/browser tools
@@ -182,12 +182,12 @@ Already in place:
 - Discord dispatch modes: `steer`, `queue`, `collect`.
 - Group collect debounce and mention/always trigger policy.
 - Optional other-bot ingestion with self-bot loop prevention.
+- Per-channel live upstream `Agent` transcripts/sessions before LCM, while sharing global persona/memory.
 - Payload inspection.
 
 Still needed:
 
 - Durable settings overrides for `/model`, `/thinking`, and later `/channel-trigger`.
-- Separate per-channel agent transcript/session history so DM/group do not share raw live transcript, while keeping global persona/memory.
 - Focused tests/log probes.
 
 Done when:
@@ -226,7 +226,7 @@ Implementation checklist:
 - Bot messages use normal Discord username; no extra bot marker needed.
 - Add probes/tests for DM steer during active job, group mention collect, group always collect, other-bot ingestion, and self-bot prevention.
 
-#### Stage 2 Polish: Durable Settings and Channel Sessions
+#### Stage 2 Polish: Durable Settings
 
 Start here next.
 
@@ -246,6 +246,8 @@ Durable settings:
 
 Per-channel agent transcript/session history:
 
+Status: implemented; keep this as a behavior reference.
+
 - Stop sharing one raw live `Agent.state.messages` transcript across DM and group channels.
 - Keep one global stable persona/memory layer: `SOUL.md`, `USER.md`, `MEMORY.md`.
 - Create or hydrate a channel-scoped agent transcript/session for each conversation channel.
@@ -257,7 +259,7 @@ Per-channel agent transcript/session history:
 Done when:
 
 - Restart preserves `/model`, `/thinking`, and `/channel-trigger` changes.
-- DM and group channels no longer share the same live transcript, but both still share persona and durable memory.
+- DM and group channels no longer share the same live transcript, but both still share persona and durable memory. (Implemented.)
 - Existing chat logs remain compatible.
 
 ### Stage 3: WebUI v0 and Side-Door Transport

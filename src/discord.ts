@@ -294,7 +294,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 			activeAgentOwner = runtime.channelKey;
 			try {
-				const reply = await familiarAgent.prompt(prompt);
+				const reply = await familiarAgent.prompt(runtime.channelKey, prompt);
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
 			} finally {
@@ -395,7 +395,8 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			if (control) {
 				await runtime.noteControlCommand(input, control);
 				if (control.command === "stop") {
-					if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort();
+					if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey)
+						familiarAgent.abort(runtime.channelKey);
 					await runtime.resetConversation("stop requested");
 					const text = "Stopped current work and cleared the chat queue.";
 					const messageIds = await sendReply(config, message, text);
@@ -403,9 +404,9 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 					return;
 				}
 				if (control.command === "new") {
-					familiarAgent.reset();
+					await familiarAgent.reset(runtime.channelKey);
 					await runtime.resetConversation("new conversation requested");
-					const text = "Started a fresh agent transcript for this daemon.";
+					const text = "Started a fresh agent transcript for this channel.";
 					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
@@ -440,7 +441,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			});
 			const canSteer = shouldTrySteer && canSteerFromRecord(config, message, runtime, record, activeAgentOwner);
 			if (canSteer) {
-				familiarAgent.steer(runtime.buildSteerPromptForRecord(record));
+				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
 				return;
 			}
 			if (shouldTrySteer) {

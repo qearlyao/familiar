@@ -39,7 +39,7 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	const familiarAgent = await createFamiliarAgent(config);
 	const daemon = await startDiscordDaemon(config, familiarAgent);
 	console.log(`familiar running for workspace ${config.workspacePath}`);
-	console.log(`sessionId=${familiarAgent.sessionId}`);
+	console.log("agent sessions are created per channel");
 
 	const stop = async () => {
 		console.log("Stopping familiar");

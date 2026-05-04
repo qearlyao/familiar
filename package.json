@@ -11,6 +11,7 @@
 		"build": "tsc -p tsconfig.build.json",
 		"lint": "biome check",
 		"format": "biome format --write",
+		"payload:pretty": "tsx scripts/pretty-payload.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

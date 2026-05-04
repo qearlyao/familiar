@@ -60,6 +60,51 @@ function writeTranscriptLog(config: Config, record: Record<string, unknown>): vo
 	);
 }
 
+function clonePayload(payload: unknown): unknown {
+	if (typeof structuredClone === "function") return structuredClone(payload);
+	return JSON.parse(JSON.stringify(payload)) as unknown;
+}
+
+function stripCacheControl(value: unknown): void {
+	if (!value || typeof value !== "object") return;
+	if (Array.isArray(value)) {
+		for (const item of value) stripCacheControl(item);
+		return;
+	}
+	const record = value as Record<string, unknown>;
+	delete record.cache_control;
+	for (const child of Object.values(record)) stripCacheControl(child);
+}
+
+function findLastAnthropicUserCacheBlock(payload: unknown): Record<string, unknown> | undefined {
+	if (!payload || typeof payload !== "object" || !("messages" in payload)) return undefined;
+	const messages = (payload as { messages?: unknown }).messages;
+	if (!Array.isArray(messages)) return undefined;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (!message || typeof message !== "object" || (message as { role?: unknown }).role !== "user") continue;
+		const content = (message as { content?: unknown }).content;
+		if (typeof content === "string") return undefined;
+		if (!Array.isArray(content)) return undefined;
+		for (let j = content.length - 1; j >= 0; j--) {
+			const block = content[j];
+			if (block && typeof block === "object" && "cache_control" in block) return block as Record<string, unknown>;
+		}
+		return undefined;
+	}
+	return undefined;
+}
+
+function keepOnlyLatestUserCacheControl(payload: unknown, model: Model<any>): unknown {
+	if (model.api !== "anthropic-messages") return payload;
+	const nextPayload = clonePayload(payload);
+	const cacheBlock = findLastAnthropicUserCacheBlock(nextPayload);
+	const cacheControl = cacheBlock?.cache_control;
+	stripCacheControl(nextPayload);
+	if (cacheBlock && cacheControl !== undefined) cacheBlock.cache_control = cacheControl;
+	return nextPayload;
+}
+
 type StoredMessageRecord = {
 	ts: string;
 	sessionId: string;
@@ -223,13 +268,14 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 				apiKey: getRequestApiKey(config, streamModel),
 				cacheRetention: config.agent.cacheRetention,
 				onPayload: (payload, payloadModel) => {
+					const requestPayload = keepOnlyLatestUserCacheControl(payload, payloadModel);
 					writePayloadLog(config, {
 						ts: new Date().toISOString(),
 						direction: "request",
 						model: payloadModel.id,
-						payload,
+						payload: requestPayload,
 					});
-					return undefined;
+					return requestPayload;
 				},
 				onResponse: (response, responseModel) => {
 					writePayloadLog(config, {

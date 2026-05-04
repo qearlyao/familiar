@@ -39,3 +39,22 @@ node dist/cli.js run /path/to/workspace
 
 DM the bot from the configured `discord.owner_id`. Guild channels are ignored unless their channel id is listed in
 `discord.allowed_channels`.
+
+## Inspect Payloads
+
+Pretty-print the latest Anthropic request that familiar sent:
+
+```sh
+npm run payload:pretty
+```
+
+Useful options:
+
+```sh
+npm run payload:pretty -- --messages 12
+npm run payload:pretty -- --full
+npm run payload:pretty -- --date 2026-05-04
+npm run payload:pretty -- --model claude-opus-4-7
+```
+
+The output shows the model, thinking config, system sections, tools, cache-control locations, and tail messages.

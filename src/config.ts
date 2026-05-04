@@ -6,6 +6,8 @@ import { parse } from "smol-toml";
 
 export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type DiscordReplyMode = "plain" | "reply";
+export type DiscordChunkMode = "simple" | "paragraph";
 
 export interface Config {
 	workspacePath: string;
@@ -13,6 +15,8 @@ export interface Config {
 		token: string;
 		ownerId: string;
 		allowedChannels: string[];
+		replyMode: DiscordReplyMode;
+		chunkMode: DiscordChunkMode;
 	};
 	agent: {
 		api: string;
@@ -105,6 +109,16 @@ function readThinkingLevel(value: unknown): ThinkingLevel {
 	);
 }
 
+function readDiscordReplyMode(value: unknown): DiscordReplyMode {
+	if (value === "plain" || value === "reply") return value;
+	throw new Error('Config value discord.reply_mode must be one of "plain" or "reply"');
+}
+
+function readDiscordChunkMode(value: unknown): DiscordChunkMode {
+	if (value === "simple" || value === "paragraph") return value;
+	throw new Error('Config value discord.chunk_mode must be one of "simple" or "paragraph"');
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
 }
@@ -138,6 +152,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			token: readString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN"),
 			ownerId,
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
+			replyMode: readDiscordReplyMode(readOptionalString(discord.reply_mode, "plain")),
+			chunkMode: readDiscordChunkMode(readOptionalString(discord.chunk_mode, "paragraph")),
 		},
 		agent: {
 			api,

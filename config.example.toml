@@ -1,15 +1,17 @@
 [discord]
-owner_id = "${DISCORD_OWNER_ID:-}"
+owner_id = "YOUR_DISCORD_USER_ID"
 allowed_channels = []
+reply_mode = "plain" # plain | reply
+chunk_mode = "paragraph" # simple | paragraph
 
 [agent]
-api = "${FAMILIAR_API:-anthropic-messages}"
-model_id = "${FAMILIAR_MODEL:-claude-sonnet-4-5}"
-base_url = "${FAMILIAR_BASE_URL:-https://api.anthropic.com}"
-api_key_env = "${FAMILIAR_API_KEY_ENV:-ANTHROPIC_API_KEY}"
-provider = "${FAMILIAR_PROVIDER:-anthropic}"
-cacheRetention = "${FAMILIAR_CACHE_RETENTION:-long}"
-thinking_level = "${FAMILIAR_THINKING_LEVEL:-medium}"
+api = "anthropic-messages"
+model_id = "claude-sonnet-4-5"
+base_url = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+provider = "anthropic"
+cacheRetention = "long"
+thinking_level = "medium"
 
 [models]
 allow = [
@@ -22,10 +24,10 @@ allow = [
 ]
 
 [models.base_urls]
-# anthropic = "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
-# google = "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
-# openai = "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-# google-vertex = "${GOOGLE_VERTEX_BASE_URL:-https://{location}-aiplatform.googleapis.com}"
+# anthropic = "https://api.anthropic.com"
+# google = "https://generativelanguage.googleapis.com/v1beta"
+# openai = "https://api.openai.com/v1"
+# google-vertex = "https://{location}-aiplatform.googleapis.com"
 
 [models.api_key_envs]
 # anthropic = "ANTHROPIC_API_KEY"
@@ -36,9 +38,9 @@ allow = [
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
 
 [persona]
-soul = "${FAMILIAR_SOUL:-SOUL.md}"
-user = "${FAMILIAR_USER:-USER.md}"
-memory = "${FAMILIAR_MEMORY:-MEMORY.md}"
+soul = "SOUL.md"
+user = "USER.md"
+memory = "MEMORY.md"
 
 [workspace]
-data_dir = "${FAMILIAR_DATA_DIR:-data}"
+data_dir = "data"

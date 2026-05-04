@@ -60,8 +60,7 @@ function isAllowedMessage(config: Config, message: Message): boolean {
 	return config.discord.allowedChannels.includes(message.channelId);
 }
 
-function chunkDiscord(text: string): string[] {
-	const limit = 2000;
+function chunkDiscordSimple(text: string, limit = 2000): string[] {
 	if (text.length <= limit) return [text || "(empty response)"];
 	const chunks: string[] = [];
 	let remaining = text;
@@ -78,17 +77,80 @@ function chunkDiscord(text: string): string[] {
 	return chunks;
 }
 
+function chunkDiscordParagraph(text: string, limit = 2000): string[] {
+	if (text.length <= limit) return [text || "(empty response)"];
+	const normalized = text.replace(/\r\n/g, "\n");
+	const paragraphs = normalized.split(/\n\n+/);
+	const chunks: string[] = [];
+	let current = "";
+
+	const pushCurrent = () => {
+		if (current.trim()) chunks.push(current);
+		current = "";
+	};
+
+	const splitLongBlock = (block: string): string[] => {
+		if (block.length <= limit) return [block];
+		const pieces: string[] = [];
+		let lineCurrent = "";
+		for (const line of block.split("\n")) {
+			const candidate = lineCurrent ? `${lineCurrent}\n${line}` : line;
+			if (candidate.length <= limit) {
+				lineCurrent = candidate;
+				continue;
+			}
+			if (lineCurrent) {
+				pieces.push(lineCurrent);
+				lineCurrent = "";
+			}
+			if (line.length <= limit) {
+				lineCurrent = line;
+				continue;
+			}
+			let remaining = line;
+			while (remaining.length > limit) {
+				let splitAt = remaining.lastIndexOf(" ", limit);
+				if (splitAt < Math.floor(limit * 0.6)) splitAt = limit;
+				pieces.push(remaining.slice(0, splitAt));
+				remaining = remaining.slice(splitAt).trimStart();
+			}
+			lineCurrent = remaining;
+		}
+		if (lineCurrent) pieces.push(lineCurrent);
+		return pieces;
+	};
+
+	for (const paragraph of paragraphs) {
+		if (!paragraph) continue;
+		for (const part of splitLongBlock(paragraph)) {
+			const candidate = current ? `${current}\n\n${part}` : part;
+			if (candidate.length <= limit) {
+				current = candidate;
+			} else {
+				pushCurrent();
+				current = part;
+			}
+		}
+	}
+	pushCurrent();
+	return chunks.length > 0 ? chunks : [normalized.slice(0, limit)];
+}
+
+function chunkDiscord(config: Config, text: string): string[] {
+	return config.discord.chunkMode === "simple" ? chunkDiscordSimple(text) : chunkDiscordParagraph(text);
+}
+
 function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
-async function sendReply(message: Message, text: string, replyToMessageId?: string): Promise<string[]> {
+async function sendReply(config: Config, message: Message, text: string, replyToMessageId?: string): Promise<string[]> {
 	const normalizedText = normalizeOutboundText(text);
-	const chunks = chunkDiscord(normalizedText);
+	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
 		let sent: Message;
-		if (index === 0) {
+		if (index === 0 && config.discord.replyMode === "reply") {
 			try {
 				const replyTarget = replyToMessageId || message.id;
 				if (!message.channel.isSendable()) {
@@ -236,7 +298,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			try {
 				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
 				const sentText = normalizeOutboundText(reply);
-				const messageIds = await sendReply(message, sentText, dispatch.triggerMessageId);
+				const messageIds = await sendReply(config, message, sentText, dispatch.triggerMessageId);
 				await runtime.completeActiveJob({
 					text: sentText,
 					messageIds,
@@ -248,7 +310,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 				await runtime.failActiveJob(errorText);
 				await runtime.appendError(errorText);
 				const fallback = "I hit an error while handling that message.";
-				const messageIds = await sendReply(message, fallback, dispatch.triggerMessageId);
+				const messageIds = await sendReply(config, message, fallback, dispatch.triggerMessageId);
 				await runtime.noteOutbound({
 					text: fallback,
 					messageIds,
@@ -272,7 +334,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 					if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort();
 					await runtime.resetConversation("stop requested");
 					const text = "Stopped current work and cleared the chat queue.";
-					const messageIds = await sendReply(message, text);
+					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
@@ -280,7 +342,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 					familiarAgent.reset();
 					await runtime.resetConversation("new conversation requested");
 					const text = "Started a fresh agent transcript for this daemon.";
-					const messageIds = await sendReply(message, text);
+					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
@@ -288,7 +350,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 					const text = control.args
 						? familiarAgent.setModel(control.args)
 						: `Current model: ${familiarAgent.getModelName()}`;
-					const messageIds = await sendReply(message, text);
+					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
@@ -296,12 +358,12 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 					const text = control.args
 						? familiarAgent.setThinkingLevel(control.args)
 						: `Current thinking: ${familiarAgent.getThinkingLevel()}`;
-					const messageIds = await sendReply(message, text);
+					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
 				const text = formatCommandResponse(control.command, runtime, familiarAgent);
-				const messageIds = await sendReply(message, text);
+				const messageIds = await sendReply(config, message, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
 				return;
 			}
@@ -312,7 +374,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			const channelKey = runtimeKeyFromMessage(message);
 			const existingRuntime = await runtimes.get(channelKey)?.catch(() => undefined);
 			await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
-			await sendReply(message, "I hit an error while handling that message.");
+			await sendReply(config, message, "I hit an error while handling that message.");
 		}
 	};
 

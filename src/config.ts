@@ -8,6 +8,8 @@ export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type DiscordReplyMode = "plain" | "reply";
 export type DiscordChunkMode = "simple" | "paragraph";
+export type DiscordDispatchMode = "steer" | "queue" | "collect";
+export type DiscordChannelTrigger = "mention" | "always";
 
 export interface Config {
 	workspacePath: string;
@@ -17,6 +19,11 @@ export interface Config {
 		allowedChannels: string[];
 		replyMode: DiscordReplyMode;
 		chunkMode: DiscordChunkMode;
+		dmMode: DiscordDispatchMode;
+		channelMode: DiscordDispatchMode;
+		channelTrigger: DiscordChannelTrigger;
+		collectDebounceMs: number;
+		allowBotMessages: boolean;
 	};
 	agent: {
 		api: string;
@@ -119,6 +126,30 @@ function readDiscordChunkMode(value: unknown): DiscordChunkMode {
 	throw new Error('Config value discord.chunk_mode must be one of "simple" or "paragraph"');
 }
 
+function readDiscordDispatchMode(value: unknown, path: string): DiscordDispatchMode {
+	if (value === "steer" || value === "queue" || value === "collect") return value;
+	throw new Error(`Config value ${path} must be one of "steer", "queue", or "collect"`);
+}
+
+function readDiscordChannelTrigger(value: unknown): DiscordChannelTrigger {
+	if (value === "mention" || value === "always") return value;
+	throw new Error('Config value discord.channel_trigger must be one of "mention" or "always"');
+}
+
+function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
+	if (value === undefined) return fallback;
+	if (typeof value === "boolean") return value;
+	throw new Error(`Config value ${path} must be a boolean`);
+}
+
+function readInteger(value: unknown, fallback: number, path: string): number {
+	if (value === undefined) return fallback;
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+		throw new Error(`Config value ${path} must be a non-negative integer`);
+	}
+	return value;
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
 }
@@ -154,6 +185,14 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
 			replyMode: readDiscordReplyMode(readOptionalString(discord.reply_mode, "plain")),
 			chunkMode: readDiscordChunkMode(readOptionalString(discord.chunk_mode, "paragraph")),
+			dmMode: readDiscordDispatchMode(readOptionalString(discord.dm_mode, "steer"), "discord.dm_mode"),
+			channelMode: readDiscordDispatchMode(
+				readOptionalString(discord.channel_mode, "collect"),
+				"discord.channel_mode",
+			),
+			channelTrigger: readDiscordChannelTrigger(readOptionalString(discord.channel_trigger, "mention")),
+			collectDebounceMs: readInteger(discord.collect_debounce_ms, 4000, "discord.collect_debounce_ms"),
+			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
 		},
 		agent: {
 			api,

@@ -7,9 +7,11 @@ import {
 	GatewayIntentBits,
 	type Message,
 	type MessageCreateOptions,
+	type MessageResolvable,
 	Partials,
 } from "discord.js";
 import type { FamiliarAgent } from "./agent.js";
+import type { InboundChatRecord } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
@@ -53,9 +55,10 @@ async function withReadyClient(token: string): Promise<Client<true>> {
 	return client as Client<true>;
 }
 
-function isAllowedMessage(config: Config, message: Message): boolean {
-	if (message.author.bot) return false;
-	if (message.author.id !== config.discord.ownerId) return false;
+function isAllowedMessage(config: Config, message: Message, botUserId: string): boolean {
+	if (message.author.id === botUserId) return false;
+	if (message.author.bot && !config.discord.allowBotMessages) return false;
+	if (message.channel.type === ChannelType.DM && message.author.id !== config.discord.ownerId) return false;
 	if (message.channel.type === ChannelType.DM) return true;
 	return config.discord.allowedChannels.includes(message.channelId);
 }
@@ -189,6 +192,37 @@ function runtimeKeyFromMessage(message: Message): string {
 	return chatChannelKey(getChannelRef(message));
 }
 
+function isDmMessage(message: Message): boolean {
+	return message.channel.type === ChannelType.DM;
+}
+
+function getDispatchMode(config: Config, message: Message): "steer" | "queue" | "collect" {
+	return isDmMessage(message) ? config.discord.dmMode : config.discord.channelMode;
+}
+
+function canSteerFromRecord(
+	config: Config,
+	message: Message,
+	runtime: ConversationRuntime,
+	record: InboundChatRecord,
+	activeAgentOwner: string | undefined,
+): boolean {
+	if (getDispatchMode(config, message) !== "steer") return false;
+	if (!runtime.hasActiveJob() || activeAgentOwner !== runtime.channelKey) return false;
+	if (isDmMessage(message)) return record.authorId === config.discord.ownerId && !record.isBot;
+	if (config.discord.channelTrigger === "always") return true;
+	return record.mentionedBot;
+}
+
+function getCollectTriggerOptions(
+	config: Config,
+	message: Message,
+): { channelTrigger: Config["discord"]["channelTrigger"] } {
+	return {
+		channelTrigger: isDmMessage(message) ? "always" : config.discord.channelTrigger,
+	};
+}
+
 function messageMentionsBot(message: Message, botUserId: string): boolean {
 	if (message.mentions.users.has(botUserId)) return true;
 	return message.content.includes(`<@${botUserId}>`) || message.content.includes(`<@!${botUserId}>`);
@@ -214,6 +248,11 @@ function toInboundInput(message: Message, botUserId: string): InboundMessageInpu
 			remoteUrl: attachment.url,
 		})),
 	};
+}
+
+async function fetchMessageAnchor(message: Message, messageId?: string): Promise<Message> {
+	if (!messageId || message.id === messageId) return message;
+	return message.channel.messages.fetch(messageId as MessageResolvable).catch(() => message);
 }
 
 function formatCommandResponse(
@@ -246,6 +285,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
 	const runtimes = new Map<string, Promise<ConversationRuntime>>();
+	const collectTimers = new Map<string, NodeJS.Timeout>();
 	let activeAgentOwner: string | undefined;
 	let agentWorkQueue = Promise.resolve();
 
@@ -298,7 +338,8 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 			try {
 				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
 				const sentText = normalizeOutboundText(reply);
-				const messageIds = await sendReply(config, message, sentText, dispatch.triggerMessageId);
+				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
+				const messageIds = await sendReply(config, replyAnchor, sentText, dispatch.triggerMessageId);
 				await runtime.completeActiveJob({
 					text: sentText,
 					messageIds,
@@ -310,7 +351,8 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 				await runtime.failActiveJob(errorText);
 				await runtime.appendError(errorText);
 				const fallback = "I hit an error while handling that message.";
-				const messageIds = await sendReply(config, message, fallback, dispatch.triggerMessageId);
+				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
+				const messageIds = await sendReply(config, replyAnchor, fallback, dispatch.triggerMessageId);
 				await runtime.noteOutbound({
 					text: fallback,
 					messageIds,
@@ -321,8 +363,30 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 		}
 	};
 
+	const flushCollected = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
+		collectTimers.delete(runtime.channelKey);
+		try {
+			const queued = await runtime.queueLatestTrigger(getCollectTriggerOptions(config, message));
+			if (!queued) return;
+			// The captured message is only a channel handle; drainJobs fetches the trigger record's message id for replies.
+			await drainJobs(message, runtime);
+		} catch (error) {
+			console.error("Discord collect flush failed", error);
+			await runtime.appendError(error instanceof Error ? error.message : String(error));
+		}
+	};
+
+	const scheduleCollect = (message: Message, runtime: ConversationRuntime): void => {
+		const existing = collectTimers.get(runtime.channelKey);
+		if (existing) clearTimeout(existing);
+		const timer = setTimeout(() => {
+			void flushCollected(message, runtime);
+		}, config.discord.collectDebounceMs);
+		collectTimers.set(runtime.channelKey, timer);
+	};
+
 	const onMessageCreate = async (message: Message) => {
-		if (!isAllowedMessage(config, message)) return;
+		if (!isAllowedMessage(config, message, client.user.id)) return;
 		let runtime: ConversationRuntime;
 		try {
 			runtime = await getRuntime(message);
@@ -367,7 +431,25 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
 				return;
 			}
-			await runtime.ingestInbound(input);
+			const dispatchMode = getDispatchMode(config, message);
+			const shouldTrySteer =
+				dispatchMode === "steer" && runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey;
+			const { record } = await runtime.ingestInbound(input, {
+				mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
+				channelTrigger: config.discord.channelTrigger,
+			});
+			const canSteer = shouldTrySteer && canSteerFromRecord(config, message, runtime, record, activeAgentOwner);
+			if (canSteer) {
+				familiarAgent.steer(runtime.buildSteerPromptForRecord(record));
+				return;
+			}
+			if (shouldTrySteer) {
+				await runtime.queueLatestTrigger(getCollectTriggerOptions(config, message));
+			}
+			if (dispatchMode === "collect") {
+				scheduleCollect(message, runtime);
+				return;
+			}
 			await drainJobs(message, runtime);
 		} catch (error) {
 			console.error("Discord message handling failed", error);
@@ -389,6 +471,8 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 		client,
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
+			for (const timer of collectTimers.values()) clearTimeout(timer);
+			collectTimers.clear();
 			const resolvedRuntimes = await Promise.all(
 				[...runtimes.values()].map((runtime) => runtime.catch(() => undefined)),
 			);

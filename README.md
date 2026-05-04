@@ -40,6 +40,15 @@ node dist/cli.js run /path/to/workspace
 DM the bot from the configured `discord.owner_id`. Guild channels are ignored unless their channel id is listed in
 `discord.allowed_channels`.
 
+## Discord Dispatch
+
+`discord.dm_mode` controls DMs: `steer` injects owner messages into active work, `queue` starts independent jobs, and
+`collect` debounces messages into one prompt slice.
+
+`discord.channel_mode` defaults to `collect` for guild channels. `discord.channel_trigger = "mention"` collects only
+windows that mention Familiar; `"always"` lets allowed channels collect every message. Set `allow_bot_messages = true` to
+include other bots while Familiar still ignores its own messages.
+
 ## Inspect Payloads
 
 Pretty-print the latest Anthropic request that familiar sent:

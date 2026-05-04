@@ -9,6 +9,7 @@ import {
 	type InboundChatRecord,
 	type JobTrigger,
 } from "./chat-log.js";
+import type { DiscordChannelTrigger } from "./config.js";
 
 export interface InboundMessageInput {
 	messageId: string;
@@ -23,6 +24,15 @@ export interface InboundMessageInput {
 		cursor?: string;
 		messageId?: string;
 	};
+}
+
+export interface InboundDispatchOptions {
+	mode?: "queue" | "collect";
+	channelTrigger?: DiscordChannelTrigger;
+}
+
+export interface CollectDispatchOptions {
+	channelTrigger?: DiscordChannelTrigger;
 }
 
 export interface ParsedControlCommand {
@@ -59,7 +69,10 @@ function formatAuthor(authorName: string | undefined, authorId: string): string 
 
 function formatPromptRecord(record: InboundChatRecord): string {
 	const text = record.text.trim() || "(no text)";
-	return `[uid:${record.authorId} @ ${record.ts}] ${text}`;
+	const author = record.authorName?.trim()
+		? `${record.authorName.trim()} uid:${record.authorId}`
+		: `uid:${record.authorId}`;
+	return `[${author} @ ${record.ts}] ${text}`;
 }
 
 function getTriggerRecord(records: ChatLogRecord[], job: QueuedJob): InboundChatRecord | undefined {
@@ -172,12 +185,16 @@ export class ConversationRuntime {
 		return last;
 	}
 
-	private shouldQueueTrigger(record: InboundChatRecord): JobTrigger | undefined {
-		if (!this.isOwnerMessage(record)) return undefined;
+	private canRecordTrigger(record: InboundChatRecord, options: InboundDispatchOptions = {}): JobTrigger | undefined {
 		if (this.armedAfterRecordId === undefined) return undefined;
 		if (record.recordId <= this.armedAfterRecordId) return undefined;
 		if (record.recordId <= this.getLastQueuedTriggerRecordId()) return undefined;
-		if (this.channel.scope === "dm" || this.channel.scope === "web") return "dm";
+		if (this.channel.scope === "dm" || this.channel.scope === "web") {
+			if (!this.isOwnerMessage(record)) return undefined;
+			return options.mode === "collect" ? undefined : "dm";
+		}
+		if (options.mode === "collect") return undefined;
+		if (options.channelTrigger === "always") return "message";
 		return record.mentionedBot ? "mention" : undefined;
 	}
 
@@ -220,7 +237,10 @@ export class ConversationRuntime {
 		if (input.checkpoint) await this.noteCheckpoint(input.checkpoint);
 	}
 
-	async ingestInbound(input: InboundMessageInput): Promise<{ record: InboundChatRecord; jobQueued: boolean }> {
+	async ingestInbound(
+		input: InboundMessageInput,
+		options: InboundDispatchOptions = {},
+	): Promise<{ record: InboundChatRecord; jobQueued: boolean }> {
 		const record: InboundChatRecord = {
 			type: "inbound",
 			...buildRecordBase(this.channel, this.nextRecordId),
@@ -235,8 +255,49 @@ export class ConversationRuntime {
 		};
 		await this.appendRecord(record);
 		if (input.checkpoint) await this.noteCheckpoint(input.checkpoint);
-		const trigger = this.shouldQueueTrigger(record);
+		const trigger = this.canRecordTrigger(record, options);
 		if (!trigger) return { record, jobQueued: false };
+		await this.queueTrigger(record, trigger);
+		return { record, jobQueued: true };
+	}
+
+	async queueLatestTrigger(options: CollectDispatchOptions = {}): Promise<QueuedJob | undefined> {
+		const record = this.getLatestQueueableInbound(options);
+		if (!record) return undefined;
+		const trigger =
+			this.channel.scope === "dm" || this.channel.scope === "web"
+				? "dm"
+				: options.channelTrigger === "always"
+					? "message"
+					: "mention";
+		return this.queueTrigger(record, trigger);
+	}
+
+	buildSteerPromptForRecord(record: InboundChatRecord): string {
+		return formatPromptRecord(record);
+	}
+
+	private getLatestQueueableInbound(options: CollectDispatchOptions): InboundChatRecord | undefined {
+		const lastQueuedTriggerRecordId = this.getLastQueuedTriggerRecordId();
+		let latest: InboundChatRecord | undefined;
+		let sawMention = false;
+		for (let index = this.records.length - 1; index >= 0; index--) {
+			const record = this.records[index];
+			if (record?.type !== "inbound") continue;
+			if (this.armedAfterRecordId === undefined) return undefined;
+			if (record.recordId <= this.armedAfterRecordId || record.recordId <= lastQueuedTriggerRecordId) break;
+			if (this.channel.scope === "dm" || this.channel.scope === "web") {
+				if (!this.isOwnerMessage(record)) continue;
+				return record;
+			}
+			latest ??= record;
+			if (record.mentionedBot) sawMention = true;
+		}
+		if (options.channelTrigger === "always") return latest;
+		return sawMention ? latest : undefined;
+	}
+
+	private async queueTrigger(record: InboundChatRecord, trigger: JobTrigger): Promise<QueuedJob> {
 		const queuedRecord = {
 			type: "job_queued",
 			...buildRecordBase(this.channel, this.nextRecordId),
@@ -245,13 +306,14 @@ export class ConversationRuntime {
 			triggerRecordId: record.recordId,
 		} as const;
 		await this.appendRecord(queuedRecord);
-		this.pendingJobs.push({
+		const job = {
 			jobId: queuedRecord.jobId,
 			trigger: queuedRecord.trigger,
 			triggerRecordId: queuedRecord.triggerRecordId,
 			queuedRecordId: queuedRecord.recordId,
-		});
-		return { record, jobQueued: true };
+		};
+		this.pendingJobs.push(job);
+		return job;
 	}
 
 	beginNextJob(): DispatchableJob | undefined {

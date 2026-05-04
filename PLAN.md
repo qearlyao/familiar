@@ -9,14 +9,14 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 Implemented or recently added:
 
 - Stage 0 and Stage 1 are effectively done: direct upstream `Agent`, Discord DM path, persona files, stable session/cache logging.
-- Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, and payload inspection tooling.
+- Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, and payload inspection tooling.
 - Anthropic cache normalization is implemented in `src/agent.ts`: Familiar strips extra upstream `cache_control` points and keeps the latest user-message checkpoint, matching Claude Code's stable cache shape.
 - Payload inspection exists: `npm run payload:pretty -- --messages 12`, `--full`, `--date`, `--model`.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next Stage 2 implementation chunk:
 
-- Add dispatch modes and group collection. Start at **Stage 2 Follow-Up** below before Stage 3.
+- Add durable settings overrides and separate per-channel agent transcript/session history. Start at **Stage 2 Polish** below before Stage 3.
 
 Important caution:
 
@@ -92,6 +92,7 @@ Discord adapter       WebUI adapter       future event sources
                     v
             upstream Agent + pi-ai + tools
             - prompt/steer/followUp
+            - per-channel transcripts/sessions before LCM
             - usage/cache telemetry
             - bash/read/write/edit
             - task/media/browser tools
@@ -125,7 +126,7 @@ Tier 2: LCM, today's lossless-ish context engine.
 - Source: per-channel append-only chat logs.
 - Summaries: markdown leaf/condensed summary DAG with provenance frontmatter.
 - Index: SQLite vectors for raw and summary records, internal only.
-- Assembly: `Agent.transformContext` selects fresh tail plus minimal useful summaries.
+- Assembly: `Agent.transformContext` selects fresh tail plus minimal useful summaries. LCM may build a global companion-brain daily view, but raw source records stay per-channel.
 - Agent access: `read` and `bash grep` over logs/summaries, no special memory tool.
 - Replaces upstream auto-compaction for Familiar.
 
@@ -176,15 +177,17 @@ Already in place:
 - Append-only chat/transcript/payload logs.
 - Replay/catch-up safety.
 - `stop`, `status`, `new`, `compact` style control path.
-- Model and thinking-level controls.
+- Model and thinking-level controls, currently runtime-only.
 - Reply/chunk config.
+- Discord dispatch modes: `steer`, `queue`, `collect`.
+- Group collect debounce and mention/always trigger policy.
+- Optional other-bot ingestion with self-bot loop prevention.
 - Payload inspection.
 
 Still needed:
 
-- Dispatch modes and group collection.
-- Better group prompt formatting with author names.
-- Other-bot ingestion option with self-bot loop prevention.
+- Durable settings overrides for `/model`, `/thinking`, and later `/channel-trigger`.
+- Separate per-channel agent transcript/session history so DM/group do not share raw live transcript, while keeping global persona/memory.
 - Focused tests/log probes.
 
 Done when:
@@ -197,7 +200,7 @@ Done when:
 
 #### Stage 2 Follow-Up: Dispatch Modes and Group Collection
 
-Start here next.
+Status: implemented in code; keep this as a behavior reference.
 
 Config to add under `[discord]`:
 
@@ -222,6 +225,40 @@ Implementation checklist:
   `[qearlyao uid:... @ 2026-05-04T13:50:24.126Z] hello`
 - Bot messages use normal Discord username; no extra bot marker needed.
 - Add probes/tests for DM steer during active job, group mention collect, group always collect, other-bot ingestion, and self-bot prevention.
+
+#### Stage 2 Polish: Durable Settings and Channel Sessions
+
+Start here next.
+
+Durable settings:
+
+- Add a small settings layer under `data/settings/`, likely JSON to start.
+- Config remains fallback/default. Durable overrides win when present.
+- Global/default overrides:
+  - current model
+  - current thinking level
+- Per-channel overrides:
+  - `channel_trigger`
+  - later `channel_mode`, reply/chunk preferences, and WebUI channel settings
+- Update `/model` and `/thinking` so successful changes persist across restart.
+- Add `/channel-trigger mention|always` with durable per-channel persistence.
+- `status` should show effective values and whether each came from config or override.
+
+Per-channel agent transcript/session history:
+
+- Stop sharing one raw live `Agent.state.messages` transcript across DM and group channels.
+- Keep one global stable persona/memory layer: `SOUL.md`, `USER.md`, `MEMORY.md`.
+- Create or hydrate a channel-scoped agent transcript/session for each conversation channel.
+- Keep provider/cache session ids stable per channel, with a deterministic workspace/channel-based id.
+- Keep chat JSON logs per-channel as the raw source of truth.
+- Leave cross-channel companion-brain continuity to Stage 6 LCM and Stage 7 diary RAG. Those stages can inject relevant cross-channel context through `transformContext` without merging raw logs.
+- Decide whether model/thinking overrides are global by default or can be channel-specific. Start conservative: model/thinking global override, channel trigger per-channel override.
+
+Done when:
+
+- Restart preserves `/model`, `/thinking`, and `/channel-trigger` changes.
+- DM and group channels no longer share the same live transcript, but both still share persona and durable memory.
+- Existing chat logs remain compatible.
 
 ### Stage 3: WebUI v0 and Side-Door Transport
 
@@ -265,6 +302,7 @@ Done when:
 - SQLite vector index internal to assembler.
 - Deferred compaction worker; do not block active turn by default.
 - `Agent.transformContext` assembles fresh tail plus summary coverage around 75% window threshold.
+- Raw logs stay per-channel and greppable. LCM can build a global daily companion-brain summary/index with channel/source provenance instead of merging raw DM/group logs.
 - File watcher re-embeds edited summaries.
 
 Done when:

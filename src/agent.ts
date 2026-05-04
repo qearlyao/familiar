@@ -25,6 +25,7 @@ export interface FamiliarAgent {
 	agent: Agent;
 	sessionId: string;
 	prompt(input: string): Promise<string>;
+	steer(input: string): void;
 	abort(): void;
 	reset(): void;
 	getModelName(): string;
@@ -363,6 +364,13 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 				() => undefined,
 			);
 			return run;
+		},
+		steer(input: string): void {
+			agent.steer({
+				role: "user",
+				content: [{ type: "text", text: input }],
+				timestamp: Date.now(),
+			});
 		},
 	};
 }

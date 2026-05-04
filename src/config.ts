@@ -26,11 +26,12 @@ export interface Config {
 		allowBotMessages: boolean;
 	};
 	agent: {
-		api: string;
-		modelId: string;
-		baseUrl: string;
-		apiKeyEnv: string;
-		provider: string;
+		model: string;
+		api?: string;
+		modelId?: string;
+		baseUrl?: string;
+		apiKeyEnv?: string;
+		provider?: string;
 		cacheRetention: CacheRetention;
 		thinkingLevel: ThinkingLevel;
 	};
@@ -171,11 +172,19 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
 	const ownerId = readString(discord.owner_id, "discord.owner_id");
-	const api = readString(agent.api, "agent.api");
-	const modelId = readString(agent.model_id, "agent.model_id");
-	const baseUrl = readString(agent.base_url, "agent.base_url");
-	const apiKeyEnv = readString(agent.api_key_env, "agent.api_key_env");
+	const model = readOptionalString(agent.model, "");
 	const provider = readOptionalString(agent.provider, "custom");
+	const modelId = readOptionalString(agent.model_id, "");
+	const api = readOptionalString(agent.api, "");
+	const baseUrl = readOptionalString(agent.base_url, "");
+	const apiKeyEnv = readOptionalString(agent.api_key_env, "");
+	const legacyModel = modelId ? `${provider}/${modelId}` : "";
+	const usingLegacyAgentModel = !model;
+	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
+		throw new Error(
+			"Missing required config value: agent.model. Legacy configs must set agent.api, agent.model_id, agent.base_url, and agent.api_key_env.",
+		);
+	}
 
 	return {
 		workspacePath,
@@ -195,11 +204,12 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
 		},
 		agent: {
-			api,
-			modelId,
-			baseUrl,
-			apiKeyEnv,
-			provider,
+			model: model || legacyModel,
+			api: usingLegacyAgentModel ? api : undefined,
+			modelId: usingLegacyAgentModel ? modelId : undefined,
+			baseUrl: usingLegacyAgentModel ? baseUrl : undefined,
+			apiKeyEnv: usingLegacyAgentModel ? apiKeyEnv : undefined,
+			provider: usingLegacyAgentModel ? provider : undefined,
 			cacheRetention: readCacheRetention(readOptionalString(agent.cacheRetention, "long")),
 			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
 		},

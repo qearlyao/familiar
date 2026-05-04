@@ -178,6 +178,7 @@ Already in place:
 - Replay/catch-up safety.
 - `stop`, `status`, `new`, `compact` style control path.
 - Model and thinking-level controls, currently runtime-only.
+- Default model config uses `agent.model = "provider/model"` and resolves through pi-ai built-ins; legacy manual `agent.api` config is only an escape hatch.
 - Reply/chunk config.
 - Discord dispatch modes: `steer`, `queue`, `collect`.
 - Group collect debounce and mention/always trigger policy.

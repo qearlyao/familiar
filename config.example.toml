@@ -10,11 +10,7 @@ collect_debounce_ms = 4000
 allow_bot_messages = true
 
 [agent]
-api = "anthropic-messages"
-model_id = "claude-sonnet-4-5"
-base_url = "https://api.anthropic.com"
-api_key_env = "ANTHROPIC_API_KEY"
-provider = "anthropic"
+model = "anthropic/claude-sonnet-4-5"
 cacheRetention = "long"
 thinking_level = "medium"
 

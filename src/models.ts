@@ -87,23 +87,28 @@ export function resolveModel(ref: ModelRef, config?: Config): Model<any> {
 }
 
 export function createConfiguredModel(config: Config): Model<any> {
-	return applyConfiguredBaseUrl(config, {
-		id: config.agent.modelId,
-		name: config.agent.modelId,
-		api: config.agent.api,
-		provider: config.agent.provider,
-		baseUrl: config.agent.baseUrl,
-		reasoning: true,
-		input: ["text", "image"],
-		cost: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-		},
-		contextWindow: 200000,
-		maxTokens: 8192,
-	});
+	const ref = parseModelRef(config.agent.model);
+	if (!ref) throw new Error(`Invalid agent.model: ${config.agent.model}`);
+	if (config.agent.api && config.agent.modelId && config.agent.baseUrl) {
+		return applyConfiguredBaseUrl(config, {
+			id: config.agent.modelId,
+			name: config.agent.modelId,
+			api: config.agent.api,
+			provider: (config.agent.provider ?? ref.provider) as Provider,
+			baseUrl: config.agent.baseUrl,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 200000,
+			maxTokens: 8192,
+		});
+	}
+	return resolveModel(ref, config);
 }
 
 export function resolveModelApiKey(config: Config, model: Model<any>): string | undefined {

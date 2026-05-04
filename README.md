@@ -18,6 +18,16 @@ node dist/cli.js init /path/to/workspace
 
 Edit `/path/to/workspace/config.toml`, then set secrets in `/path/to/workspace/.env`.
 
+The default model is configured as a provider/model ref:
+
+```toml
+[agent]
+model = "anthropic/claude-opus-4-7"
+```
+
+Provider-specific base URLs and API-key env var names live under `[models.base_urls]` and `[models.api_key_envs]`.
+Legacy manual `agent.api` / `agent.model_id` / `agent.base_url` config is still accepted as an escape hatch.
+
 ## Workspace Env
 
 ```sh

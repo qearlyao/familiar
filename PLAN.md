@@ -16,7 +16,7 @@ Implemented or recently added:
 
 Next Stage 2 implementation chunk:
 
-- Add durable settings overrides. Start at **Stage 2 Polish** below before Stage 3.
+- Finish tests/log probes and Stage 2 polish cleanup before Stage 3.
 
 Important caution:
 
@@ -183,11 +183,11 @@ Already in place:
 - Group collect debounce and mention/always trigger policy.
 - Optional other-bot ingestion with self-bot loop prevention.
 - Per-channel live upstream `Agent` transcripts/sessions before LCM, while sharing global persona/memory.
+- Durable per-channel overrides for `/model`, `/thinking`, and `/channel-trigger`.
 - Payload inspection.
 
 Still needed:
 
-- Durable settings overrides for `/model`, `/thinking`, and later `/channel-trigger`.
 - Focused tests/log probes.
 
 Done when:
@@ -228,16 +228,15 @@ Implementation checklist:
 
 #### Stage 2 Polish: Durable Settings
 
-Start here next.
+Status: implemented in code; keep this as a behavior reference.
 
 Durable settings:
 
-- Add a small settings layer under `data/settings/`, likely JSON to start.
+- Settings live in `data/settings/channel-overrides.json`.
 - Config remains fallback/default. Durable overrides win when present.
-- Global/default overrides:
+- Per-channel overrides:
   - current model
   - current thinking level
-- Per-channel overrides:
   - `channel_trigger`
   - later `channel_mode`, reply/chunk preferences, and WebUI channel settings
 - Update `/model` and `/thinking` so successful changes persist across restart.
@@ -254,11 +253,11 @@ Status: implemented; keep this as a behavior reference.
 - Keep provider/cache session ids stable per channel, with a deterministic workspace/channel-based id.
 - Keep chat JSON logs per-channel as the raw source of truth.
 - Leave cross-channel companion-brain continuity to Stage 6 LCM and Stage 7 diary RAG. Those stages can inject relevant cross-channel context through `transformContext` without merging raw logs.
-- Decide whether model/thinking overrides are global by default or can be channel-specific. Start conservative: model/thinking global override, channel trigger per-channel override.
+- Model/thinking are per-channel overrides, not global, so different channels can use different providers and reasoning levels.
 
 Done when:
 
-- Restart preserves `/model`, `/thinking`, and `/channel-trigger` changes.
+- Restart preserves `/model`, `/thinking`, and `/channel-trigger` changes. (Implemented.)
 - DM and group channels no longer share the same live transcript, but both still share persona and durable memory. (Implemented.)
 - Existing chat logs remain compatible.
 

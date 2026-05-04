@@ -49,6 +49,18 @@ DM the bot from the configured `discord.owner_id`. Guild channels are ignored un
 windows that mention Familiar; `"always"` lets allowed channels collect every message. Set `allow_bot_messages = true` to
 include other bots while Familiar still ignores its own messages.
 
+Discord control commands are owner-only and use slash-style text commands:
+
+```text
+/status
+/model anthropic/claude-opus-4-7
+/thinking xhigh
+/channel-trigger mention
+```
+
+`/model`, `/thinking`, and `/channel-trigger` are durable per-channel overrides stored in
+`data/settings/channel-overrides.json`. `config.toml` remains the fallback/default for channels without overrides.
+
 ## Inspect Payloads
 
 Pretty-print the latest Anthropic request that familiar sent:

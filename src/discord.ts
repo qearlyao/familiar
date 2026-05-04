@@ -15,6 +15,7 @@ import type { InboundChatRecord } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
+import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -200,27 +201,33 @@ function getDispatchMode(config: Config, message: Message): "steer" | "queue" | 
 	return isDmMessage(message) ? config.discord.dmMode : config.discord.channelMode;
 }
 
+function getChannelTriggerSetting(
+	config: Config,
+	settings: SettingsStore,
+	message: Message,
+	channelKey: string,
+): EffectiveSetting<Config["discord"]["channelTrigger"]> {
+	if (isDmMessage(message)) return { value: "always", source: "config" };
+	return settings.getChannelTrigger(channelKey, config.discord.channelTrigger);
+}
+
 function canSteerFromRecord(
 	config: Config,
 	message: Message,
 	runtime: ConversationRuntime,
 	record: InboundChatRecord,
 	activeAgentOwner: string | undefined,
+	channelTrigger: Config["discord"]["channelTrigger"],
 ): boolean {
 	if (getDispatchMode(config, message) !== "steer") return false;
 	if (!runtime.hasActiveJob() || activeAgentOwner !== runtime.channelKey) return false;
 	if (isDmMessage(message)) return record.authorId === config.discord.ownerId && !record.isBot;
-	if (config.discord.channelTrigger === "always") return true;
+	if (channelTrigger === "always") return true;
 	return record.mentionedBot;
 }
 
-function getCollectTriggerOptions(
-	config: Config,
-	message: Message,
-): { channelTrigger: Config["discord"]["channelTrigger"] } {
-	return {
-		channelTrigger: isDmMessage(message) ? "always" : config.discord.channelTrigger,
-	};
+function formatSetting<T>(setting: EffectiveSetting<T>): string {
+	return `${setting.value} (${setting.source})`;
 }
 
 function messageMentionsBot(message: Message, botUserId: string): boolean {
@@ -259,12 +266,14 @@ function formatCommandResponse(
 	command: "status" | "compact",
 	runtime: ConversationRuntime,
 	familiarAgent: FamiliarAgent,
+	channelTrigger: EffectiveSetting<Config["discord"]["channelTrigger"]>,
 ): string {
 	if (command === "status") {
 		return [
 			runtime.formatStatus(),
-			`model: ${familiarAgent.getModelName()}`,
-			`thinking: ${familiarAgent.getThinkingLevel()}`,
+			`model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`,
+			`thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`,
+			`channel_trigger: ${formatSetting(channelTrigger)}`,
 		].join("\n");
 	}
 	return "Compact is not wired for this runtime yet. I logged the command, but I won't run lossy compaction here.";
@@ -281,7 +290,11 @@ function canceledJobError(): Error {
 	return error;
 }
 
-export async function startDiscordDaemon(config: Config, familiarAgent: FamiliarAgent): Promise<DiscordDaemon> {
+export async function startDiscordDaemon(
+	config: Config,
+	familiarAgent: FamiliarAgent,
+	settings: SettingsStore,
+): Promise<DiscordDaemon> {
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
 	const runtimes = new Map<string, Promise<ConversationRuntime>>();
@@ -366,7 +379,9 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 	const flushCollected = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
 		collectTimers.delete(runtime.channelKey);
 		try {
-			const queued = await runtime.queueLatestTrigger(getCollectTriggerOptions(config, message));
+			const queued = await runtime.queueLatestTrigger({
+				channelTrigger: getChannelTriggerSetting(config, settings, message, runtime.channelKey).value,
+			});
 			if (!queued) return;
 			// The captured message is only a channel handle; drainJobs fetches the trigger record's message id for replies.
 			await drainJobs(message, runtime);
@@ -390,6 +405,7 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 		let runtime: ConversationRuntime;
 		try {
 			runtime = await getRuntime(message);
+			const channelTrigger = getChannelTriggerSetting(config, settings, message, runtime.channelKey);
 			const input = toInboundInput(message, client.user.id);
 			const control = runtime.parseControlCommand(input);
 			if (control) {
@@ -413,21 +429,42 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 				}
 				if (control.command === "model") {
 					const text = control.args
-						? familiarAgent.setModel(control.args)
-						: `Current model: ${familiarAgent.getModelName()}`;
+						? await familiarAgent.setModel(runtime.channelKey, control.args)
+						: `Current model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`;
 					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
 				if (control.command === "thinking") {
 					const text = control.args
-						? familiarAgent.setThinkingLevel(control.args)
-						: `Current thinking: ${familiarAgent.getThinkingLevel()}`;
+						? await familiarAgent.setThinkingLevel(runtime.channelKey, control.args)
+						: `Current thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`;
 					const messageIds = await sendReply(config, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
-				const text = formatCommandResponse(control.command, runtime, familiarAgent);
+				if (control.command === "channel-trigger") {
+					if (isDmMessage(message)) {
+						const text = "DM channel trigger is always.";
+						const messageIds = await sendReply(config, message, text);
+						await runtime.noteOutbound({ text, messageIds, control: control.command });
+						return;
+					}
+					const triggerInput = control.args.trim().toLowerCase();
+					if (triggerInput && triggerInput !== "mention" && triggerInput !== "always") {
+						throw new Error("Usage: /channel-trigger mention|always");
+					}
+					const trigger = triggerInput === "mention" || triggerInput === "always" ? triggerInput : undefined;
+					const text = trigger
+						? await settings
+								.setChannelTrigger(runtime.channelKey, trigger)
+								.then(() => `Channel trigger set to ${trigger} for this channel`)
+						: `Current channel trigger: ${formatSetting(channelTrigger)}`;
+					const messageIds = await sendReply(config, message, text);
+					await runtime.noteOutbound({ text, messageIds, control: control.command });
+					return;
+				}
+				const text = formatCommandResponse(control.command, runtime, familiarAgent, channelTrigger);
 				const messageIds = await sendReply(config, message, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
 				return;
@@ -437,15 +474,17 @@ export async function startDiscordDaemon(config: Config, familiarAgent: Familiar
 				dispatchMode === "steer" && runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey;
 			const { record } = await runtime.ingestInbound(input, {
 				mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
-				channelTrigger: config.discord.channelTrigger,
+				channelTrigger: channelTrigger.value,
 			});
-			const canSteer = shouldTrySteer && canSteerFromRecord(config, message, runtime, record, activeAgentOwner);
+			const canSteer =
+				shouldTrySteer &&
+				canSteerFromRecord(config, message, runtime, record, activeAgentOwner, channelTrigger.value);
 			if (canSteer) {
 				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
 				return;
 			}
 			if (shouldTrySteer) {
-				await runtime.queueLatestTrigger(getCollectTriggerOptions(config, message));
+				await runtime.queueLatestTrigger({ channelTrigger: channelTrigger.value });
 			}
 			if (dispatchMode === "collect") {
 				scheduleCollect(message, runtime);

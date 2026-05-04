@@ -216,7 +216,9 @@ export class ConversationRuntime {
 		if (!slashCommand && !explicitBotCommand) return undefined;
 		const [rawCommand = "", ...argParts] = normalized.split(" ");
 		const command = rawCommand.replace(/^\//, "").toLowerCase();
-		if (!["stop", "status", "new", "compact", "model", "thinking"].includes(command)) return undefined;
+		if (!["stop", "status", "new", "compact", "model", "thinking", "channel-trigger"].includes(command)) {
+			return undefined;
+		}
 		return {
 			command: command as ControlCommand,
 			args: argParts.join(" ").trim(),

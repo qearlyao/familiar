@@ -36,3 +36,10 @@ export {
 	type InboundMessageInput,
 	type QueuedJob,
 } from "./runtime.js";
+export {
+	type ChannelSettings,
+	type EffectiveSetting,
+	loadSettingsStore,
+	type SettingSource,
+	type SettingsStore,
+} from "./settings.js";

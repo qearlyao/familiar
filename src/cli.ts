@@ -9,6 +9,7 @@ import { config as loadDotenv } from "dotenv";
 import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { startDiscordDaemon } from "./discord.js";
+import { loadSettingsStore } from "./settings.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
@@ -36,10 +37,12 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	}
 	const config = await loadConfig(workspacePath);
 	await mkdir(config.workspace.dataDir, { recursive: true });
-	const familiarAgent = await createFamiliarAgent(config);
-	const daemon = await startDiscordDaemon(config, familiarAgent);
+	const settings = await loadSettingsStore(config);
+	const familiarAgent = await createFamiliarAgent(config, settings);
+	const daemon = await startDiscordDaemon(config, familiarAgent, settings);
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
+	console.log(`settings=${settings.path}`);
 
 	const stop = async () => {
 		console.log("Stopping familiar");

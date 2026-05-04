@@ -6,7 +6,7 @@ import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agen
 import { type Model, streamSimple } from "@mariozechner/pi-ai";
 import { createBashTool, createEditTool, createReadTool } from "@mariozechner/pi-coding-agent";
 
-import type { Config } from "./config.js";
+import type { Config, ThinkingLevel } from "./config.js";
 import {
 	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
@@ -20,21 +20,24 @@ import {
 	supportedThinkingLevels,
 } from "./models.js";
 import { buildSystemPrompt, loadPersona } from "./persona.js";
+import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
 export interface FamiliarAgent {
 	prompt(sessionKey: string, input: string): Promise<string>;
 	steer(sessionKey: string, input: string): void;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
-	getModelName(): string;
-	getThinkingLevel(): string;
-	setModel(input: string): string;
-	setThinkingLevel(input: string): string;
+	getModel(sessionKey: string): EffectiveSetting<string>;
+	getThinkingLevel(sessionKey: string): EffectiveSetting<string>;
+	setModel(sessionKey: string, input: string): Promise<string>;
+	setThinkingLevel(sessionKey: string, input: string): Promise<string>;
 }
 
 interface FamiliarAgentSession {
 	agent: Agent;
 	sessionId: string;
+	model: Model<any>;
+	thinkingLevel: ThinkingLevel;
 	promptQueue: Promise<void>;
 }
 
@@ -196,6 +199,10 @@ function formatModel(model: Model<any>): string {
 	return `${model.provider}/${model.id}`;
 }
 
+function resolveModelName(value: string | undefined, fallback: Model<any>): string {
+	return value ?? formatModel(fallback);
+}
+
 function assertModelAllowed(config: Config, ref: ModelRef): void {
 	if (!isAllowedModel(config, ref)) throw new Error(`Model is not allowlisted: ${ref.key}`);
 }
@@ -241,33 +248,53 @@ function logUsage(event: AgentEvent): void {
 	);
 }
 
-export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent> {
+export async function createFamiliarAgent(config: Config, settings: SettingsStore): Promise<FamiliarAgent> {
 	const persona = await loadPersona(config);
 	const systemPrompt = buildSystemPrompt(persona);
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
-	let currentModel = createConfiguredModel(config);
-	let currentThinkingLevel = config.agent.thinkingLevel;
+	const defaultModel = createConfiguredModel(config);
 	// Fail fast during startup if the configured default model cannot authenticate.
-	getRequestApiKey(config, currentModel);
+	getRequestApiKey(config, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+
+	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
+		const override = settings.getChannelModel(sessionKey);
+		const modelName = resolveModelName(override.value, defaultModel);
+		const ref = parseModelRef(modelName);
+		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
+		if (override.value) assertModelAllowed(config, ref);
+		const model = override.value ? resolveModel(ref, config) : defaultModel;
+		getRequestApiKey(config, model);
+		return { model, source: override.source };
+	};
+
+	const resolveChannelThinkingLevel = (sessionKey: string, model: Model<any>): EffectiveSetting<ThinkingLevel> => {
+		const setting = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel);
+		return {
+			value: clampConfiguredThinkingLevel(model, setting.value),
+			source: setting.source,
+		};
+	};
 
 	const createSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
 		const sessionId = deriveSessionId(config.workspacePath, sessionKey);
 		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
+		const { model } = resolveChannelModel(sessionKey);
+		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
 		const agent = new Agent({
 			initialState: {
 				systemPrompt,
-				model: currentModel,
+				model,
 				messages,
 				tools: [
 					createBashTool(config.workspacePath),
 					createReadTool(config.workspacePath),
 					createEditTool(config.workspacePath),
 				],
-				thinkingLevel: currentThinkingLevel,
+				thinkingLevel,
 			},
 			sessionId,
 			streamFn: (streamModel, context, options) =>
@@ -316,6 +343,8 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 		return {
 			agent,
 			sessionId,
+			model,
+			thinkingLevel,
 			promptQueue: Promise.resolve(),
 		};
 	};
@@ -342,13 +371,13 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 			type: "reset",
 		});
 		session.agent.state.systemPrompt = systemPrompt;
-		session.agent.state.model = currentModel;
+		session.agent.state.model = session.model;
 		session.agent.state.tools = [
 			createBashTool(config.workspacePath),
 			createReadTool(config.workspacePath),
 			createEditTool(config.workspacePath),
 		];
-		session.agent.state.thinkingLevel = currentThinkingLevel;
+		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
 	return {
@@ -367,46 +396,52 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 			const session = await existing;
 			resetSession(session);
 		},
-		getModelName(): string {
-			return formatModel(currentModel);
+		getModel(sessionKey: string): EffectiveSetting<string> {
+			const { model, source } = resolveChannelModel(sessionKey);
+			return { value: formatModel(model), source };
 		},
-		getThinkingLevel(): string {
-			return currentThinkingLevel;
+		getThinkingLevel(sessionKey: string): EffectiveSetting<string> {
+			const { model } = resolveChannelModel(sessionKey);
+			const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model);
+			return thinkingLevel;
 		},
-		setModel(input: string): string {
+		async setModel(sessionKey: string, input: string): Promise<string> {
 			const ref = parseModelRef(input);
 			if (!ref) throw new Error("Usage: /model provider/model-id");
 			assertModelAllowed(config, ref);
 			const nextModel = resolveModel(ref, config);
 			getRequestApiKey(config, nextModel);
-			currentModel = nextModel;
-			currentThinkingLevel = clampConfiguredThinkingLevel(nextModel, currentThinkingLevel);
-			for (const sessionPromise of sessions.values()) {
-				sessionPromise
-					.then((session) => {
-						session.agent.state.model = currentModel;
-						session.agent.state.thinkingLevel = currentThinkingLevel;
-					})
-					.catch(() => undefined);
+			const previousThinking = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel).value;
+			const nextThinking = clampConfiguredThinkingLevel(nextModel, previousThinking);
+			await settings.setChannelModel(sessionKey, formatModel(nextModel));
+			if (nextThinking !== previousThinking) await settings.setChannelThinkingLevel(sessionKey, nextThinking);
+			const sessionPromise = sessions.get(sessionKey);
+			if (sessionPromise) {
+				const session = await sessionPromise;
+				session.model = nextModel;
+				session.thinkingLevel = nextThinking;
+				session.agent.state.model = nextModel;
+				session.agent.state.thinkingLevel = nextThinking;
 			}
-			return `Model set to ${formatModel(nextModel)}\nThinking: ${currentThinkingLevel}`;
+			const suffix = nextThinking === previousThinking ? "" : ` (clamped from ${previousThinking})`;
+			return `Model set to ${formatModel(nextModel)} for this channel\nThinking: ${nextThinking}${suffix}`;
 		},
-		setThinkingLevel(input: string): string {
+		async setThinkingLevel(sessionKey: string, input: string): Promise<string> {
 			const level = input.trim().toLowerCase();
 			if (!isThinkingLevel(level)) {
 				throw new Error("Usage: /thinking off|minimal|low|medium|high|xhigh");
 			}
-			const clamped = clampConfiguredThinkingLevel(currentModel, level);
-			currentThinkingLevel = clamped;
-			for (const sessionPromise of sessions.values()) {
-				sessionPromise
-					.then((session) => {
-						session.agent.state.thinkingLevel = currentThinkingLevel;
-					})
-					.catch(() => undefined);
+			const { model } = resolveChannelModel(sessionKey);
+			const clamped = clampConfiguredThinkingLevel(model, level);
+			await settings.setChannelThinkingLevel(sessionKey, clamped);
+			const sessionPromise = sessions.get(sessionKey);
+			if (sessionPromise) {
+				const session = await sessionPromise;
+				session.thinkingLevel = clamped;
+				session.agent.state.thinkingLevel = clamped;
 			}
 			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
-			return `Thinking set to ${clamped}${suffix}\nSupported: ${supportedThinkingLevels(currentModel).join(", ")}`;
+			return `Thinking set to ${clamped}${suffix} for this channel\nSupported: ${supportedThinkingLevels(model).join(", ")}`;
 		},
 		async prompt(sessionKey: string, input: string): Promise<string> {
 			const session = await getSession(sessionKey);

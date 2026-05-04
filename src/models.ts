@@ -94,7 +94,7 @@ export function createConfiguredModel(config: Config): Model<any> {
 			id: config.agent.modelId,
 			name: config.agent.modelId,
 			api: config.agent.api,
-			provider: (config.agent.provider ?? ref.provider) as Provider,
+			provider: config.agent.provider as Provider,
 			baseUrl: config.agent.baseUrl,
 			reasoning: true,
 			input: ["text", "image"],

@@ -182,7 +182,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const usingLegacyAgentModel = !model;
 	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
 		throw new Error(
-			"Missing required config value: agent.model. Legacy configs must set agent.api, agent.model_id, agent.base_url, and agent.api_key_env.",
+			'Set agent.model = "provider/model", or for a legacy custom endpoint set all of agent.api, agent.model_id, agent.base_url, and agent.api_key_env.',
 		);
 	}
 

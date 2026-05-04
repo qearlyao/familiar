@@ -27,6 +27,8 @@ model = "anthropic/claude-opus-4-7"
 
 Provider-specific base URLs and API-key env var names live under `[models.base_urls]` and `[models.api_key_envs]`.
 Legacy manual `agent.api` / `agent.model_id` / `agent.base_url` config is still accepted as an escape hatch.
+Providers outside pi-ai's built-ins and Familiar's `anthropic`, `google`, `google-vertex`, and `openai` fallbacks need
+that legacy escape hatch; a base URL alone does not define a new provider.
 
 ## Workspace Env
 

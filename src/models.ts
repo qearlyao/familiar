@@ -115,6 +115,10 @@ export function resolveModelApiKey(config: Config, model: Model<any>): string | 
 	return getEnvApiKey(model.provider);
 }
 
+export function modelCanAuthenticate(config: Config, model: Model<any>): boolean {
+	return resolveModelApiKey(config, model) !== undefined;
+}
+
 export function describeModelAuth(config: Config, model: Model<any>): string {
 	const configuredEnv =
 		config.models.apiKeyEnvs[`${model.provider}/${model.id}`] ??

@@ -115,8 +115,31 @@ export function resolveModelApiKey(config: Config, model: Model<any>): string | 
 	return getEnvApiKey(model.provider);
 }
 
+export function requiresExplicitApiKey(config: Config, model: Model<any>): boolean {
+	if (model.provider === "google-vertex") return false;
+	return resolveModelApiKey(config, model) === undefined;
+}
+
+function hasVertexAdcEnvironment(): boolean {
+	const project = process.env.GOOGLE_CLOUD_PROJECT?.trim() || process.env.GCLOUD_PROJECT?.trim();
+	const location = process.env.GOOGLE_CLOUD_LOCATION?.trim();
+	return !!project && !!location;
+}
+
 export function modelCanAuthenticate(config: Config, model: Model<any>): boolean {
-	return resolveModelApiKey(config, model) !== undefined;
+	if (model.provider === "google-vertex")
+		return resolveModelApiKey(config, model) !== undefined || hasVertexAdcEnvironment();
+	return !requiresExplicitApiKey(config, model);
+}
+
+export function assertModelCanAuthenticate(config: Config, model: Model<any>): void {
+	if (model.provider === "google-vertex") {
+		if (resolveModelApiKey(config, model) !== undefined || hasVertexAdcEnvironment()) return;
+		throw new Error(`Missing Vertex auth for ${model.provider}/${model.id}: ${describeModelAuth(config, model)}`);
+	}
+	if (requiresExplicitApiKey(config, model)) {
+		throw new Error(`Missing API key for ${model.provider}/${model.id}: ${describeModelAuth(config, model)}`);
+	}
 }
 
 export function describeModelAuth(config: Config, model: Model<any>): string {
@@ -125,6 +148,9 @@ export function describeModelAuth(config: Config, model: Model<any>): string {
 		config.models.apiKeyEnvs[model.provider] ??
 		(model.provider === config.agent.provider ? config.agent.apiKeyEnv : undefined);
 	if (configuredEnv) return configuredEnv;
+	if (model.provider === "google-vertex") {
+		return "set GOOGLE_CLOUD_API_KEY, or use Vertex ADC with GOOGLE_CLOUD_PROJECT/GCLOUD_PROJECT and GOOGLE_CLOUD_LOCATION";
+	}
 	const envKeys = findEnvKeys(model.provider);
 	if (envKeys?.length) return envKeys.join(", ");
 	return "no matching API key environment variable found";

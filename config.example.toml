@@ -33,8 +33,8 @@ allow = [
 # anthropic = "ANTHROPIC_API_KEY"
 # google = "GEMINI_API_KEY"
 # openai = "OPENAI_API_KEY"
-# google-vertex is optional: pi-ai also supports Vertex ADC via
-# GOOGLE_APPLICATION_CREDENTIALS or gcloud ADC, plus GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION.
+# google-vertex is optional: pi-ai also supports Vertex ADC via gcloud ADC or
+# GOOGLE_APPLICATION_CREDENTIALS, plus GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION in .env.
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
 
 [persona]

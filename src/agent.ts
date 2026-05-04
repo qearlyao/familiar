@@ -8,9 +8,9 @@ import { createBashTool, createEditTool, createReadTool } from "@mariozechner/pi
 
 import type { Config } from "./config.js";
 import {
+	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
 	createConfiguredModel,
-	describeModelAuth,
 	isAllowedModel,
 	isThinkingLevel,
 	type ModelRef,
@@ -136,11 +136,9 @@ async function loadStoredMessages(dataDir: string, sessionId: string): Promise<A
 	return activeRecords.flatMap((record) => ("message" in record ? [record.message] : []));
 }
 
-function getRequiredApiKey(config: Config, model: Model<any>): string {
+function getRequestApiKey(config: Config, model: Model<any>): string | undefined {
 	const apiKey = resolveModelApiKey(config, model);
-	if (!apiKey) {
-		throw new Error(`Missing API key for ${model.provider}/${model.id}: ${describeModelAuth(config, model)}`);
-	}
+	assertModelCanAuthenticate(config, model);
 	return apiKey;
 }
 
@@ -153,8 +151,13 @@ function assertModelAllowed(config: Config, ref: ModelRef): void {
 }
 
 function extractText(message: unknown): string {
-	if (!message || typeof message !== "object" || !("content" in message)) return "";
-	const content = (message as { content: unknown }).content;
+	if (!message || typeof message !== "object") return "";
+	const record = message as { content?: unknown; stopReason?: unknown; errorMessage?: unknown };
+	if (record.stopReason === "error" && typeof record.errorMessage === "string" && record.errorMessage.trim()) {
+		return `Model error: ${record.errorMessage}`;
+	}
+	if (!("content" in record)) return "";
+	const content = record.content;
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
@@ -196,7 +199,7 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 	console.log("---SYSTEM PROMPT (end)---");
 	const model = createConfiguredModel(config);
 	// Fail fast during startup if the configured default model cannot authenticate.
-	getRequiredApiKey(config, model);
+	getRequestApiKey(config, model);
 
 	const sessionId = deriveSessionId(config.workspacePath);
 	const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
@@ -217,7 +220,7 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 		streamFn: (streamModel, context, options) =>
 			streamSimple(streamModel, context, {
 				...options,
-				apiKey: getRequiredApiKey(config, streamModel),
+				apiKey: getRequestApiKey(config, streamModel),
 				cacheRetention: config.agent.cacheRetention,
 				onPayload: (payload, payloadModel) => {
 					writePayloadLog(config, {
@@ -288,7 +291,7 @@ export async function createFamiliarAgent(config: Config): Promise<FamiliarAgent
 			if (!ref) throw new Error("Usage: /model provider/model-id");
 			assertModelAllowed(config, ref);
 			const nextModel = resolveModel(ref, config);
-			getRequiredApiKey(config, nextModel);
+			getRequestApiKey(config, nextModel);
 			agent.state.model = nextModel;
 			const nextThinking = clampConfiguredThinkingLevel(nextModel, agent.state.thinkingLevel);
 			agent.state.thinkingLevel = nextThinking;

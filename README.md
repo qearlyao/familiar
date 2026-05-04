@@ -28,6 +28,9 @@ node dist/cli.js run ~/.familiar
 
 `familiar run` auto-loads `<workspace>/.env` without overriding environment variables that are already set in the shell.
 
+For Google Vertex models with ADC, put `GOOGLE_CLOUD_PROJECT` or `GCLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` in
+`<workspace>/.env`. ADC itself can come from `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`.
+
 ## Run
 
 ```sh

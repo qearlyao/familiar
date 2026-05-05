@@ -185,6 +185,8 @@ Already in place:
 - Optional other-bot ingestion with self-bot loop prevention.
 - Per-channel live upstream `Agent` transcripts/sessions before LCM, while sharing global persona/memory.
 - Durable per-channel overrides for `/model`, `/thinking`, and `/channel-trigger`.
+- Native Discord `/familiar` command with subcommands, model autocomplete, and ephemeral control replies. It is namespaced
+  under `/familiar` to avoid clobbering OpenClaw's existing `/model`, `/new`, `/stop`, and `/status` commands on the same bot.
 - Payload inspection.
 
 Still needed:

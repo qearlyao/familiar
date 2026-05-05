@@ -61,7 +61,19 @@ DM the bot from the configured `discord.owner_id`. Guild channels are ignored un
 windows that mention Familiar; `"always"` lets allowed channels collect every message. Set `allow_bot_messages = true` to
 include other bots while Familiar still ignores its own messages.
 
-Discord control commands are owner-only and use slash-style text commands:
+Discord control commands are owner-only. Familiar registers one native Discord slash command, `/familiar`, so it can
+coexist with other apps using the same bot token:
+
+```text
+/familiar status
+/familiar model anthropic/claude-opus-4-7
+/familiar thinking xhigh
+/familiar channel-trigger mention
+```
+
+Native control replies are ephemeral and `/familiar model` autocompletes from `models.allow`.
+
+The older slash-style text commands still work as a fallback:
 
 ```text
 /status

@@ -1,12 +1,22 @@
 import { once } from "node:events";
 
 import {
+	type ApplicationCommandData,
+	type ApplicationCommandOptionChoiceData,
+	ApplicationCommandOptionType,
+	ApplicationCommandType,
+	ApplicationIntegrationType,
+	type AutocompleteInteraction,
 	ChannelType,
+	type ChatInputCommandInteraction,
 	Client,
 	Events,
 	GatewayIntentBits,
+	type Interaction,
+	InteractionContextType,
 	type Message,
 	type MessageCreateOptions,
+	MessageFlags,
 	type MessageResolvable,
 	Partials,
 } from "discord.js";
@@ -16,6 +26,11 @@ import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.j
 import type { Config } from "./config.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
+
+const FAMILIAR_COMMAND_NAME = "familiar";
+const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
+const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -56,12 +71,113 @@ async function withReadyClient(token: string): Promise<Client<true>> {
 	return client as Client<true>;
 }
 
+function getFamiliarApplicationCommand(): ApplicationCommandData {
+	const modelOption = {
+		name: "model",
+		description: "Provider/model id",
+		type: ApplicationCommandOptionType.String,
+		required: false,
+		autocomplete: true,
+	} as const;
+	return {
+		name: FAMILIAR_COMMAND_NAME,
+		description: "Control Familiar",
+		type: ApplicationCommandType.ChatInput,
+		contexts: [InteractionContextType.Guild, InteractionContextType.BotDM],
+		integrationTypes: [ApplicationIntegrationType.GuildInstall],
+		options: [
+			{
+				name: "status",
+				description: "Show Familiar status for this channel",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
+				name: "stop",
+				description: "Stop current work and clear the queue",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
+				name: "new",
+				description: "Start a fresh agent transcript for this channel",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
+				name: "compact",
+				description: "Show compaction status",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
+				name: "model",
+				description: "Show or set the model for this channel",
+				type: ApplicationCommandOptionType.Subcommand,
+				options: [modelOption],
+			},
+			{
+				name: "thinking",
+				description: "Show or set thinking level for this channel",
+				type: ApplicationCommandOptionType.Subcommand,
+				options: [
+					{
+						name: "level",
+						description: "Thinking level",
+						type: ApplicationCommandOptionType.String,
+						required: false,
+						choices: THINKING_CHOICES.map((level) => ({ name: level, value: level })),
+					},
+				],
+			},
+			{
+				name: "channel-trigger",
+				description: "Show or set when Familiar responds in this channel",
+				type: ApplicationCommandOptionType.Subcommand,
+				options: [
+					{
+						name: "trigger",
+						description: "Channel trigger policy",
+						type: ApplicationCommandOptionType.String,
+						required: false,
+						choices: CHANNEL_TRIGGER_CHOICES.map((trigger) => ({ name: trigger, value: trigger })),
+					},
+				],
+			},
+		],
+	};
+}
+
+async function registerFamiliarApplicationCommand(client: Client<true>): Promise<void> {
+	const command = getFamiliarApplicationCommand();
+	const commands = await client.application.commands.fetch({ force: true });
+	const existing = commands.find(
+		(candidate) => candidate.name === FAMILIAR_COMMAND_NAME && candidate.type === ApplicationCommandType.ChatInput,
+	);
+	if (existing) {
+		if (!existing.equals(command)) {
+			await client.application.commands.edit(existing.id, command);
+			console.log(`Updated Discord /${FAMILIAR_COMMAND_NAME} command`);
+		}
+		return;
+	}
+	await client.application.commands.create(command);
+	console.log(`Registered Discord /${FAMILIAR_COMMAND_NAME} command`);
+}
+
 function isAllowedMessage(config: Config, message: Message, botUserId: string): boolean {
 	if (message.author.id === botUserId) return false;
 	if (message.author.bot && !config.discord.allowBotMessages) return false;
 	if (message.channel.type === ChannelType.DM && message.author.id !== config.discord.ownerId) return false;
 	if (message.channel.type === ChannelType.DM) return true;
 	return config.discord.allowedChannels.includes(message.channelId);
+}
+
+function isAllowedInteractionChannel(
+	config: Config,
+	interaction: ChatInputCommandInteraction | AutocompleteInteraction,
+): boolean {
+	if (interaction.user.id !== config.discord.ownerId) return false;
+	const channel = interaction.channel;
+	if (!channel) return false;
+	if (channel.type === ChannelType.DM) return true;
+	return interaction.channelId ? config.discord.allowedChannels.includes(interaction.channelId) : false;
 }
 
 function chunkDiscordSimple(text: string, limit = 2000): string[] {
@@ -177,37 +293,44 @@ async function sendReply(config: Config, message: Message, text: string, replyTo
 	return sentIds;
 }
 
-function getChannelRef(message: Message): ChatChannelRef {
-	const scope = message.channel.type === ChannelType.DM ? "dm" : message.channel.isThread() ? "thread" : "channel";
-	const channelName = "name" in message.channel ? message.channel.name : undefined;
+type DiscordInteractionChannel = NonNullable<ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]>;
+type DiscordChatChannel = Message["channel"] | DiscordInteractionChannel;
+
+function buildChannelRef(channel: DiscordChatChannel, channelId: string): ChatChannelRef {
+	const scope = channel.type === ChannelType.DM ? "dm" : channel.isThread() ? "thread" : "channel";
+	const channelName = "name" in channel ? channel.name : undefined;
 	return {
 		service: "discord",
 		scope,
-		channelId: message.channelId,
+		channelId,
 		channelName: typeof channelName === "string" ? channelName : undefined,
-		threadId: message.channel.isThread() ? message.channel.id : undefined,
+		threadId: channel.isThread() ? channel.id : undefined,
 	};
+}
+
+function getChannelRef(message: Message): ChatChannelRef {
+	return buildChannelRef(message.channel, message.channelId);
 }
 
 function runtimeKeyFromMessage(message: Message): string {
 	return chatChannelKey(getChannelRef(message));
 }
 
-function isDmMessage(message: Message): boolean {
-	return message.channel.type === ChannelType.DM;
+function isDmChannel(channel: DiscordChatChannel | null | undefined): boolean {
+	return channel?.type === ChannelType.DM;
 }
 
 function getDispatchMode(config: Config, message: Message): "steer" | "queue" | "collect" {
-	return isDmMessage(message) ? config.discord.dmMode : config.discord.channelMode;
+	return isDmChannel(message.channel) ? config.discord.dmMode : config.discord.channelMode;
 }
 
 function getChannelTriggerSetting(
 	config: Config,
 	settings: SettingsStore,
-	message: Message,
 	channelKey: string,
+	isDm: boolean,
 ): EffectiveSetting<Config["discord"]["channelTrigger"]> {
-	if (isDmMessage(message)) return { value: "always", source: "config" };
+	if (isDm) return { value: "always", source: "config" };
 	return settings.getChannelTrigger(channelKey, config.discord.channelTrigger);
 }
 
@@ -221,7 +344,7 @@ function canSteerFromRecord(
 ): boolean {
 	if (getDispatchMode(config, message) !== "steer") return false;
 	if (!runtime.hasActiveJob() || activeAgentOwner !== runtime.channelKey) return false;
-	if (isDmMessage(message)) return record.authorId === config.discord.ownerId && !record.isBot;
+	if (isDmChannel(message.channel)) return record.authorId === config.discord.ownerId && !record.isBot;
 	if (channelTrigger === "always") return true;
 	return record.mentionedBot;
 }
@@ -262,6 +385,52 @@ async function fetchMessageAnchor(message: Message, messageId?: string): Promise
 	return message.channel.messages.fetch(messageId as MessageResolvable).catch(() => message);
 }
 
+function commandTextFromInteraction(interaction: ChatInputCommandInteraction): string {
+	const subcommand = interaction.options.getSubcommand(true);
+	if (subcommand === "model") {
+		const model = interaction.options.getString("model");
+		return model ? `/model ${model}` : "/model";
+	}
+	if (subcommand === "thinking") {
+		const level = interaction.options.getString("level");
+		return level ? `/thinking ${level}` : "/thinking";
+	}
+	if (subcommand === "channel-trigger") {
+		const trigger = interaction.options.getString("trigger");
+		return trigger ? `/channel-trigger ${trigger}` : "/channel-trigger";
+	}
+	return `/${subcommand}`;
+}
+
+function inboundInputFromInteraction(interaction: ChatInputCommandInteraction): InboundMessageInput {
+	return {
+		messageId: interaction.id,
+		authorId: interaction.user.id,
+		authorName: interaction.user.username,
+		text: commandTextFromInteraction(interaction),
+		isBot: false,
+		mentionedBot: true,
+		remoteTimestamp: new Date(interaction.createdTimestamp || Date.now()).toISOString(),
+	};
+}
+
+async function replyEphemeral(interaction: ChatInputCommandInteraction, text: string): Promise<string[]> {
+	const content = normalizeOutboundText(text);
+	if (interaction.deferred || interaction.replied) {
+		await interaction.editReply({ content });
+	} else {
+		await interaction.reply({ content, flags: EPHEMERAL_REPLY });
+	}
+	const reply = await interaction.fetchReply().catch(() => undefined);
+	return reply?.id ? [reply.id] : [];
+}
+
+async function replyInteractionError(interaction: ChatInputCommandInteraction, error: unknown): Promise<void> {
+	const message = error instanceof Error ? error.message : String(error);
+	console.error("Discord interaction handling failed", error);
+	await replyEphemeral(interaction, `I hit an error while handling that command.\n${message}`);
+}
+
 function formatCommandResponse(
 	command: "status" | "compact",
 	runtime: ConversationRuntime,
@@ -277,6 +446,70 @@ function formatCommandResponse(
 		].join("\n");
 	}
 	return "Compact is not wired for this runtime yet. I logged the command, but I won't run lossy compaction here.";
+}
+
+async function applyControlCommand(options: {
+	control: NonNullable<ReturnType<ConversationRuntime["parseControlCommand"]>>;
+	runtime: ConversationRuntime;
+	familiarAgent: FamiliarAgent;
+	settings: SettingsStore;
+	channelTrigger: EffectiveSetting<Config["discord"]["channelTrigger"]>;
+	isDm: boolean;
+	activeAgentOwner: string | undefined;
+}): Promise<string> {
+	const { control, runtime, familiarAgent, settings, channelTrigger, isDm, activeAgentOwner } = options;
+	if (control.command === "stop") {
+		if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
+		await runtime.resetConversation("stop requested");
+		return "Stopped current work and cleared the chat queue.";
+	}
+	if (control.command === "new") {
+		await familiarAgent.reset(runtime.channelKey);
+		await runtime.resetConversation("new conversation requested");
+		return "Started a fresh agent transcript for this channel.";
+	}
+	if (control.command === "model") {
+		return control.args
+			? await familiarAgent.setModel(runtime.channelKey, control.args)
+			: `Current model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`;
+	}
+	if (control.command === "thinking") {
+		return control.args
+			? await familiarAgent.setThinkingLevel(runtime.channelKey, control.args)
+			: `Current thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`;
+	}
+	if (control.command === "channel-trigger") {
+		if (isDm) {
+			return "DM channel trigger is always.";
+		}
+		const triggerInput = control.args.trim().toLowerCase();
+		if (triggerInput && triggerInput !== "mention" && triggerInput !== "always") {
+			throw new Error("Usage: /channel-trigger mention|always");
+		}
+		const trigger = triggerInput === "mention" || triggerInput === "always" ? triggerInput : undefined;
+		if (trigger) {
+			await settings.setChannelTrigger(runtime.channelKey, trigger);
+			return `Channel trigger set to ${trigger} for this channel`;
+		}
+		return `Current channel trigger: ${formatSetting(channelTrigger)}`;
+	}
+	return formatCommandResponse(control.command, runtime, familiarAgent, channelTrigger);
+}
+
+function getAutocompleteChoices(
+	config: Config,
+	interaction: AutocompleteInteraction,
+): ApplicationCommandOptionChoiceData[] {
+	if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return [];
+	const subcommand = interaction.options.getSubcommand(false);
+	const focused = interaction.options.getFocused(true);
+	const value = String(focused.value ?? "").toLowerCase();
+	if (subcommand !== "model" || focused.name !== "model") return [];
+	const candidates = config.models.allow.length > 0 ? config.models.allow : [config.agent.model];
+	return [...new Set(candidates)]
+		.filter((model) => !value || model.toLowerCase().includes(value))
+		.slice(0, 25)
+		.map((model) => ({ name: model, value: model }));
 }
 
 function isCanceledJob(error: unknown): boolean {
@@ -321,8 +554,7 @@ export async function startDiscordDaemon(
 		return run;
 	};
 
-	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
-		const channel = getChannelRef(message);
+	const getRuntimeForChannel = async (channel: ChatChannelRef): Promise<ConversationRuntime> => {
 		const channelKey = chatChannelKey(channel);
 		const existing = runtimes.get(channelKey);
 		if (existing) return existing;
@@ -342,6 +574,18 @@ export async function startDiscordDaemon(
 			runtimes.delete(channelKey);
 			throw error;
 		}
+	};
+
+	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
+		return getRuntimeForChannel(getChannelRef(message));
+	};
+
+	const getInteractionRuntime = async (
+		interaction: ChatInputCommandInteraction | AutocompleteInteraction,
+	): Promise<ConversationRuntime> => {
+		const channel = interaction.channel;
+		if (!channel || !interaction.channelId) throw new Error("Discord interaction has no channel");
+		return getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
 	};
 
 	const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
@@ -379,8 +623,9 @@ export async function startDiscordDaemon(
 	const flushCollected = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
 		collectTimers.delete(runtime.channelKey);
 		try {
+			const isDm = isDmChannel(message.channel);
 			const queued = await runtime.queueLatestTrigger({
-				channelTrigger: getChannelTriggerSetting(config, settings, message, runtime.channelKey).value,
+				channelTrigger: getChannelTriggerSetting(config, settings, runtime.channelKey, isDm).value,
 			});
 			if (!queued) return;
 			// The captured message is only a channel handle; drainJobs fetches the trigger record's message id for replies.
@@ -405,68 +650,21 @@ export async function startDiscordDaemon(
 		let runtime: ConversationRuntime;
 		try {
 			runtime = await getRuntime(message);
-			const channelTrigger = getChannelTriggerSetting(config, settings, message, runtime.channelKey);
+			const isDm = isDmChannel(message.channel);
+			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
 			const input = toInboundInput(message, client.user.id);
 			const control = runtime.parseControlCommand(input);
 			if (control) {
 				await runtime.noteControlCommand(input, control);
-				if (control.command === "stop") {
-					if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey)
-						familiarAgent.abort(runtime.channelKey);
-					await runtime.resetConversation("stop requested");
-					const text = "Stopped current work and cleared the chat queue.";
-					const messageIds = await sendReply(config, message, text);
-					await runtime.noteOutbound({ text, messageIds, control: control.command });
-					return;
-				}
-				if (control.command === "new") {
-					await familiarAgent.reset(runtime.channelKey);
-					await runtime.resetConversation("new conversation requested");
-					const text = "Started a fresh agent transcript for this channel.";
-					const messageIds = await sendReply(config, message, text);
-					await runtime.noteOutbound({ text, messageIds, control: control.command });
-					return;
-				}
-				if (control.command === "model") {
-					const text = control.args
-						? await familiarAgent.setModel(runtime.channelKey, control.args)
-						: `Current model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`;
-					const messageIds = await sendReply(config, message, text);
-					await runtime.noteOutbound({ text, messageIds, control: control.command });
-					return;
-				}
-				if (control.command === "thinking") {
-					const text = control.args
-						? await familiarAgent.setThinkingLevel(runtime.channelKey, control.args)
-						: `Current thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`;
-					const messageIds = await sendReply(config, message, text);
-					await runtime.noteOutbound({ text, messageIds, control: control.command });
-					return;
-				}
-				if (control.command === "channel-trigger") {
-					if (isDmMessage(message)) {
-						const text = "DM channel trigger is always.";
-						const messageIds = await sendReply(config, message, text);
-						await runtime.noteOutbound({ text, messageIds, control: control.command });
-						return;
-					}
-					const triggerInput = control.args.trim().toLowerCase();
-					if (triggerInput && triggerInput !== "mention" && triggerInput !== "always") {
-						throw new Error("Usage: /channel-trigger mention|always");
-					}
-					const trigger = triggerInput === "mention" || triggerInput === "always" ? triggerInput : undefined;
-					let text: string;
-					if (trigger) {
-						await settings.setChannelTrigger(runtime.channelKey, trigger);
-						text = `Channel trigger set to ${trigger} for this channel`;
-					} else {
-						text = `Current channel trigger: ${formatSetting(channelTrigger)}`;
-					}
-					const messageIds = await sendReply(config, message, text);
-					await runtime.noteOutbound({ text, messageIds, control: control.command });
-					return;
-				}
-				const text = formatCommandResponse(control.command, runtime, familiarAgent, channelTrigger);
+				const text = await applyControlCommand({
+					control,
+					runtime,
+					familiarAgent,
+					settings,
+					channelTrigger,
+					isDm,
+					activeAgentOwner,
+				});
 				const messageIds = await sendReply(config, message, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
 				return;
@@ -502,7 +700,57 @@ export async function startDiscordDaemon(
 		}
 	};
 
+	const onInteractionCreate = async (interaction: Interaction) => {
+		if (interaction.isAutocomplete()) {
+			if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
+			if (!isAllowedInteractionChannel(config, interaction)) {
+				await interaction.respond([]);
+				return;
+			}
+			await interaction.respond(getAutocompleteChoices(config, interaction)).catch((error) => {
+				console.error("Discord autocomplete response failed", error);
+			});
+			return;
+		}
+		if (!interaction.isChatInputCommand()) return;
+		if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
+		if (!isAllowedInteractionChannel(config, interaction)) {
+			await interaction.reply({
+				content: "This Familiar command is owner-only for configured channels.",
+				flags: EPHEMERAL_REPLY,
+			});
+			return;
+		}
+		let runtime: ConversationRuntime | undefined;
+		try {
+			await interaction.deferReply({ flags: EPHEMERAL_REPLY });
+			runtime = await getInteractionRuntime(interaction);
+			const isDm = isDmChannel(interaction.channel);
+			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
+			const input = inboundInputFromInteraction(interaction);
+			const control = runtime.parseControlCommand(input);
+			if (!control) throw new Error("Unsupported Familiar command.");
+			await runtime.noteControlCommand(input, control);
+			const text = await applyControlCommand({
+				control,
+				runtime,
+				familiarAgent,
+				settings,
+				channelTrigger,
+				isDm,
+				activeAgentOwner,
+			});
+			const messageIds = await replyEphemeral(interaction, text);
+			await runtime.noteOutbound({ text, messageIds, control: control.command });
+		} catch (error) {
+			await runtime?.appendError(error instanceof Error ? error.message : String(error));
+			await replyInteractionError(interaction, error);
+		}
+	};
+
+	await registerFamiliarApplicationCommand(client);
 	client.on(Events.MessageCreate, onMessageCreate);
+	client.on(Events.InteractionCreate, onInteractionCreate);
 	client.on(Events.Error, (error) => console.error("Discord client error", error));
 	client.on(Events.Warn, (warning) => console.warn("Discord warning", warning));
 	client.ws.on("close" as any, (event: unknown) => {
@@ -513,6 +761,7 @@ export async function startDiscordDaemon(
 		client,
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
+			client.off(Events.InteractionCreate, onInteractionCreate);
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
 			const resolvedRuntimes = await Promise.all(

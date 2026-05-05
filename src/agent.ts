@@ -113,6 +113,7 @@ function keepOnlyLatestUserCacheControl(payload: unknown, model: Model<any>): un
 	return nextPayload;
 }
 
+// TODO: remove once pi-ai handles store:false reasoning replay upstream.
 function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
 	const nextPayload = clonePayload(payload);

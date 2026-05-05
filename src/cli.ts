@@ -10,6 +10,7 @@ import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { startDiscordDaemon } from "./discord.js";
 import { loadSettingsStore } from "./settings.js";
+import { startWebDaemon } from "./web.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
@@ -39,14 +40,15 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	await mkdir(config.workspace.dataDir, { recursive: true });
 	const settings = await loadSettingsStore(config);
 	const familiarAgent = await createFamiliarAgent(config, settings);
-	const daemon = await startDiscordDaemon(config, familiarAgent, settings);
+	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings);
+	const webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon);
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
 	console.log(`settings=${settings.path}`);
 
 	const stop = async () => {
 		console.log("Stopping familiar");
-		await daemon.stop();
+		await Promise.all([webDaemon.stop(), discordDaemon.stop()]);
 		process.exit(0);
 	};
 	process.once("SIGINT", () => void stop());

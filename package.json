@@ -7,7 +7,7 @@
 		"familiar": "./dist/cli.js"
 	},
 	"scripts": {
-		"dev": "tsx watch src/cli.ts",
+		"dev": "tsx watch src/cli.ts run",
 		"build": "tsc -p tsconfig.build.json",
 		"lint": "biome check",
 		"format": "biome format --write",

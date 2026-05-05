@@ -23,7 +23,7 @@ import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
 export interface FamiliarAgent {
-	prompt(sessionKey: string, input: string): Promise<string>;
+	prompt(sessionKey: string, input: string, onEvent?: (event: AgentEvent) => void | Promise<void>): Promise<string>;
 	steer(sessionKey: string, input: string): void;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
@@ -462,10 +462,15 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
 			return `Thinking set to ${clamped}${suffix} for this channel\nSupported: ${supportedThinkingLevels(model).join(", ")}`;
 		},
-		async prompt(sessionKey: string, input: string): Promise<string> {
+		async prompt(sessionKey: string, input: string, onEvent?: (event: AgentEvent) => void | Promise<void>): Promise<string> {
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
-				await session.agent.prompt(input);
+				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
+				try {
+					await session.agent.prompt(input);
+				} finally {
+					unsubscribe?.();
+				}
 				return getLastAssistantText(session.agent);
 			});
 			session.promptQueue = run.then(

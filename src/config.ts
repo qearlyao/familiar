@@ -10,6 +10,7 @@ export type DiscordReplyMode = "plain" | "reply";
 export type DiscordChunkMode = "simple" | "paragraph";
 export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
+export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 
 export interface Config {
 	workspacePath: string;
@@ -24,6 +25,13 @@ export interface Config {
 		channelTrigger: DiscordChannelTrigger;
 		collectDebounceMs: number;
 		allowBotMessages: boolean;
+	};
+	web: {
+		port: number;
+		authMode: WebAuthMode;
+		bearerToken?: string;
+		totpSecret?: string;
+		bindAddress: string;
 	};
 	agent: {
 		model: string;
@@ -137,6 +145,11 @@ function readDiscordChannelTrigger(value: unknown): DiscordChannelTrigger {
 	throw new Error('Config value discord.channel_trigger must be one of "mention" or "always"');
 }
 
+function readWebAuthMode(value: unknown): WebAuthMode {
+	if (value === "tailscale-only" || value === "bearer" || value === "public-2fa") return value;
+	throw new Error('Config value web.auth_mode must be one of "tailscale-only", "bearer", or "public-2fa"');
+}
+
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
 	if (typeof value === "boolean") return value;
@@ -166,6 +179,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const parsed = interpolateValue(parse(raw)) as Record<string, any>;
 
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
+	const web = (parsed.web ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
@@ -202,6 +216,13 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			channelTrigger: readDiscordChannelTrigger(readOptionalString(discord.channel_trigger, "mention")),
 			collectDebounceMs: readInteger(discord.collect_debounce_ms, 4000, "discord.collect_debounce_ms"),
 			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
+		},
+		web: {
+			port: readInteger(web.port, 8787, "web.port"),
+			authMode: readWebAuthMode(readOptionalString(web.auth_mode, "tailscale-only")),
+			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
+			totpSecret: readOptionalString(web.totp_secret, "") || undefined,
+			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),
 		},
 		agent: {
 			model: model || legacyModel,

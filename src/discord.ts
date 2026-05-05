@@ -20,6 +20,7 @@ import {
 	type MessageResolvable,
 	Partials,
 } from "discord.js";
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
 import type { InboundChatRecord } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
@@ -35,7 +36,24 @@ const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 
 export interface DiscordDaemon {
 	client: Client<true>;
+	getWebSessions(): Promise<DiscordWebSession[]>;
+	getRuntimeForWebChannel(channelKey?: string): Promise<ConversationRuntime>;
+	runPromptForWeb(
+		runtime: ConversationRuntime,
+		jobId: string,
+		prompt: string,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+	): Promise<string>;
+	abortWebRuntime(runtime: ConversationRuntime): void;
+	getActiveRuntimeKey(): string | undefined;
 	stop(): Promise<void>;
+}
+
+export interface DiscordWebSession {
+	key: string;
+	label: string;
+	channel: ChatChannelRef;
+	isDefault?: boolean;
 }
 
 async function withReadyClient(token: string): Promise<Client<true>> {
@@ -550,12 +568,17 @@ export async function startDiscordDaemon(
 	let activeAgentOwner: string | undefined;
 	let agentWorkQueue = Promise.resolve();
 
-	const promptForRuntime = async (runtime: ConversationRuntime, jobId: string, prompt: string): Promise<string> => {
+	const promptForRuntime = async (
+		runtime: ConversationRuntime,
+		jobId: string,
+		prompt: string,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+	): Promise<string> => {
 		const run = agentWorkQueue.then(async () => {
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 			activeAgentOwner = runtime.channelKey;
 			try {
-				const reply = await familiarAgent.prompt(runtime.channelKey, prompt);
+				const reply = await familiarAgent.prompt(runtime.channelKey, prompt, onEvent);
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
 			} finally {
@@ -601,6 +624,36 @@ export async function startDiscordDaemon(
 		const channel = interaction.channel;
 		if (!channel || !interaction.channelId) throw new Error("Discord interaction has no channel");
 		return getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
+	};
+
+	const getWebSessions = async (): Promise<DiscordWebSession[]> => {
+		const sessions: DiscordWebSession[] = [];
+		const dmChannel = await client.users.createDM(config.discord.ownerId);
+		const dmRef = buildChannelRef(dmChannel, dmChannel.id);
+		sessions.push({
+			key: chatChannelKey(dmRef),
+			label: "Main Chat",
+			channel: dmRef,
+			isDefault: true,
+		});
+		for (const channelId of config.discord.allowedChannels) {
+			const channel = await client.channels.fetch(channelId).catch(() => undefined);
+			if (!channel) continue;
+			const ref = buildChannelRef(channel as DiscordChatChannel, channelId);
+			sessions.push({
+				key: chatChannelKey(ref),
+				label: ref.channelName || `Discord ${ref.scope}`,
+				channel: ref,
+			});
+		}
+		return sessions;
+	};
+
+	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
+		const sessions = await getWebSessions();
+		const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
+		if (!session) throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No Discord sessions available");
+		return getRuntimeForChannel(session.channel);
 	};
 
 	const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
@@ -781,6 +834,15 @@ export async function startDiscordDaemon(
 
 	return {
 		client,
+		getWebSessions,
+		getRuntimeForWebChannel,
+		runPromptForWeb: promptForRuntime,
+		abortWebRuntime(runtime: ConversationRuntime): void {
+			if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
+		},
+		getActiveRuntimeKey(): string | undefined {
+			return activeAgentOwner;
+		},
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);

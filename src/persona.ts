@@ -20,3 +20,11 @@ export async function loadPersona(config: Config): Promise<Persona> {
 export function buildSystemPrompt(persona: Persona): string {
 	return `${persona.soul.trim()}\n\n${persona.user.trim()}\n\n${persona.memory.trim()}\n<system-reminder>\nIf you learn something durable about the user, you may edit MEMORY.md to keep it. Stay yourself.\nYou may output [[FAMILIAR_SILENT]] to end the conversation without sending a visible reply, optionally followed by a short reason.\n</system-reminder>`;
 }
+
+const NAME_FIELD_RE = /^\s*[-*]?\s*\*\*Name:\*\*\s*(.+?)\s*$/im;
+
+export function parsePersonaName(soul: string, fallback = "Familiar"): string {
+	const match = soul.match(NAME_FIELD_RE);
+	if (!match) return fallback;
+	return match[1].replace(/^["'`*_]+|["'`*_]+$/g, "").trim() || fallback;
+}

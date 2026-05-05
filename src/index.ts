@@ -15,6 +15,7 @@ export {
 } from "./chat-log.js";
 export { type CacheRetention, type Config, loadConfig } from "./config.js";
 export { type DiscordDaemon, startDiscordDaemon } from "./discord.js";
+export { type WebDaemon, startWebDaemon } from "./web.js";
 export {
 	clampConfiguredThinkingLevel,
 	createConfiguredModel,

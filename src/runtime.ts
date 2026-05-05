@@ -63,6 +63,8 @@ export interface ConversationStatus {
 	armed: boolean;
 }
 
+export type RuntimeRecordListener = (record: ChatLogRecord) => void | Promise<void>;
+
 function formatAuthor(authorName: string | undefined, authorId: string): string {
 	return authorName ? `${authorName} (uid:${authorId})` : `uid:${authorId}`;
 }
@@ -95,6 +97,7 @@ export class ConversationRuntime {
 	private armedAfterRecordId: number | undefined;
 	private pendingJobs: QueuedJob[] = [];
 	private activeJob: QueuedJob | undefined;
+	private listeners = new Set<RuntimeRecordListener>();
 
 	private constructor(options: {
 		channelKey: string;
@@ -162,6 +165,18 @@ export class ConversationRuntime {
 		this.records.push(record);
 		this.nextRecordId = Math.max(this.nextRecordId, record.recordId + 1);
 		await this.log.append(record);
+		for (const listener of this.listeners) {
+			void Promise.resolve(listener(record)).catch((error) =>
+				console.error(`runtime listener failed for ${this.channelKey}`, error),
+			);
+		}
+	}
+
+	subscribe(listener: RuntimeRecordListener): () => void {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
 	}
 
 	private isOwnerMessage(input: Pick<InboundMessageInput, "authorId" | "isBot">): boolean {
@@ -344,6 +359,8 @@ export class ConversationRuntime {
 	async noteOutbound(options: {
 		text: string;
 		messageIds: string[];
+		thinking?: string;
+		thinkingMs?: number;
 		silent?: boolean;
 		replyToMessageId?: string;
 		jobId?: string;
@@ -356,6 +373,8 @@ export class ConversationRuntime {
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageIds: options.messageIds,
 			text,
+			thinking: options.thinking,
+			thinkingMs: options.thinkingMs,
 			silent: options.silent || undefined,
 			replyToMessageId: options.replyToMessageId,
 			jobId: options.jobId,
@@ -368,6 +387,8 @@ export class ConversationRuntime {
 	async completeActiveJob(options: {
 		text: string;
 		messageIds: string[];
+		thinking?: string;
+		thinkingMs?: number;
 		silent?: boolean;
 		replyToMessageId?: string;
 	}): Promise<void> {
@@ -376,6 +397,8 @@ export class ConversationRuntime {
 		const outboundRecordId = await this.noteOutbound({
 			text: options.text,
 			messageIds: options.messageIds,
+			thinking: options.thinking,
+			thinkingMs: options.thinkingMs,
 			silent: options.silent,
 			replyToMessageId: options.replyToMessageId,
 			jobId: job.jobId,
@@ -470,5 +493,9 @@ export class ConversationRuntime {
 
 	formatInboundForLog(record: InboundChatRecord): string {
 		return `${formatAuthor(record.authorName, record.authorId)} @ ${record.ts}: ${record.text}`;
+	}
+
+	getRecords(): readonly ChatLogRecord[] {
+		return this.records;
 	}
 }

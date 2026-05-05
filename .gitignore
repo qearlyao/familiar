@@ -6,3 +6,4 @@ data/
 attachments/
 logs/
 *.log
+.DS_Store

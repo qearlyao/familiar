@@ -113,6 +113,25 @@ function keepOnlyLatestUserCacheControl(payload: unknown, model: Model<any>): un
 	return nextPayload;
 }
 
+function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
+	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
+	const nextPayload = clonePayload(payload);
+	if (!nextPayload || typeof nextPayload !== "object") return nextPayload;
+	const request = nextPayload as { input?: unknown; store?: unknown };
+	if (request.store !== false) return nextPayload;
+	const input = request.input;
+	if (!Array.isArray(input)) return nextPayload;
+	request.input = input.filter((item) => {
+		if (!item || typeof item !== "object" || Array.isArray(item)) return true;
+		return (item as { type?: unknown }).type !== "reasoning";
+	});
+	return nextPayload;
+}
+
+function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
+	return stripOpenAIStoredReasoningItems(keepOnlyLatestUserCacheControl(payload, model), model);
+}
+
 type StoredMessageRecord = {
 	ts: string;
 	sessionId: string;
@@ -303,7 +322,7 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 					apiKey: getRequestApiKey(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
 					onPayload: (payload, payloadModel) => {
-						const requestPayload = keepOnlyLatestUserCacheControl(payload, payloadModel);
+						const requestPayload = normalizeProviderPayload(payload, payloadModel);
 						writePayloadLog(config, {
 							ts: new Date().toISOString(),
 							direction: "request",

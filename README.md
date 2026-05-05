@@ -91,3 +91,6 @@ npm run payload:pretty -- --model claude-opus-4-7
 ```
 
 The output shows the model, thinking config, system sections, tools, cache-control locations, and tail messages.
+
+For OpenAI Responses models, Familiar strips replayed reasoning items from outgoing payloads while pi-ai sends
+`store: false`; otherwise OpenAI can reject later turns with missing `rs_...` item references.

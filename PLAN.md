@@ -187,6 +187,8 @@ Already in place:
 - Durable per-channel overrides for `/model`, `/thinking`, and `/channel-trigger`.
 - Native Discord `/familiar` command with subcommands, model autocomplete, and ephemeral control replies. It is namespaced
   under `/familiar` to avoid clobbering OpenClaw's existing `/model`, `/new`, `/stop`, and `/status` commands on the same bot.
+- Silent response protocol: the agent may output `[[FAMILIAR_SILENT]]` on the first line to suppress Discord output while
+  recording a silent outbound log event for WebUI/internal visibility.
 - Payload inspection.
 
 Still needed:

@@ -31,6 +31,7 @@ const FAMILIAR_COMMAND_NAME = "familiar";
 const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
+const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -264,6 +265,18 @@ function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
+function parseAgentReply(text: string): { text: string; silent: boolean } {
+	const normalized = text.replace(/\r\n/g, "\n").trim();
+	if (normalized === SILENT_RESPONSE_MARKER) {
+		return { text: "", silent: true };
+	}
+	if (normalized.startsWith(`${SILENT_RESPONSE_MARKER}\n`)) {
+		const reason = normalized.slice(SILENT_RESPONSE_MARKER.length).trim();
+		return { text: reason, silent: true };
+	}
+	return { text: normalizeOutboundText(text), silent: false };
+}
+
 async function sendReply(config: Config, message: Message, text: string, replyToMessageId?: string): Promise<string[]> {
 	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
@@ -293,7 +306,9 @@ async function sendReply(config: Config, message: Message, text: string, replyTo
 	return sentIds;
 }
 
-type DiscordInteractionChannel = NonNullable<ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]>;
+type DiscordInteractionChannel = NonNullable<
+	ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]
+>;
 type DiscordChatChannel = Message["channel"] | DiscordInteractionChannel;
 
 function buildChannelRef(channel: DiscordChatChannel, channelId: string): ChatChannelRef {
@@ -594,12 +609,19 @@ export async function startDiscordDaemon(
 			if (!dispatch) return;
 			try {
 				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
-				const sentText = normalizeOutboundText(reply);
-				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
-				const messageIds = await sendReply(config, replyAnchor, sentText, dispatch.triggerMessageId);
+				const parsedReply = parseAgentReply(reply);
+				const messageIds = parsedReply.silent
+					? []
+					: await sendReply(
+							config,
+							await fetchMessageAnchor(message, dispatch.triggerMessageId),
+							parsedReply.text,
+							dispatch.triggerMessageId,
+						);
 				await runtime.completeActiveJob({
-					text: sentText,
+					text: parsedReply.text,
 					messageIds,
+					silent: parsedReply.silent,
 					replyToMessageId: dispatch.triggerMessageId,
 				});
 			} catch (error) {

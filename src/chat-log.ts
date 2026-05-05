@@ -67,6 +67,7 @@ export interface OutboundChatRecord extends ChatRecordBase {
 	type: "outbound";
 	messageIds: string[];
 	text: string;
+	silent?: boolean;
 	replyToMessageId?: string;
 	jobId?: string;
 	control?: ControlCommand;

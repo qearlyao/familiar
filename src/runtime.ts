@@ -344,6 +344,7 @@ export class ConversationRuntime {
 	async noteOutbound(options: {
 		text: string;
 		messageIds: string[];
+		silent?: boolean;
 		replyToMessageId?: string;
 		jobId?: string;
 		control?: ControlCommand;
@@ -355,6 +356,7 @@ export class ConversationRuntime {
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageIds: options.messageIds,
 			text,
+			silent: options.silent || undefined,
 			replyToMessageId: options.replyToMessageId,
 			jobId: options.jobId,
 			control: options.control,
@@ -363,12 +365,18 @@ export class ConversationRuntime {
 		return record.recordId;
 	}
 
-	async completeActiveJob(options: { text: string; messageIds: string[]; replyToMessageId?: string }): Promise<void> {
+	async completeActiveJob(options: {
+		text: string;
+		messageIds: string[];
+		silent?: boolean;
+		replyToMessageId?: string;
+	}): Promise<void> {
 		const job = this.activeJob;
 		if (!job) return;
 		const outboundRecordId = await this.noteOutbound({
 			text: options.text,
 			messageIds: options.messageIds,
+			silent: options.silent,
 			replyToMessageId: options.replyToMessageId,
 			jobId: job.jobId,
 		});

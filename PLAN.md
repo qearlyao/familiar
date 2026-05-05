@@ -10,13 +10,15 @@ Implemented or recently added:
 
 - Stage 0 and Stage 1 are effectively done: direct upstream `Agent`, Discord DM path, persona files, stable session/cache logging.
 - Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, per-channel agent transcripts, and payload inspection tooling.
+- Stage 3 v0 is shipped: WebUI at `web/` (React+Vite+Tailwind v4+shadcn, warm sepia tweakcn theme), side-door HTTP+WebSocket server in `src/web.ts`, three auth modes scaffolded, session picker exposing owner DM + allowed Discord channels, web tabs share runtime/transcript with their Discord counterpart so Discord-originated messages stream live into open web tabs, persona name auto-detected from SOUL.md `**Name:**`, streaming thinking blocks (collapsible, italic Lora serif).
 - Anthropic cache normalization is implemented in `src/agent.ts`: Familiar strips extra upstream `cache_control` points and keeps the latest user-message checkpoint, matching Claude Code's stable cache shape.
 - Payload inspection exists: `npm run payload:pretty -- --messages 12`, `--full`, `--date`, `--model`.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
-Next Stage 2 implementation chunk:
+Next implementation chunks:
 
-- Finish tests/log probes and Stage 2 polish cleanup before Stage 3.
+- Finish tests/log probes and Stage 2 polish cleanup.
+- Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 
 Important caution:
 
@@ -268,15 +270,30 @@ Done when:
 
 ### Stage 3: WebUI v0 and Side-Door Transport
 
-- HTTP and WebSocket server.
-- Auth modes: bearer, public-2fa, optional private-network access.
-- Static `web/` UI with channel picker, message form, log/status view, live stream.
-- Web channel is equal to Discord in the runtime model.
-- Protocol should leave room for rich WebUI: attachments, tool/status events, model/thinking controls, memory/diary panes, transcript/payload inspection, channel settings.
+Status: v0 shipped. Keep this section as a behavior/design reference.
+
+Implemented:
+
+- HTTP + WebSocket side-door server in `src/web.ts`, no new runtime deps (hand-rolled WS framing).
+- Three auth modes scaffolded: `tailscale-only`, `bearer`, `public-2fa` (TOTP via `/api/web/control` `login` command).
+- Frontend at `web/`: React+Vite+TypeScript+Tailwind v4+shadcn/ui+tweakcn theme `cmokic2d8000304jo55ca0sy3` (warm sepia/literary, Libre Baskerville/Lora/IBM Plex Mono).
+- Wire protocol documented at `web/PROTOCOL.md`: HTTP for handshake/history/control/sessions, WebSocket for live deltas, `delta.part: "thinking" | "text"` discriminator, `lastEventId` reconnect with `replay_window_lost` fallback.
+- Session picker: web tabs do not own a separate runtime; `GET /api/web/sessions` returns owner DM + configured allowed Discord channels, and web requests share the same `ConversationRuntime`/transcript/agent session as their Discord counterpart. Discord-originated messages stream into web tabs viewing that channel via `ConversationRuntime.subscribe()`.
+- Streaming thinking blocks: collapsible, italic serif body, "thought for Xs" trigger (lighter color than the assistant name to avoid visual collision).
+- Persona name is auto-detected from `SOUL.md` `**Name:**` field via `parsePersonaName()` and surfaced in `/api/web/auth/mode`; the wordmark and assistant labels track the active persona.
+- Symmetric plain-text message style (alignment + name label only, no asymmetric bubbles) — fits the literary aesthetic.
 
 Done when:
 
-- Phone/browser can talk to Familiar without Discord through configured auth/access.
+- Phone/browser can talk to Familiar without Discord through configured auth/access. ✅
+
+Deferred / open questions:
+
+- Cross-posting: web messages currently share Familiar's runtime/log with the Discord session but are NOT echoed as visible Discord messages. Decide later whether to mirror them.
+- Public-2fa login UI: protocol path is wired (`POST /api/web/control` with `command: "login"`), but no login screen exists in the frontend yet.
+- Attachments (images, audio) on either direction.
+- Rich panes (memory/diary/transcript/payload inspection) — left for later iterations.
+- Token-level usage and cost surfacing in the UI (only final usage on `message_completed` is captured today).
 
 ### Stage 4: Tools
 

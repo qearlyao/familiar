@@ -12,7 +12,7 @@ import type { ChatLogRecord } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
-import { ConversationRuntime, type InboundMessageInput, type ParsedControlCommand } from "./runtime.js";
+import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
 
 const WEB_USER_NAME = "you";
@@ -291,11 +291,9 @@ function webMessageFromRecord(record: ChatLogRecord, assistantName: string): Web
 	return undefined;
 }
 
-function usageFromAgentEvent(event: AgentEvent): WebStreamEvent extends infer T
-	? T extends { type: "message_completed"; usage?: infer U }
-		? U
-		: never
-	: never {
+function usageFromAgentEvent(
+	event: AgentEvent,
+): WebStreamEvent extends infer T ? (T extends { type: "message_completed"; usage?: infer U } ? U : never) : never {
 	if (event.type !== "message_end" || event.message.role !== "assistant") return undefined as never;
 	const usage = event.message.usage;
 	return {
@@ -452,7 +450,8 @@ export async function startWebDaemon(
 		part: "thinking" | "text",
 		text: string,
 		ts?: number,
-	): WebStreamEvent => publish({ type: "delta", channelKey, messageId: messageIdValue, part, content: text, text, ts });
+	): WebStreamEvent =>
+		publish({ type: "delta", channelKey, messageId: messageIdValue, part, content: text, text, ts });
 
 	const subscribeRuntime = (runtime: ConversationRuntime): void => {
 		if (runtimeSubscriptions.has(runtime.channelKey)) return;
@@ -467,7 +466,12 @@ export async function startWebDaemon(
 					ts: toUnixMs(record.ts),
 				});
 				publishDelta(runtime.channelKey, record.messageId, "text", record.text, toUnixMs(record.ts));
-				publish({ type: "message_completed", channelKey: runtime.channelKey, messageId: record.messageId, ts: toUnixMs(record.ts) });
+				publish({
+					type: "message_completed",
+					channelKey: runtime.channelKey,
+					messageId: record.messageId,
+					ts: toUnixMs(record.ts),
+				});
 			}
 			if (record.type === "outbound" && !record.control) {
 				const outboundId = record.messageIds[0] || `out_${record.recordId}`;
@@ -480,7 +484,8 @@ export async function startWebDaemon(
 					who: personaName,
 					ts: toUnixMs(record.ts),
 				});
-				if (record.thinking) publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
+				if (record.thinking)
+					publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
 				if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
 				publish({
 					type: "message_completed",
@@ -536,7 +541,6 @@ export async function startWebDaemon(
 		let usage: ReturnType<typeof usageFromAgentEvent> | undefined;
 		let started = false;
 		let thinking = "";
-		let thinkingMs: number | undefined;
 		const reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, (event: AgentEvent) => {
 			if (event.type === "message_start" && event.message.role === "assistant" && !started) {
 				started = true;
@@ -573,8 +577,15 @@ export async function startWebDaemon(
 			});
 			publishDelta(runtime.channelKey, assistantMessageId, "text", reply);
 		}
-		thinkingMs = thinkingStart !== undefined ? Math.max(0, (thinkingEnd ?? Date.now()) - thinkingStart) : undefined;
-		publish({ type: "message_completed", channelKey: runtime.channelKey, messageId: assistantMessageId, thinkingMs, usage });
+		const thinkingMs =
+			thinkingStart !== undefined ? Math.max(0, (thinkingEnd ?? Date.now()) - thinkingStart) : undefined;
+		publish({
+			type: "message_completed",
+			channelKey: runtime.channelKey,
+			messageId: assistantMessageId,
+			thinkingMs,
+			usage,
+		});
 		locallyStreamedOutboundIds.add(assistantMessageId);
 		return { text: reply, messageId: assistantMessageId, thinking, thinkingMs };
 	};
@@ -606,7 +617,12 @@ export async function startWebDaemon(
 		if (control.command === "stop") {
 			discordDaemon.abortWebRuntime(runtime);
 			await runtime.resetConversation("stop requested");
-			publish({ type: "status", channelKey: runtime.channelKey, kind: "idle", detail: "Stopped current work and cleared the chat queue." });
+			publish({
+				type: "status",
+				channelKey: runtime.channelKey,
+				kind: "idle",
+				detail: "Stopped current work and cleared the chat queue.",
+			});
 			return "Stopped current work and cleared the chat queue.";
 		}
 		if (control.command === "new") {
@@ -703,11 +719,16 @@ export async function startWebDaemon(
 						return true;
 					}
 					const sessionId = auth.createSession();
-					sendJson(response, 200, { ok: true, message: "Authenticated." }, {
-						"set-cookie": `familiar_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
-							SESSION_TTL_MS / 1000,
-						)}; Path=/api/web`,
-					});
+					sendJson(
+						response,
+						200,
+						{ ok: true, message: "Authenticated." },
+						{
+							"set-cookie": `familiar_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
+								SESSION_TTL_MS / 1000,
+							)}; Path=/api/web`,
+						},
+					);
 					return true;
 				}
 				const args = commandArgs(body.command, body.args);
@@ -763,9 +784,7 @@ export async function startWebDaemon(
 			netSocket.destroy();
 			return;
 		}
-		const responseKey = createHash("sha1")
-			.update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-			.digest("base64");
+		const responseKey = createHash("sha1").update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
 		netSocket.write(
 			[
 				"HTTP/1.1 101 Switching Protocols",
@@ -798,13 +817,22 @@ export async function startWebDaemon(
 					const message = JSON.parse(raw) as unknown;
 					if (isObject(message) && message.type === "hello") {
 						if (!client.channelKey) continue;
-						replay(client, client.channelKey, typeof message.lastEventId === "string" ? message.lastEventId : null);
+						replay(
+							client,
+							client.channelKey,
+							typeof message.lastEventId === "string" ? message.lastEventId : null,
+						);
 					}
 					if (isObject(message) && message.type === "abort") {
 						void getRuntime(client.channelKey).then(async (runtime) => {
 							discordDaemon.abortWebRuntime(runtime);
 							await runtime.resetConversation("web abort requested");
-							publish({ type: "error", channelKey: runtime.channelKey, code: "abort", message: "Aborted current work." });
+							publish({
+								type: "error",
+								channelKey: runtime.channelKey,
+								code: "abort",
+								message: "Aborted current work.",
+							});
 						});
 					}
 				}

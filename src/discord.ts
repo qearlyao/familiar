@@ -1,5 +1,5 @@
 import { once } from "node:events";
-
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import {
 	type ApplicationCommandData,
 	type ApplicationCommandOptionChoiceData,
@@ -20,7 +20,6 @@ import {
 	type MessageResolvable,
 	Partials,
 } from "discord.js";
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
 import type { InboundChatRecord } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
@@ -652,7 +651,8 @@ export async function startDiscordDaemon(
 	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
 		const sessions = await getWebSessions();
 		const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
-		if (!session) throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No Discord sessions available");
+		if (!session)
+			throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No Discord sessions available");
 		return getRuntimeForChannel(session.channel);
 	};
 

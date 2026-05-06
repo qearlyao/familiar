@@ -73,46 +73,6 @@ function clonePayload(payload: unknown): unknown {
 	return JSON.parse(JSON.stringify(payload)) as unknown;
 }
 
-function stripCacheControl(value: unknown): void {
-	if (!value || typeof value !== "object") return;
-	if (Array.isArray(value)) {
-		for (const item of value) stripCacheControl(item);
-		return;
-	}
-	const record = value as Record<string, unknown>;
-	delete record.cache_control;
-	for (const child of Object.values(record)) stripCacheControl(child);
-}
-
-function findLastAnthropicUserCacheBlock(payload: unknown): Record<string, unknown> | undefined {
-	if (!payload || typeof payload !== "object" || !("messages" in payload)) return undefined;
-	const messages = (payload as { messages?: unknown }).messages;
-	if (!Array.isArray(messages)) return undefined;
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const message = messages[i];
-		if (!message || typeof message !== "object" || (message as { role?: unknown }).role !== "user") continue;
-		const content = (message as { content?: unknown }).content;
-		if (typeof content === "string") return undefined;
-		if (!Array.isArray(content)) return undefined;
-		for (let j = content.length - 1; j >= 0; j--) {
-			const block = content[j];
-			if (block && typeof block === "object" && "cache_control" in block) return block as Record<string, unknown>;
-		}
-		return undefined;
-	}
-	return undefined;
-}
-
-function keepOnlyLatestUserCacheControl(payload: unknown, model: Model<any>): unknown {
-	if (model.api !== "anthropic-messages") return payload;
-	const nextPayload = clonePayload(payload);
-	const cacheBlock = findLastAnthropicUserCacheBlock(nextPayload);
-	const cacheControl = cacheBlock?.cache_control;
-	stripCacheControl(nextPayload);
-	if (cacheBlock && cacheControl !== undefined) cacheBlock.cache_control = cacheControl;
-	return nextPayload;
-}
-
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.
 function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
@@ -130,7 +90,7 @@ function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): u
 }
 
 function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
-	return stripOpenAIStoredReasoningItems(keepOnlyLatestUserCacheControl(payload, model), model);
+	return stripOpenAIStoredReasoningItems(payload, model);
 }
 
 type StoredMessageRecord = {
@@ -462,7 +422,11 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
 			return `Thinking set to ${clamped}${suffix} for this channel\nSupported: ${supportedThinkingLevels(model).join(", ")}`;
 		},
-		async prompt(sessionKey: string, input: string, onEvent?: (event: AgentEvent) => void | Promise<void>): Promise<string> {
+		async prompt(
+			sessionKey: string,
+			input: string,
+			onEvent?: (event: AgentEvent) => void | Promise<void>,
+		): Promise<string> {
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
 				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;

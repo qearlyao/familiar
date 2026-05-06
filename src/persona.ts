@@ -17,8 +17,32 @@ export async function loadPersona(config: Config): Promise<Persona> {
 	return { soul, user, memory };
 }
 
+type SystemPromptFile = {
+	name: string;
+	contents: string;
+};
+
+function renderSystemPromptFile(file: SystemPromptFile): string {
+	return `<file name="${file.name}">
+${file.contents.trim()}
+</file>`;
+}
+
 export function buildSystemPrompt(persona: Persona): string {
-	return `${persona.soul.trim()}\n\n${persona.user.trim()}\n\n${persona.memory.trim()}\n<system-reminder>\nIf you learn something durable about the user, you may edit MEMORY.md to keep it. Stay yourself.\nYou may output [[FAMILIAR_SILENT]] to end the conversation without sending a visible reply, optionally followed by a short reason.\n</system-reminder>`;
+	const files: SystemPromptFile[] = [
+		{ name: "SOUL.md", contents: persona.soul },
+		{ name: "USER.md", contents: persona.user },
+		{ name: "MEMORY.md", contents: persona.memory },
+	];
+	const renderedFiles = files.map(renderSystemPromptFile).join("\n\n");
+	return `<system-reminder>
+${renderedFiles}
+
+<instructions>
+If you learn something durable about the user, you may edit MEMORY.md to keep it. Stay yourself.
+You may output [[FAMILIAR_SILENT]] to end the conversation without sending a visible reply, optionally followed by a short reason.
+</instructions>
+</system-reminder>`;
 }
 
 const NAME_FIELD_RE = /^\s*[-*]?\s*\*\*Name:\*\*\s*(.+?)\s*$/im;

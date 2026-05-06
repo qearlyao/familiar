@@ -18,7 +18,7 @@ export function Chat() {
       <main className="flex-1 overflow-y-auto">
         <MessageList messages={messages} />
       </main>
-      <Composer onSend={(text) => void send(text)} />
+      <Composer onSend={(text) => void send(text)} personaName={personaName} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function Composer({ onSend }: { onSend: (text: string) => void }) {
+export function Composer({ onSend, personaName }: { onSend: (text: string) => void; personaName: string }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -21,7 +21,7 @@ export function Composer({ onSend }: { onSend: (text: string) => void }) {
   };
 
   return (
-    <div className="border-t border-border bg-background">
+    <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-3xl px-5 py-4">
         <div className="flex items-end gap-2 rounded-md border border-input bg-card px-3 py-2.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
           <textarea
@@ -34,10 +34,10 @@ export function Composer({ onSend }: { onSend: (text: string) => void }) {
                 send();
               }
             }}
-            placeholder="message Familiar…"
+            placeholder={`write to ${personaName}…`}
             rows={1}
             autoFocus
-            className="flex-1 resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="flex-1 resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none min-h-8 leading-8"
           />
           <Button
             type="button"

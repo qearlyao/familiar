@@ -258,7 +258,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
+	return record.type !== "runtime" || !["armed", "reset", "stopped"].includes(record.event);
+}
+
 function webMessageFromRecord(record: ChatLogRecord, assistantName: string): WebMessage | undefined {
+	if (!isUserVisibleRuntimeRecord(record)) return undefined;
 	if (record.type === "inbound") {
 		return {
 			id: record.messageId,

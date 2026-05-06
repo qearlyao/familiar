@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadMode, saveMode, type ThemeMode } from "@/lib/theme";
+
+const ORDER: ThemeMode[] = ["light", "dark", "auto"];
+const ICON: Record<ThemeMode, typeof Sun> = {
+  light: Sun,
+  dark: Moon,
+  auto: Monitor,
+};
+const LABEL: Record<ThemeMode, string> = {
+  light: "light mode",
+  dark: "dark mode",
+  auto: "system mode",
+};
 
 export function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>(() => loadMode());
@@ -10,20 +22,20 @@ export function ThemeToggle() {
     saveMode(mode);
   }, [mode]);
 
-  const isDark =
-    mode === "dark" ||
-    (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const Icon = ICON[mode];
+  const next = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
 
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
-      aria-label={isDark ? "switch to light mode" : "switch to dark mode"}
+      aria-label={`theme: ${LABEL[mode]}, click for ${LABEL[next]}`}
+      title={LABEL[mode]}
       className="size-8"
-      onClick={() => setMode(isDark ? "light" : "dark")}
+      onClick={() => setMode(next)}
     >
-      {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+      <Icon className="size-4" />
     </Button>
   );
 }

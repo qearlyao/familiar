@@ -23,7 +23,7 @@ export function SessionPicker({
   activeKey: string | undefined;
   onSelect: (key: string) => void;
 }) {
-  if (sessions.length === 0) return null;
+  if (sessions.length <= 1) return null;
   const active = sessions.find((s) => s.key === activeKey);
   const label = active ? sessionLabel(active) : "select session";
 

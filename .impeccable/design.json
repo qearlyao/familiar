@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-07T00:00:00Z",
+  "title": "Design System: Familiar",
+  "extensions": {
+    "colorMeta": {
+      "steeped-cream": {
+        "role": "neutral",
+        "displayName": "Steeped Cream",
+        "canonical": "oklch(0.9582 0.0152 90.2357)",
+        "tonalRamp": [
+          "oklch(0.18 0.012 90)",
+          "oklch(0.30 0.013 90)",
+          "oklch(0.45 0.014 90)",
+          "oklch(0.60 0.015 90)",
+          "oklch(0.74 0.015 90)",
+          "oklch(0.85 0.015 90)",
+          "oklch(0.92 0.015 90)",
+          "oklch(0.96 0.015 90)"
+        ]
+      },
+      "aged-linen": {
+        "role": "neutral",
+        "displayName": "Aged Linen",
+        "canonical": "oklch(0.9914 0.0098 87.4695)",
+        "tonalRamp": [
+          "oklch(0.20 0.008 87)",
+          "oklch(0.34 0.009 87)",
+          "oklch(0.48 0.009 87)",
+          "oklch(0.62 0.010 87)",
+          "oklch(0.76 0.010 87)",
+          "oklch(0.88 0.010 87)",
+          "oklch(0.95 0.010 87)",
+          "oklch(0.99 0.010 87)"
+        ]
+      },
+      "inkwell-brown": {
+        "role": "neutral",
+        "displayName": "Inkwell Brown",
+        "canonical": "oklch(0.3760 0.0225 64.3434)",
+        "tonalRamp": [
+          "oklch(0.18 0.020 64)",
+          "oklch(0.28 0.022 64)",
+          "oklch(0.38 0.022 64)",
+          "oklch(0.48 0.022 64)",
+          "oklch(0.60 0.020 64)",
+          "oklch(0.72 0.018 64)",
+          "oklch(0.84 0.015 64)",
+          "oklch(0.95 0.010 64)"
+        ]
+      },
+      "worn-clay": {
+        "role": "primary",
+        "displayName": "Worn Clay",
+        "canonical": "oklch(0.6180 0.0778 65.5444)",
+        "tonalRamp": [
+          "oklch(0.20 0.04 65)",
+          "oklch(0.32 0.06 65)",
+          "oklch(0.44 0.075 65)",
+          "oklch(0.56 0.080 65)",
+          "oklch(0.62 0.078 65)",
+          "oklch(0.72 0.060 65)",
+          "oklch(0.84 0.040 65)",
+          "oklch(0.94 0.020 65)"
+        ]
+      },
+      "worn-clay-on-dark": {
+        "role": "primary",
+        "displayName": "Worn Clay (on Walnut)",
+        "canonical": "oklch(0.7264 0.0581 66.6967)",
+        "tonalRamp": [
+          "oklch(0.22 0.03 66)",
+          "oklch(0.36 0.04 66)",
+          "oklch(0.48 0.05 66)",
+          "oklch(0.60 0.058 66)",
+          "oklch(0.72 0.058 66)",
+          "oklch(0.82 0.050 66)",
+          "oklch(0.90 0.030 66)",
+          "oklch(0.96 0.015 66)"
+        ]
+      },
+      "soft-sand": {
+        "role": "neutral",
+        "displayName": "Soft Sand",
+        "canonical": "oklch(0.8846 0.0302 85.5655)",
+        "tonalRamp": [
+          "oklch(0.20 0.018 85)",
+          "oklch(0.34 0.022 85)",
+          "oklch(0.48 0.026 85)",
+          "oklch(0.62 0.028 85)",
+          "oklch(0.74 0.030 85)",
+          "oklch(0.84 0.030 85)",
+          "oklch(0.92 0.025 85)",
+          "oklch(0.97 0.015 85)"
+        ]
+      },
+      "warm-sand": {
+        "role": "neutral",
+        "displayName": "Warm Sand",
+        "canonical": "oklch(0.8348 0.0426 88.8064)",
+        "tonalRamp": [
+          "oklch(0.20 0.025 88)",
+          "oklch(0.34 0.030 88)",
+          "oklch(0.48 0.038 88)",
+          "oklch(0.60 0.042 88)",
+          "oklch(0.72 0.043 88)",
+          "oklch(0.83 0.043 88)",
+          "oklch(0.92 0.030 88)",
+          "oklch(0.97 0.015 88)"
+        ]
+      },
+      "hearth-tan": {
+        "role": "neutral",
+        "displayName": "Hearth Tan",
+        "canonical": "oklch(0.8606 0.0321 84.5881)",
+        "tonalRamp": [
+          "oklch(0.20 0.018 84)",
+          "oklch(0.34 0.022 84)",
+          "oklch(0.48 0.028 84)",
+          "oklch(0.62 0.032 84)",
+          "oklch(0.74 0.032 84)",
+          "oklch(0.86 0.032 84)",
+          "oklch(0.93 0.024 84)",
+          "oklch(0.97 0.014 84)"
+        ]
+      },
+      "earth-gray": {
+        "role": "neutral",
+        "displayName": "Earth Gray",
+        "canonical": "oklch(0.5391 0.0387 71.1655)",
+        "tonalRamp": [
+          "oklch(0.20 0.020 71)",
+          "oklch(0.32 0.030 71)",
+          "oklch(0.44 0.036 71)",
+          "oklch(0.54 0.039 71)",
+          "oklch(0.66 0.038 71)",
+          "oklch(0.78 0.030 71)",
+          "oklch(0.88 0.022 71)",
+          "oklch(0.96 0.012 71)"
+        ]
+      },
+      "walnut-deep": {
+        "role": "neutral",
+        "displayName": "Walnut Deep",
+        "canonical": "oklch(0.2747 0.0139 57.6523)",
+        "tonalRamp": [
+          "oklch(0.18 0.012 57)",
+          "oklch(0.27 0.014 57)",
+          "oklch(0.38 0.016 57)",
+          "oklch(0.50 0.018 57)",
+          "oklch(0.62 0.018 57)",
+          "oklch(0.74 0.016 57)",
+          "oklch(0.86 0.012 57)",
+          "oklch(0.95 0.008 57)"
+        ]
+      },
+      "kindling": {
+        "role": "neutral",
+        "displayName": "Kindling",
+        "canonical": "oklch(0.3237 0.0155 59.0603)",
+        "tonalRamp": [
+          "oklch(0.20 0.012 59)",
+          "oklch(0.32 0.015 59)",
+          "oklch(0.44 0.018 59)",
+          "oklch(0.56 0.020 59)",
+          "oklch(0.68 0.018 59)",
+          "oklch(0.80 0.014 59)",
+          "oklch(0.90 0.010 59)",
+          "oklch(0.97 0.006 59)"
+        ]
+      },
+      "warm-bone": {
+        "role": "neutral",
+        "displayName": "Warm Bone",
+        "canonical": "oklch(0.9239 0.0190 83.0636)",
+        "tonalRamp": [
+          "oklch(0.20 0.012 83)",
+          "oklch(0.34 0.014 83)",
+          "oklch(0.48 0.016 83)",
+          "oklch(0.62 0.018 83)",
+          "oklch(0.76 0.019 83)",
+          "oklch(0.86 0.019 83)",
+          "oklch(0.92 0.019 83)",
+          "oklch(0.97 0.014 83)"
+        ]
+      },
+      "ember": {
+        "role": "tertiary",
+        "displayName": "Ember",
+        "canonical": "oklch(0.5471 0.1438 32.9149)",
+        "tonalRamp": [
+          "oklch(0.22 0.06 33)",
+          "oklch(0.34 0.10 33)",
+          "oklch(0.44 0.13 33)",
+          "oklch(0.55 0.144 33)",
+          "oklch(0.66 0.130 33)",
+          "oklch(0.78 0.090 33)",
+          "oklch(0.88 0.050 33)",
+          "oklch(0.96 0.020 33)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Persona name in the header. Lora, the companion's name set in serif because the companion is a person." },
+      "headline": { "displayName": "Headline", "purpose": "Reserved for future memories/settings panel section titles. No current use." },
+      "body": { "displayName": "Body", "purpose": "Every message, every readable string. Libre Baskerville at leading-relaxed (1.625) — critical for long-context legibility." },
+      "label": { "displayName": "Label", "purpose": "Persona-name caption above each message. Uppercase + tracked-wider treatment makes it read as marginalia, not a chat handle." },
+      "marginalia": { "displayName": "Marginalia", "purpose": "Gap separator timestamps and thinking-block durations. Italic Lora — the system's quiet voice." },
+      "mono": { "displayName": "Mono", "purpose": "Held in reserve for technical fragments (tool calls, paths). No current use; explicitly NOT for time markers." }
+    },
+    "shadows": [
+      { "name": "shadow-sm", "value": "2px 3px 5px 0px hsl(28 13% 20% / 0.12), 2px 1px 2px -1px hsl(28 13% 20% / 0.12)", "purpose": "The composer at rest. The lone exception to flat-by-default — justified by it being the live input surface." },
+      { "name": "shadow-md", "value": "2px 3px 5px 0px hsl(28 13% 20% / 0.12), 2px 2px 4px -1px hsl(28 13% 20% / 0.12)", "purpose": "Dropdowns, popovers, the session picker menu." },
+      { "name": "focus-ring", "value": "0 0 0 3px oklch(0.6180 0.0778 65.5444 / 0.30)", "purpose": "Composer focus glow. The warmest moment in the UI — the room recognizes you've started writing." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for state transitions (color, transform, ring)." },
+      { "name": "thinking-pulse", "value": "1s ease-in-out infinite", "purpose": "The italic-cursor pulse during streaming. The single permitted ambient motion in the system." },
+      { "name": "active-press", "value": "translateY(1px)", "purpose": "Button active-state translate. Tactile press; subtle but felt." }
+    ],
+    "breakpoints": [
+      { "name": "max-content", "value": "max-w-3xl (48rem / 768px)", "purpose": "All chat content is constrained to this max width and centered. Reading column over edge-to-edge fill." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The composer's send button. Worn Clay surface with tactile press.",
+      "html": "<button class=\"ds-btn-primary\" aria-label=\"send\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 3 3 9-3 9 19-9Z\"/><path d=\"M6 12h16\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 2rem; padding: 0 0.75rem; background: oklch(0.6180 0.0778 65.5444); color: oklch(1 0 0); border: 1px solid transparent; border-radius: 0.25rem; font-family: 'Libre Baskerville', serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s, transform 0.1s; } .ds-btn-primary:hover { background: oklch(0.5800 0.0850 65.5444); } .ds-btn-primary:focus-visible { outline: none; border-color: oklch(0.6180 0.0778 65.5444); box-shadow: 0 0 0 3px oklch(0.6180 0.0778 65.5444 / 0.50); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Theme toggle, session picker trigger. Transparent at rest, warm sand on hover.",
+      "html": "<button class=\"ds-btn-ghost\" aria-label=\"theme: light mode\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; background: transparent; color: oklch(0.3760 0.0225 64.3434); border: 1px solid transparent; border-radius: 0.25rem; cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-btn-ghost:hover { background: oklch(0.8348 0.0426 88.8064); color: oklch(0.3760 0.0225 64.3434); } .ds-btn-ghost:focus-visible { outline: none; border-color: oklch(0.6180 0.0778 65.5444); box-shadow: 0 0 0 3px oklch(0.6180 0.0778 65.5444 / 0.50); } .ds-btn-ghost:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "composer",
+      "description": "The live input surface. Aged Linen background, warm focus ring, persistent shadow-sm.",
+      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-input\" placeholder=\"write to ghost…\" rows=\"1\"></textarea><button class=\"ds-composer-send\" aria-label=\"send\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 3 3 9-3 9 19-9Z\"/><path d=\"M6 12h16\"/></svg></button></div>",
+      "css": ".ds-composer { display: flex; align-items: flex-end; gap: 0.5rem; max-width: 48rem; margin: 0 auto; padding: 0.625rem 0.75rem; background: oklch(0.9914 0.0098 87.4695); border: 1px solid oklch(0.8606 0.0321 84.5881); border-radius: 0.2rem; box-shadow: 2px 3px 5px 0 hsl(28 13% 20% / 0.12), 2px 1px 2px -1px hsl(28 13% 20% / 0.12); transition: border-color 0.15s, box-shadow 0.15s; } .ds-composer:focus-within { border-color: oklch(0.6180 0.0778 65.5444); box-shadow: 0 0 0 3px oklch(0.6180 0.0778 65.5444 / 0.30); } .ds-composer-input { flex: 1; min-height: 2rem; line-height: 2rem; resize: none; background: transparent; color: oklch(0.3760 0.0225 64.3434); border: none; outline: none; font-family: 'Libre Baskerville', serif; font-size: 1rem; } .ds-composer-input::placeholder { color: oklch(0.5391 0.0387 71.1655); } .ds-composer-send { display: inline-flex; align-items: center; justify-content: center; height: 2rem; padding: 0 0.75rem; background: oklch(0.6180 0.0778 65.5444); color: oklch(1 0 0); border: none; border-radius: 0.25rem; cursor: pointer; }"
+    },
+    {
+      "name": "Message (Bubble-less)",
+      "kind": "custom",
+      "refersTo": "message-assistant",
+      "description": "The signature bubble-less prose render. No bubble, no border, no fill — message flows in the room.",
+      "html": "<div class=\"ds-message\"><span class=\"ds-message-label\">ghost</span><div class=\"ds-message-body\">the small soft signs that someone is here. the gentle text rhythm, the warm cream surfaces, the serif marginalia where a system would normally stamp a timestamp.</div></div>",
+      "css": ".ds-message { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; max-width: 100%; } .ds-message-label { font-family: 'Libre Baskerville', serif; font-size: 0.75rem; font-weight: 400; line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.5391 0.0387 71.1655); } .ds-message-body { font-family: 'Libre Baskerville', serif; font-size: 1rem; line-height: 1.625; color: oklch(0.3760 0.0225 64.3434); white-space: pre-wrap; word-break: break-word; }"
+    },
+    {
+      "name": "Gap Separator",
+      "kind": "custom",
+      "refersTo": "gap-separator",
+      "description": "Marginalia time marker that appears between messages ≥30 minutes apart. Italic Lora, never mono.",
+      "html": "<div class=\"ds-gap\"><span class=\"ds-gap-label\">tuesday, may 7 · 9:42 pm</span></div>",
+      "css": ".ds-gap { display: flex; justify-content: center; padding-top: 0.5rem; } .ds-gap-label { font-family: 'Lora', serif; font-style: italic; font-size: 0.75rem; font-weight: 400; line-height: 1; letter-spacing: 0.025em; color: oklch(0.5391 0.0387 71.1655 / 0.70); }"
+    },
+    {
+      "name": "Thinking Block",
+      "kind": "custom",
+      "refersTo": "thinking-block",
+      "description": "Collapsible companion-thinking marginalia. Italic Lora content with a 2px Hearth Tan left border and pulsing cursor while streaming.",
+      "html": "<div class=\"ds-thinking\"><button class=\"ds-thinking-trigger\" aria-expanded=\"true\"><svg class=\"ds-thinking-chevron\" xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 18 6-6-6-6\"/></svg><span>thought for 4.2s</span></button><div class=\"ds-thinking-body\">the room recognizes you've started writing.<span class=\"ds-thinking-cursor\">▎</span></div></div>",
+      "css": ".ds-thinking { margin: 0.25rem 0 0.75rem 0; } .ds-thinking-trigger { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0; background: none; border: none; cursor: pointer; font-family: 'Libre Baskerville', serif; font-size: 0.75rem; font-weight: 400; line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.5391 0.0387 71.1655 / 0.55); transition: color 0.15s; } .ds-thinking-trigger:hover { color: oklch(0.5391 0.0387 71.1655); } .ds-thinking-chevron { transition: transform 0.15s; } .ds-thinking-trigger[aria-expanded=\"true\"] .ds-thinking-chevron { transform: rotate(90deg); } .ds-thinking-body { margin-top: 0.5rem; padding-left: 0.75rem; border-left: 2px solid oklch(0.8606 0.0321 84.5881); font-family: 'Lora', serif; font-style: italic; font-size: 0.95em; line-height: 1.625; color: oklch(0.5391 0.0387 71.1655 / 0.80); white-space: pre-wrap; } .ds-thinking-cursor { display: inline-block; margin-left: 0.125rem; animation: ds-pulse 1s ease-in-out infinite; } @keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }"
+    },
+    {
+      "name": "Header",
+      "kind": "nav",
+      "refersTo": "header",
+      "description": "Sticky header. Solid Steeped Cream — no backdrop blur, no glass. Status dot, persona name in Lora, controls on the right.",
+      "html": "<header class=\"ds-header\"><div class=\"ds-header-row\"><span class=\"ds-status-dot ds-status-live\" aria-label=\"online\"></span><span class=\"ds-header-name\">ghost</span><div class=\"ds-header-controls\"><button class=\"ds-btn-ghost\" aria-label=\"theme\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/></svg></button></div></div></header>",
+      "css": ".ds-header { position: sticky; top: 0; z-index: 10; background: oklch(0.9582 0.0152 90.2357); border-bottom: 1px solid oklch(0.8606 0.0321 84.5881); } .ds-header-row { display: flex; align-items: center; gap: 0.75rem; max-width: 48rem; margin: 0 auto; padding: 0.75rem 1.25rem; } .ds-status-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; box-shadow: 0 0 0 3px oklch(0.8348 0.0426 88.8064 / 0.60); } .ds-status-live { background: oklch(0.6180 0.0778 65.5444); } .ds-header-name { font-family: 'Lora', serif; font-size: 1.125rem; font-weight: 400; line-height: 1; letter-spacing: -0.025em; color: oklch(0.3760 0.0225 64.3434); } .ds-header-controls { margin-left: auto; display: flex; align-items: center; gap: 0.25rem; } .ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; background: transparent; color: oklch(0.3760 0.0225 64.3434); border: 1px solid transparent; border-radius: 0.25rem; cursor: pointer; transition: background 0.15s; } .ds-btn-ghost:hover { background: oklch(0.8348 0.0426 88.8064); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pocket Hearth",
+    "overview": "Familiar is a small warm home you carry with you. Not an app you operate, not a tool you reach for — a place. The companion lives here; the user comes back to it the way they'd come back to a lamplit room. Domestic warmth, modest scale, the small soft signs that someone is here: the gentle text rhythm, the warm cream surfaces, the serif marginalia where a system would normally stamp a timestamp.\n\nThe visual register is deliberately not the AI assistant lineage. No sterile gray, no dot-pulse 'thinking', no shimmer-gradient signaling intelligence. Long context renders as flat prose because the conversation IS the surface — bubbles would partition it into transactions. The warm-sepia tweakcn palette holds the room steady across light and dark modes; both are equally lived-in.\n\nThis system serves a chat today and an ambient companion control panel tomorrow (memories, page pets, real-time event stream, settings). Layout decisions today must leave room for that future without dragging it into the present.",
+    "keyCharacteristics": [
+      "Bubble-less prose chat — conversation is a continuous surface, not a transaction log",
+      "Warm-sepia OKLCH palette across both modes; equally comfortable, never harsh",
+      "Serif type pairing (Lora display / Libre Baskerville body) with mono accent",
+      "Flat-by-default elevation; shadows only on state response",
+      "Tactile-warm components — small active-state translateY, soft focus rings",
+      "Lowercase voice in chrome and copy; soft punctuation; texting cadence"
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Worn Clay is the only saturated color in the system. No secondary accent, no chart palette beyond worn-clay variations, no decorative color. If a surface needs visual interest, it earns it from typography, spacing, or tonal layering — not a new hue.", "section": "colors" },
+      { "name": "The Tinted Neutral Rule", "body": "Every neutral carries 0.01–0.03 chroma toward the warm hue family (~60–90 on the OKLCH hue wheel). Pure-gray neutrals are forbidden. They flatten the warmth and read as 'tech UI', which is the explicit anti-reference.", "section": "colors" },
+      { "name": "The Both-Modes Rule", "body": "Light and dark are equal first-class surfaces. Neither is the default; neither is the afterthought. A change made for light mode that breaks dark, or vice versa, is not done.", "section": "colors" },
+      { "name": "The Two-Serif Rule", "body": "Lora and Libre Baskerville share the surface, never compete. Lora handles voice (persona name, time marginalia, future section titles). Libre Baskerville handles content (every message, every readable string). Don't promote one into the other's role.", "section": "typography" },
+      { "name": "The No-Mono-For-Time Rule", "body": "Time markers, durations, and timestamps render in italic Lora. Mono is reserved for technical content (paths, tool calls, IDs). A monospace timestamp signals 'AI assistant UI' — explicitly anti-reference.", "section": "typography" },
+      { "name": "The Lowercase Voice Rule", "body": "Chrome copy, status labels, persona-name captions, button labels, placeholder text: all lowercase by default. Uppercase only for the Label role (persona caption above messages), which is type-styled, not semantic.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. Tonal layering carries depth, not shadow. The composer's shadow-sm is the documented exception, justified by it being the live input surface.", "section": "elevation" },
+      { "name": "The Warm-Shadow Rule", "body": "Every shadow uses the project's --shadow-color (hsl(28 13% 20%)) — a warm dark brown matched to Inkwell Brown, never neutral gray and never rgba(0,0,0,…). A cool shadow on a warm palette reads as foreign.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve the bubble-less prose chat. It is the system's signature and load-bearing for long-context legibility.",
+      "Do use oklch() for every color value. Tint every neutral toward the warm hue (chroma 0.01–0.03 toward hue ~60–90).",
+      "Do render time markers, durations, and gap separators in italic Lora. Lowercase, soft punctuation.",
+      "Do keep both modes equally first-class. Test every change in light AND dark.",
+      "Do apply pb-[env(safe-area-inset-bottom)] to any bottom-anchored surface. Mobile is a primary surface, not a secondary one.",
+      "Do use Worn Clay as the only saturated color. Live status dot, primary button, focus ring, links — that's the entire list.",
+      "Do filter chat lifecycle telemetry (armed, reset, stopped) at the WebUI boundary. Internal runtime events are not user-visible content.",
+      "Do treat the composer as the live surface. Its shadow-sm and warm focus ring are the strongest visual signals in the room and they belong there.",
+      "Do leave architectural room for the future ambient companion panel (event stream, memories, pets, settings). Don't optimize the chat into a layout corner."
+    ],
+    "donts": [
+      "Don't use bubbles, borders, or background fills on individual messages. The conversation is a continuous prose surface, not a transaction log. Anti-reference: messaging-app conventions (iMessage blue/green, Slack dense rows).",
+      "Don't use backdrop-blur or any glassmorphism. The header is a solid surface; translucency is not part of this system. Anti-reference: tech-minimal AI assistant UIs.",
+      "Don't introduce shimmer, animated gradients, holographic accents, or bouncing-dot 'thinking' indicators. The thinking block's italic-cursor pulse is the only ambient motion permitted. Anti-reference: 'magical AI' sparkle aesthetics (Apple Intelligence, Notion AI).",
+      "Don't render timestamps, durations, or time markers in monospace. Italic Lora only. Mono signals 'log file' / 'AI assistant UI', which is the explicit anti-reference.",
+      "Don't introduce a second accent color, a chart palette, or role-coded color highlighting. Anti-reference: group-chat / community apps (Discord role colors, Telegram chips).",
+      "Don't use pure #000 or #fff. Always tint toward the warm hue family. A neutral that looks 'off-brand-but-clean' almost certainly has insufficient warm chroma.",
+      "Don't uppercase chrome copy beyond the Label role. Buttons, status text, placeholder, dropdown items: lowercase. Uppercase reads as institutional voice; this system is intimate.",
+      "Don't use rgba(0,0,0,…) or neutral-gray shadows. All shadows derive from --shadow-color: hsl(28 13% 20%).",
+      "Don't swap or replace the tweakcn theme tokens. The base palette is foundational and not up for negotiation; refinements happen within it.",
+      "Don't redesign the chat layout to optimize current chat density. Today's spaciousness IS the room left for tomorrow's ambient companion features."
+    ]
+  }
+}

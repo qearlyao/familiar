@@ -25,13 +25,15 @@ Important caution:
 ## 1. Locked Decisions
 
 - Build on upstream packages. Do not fork or rebuild `pi-agent-core`, `pi-ai`, or `pi-coding-agent` primitives unless upstream cannot support the needed behavior.
-- Use direct `Agent` first. Reconsider `AgentSession` only if upstream JSONL session branching/compaction becomes valuable.
+- Keep direct `Agent` as Familiar's runtime. Do not reinstate `AgentSession` just to get skills.
 - Do not use upstream lossy auto-compaction as Familiar's memory system. Familiar owns LCM plus diary RAG through `Agent.transformContext`.
+- Reuse pi's standalone skill loader/formatter for progressive instructions: the agent sees skill name/description/path, then uses `read` to load `SKILL.md` only when needed.
 - Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, and one global `MEMORY.md`. Upstream does not know these names.
 - `MEMORY.md` is small and durable. Episodic recall belongs in LCM and diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
   - Avoid bespoke memory/diary wrappers.
+  - Put large, rarely used media/persona/character instructions in skills, not tool descriptions.
   - Prioritize output/media tools now; postpone `task`/subagent delegation.
   - Keep one compact `browser` tool with structured actions later.
 - Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local, remote sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, etc.
@@ -52,6 +54,7 @@ Use these upstream primitives instead of duplicating functionality:
   - Usage includes `cacheRead`, `cacheWrite`, `input`, `output`, `cost`.
 - `@mariozechner/pi-coding-agent`
   - Tool factories for `bash`, `read`, `write`, `edit`, `grep`, `find`, `ls`.
+  - Skill loader/formatter: `loadSkills()` and `formatSkillsForPrompt()` are reusable without adopting `AgentSession`.
   - Familiar uses `bash/read/write/edit`; shell `grep` through `bash` is enough.
   - Compaction/session utilities exist but are coding-session shaped and lossy.
 - `pi-chat` in `/tmp/pi-chat`
@@ -183,7 +186,14 @@ TTS follow-ups before heavy use:
 - Add focused Discord delivery coverage for audio-only replies, including the reply-fallback path and the "no broken placeholder" failure path.
 - Add a concise user-facing error path for ElevenLabs failures that avoids logging API response bodies into visible chat text.
 - Add optional config for ElevenLabs voice settings (`stability`, `similarity_boost`, maybe `style` / `use_speaker_boost`) only if qearl needs tuning beyond the current defaults.
-- Decide whether to keep `tts` tool description visible/minimal or hide most provider detail from the model prompt.
+- Minimize `tts` prompt-facing description; keep provider details in config and only expose `voiceId` because it is an argument.
+
+Skills for media/character guidance:
+
+- Add Familiar skill discovery without `AgentSession`: load user/project skills and append pi's progressive skill index to the direct `Agent` system prompt.
+- Create skills for character-specific TTS and image-generation rules: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
+- Keep tool definitions generic. The model should load relevant skills before calling `tts` or `image_gen` when a request matches a character/media workflow.
+- Keep LCM as the only automatic context compaction layer; skills are instruction loading, not conversation memory.
 
 Deferred WebUI TTS polish:
 

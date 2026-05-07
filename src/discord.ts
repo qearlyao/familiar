@@ -563,6 +563,18 @@ function canceledJobError(): Error {
 	return error;
 }
 
+function startTypingIndicator(message: Message): () => void {
+	const sendTyping = () => {
+		if (!message.channel.isSendable()) return;
+		void message.channel.sendTyping().catch(() => undefined);
+	};
+	sendTyping();
+	const timer = setInterval(sendTyping, 8000);
+	return () => {
+		clearInterval(timer);
+	};
+}
+
 export async function startDiscordDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
@@ -668,6 +680,7 @@ export async function startDiscordDaemon(
 		for (;;) {
 			const dispatch = runtime.beginNextJob();
 			if (!dispatch) return;
+			const stopTyping = startTypingIndicator(message);
 			try {
 				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
 				const parsedReply = parseAgentReply(reply.text);
@@ -701,6 +714,8 @@ export async function startDiscordDaemon(
 					replyToMessageId: dispatch.triggerMessageId,
 					jobId: dispatch.job.jobId,
 				});
+			} finally {
+				stopTyping();
 			}
 		}
 	};

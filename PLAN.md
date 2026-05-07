@@ -18,6 +18,7 @@ Implemented or recently added:
 Next implementation chunks:
 
 - Finish tests/log probes and Stage 2 polish cleanup.
+- Prioritize Stage 5 media output: TTS and image generation tools with Discord/WebUI attachment delivery.
 - Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 
 Important caution:
@@ -34,7 +35,8 @@ Important caution:
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
   - Avoid bespoke memory/diary wrappers.
-  - New tool families: `task`, output/media tools, and one compact `browser` tool with structured actions.
+  - Prioritize output/media tools now; postpone `task`/subagent delegation.
+  - Keep one compact `browser` tool with structured actions later.
 - Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local, remote sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, etc.
 - WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door.
 - Single-owner is locked. Extensibility means tools, channels, providers, triggers, memory adapters, and subagent personas, not multi-user account isolation.
@@ -97,7 +99,7 @@ Discord adapter       WebUI adapter       future event sources
 - per-channel transcripts/sessions before LCM
             - usage/cache telemetry
             - bash/read/write/edit
-            - task/media/browser tools
+            - media tools now; task/browser tools later
 
 Browser/activity backend abstraction
   - local backend when browser is on same host
@@ -108,7 +110,7 @@ Browser/activity backend abstraction
 
 Runtime and packaging:
 
-- Main daemon: one `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, main agent, subagents, memory workers, embeddings, attachment writer, queues.
+- Main daemon: one `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, main agent, media workers, memory workers, embeddings, attachment writer, queues. Subagents can be added later.
 - Dev: `familiar run <workspace>`.
 - Prod: `familiar install-service <workspace>` eventually writes systemd or launchd config.
 - Workspace layout: `<workspace>/config.toml`, `.env`, `SOUL.md`, `USER.md`, `MEMORY.md`, `data/`, `attachments/`, `logs/`.
@@ -135,7 +137,7 @@ Tier 2: LCM, today's lossless-ish context engine.
 Tier 3: diary RAG, previous days.
 
 - Source: `data/diaries/YYYY-MM-DD.md`, reflective markdown, editable by qearl.
-- Written by a diary subagent at end-of-day, on "good night", or explicit signal.
+- Written by a diary worker at end-of-day, on "good night", or explicit signal.
 - Index: diary chunks plus atomic facts, hybrid FTS/vector with recency.
 - Injection: top-K diary context through `Agent.transformContext`.
 - Durable facts discovered from diary can be promoted to `MEMORY.md`.
@@ -306,17 +308,23 @@ Done when:
 
 - Agent can use bash, read/edit persona files, and grep/read `data/`.
 
-### Stage 5: Subagent Delegation Tool
+### Stage 5: TTS and Image Generation
 
-- Add one `task` tool.
-- Subagent is a fresh upstream `Agent` with focused system prompt, scoped tools, isolated transcript, same provider/cache plumbing.
-- Arguments: `goal`, `context`, `allowedTools`, `timeoutMs`, `maxSteps`, `maxToolCalls`, `returnShape`, `allowMemory`, `allowRag`, `attachmentPolicy`.
-- Mirror subagent events to the current channel log.
-- Enforce depth/time/tool/output guards and cancellation.
+Status: current priority.
+
+- Add a `tts` tool for generating speech audio from requested text.
+- Add an `image_gen` tool for generating image attachments from prompts.
+- Add provider/config plumbing for media models, API keys, output formats, and per-tool limits.
+- Store generated assets under the workspace attachment/data area with durable metadata in chat logs.
+- Integrate attachment queue delivery for Discord replies and WebUI live events/history.
+- Keep the tools simple and direct; do not route media generation through subagents.
+- Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 
 Done when:
 
-- Main agent can delegate a bounded task, show what happened, receive structured result, and continue.
+- "say this out loud" returns an audio attachment in Discord and WebUI.
+- "draw X" returns an image attachment in Discord and WebUI.
+- Generated media paths are logged and survive restart/history replay.
 
 ### Stage 6: LCM
 
@@ -336,7 +344,7 @@ Done when:
 ### Stage 7: Daily Diary and Cross-Session RAG
 
 - Diary files at `data/diaries/YYYY-MM-DD.md`.
-- Diary-writer subagent uses chat logs and previous diary through upstream tools.
+- Diary-writer worker uses chat logs and previous diary through upstream tools. It may become a `task` subagent later, but should not block on the subagent tool.
 - Trigger at end of day, on "good night", or explicit command/signal.
 - Embed diary chunks and atomic facts.
 - Inject relevant diary context through `Agent.transformContext`.
@@ -371,15 +379,17 @@ Done when:
 
 - Familiar can send a tasteful proactive DM, ingest idle-period events, persist scheduler state, and log why it spoke or stayed quiet.
 
-### Stage 10: TTS and Image Generation
+### Stage 10: Subagent Delegation Tool
 
-- `tts` tool.
-- `image_gen` tool.
-- Attachment queue integration for Discord and WebUI replies.
+- Revisit the deferred `task` tool after media output, LCM/diary, and proactive scheduling have enough shape to justify delegation.
+- Subagent remains a fresh upstream `Agent` with focused system prompt, scoped tools, isolated transcript, same provider/cache plumbing.
+- Arguments: `goal`, `context`, `allowedTools`, `timeoutMs`, `maxSteps`, `maxToolCalls`, `returnShape`, `allowMemory`, `allowRag`, `attachmentPolicy`.
+- Mirror subagent events to the current channel log.
+- Enforce depth/time/tool/output guards and cancellation.
 
 Done when:
 
-- "say this out loud" returns audio and "draw X" returns an image attachment.
+- Main agent can delegate a bounded task, show what happened, receive structured result, and continue.
 
 ### Stage 11: Browser/Activity Backend and Mac Sidecar
 
@@ -499,7 +509,7 @@ npm run payload:pretty -- --full
 ## 7. Maintenance Posture
 
 - Pin pi packages with normal semver ranges; on upgrade, run typecheck/build, send a known-good prompt, and verify cache telemetry.
-- Write tests for runtime state machine, dispatch modes, LCM assembly/scoring, subagent guards, and browser backend adapters. Skip thin wrappers over upstream.
+- Write tests for runtime state machine, dispatch modes, media attachment delivery, LCM assembly/scoring, subagent guards when revived, and browser backend adapters. Skip thin wrappers over upstream.
 - Use Biome formatting.
 - Keep commits atomic and explain why.
 - Log token usage and cost per turn; aggregate daily later. No external telemetry sink.

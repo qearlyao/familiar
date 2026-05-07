@@ -18,15 +18,15 @@ describe("generated media", () => {
 		assert.deepEqual(sink.drain(), []);
 	});
 
-	it("creates public URLs for generated attachment paths", () => {
-		const config = configWithDataDir("/workspace/data");
+	it("creates public URLs for generated attachment paths", async () => {
+		const config = await configWithDataDir("/workspace/data");
 		const localPath = resolve(generatedAttachmentsDir(config), "nested", "voice one.mp3");
 
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/nested/voice%20one.mp3");
 	});
 
-	it("throws for paths outside the generated attachment directory", () => {
-		const config = configWithDataDir("/workspace/data");
+	it("throws for paths outside the generated attachment directory", async () => {
+		const config = await configWithDataDir("/workspace/data");
 
 		assert.throws(() => publicAttachmentPath(config, "/tmp/outside.mp3"), /outside generated attachments dir/);
 	});

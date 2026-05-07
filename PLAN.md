@@ -8,18 +8,14 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 
 Implemented or recently added:
 
-- Stage 0 and Stage 1 are effectively done: direct upstream `Agent`, Discord DM path, persona files, stable session/cache logging.
-- Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, per-channel agent transcripts, and payload inspection tooling.
-- Stage 3 v0 is shipped: WebUI at `web/` (React+Vite+Tailwind v4+shadcn, warm sepia tweakcn theme), side-door HTTP+WebSocket server in `src/web.ts`, three auth modes scaffolded, session picker exposing owner DM + allowed Discord channels, web tabs share runtime/transcript with their Discord counterpart so Discord-originated messages stream live into open web tabs, persona name auto-detected from SOUL.md `**Name:**`, streaming thinking blocks (collapsible, italic Lora serif).
-- Stage 5 TTS v0 is implemented: ElevenLabs-backed `tts` tool with configurable `voice_id`, generated audio saved under `data/attachments/generated`, outbound attachment logging, Discord file delivery, and WebUI audio playback/history.
-- Anthropic cache normalization is implemented in `src/agent.ts`: Familiar strips extra upstream `cache_control` points and keeps the latest user-message checkpoint, matching Claude Code's stable cache shape.
-- Payload inspection exists: `npm run payload:pretty -- --messages 12`, `--full`, `--date`, `--model`.
+- Stages 0-4 are v0-complete: upstream `Agent`, Discord runtime/logs/controls, Anthropic cache normalization, WebUI side-door, workspace tools, payload inspection, and focused backend tests.
+- Stage 5 TTS v0 is implemented: ElevenLabs `tts`, configurable `voice_id`, generated audio attachments, Discord audio-only delivery, WebUI playback/history plumbing, and attachment-serving safety tests.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next implementation chunks:
 
-- Finish tests/log probes and Stage 2 polish cleanup.
-- Prioritize Stage 5 media output: TTS and image generation tools with Discord/WebUI attachment delivery.
+- Tighten Stage 5 TTS follow-ups listed below before heavy usage.
+- Implement Stage 5 image generation using the existing generated-media attachment path.
 - Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 
 Important caution:
@@ -97,7 +93,7 @@ Discord adapter       WebUI adapter       future event sources
                     v
             upstream Agent + pi-ai + tools
             - prompt/steer/followUp
-- per-channel transcripts/sessions before LCM
+            - per-channel transcripts/sessions before LCM
             - usage/cache telemetry
             - bash/read/write/edit
             - media tools now; task/browser tools later
@@ -151,177 +147,58 @@ Turn assembly:
 
 ## 5. Stage Roadmap
 
-### Stage 0: Upstream Integration Decision
+### Completed v0 Foundation: Stages 0-4
 
-Status: done.
+Status: shipped enough for current development. Keep details in git history and source, not this roadmap.
 
-- Use direct `Agent` for v0 daemon simplicity.
-- Reuse `pi-coding-agent` tool factories.
-- Log `cacheRead/cacheWrite`.
+- Stage 0: chose direct upstream `Agent`, reused upstream tool factories, and kept usage/cache telemetry.
+- Stage 1: bootstrapped config/env/persona loading, Discord DM path, reply pipeline, and stable session/cache logging.
+- Stage 2: added `ConversationRuntime`, append-only logs, replay safety, control commands, provider/model/thinking controls, Anthropic cache normalization, Discord dispatch modes, per-channel overrides/sessions, slash commands, silent response protocol, and payload inspection.
+- Stage 3: shipped WebUI side-door with HTTP/WebSocket transport, auth scaffolding, session picker, shared Discord/Web runtime, thinking/text streaming, persona label detection, and current frontend baseline.
+- Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
 
-### Stage 1: Bootstrap Daemon and Discord DM
+Still open from these stages:
 
-Status: done enough for v0.
-
-- Config loader, env loading, persona files.
-- Discord DM adapter.
-- Basic reply pipeline.
-- Stable `sessionId` and cache usage logging.
-
-Done when:
-
-- qearl can DM the bot and get a persona-aware reply after restart.
-
-### Stage 2: Chat Runtime, Logs, Control Commands, and Dispatch Modes
-
-Status: partially done. This is the active stage.
-
-Already in place:
-
-- `ConversationRuntime`.
-- Append-only chat/transcript/payload logs.
-- Replay/catch-up safety.
-- `stop`, `status`, `new`, `compact` style control path.
-- Model and thinking-level controls, currently runtime-only.
-- Default model config uses `agent.model = "provider/model"` and resolves through pi-ai built-ins; legacy manual `agent.api` config is only an escape hatch.
-- Reply/chunk config.
-- Discord dispatch modes: `steer`, `queue`, `collect`.
-- Group collect debounce and mention/always trigger policy.
-- Optional other-bot ingestion with self-bot loop prevention.
-- Per-channel live upstream `Agent` transcripts/sessions before LCM, while sharing global persona/memory.
-- Durable per-channel overrides for `/model`, `/thinking`, and `/channel-trigger`.
-- Native Discord `/familiar` command with subcommands, model autocomplete, and ephemeral control replies. It is namespaced
-  under `/familiar` to avoid clobbering OpenClaw's existing `/model`, `/new`, `/stop`, and `/status` commands on the same bot.
-- Silent response protocol: the agent may output `[[FAMILIAR_SILENT]]` on the first line to suppress Discord output while
-  recording a silent outbound log event for WebUI/internal visibility.
-- Payload inspection.
-
-Still needed:
-
-- Focused tests/log probes.
-
-Done when:
-
-- Reconnect replay does not re-trigger old messages.
-- Logs survive restart.
-- Control commands work from Discord.
-- DMs can steer active work.
-- Group/channel dispatch can be switched between mention-gated collect and always-on collection.
-
-#### Stage 2 Follow-Up: Dispatch Modes and Group Collection
-
-Status: implemented in code; keep this as a behavior reference.
-
-Config to add under `[discord]`:
-
-```toml
-dm_mode = "steer"             # steer | queue | collect
-channel_mode = "collect"      # collect | queue | steer
-channel_trigger = "mention"   # mention | always
-collect_debounce_ms = 4000
-allow_bot_messages = false
-```
-
-Implementation checklist:
-
-- Extend `Config.discord` and `config.example.toml`.
-- Update Discord intake so `allow_bot_messages` admits other bots' messages, while always ignoring Familiar's own Discord user id.
-- Update group/channel triggering to honor `channel_trigger = "mention" | "always"`.
-- Implement group/channel collect mode with 3-5s debounce, then dispatch one prompt slice.
-- Implement DM active-work steering: if owner DM arrives while the agent is active and `dm_mode = "steer"`, call upstream `Agent.steer(...)` instead of queuing a separate job.
-- Keep `queue` mode as current independent serialized job behavior.
-- Keep `collect` mode append-only and log-backed, not only in memory.
-- Format collected prompt lines with `authorName`, stable `authorId`, ISO timestamp, and text:
-  `[qearlyao uid:... @ 2026-05-04T13:50:24.126Z] hello`
-- Bot messages use normal Discord username; no extra bot marker needed.
-- Add probes/tests for DM steer during active job, group mention collect, group always collect, other-bot ingestion, and self-bot prevention.
-
-#### Stage 2 Polish: Durable Settings
-
-Status: implemented in code; keep this as a behavior reference.
-
-Durable settings:
-
-- Settings live in `data/settings/channel-overrides.json`.
-- Config remains fallback/default. Durable overrides win when present.
-- Per-channel overrides:
-  - current model
-  - current thinking level
-  - `channel_trigger`
-  - later `channel_mode`, reply/chunk preferences, and WebUI channel settings
-- Update `/model` and `/thinking` so successful changes persist across restart.
-- Add `/channel-trigger mention|always` with durable per-channel persistence.
-- `status` should show effective values and whether each came from config or override.
-
-Per-channel agent transcript/session history:
-
-Status: implemented; keep this as a behavior reference.
-
-- Stop sharing one raw live `Agent.state.messages` transcript across DM and group channels.
-- Keep one global stable persona/memory layer: `SOUL.md`, `USER.md`, `MEMORY.md`.
-- Create or hydrate a channel-scoped agent transcript/session for each conversation channel.
-- Keep provider/cache session ids stable per channel, with a deterministic workspace/channel-based id.
-- Keep chat JSON logs per-channel as the raw source of truth.
-- Leave cross-channel companion-brain continuity to Stage 6 LCM and Stage 7 diary RAG. Those stages can inject relevant cross-channel context through `transformContext` without merging raw logs.
-- Model/thinking are per-channel overrides, not global, so different channels can use different providers and reasoning levels.
-
-Done when:
-
-- Restart preserves `/model`, `/thinking`, and `/channel-trigger` changes. (Implemented.)
-- DM and group channels no longer share the same live transcript, but both still share persona and durable memory. (Implemented.)
-- Existing chat logs remain compatible.
-
-### Stage 3: WebUI v0 and Side-Door Transport
-
-Status: v0 shipped. Keep this section as a behavior/design reference.
-
-Implemented:
-
-- HTTP + WebSocket side-door server in `src/web.ts`, no new runtime deps (hand-rolled WS framing).
-- Three auth modes scaffolded: `tailscale-only`, `bearer`, `public-2fa` (TOTP via `/api/web/control` `login` command).
-- Frontend at `web/`: React+Vite+TypeScript+Tailwind v4+shadcn/ui+tweakcn theme `cmokic2d8000304jo55ca0sy3` (warm sepia/literary, Libre Baskerville/Lora/IBM Plex Mono).
-- Wire protocol documented at `web/PROTOCOL.md`: HTTP for handshake/history/control/sessions, WebSocket for live deltas, `delta.part: "thinking" | "text"` discriminator, `lastEventId` reconnect with `replay_window_lost` fallback.
-- Session picker: web tabs do not own a separate runtime; `GET /api/web/sessions` returns owner DM + configured allowed Discord channels, and web requests share the same `ConversationRuntime`/transcript/agent session as their Discord counterpart. Discord-originated messages stream into web tabs viewing that channel via `ConversationRuntime.subscribe()`.
-- Streaming thinking blocks: collapsible, italic serif body, "thought for Xs" trigger (lighter color than the assistant name to avoid visual collision).
-- Persona name is auto-detected from `SOUL.md` `**Name:**` field via `parsePersonaName()` and surfaced in `/api/web/auth/mode`; the wordmark and assistant labels track the active persona.
-- Symmetric plain-text message style (alignment + name label only, no asymmetric bubbles) — fits the literary aesthetic.
-
-Done when:
-
-- Phone/browser can talk to Familiar without Discord through configured auth/access. ✅
-
-Deferred / open questions:
-
-- Cross-posting: web messages currently share Familiar's runtime/log with the Discord session but are NOT echoed as visible Discord messages. Decide later whether to mirror them.
-- Public-2fa login UI: protocol path is wired (`POST /api/web/control` with `command: "login"`), but no login screen exists in the frontend yet.
-- Attachments (images, audio) on either direction.
-- Rich panes (memory/diary/transcript/payload inspection) — left for later iterations.
-- Token-level usage and cost surfacing in the UI (only final usage on `message_completed` is captured today).
-
-### Stage 4: Tools
-
-- Register upstream `bash`, `read`, `write`, `edit` with workspace root and Familiar policy.
-- YOLO bash on VPS is allowed for qearl's install.
-- No memory/diary wrapper tools.
-- Agent can inspect logs/summaries/diaries through filesystem tools.
-
-Done when:
-
-- Agent can use bash, read/edit persona files, and grep/read `data/`.
+- Decide whether web-originated messages should be visibly mirrored into Discord.
+- Add public-2fa login UI when the frontend pass resumes.
+- Add richer WebUI panes for memory/diary/transcript/payload inspection later.
+- Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
 
 Status: TTS v0 implemented; image generation still next.
 
-- Add a `tts` tool for generating speech audio from requested text. (Implemented with ElevenLabs.)
-- Add an `image_gen` tool for generating image attachments from prompts.
-- Add provider/config plumbing for media models, API keys, output formats, and per-tool limits. (TTS implemented.)
-- Store generated assets under the workspace attachment/data area with durable metadata in chat logs. (TTS implemented.)
-- Integrate attachment queue delivery for Discord replies and WebUI live events/history. (TTS implemented.)
-- Discord TTS delivery should send only the generated audio attachment; keep transcript text in logs for later WebUI toggle.
-- TODO WebUI TTS display: default to playable audio with an optional transcript/text view after frontend design settles.
-- Add generated-media retention/cleanup policy before high-volume production use.
-- Keep the tools simple and direct; do not route media generation through subagents.
+TTS v0 done:
+
+- ElevenLabs is the default TTS provider.
+- `tts` supports configured `tts.voice_id` plus per-call `voiceId` override for qearl's cloned voice.
+- Generated audio is saved under `data/attachments/generated` and logged as outbound attachments.
+- Discord sends TTS responses as audio-only attachments while retaining transcript text in logs.
+- Web backend/history can carry generated audio attachments; current WebUI can play audio, but transcript toggle UX is deferred.
+- Tests cover config/env interpolation, generated media public paths, attachment serving safety, TTS format helpers, TOTP/auth, and WebSocket framing.
+
+TTS follow-ups before heavy use:
+
+- Add a retention policy for `data/attachments/generated`: configurable max age and/or max bytes, startup cleanup, and a manual cleanup command.
+- Add focused Discord delivery coverage for audio-only replies, including the reply-fallback path and the "no broken placeholder" failure path.
+- Add a concise user-facing error path for ElevenLabs failures that avoids logging API response bodies into visible chat text.
+- Add optional config for ElevenLabs voice settings (`stability`, `similarity_boost`, maybe `style` / `use_speaker_boost`) only if qearl needs tuning beyond the current defaults.
+- Decide whether to keep `tts` tool description visible/minimal or hide most provider detail from the model prompt.
+
+Deferred WebUI TTS polish:
+
+- Coordinate with Claude before frontend changes.
+- Default render should be a playable audio element.
+- Provide a transcript/text toggle using the already logged assistant text.
+- Avoid showing duplicate text beside audio by default.
+
+Image generation next:
+
+- Pick provider/config shape for `image_gen` before implementation.
+- Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, and WebUI live/history attachment plumbing from TTS.
+- Store prompt, provider, model, mime type, size, local path, and public attachment path in durable metadata.
+- Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
+- Keep media tools simple and direct; do not route generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 
 Done when:

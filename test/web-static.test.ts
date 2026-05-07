@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { generatedAttachmentsDir } from "../src/generated-media.js";
 import { serveAttachment } from "../src/web-static.js";
-import { configWithDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 class FakeResponse {
 	statusCode?: number;
@@ -40,10 +40,8 @@ class FakeResponse {
 
 describe("serveAttachment", () => {
 	it("serves generated audio files", async () => {
-		const root = await mkdir(resolve(process.cwd(), ".tmp-test-attachments"), { recursive: true }).then(() =>
-			resolve(process.cwd(), ".tmp-test-attachments", String(Date.now()), "data"),
-		);
-		const config = configWithDataDir(root);
+		const root = await createTempDataDir();
+		const config = await configWithDataDir(root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "voice.mp3"), "audio", "utf8");
@@ -57,10 +55,8 @@ describe("serveAttachment", () => {
 	});
 
 	it("rejects traversal attempts", async () => {
-		const root = await mkdir(resolve(process.cwd(), ".tmp-test-attachments"), { recursive: true }).then(() =>
-			resolve(process.cwd(), ".tmp-test-attachments", String(Date.now()), "data"),
-		);
-		const config = configWithDataDir(root);
+		const root = await createTempDataDir();
+		const config = await configWithDataDir(root);
 		await mkdir(generatedAttachmentsDir(config), { recursive: true });
 		const response = new FakeResponse();
 
@@ -70,10 +66,8 @@ describe("serveAttachment", () => {
 	});
 
 	it("rejects symlinks inside the generated attachment directory", async () => {
-		const root = await mkdir(resolve(process.cwd(), ".tmp-test-attachments"), { recursive: true }).then(() =>
-			resolve(process.cwd(), ".tmp-test-attachments", String(Date.now()), "data"),
-		);
-		const config = configWithDataDir(root);
+		const root = await createTempDataDir();
+		const config = await configWithDataDir(root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
 		const target = join(root, "outside.mp3");

@@ -35,7 +35,7 @@ interface TtsToolDetails {
 	size: number;
 }
 
-function audioExtension(outputFormat: string): string {
+export function audioExtension(outputFormat: string): string {
 	if (outputFormat.startsWith("pcm_")) return "pcm";
 	if (outputFormat.startsWith("ulaw_")) return "ulaw";
 	if (outputFormat.startsWith("alaw_")) return "alaw";
@@ -43,7 +43,7 @@ function audioExtension(outputFormat: string): string {
 	return "mp3";
 }
 
-function audioMimeType(outputFormat: string): string {
+export function audioMimeType(outputFormat: string): string {
 	if (outputFormat.startsWith("pcm_")) return "audio/L16";
 	if (outputFormat.startsWith("ulaw_")) return "audio/basic";
 	if (outputFormat.startsWith("alaw_")) return "audio/basic";

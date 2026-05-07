@@ -2,7 +2,11 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import type { Config } from "../src/config.js";
+import { type Config, loadConfig } from "../src/config.js";
+
+type ConfigOverrides = Partial<{
+	[K in keyof Config]: Partial<Config[K]>;
+}>;
 
 export async function createWorkspace(configToml: string): Promise<string> {
 	const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-test-"));
@@ -25,51 +29,37 @@ ${extra}
 `;
 }
 
-export function configWithDataDir(dataDir: string): Config {
-	return {
-		workspacePath: dataDir,
-		discord: {
-			token: "token",
-			ownerId: "owner",
-			allowedChannels: [],
-			replyMode: "plain",
-			chunkMode: "paragraph",
-			dmMode: "steer",
-			channelMode: "collect",
-			channelTrigger: "mention",
-			collectDebounceMs: 4000,
-			allowBotMessages: false,
-		},
-		web: {
-			port: 8787,
-			authMode: "tailscale-only",
-			bindAddress: "127.0.0.1",
-		},
-		agent: {
-			model: "anthropic/claude-sonnet-4-5",
-			cacheRetention: "long",
-			thinkingLevel: "medium",
-		},
-		models: {
-			allow: [],
-			baseUrls: {},
-			apiKeyEnvs: {},
-		},
-		tts: {
-			provider: "elevenlabs",
-			apiKeyEnv: "ELEVENLABS_API_KEY",
-			voiceId: "",
-			modelId: "eleven_multilingual_v2",
-			outputFormat: "mp3_44100_128",
-			maxInputChars: 5000,
-		},
-		persona: {
-			soul: "SOUL.md",
-			user: "USER.md",
-			memory: "MEMORY.md",
-		},
-		workspace: {
-			dataDir,
-		},
-	};
+export async function createTempDataDir(): Promise<string> {
+	return mkdtemp(resolve(tmpdir(), "familiar-data-"));
+}
+
+export async function configWithDataDir(
+	dataDir: string,
+	overrides: ConfigOverrides = {},
+): Promise<Config> {
+	const previousDiscordToken = process.env.DISCORD_TOKEN;
+	process.env.DISCORD_TOKEN = "discord-token";
+	try {
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[workspace]
+data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
+`),
+		);
+		const config = await loadConfig(workspacePath);
+		return {
+			...config,
+			...overrides,
+			discord: { ...config.discord, ...overrides.discord },
+			web: { ...config.web, ...overrides.web },
+			agent: { ...config.agent, ...overrides.agent },
+			models: { ...config.models, ...overrides.models },
+			tts: { ...config.tts, ...overrides.tts },
+			persona: { ...config.persona, ...overrides.persona },
+			workspace: { ...config.workspace, ...overrides.workspace, dataDir },
+		};
+	} finally {
+		if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
+		else process.env.DISCORD_TOKEN = previousDiscordToken;
+	}
 }

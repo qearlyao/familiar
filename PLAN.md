@@ -503,6 +503,7 @@ Local refs:
 Useful local commands:
 
 ```sh
+npm test
 npm run typecheck
 npm run lint
 npm run build
@@ -513,6 +514,7 @@ npm run payload:pretty -- --full
 ## 7. Maintenance Posture
 
 - Pin pi packages with normal semver ranges; on upgrade, run typecheck/build, send a known-good prompt, and verify cache telemetry.
+- Node test suite exists under `test/` using `tsx --test`; run `npm test`.
 - Write tests for runtime state machine, dispatch modes, media attachment delivery, LCM assembly/scoring, subagent guards when revived, and browser backend adapters. Skip thin wrappers over upstream.
 - Use Biome formatting.
 - Keep commits atomic and explain why.

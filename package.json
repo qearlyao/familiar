@@ -12,6 +12,7 @@
 		"lint": "biome check",
 		"format": "biome format --write",
 		"payload:pretty": "tsx scripts/pretty-payload.ts",
+		"test": "tsx --test test/**/*.test.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

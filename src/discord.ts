@@ -20,8 +20,8 @@ import {
 	type MessageResolvable,
 	Partials,
 } from "discord.js";
-import type { FamiliarAgent } from "./agent.js";
-import type { InboundChatRecord } from "./chat-log.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
+import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
@@ -32,6 +32,7 @@ const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
+const DISCORD_ATTACHMENT_ONLY_CONTENT = "\u200B";
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -42,7 +43,7 @@ export interface DiscordDaemon {
 		jobId: string,
 		prompt: string,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
-	): Promise<string>;
+	): Promise<FamiliarAgentReply>;
 	abortWebRuntime(runtime: ConversationRuntime): void;
 	getActiveRuntimeKey(): string | undefined;
 	stop(): Promise<void>;
@@ -282,6 +283,14 @@ function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
+function isAudioAttachment(attachment: StoredAttachment): boolean {
+	return attachment.mimeType?.startsWith("audio/") ?? false;
+}
+
+function shouldSendAttachmentsOnly(attachments: StoredAttachment[]): boolean {
+	return attachments.length > 0 && attachments.every(isAudioAttachment);
+}
+
 function parseAgentReply(text: string): { text: string; silent: boolean } {
 	const normalized = text.replace(/\r\n/g, "\n").trim();
 	if (normalized === SILENT_RESPONSE_MARKER) {
@@ -294,11 +303,20 @@ function parseAgentReply(text: string): { text: string; silent: boolean } {
 	return { text: normalizeOutboundText(text), silent: false };
 }
 
-async function sendReply(config: Config, message: Message, text: string, replyToMessageId?: string): Promise<string[]> {
-	const normalizedText = normalizeOutboundText(text);
+async function sendReply(
+	config: Config,
+	message: Message,
+	text: string,
+	replyToMessageId?: string,
+	attachments: StoredAttachment[] = [],
+): Promise<string[]> {
+	const attachmentOnly = shouldSendAttachmentsOnly(attachments);
+	const normalizedText = attachmentOnly ? DISCORD_ATTACHMENT_ONLY_CONTENT : normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
+		const files =
+			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
 		let sent: Message;
 		if (index === 0 && config.discord.replyMode === "reply") {
 			try {
@@ -306,7 +324,7 @@ async function sendReply(config: Config, message: Message, text: string, replyTo
 				if (!message.channel.isSendable()) {
 					throw new Error(`Discord channel is not sendable: ${message.channelId}`);
 				}
-				const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget } };
+				const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget }, files };
 				sent = await message.channel.send(options);
 				sentIds.push(sent.id);
 				continue;
@@ -317,7 +335,7 @@ async function sendReply(config: Config, message: Message, text: string, replyTo
 		if (!message.channel.isSendable()) {
 			throw new Error(`Discord channel is not sendable: ${message.channelId}`);
 		}
-		sent = await message.channel.send(chunk);
+		sent = await message.channel.send(files.length > 0 ? { content: chunk, files } : chunk);
 		sentIds.push(sent.id);
 	}
 	return sentIds;
@@ -572,7 +590,7 @@ export async function startDiscordDaemon(
 		jobId: string,
 		prompt: string,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
-	): Promise<string> => {
+	): Promise<FamiliarAgentReply> => {
 		const run = agentWorkQueue.then(async () => {
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 			activeAgentOwner = runtime.channelKey;
@@ -662,7 +680,7 @@ export async function startDiscordDaemon(
 			if (!dispatch) return;
 			try {
 				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
-				const parsedReply = parseAgentReply(reply);
+				const parsedReply = parseAgentReply(reply.text);
 				const messageIds = parsedReply.silent
 					? []
 					: await sendReply(
@@ -670,10 +688,12 @@ export async function startDiscordDaemon(
 							await fetchMessageAnchor(message, dispatch.triggerMessageId),
 							parsedReply.text,
 							dispatch.triggerMessageId,
+							reply.attachments,
 						);
 				await runtime.completeActiveJob({
 					text: parsedReply.text,
 					messageIds,
+					attachments: reply.attachments,
 					silent: parsedReply.silent,
 					replyToMessageId: dispatch.triggerMessageId,
 				});

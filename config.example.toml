@@ -45,6 +45,14 @@ allow = [
 # GOOGLE_APPLICATION_CREDENTIALS, plus GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION in .env.
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
 
+[tts]
+provider = "elevenlabs"
+api_key_env = "ELEVENLABS_API_KEY"
+voice_id = "${ELEVENLABS_VOICE_ID:-}"
+model_id = "eleven_multilingual_v2"
+output_format = "mp3_44100_128"
+max_input_chars = 5000
+
 [persona]
 soul = "SOUL.md"
 user = "USER.md"

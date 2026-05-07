@@ -1,16 +1,17 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
-import { extname, join, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
-import type { ChatLogRecord } from "./chat-log.js";
+import type { ChatLogRecord, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
+import { generatedAttachmentsDir, publicAttachmentPath } from "./generated-media.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -25,9 +26,18 @@ type WebMessage = {
 	role: "user" | "assistant" | "system";
 	who: string;
 	text: string;
+	attachments?: WebAttachment[];
 	thinking?: string;
 	thinkingMs?: number;
 	ts: number;
+};
+
+type WebAttachment = {
+	id: string;
+	name: string;
+	mimeType?: string;
+	size?: number;
+	url?: string;
 };
 
 type WebStreamEvent =
@@ -57,6 +67,7 @@ type WebStreamEvent =
 			channelKey?: string;
 			messageId: string;
 			thinkingMs?: number;
+			attachments?: WebAttachment[];
 			usage?: {
 				input: number;
 				output: number;
@@ -262,7 +273,18 @@ function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
 	return record.type !== "runtime" || !["armed", "reset", "stopped"].includes(record.event);
 }
 
-function webMessageFromRecord(record: ChatLogRecord, assistantName: string): WebMessage | undefined {
+function webAttachments(config: Config, attachments: StoredAttachment[] | undefined): WebAttachment[] | undefined {
+	if (!attachments?.length) return undefined;
+	return attachments.map((attachment) => ({
+		id: attachment.id,
+		name: attachment.name,
+		mimeType: attachment.mimeType,
+		size: attachment.size,
+		url: attachment.localPath ? publicAttachmentPath(config, attachment.localPath) : attachment.remoteUrl,
+	}));
+}
+
+function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantName: string): WebMessage | undefined {
 	if (!isUserVisibleRuntimeRecord(record)) return undefined;
 	if (record.type === "inbound") {
 		return {
@@ -270,6 +292,7 @@ function webMessageFromRecord(record: ChatLogRecord, assistantName: string): Web
 			role: "user",
 			who: record.authorName || WEB_USER_NAME,
 			text: record.text,
+			attachments: webAttachments(config, record.attachments),
 			ts: toUnixMs(record.ts),
 		};
 	}
@@ -279,6 +302,7 @@ function webMessageFromRecord(record: ChatLogRecord, assistantName: string): Web
 			role: "assistant",
 			who: assistantName,
 			text: record.text,
+			attachments: webAttachments(config, record.attachments),
 			thinking: record.thinking,
 			thinkingMs: record.thinkingMs,
 			ts: toUnixMs(record.ts),
@@ -375,6 +399,9 @@ function mimeType(path: string): string {
 	if (extension === ".svg") return "image/svg+xml";
 	if (extension === ".png") return "image/png";
 	if (extension === ".ico") return "image/x-icon";
+	if (extension === ".mp3") return "audio/mpeg";
+	if (extension === ".opus" || extension === ".ogg") return "audio/ogg";
+	if (extension === ".wav") return "audio/wav";
 	return "application/octet-stream";
 }
 
@@ -393,6 +420,53 @@ async function serveStatic(response: ServerResponse, requestPath: string): Promi
 	const stream = createReadStream(filePath);
 	response.writeHead(200, { "content-type": mimeType(filePath) });
 	stream.pipe(response);
+	return true;
+}
+
+async function serveAttachment(config: Config, response: ServerResponse, requestPath: string): Promise<boolean> {
+	const root = generatedAttachmentsDir(config);
+	const rootRealPath = await realpath(root).catch(() => undefined);
+	if (!rootRealPath) {
+		sendText(response, 404, "Not found");
+		return true;
+	}
+	const relativePath = decodeURIComponent(requestPath.replace(/^\/api\/web\/attachments\/?/, ""));
+	if (!relativePath) {
+		sendText(response, 404, "Not found");
+		return true;
+	}
+	const filePath = resolve(root, relativePath);
+	const rel = relative(root, filePath);
+	if (rel.startsWith("..") || rel.startsWith("/") || rel.startsWith("\\") || rel === "") {
+		sendText(response, 403, "Forbidden");
+		return true;
+	}
+	const linkStat = await lstat(filePath).catch(() => undefined);
+	if (!linkStat || linkStat.isSymbolicLink()) {
+		sendText(response, linkStat ? 403 : 404, linkStat ? "Forbidden" : "Not found");
+		return true;
+	}
+	const fileRealPath = await realpath(filePath).catch(() => undefined);
+	if (!fileRealPath) {
+		sendText(response, 404, "Not found");
+		return true;
+	}
+	const realRel = relative(rootRealPath, fileRealPath);
+	if (realRel.startsWith("..") || realRel.startsWith("/") || realRel.startsWith("\\") || realRel === "") {
+		sendText(response, 403, "Forbidden");
+		return true;
+	}
+	const fileStat = await stat(fileRealPath).catch(() => undefined);
+	if (!fileStat?.isFile()) {
+		sendText(response, 404, "Not found");
+		return true;
+	}
+	response.writeHead(200, {
+		"content-type": mimeType(filePath),
+		"content-length": String(fileStat.size),
+		"cache-control": "private, max-age=31536000, immutable",
+	});
+	createReadStream(fileRealPath).pipe(response);
 	return true;
 }
 
@@ -497,6 +571,7 @@ export async function startWebDaemon(
 					channelKey: runtime.channelKey,
 					messageId: outboundId,
 					thinkingMs: record.thinkingMs,
+					attachments: webAttachments(config, record.attachments),
 					ts: toUnixMs(record.ts),
 				});
 			}
@@ -539,7 +614,13 @@ export async function startWebDaemon(
 		runtime: ConversationRuntime,
 		jobId: string,
 		prompt: string,
-	): Promise<{ text: string; messageId: string; thinking: string; thinkingMs?: number }> => {
+	): Promise<{
+		text: string;
+		messageId: string;
+		thinking: string;
+		thinkingMs?: number;
+		attachments?: StoredAttachment[];
+	}> => {
 		const assistantMessageId = messageId();
 		let thinkingStart: number | undefined;
 		let thinkingEnd: number | undefined;
@@ -580,7 +661,7 @@ export async function startWebDaemon(
 				role: "assistant",
 				who: personaName,
 			});
-			publishDelta(runtime.channelKey, assistantMessageId, "text", reply);
+			publishDelta(runtime.channelKey, assistantMessageId, "text", reply.text);
 		}
 		const thinkingMs =
 			thinkingStart !== undefined ? Math.max(0, (thinkingEnd ?? Date.now()) - thinkingStart) : undefined;
@@ -589,10 +670,11 @@ export async function startWebDaemon(
 			channelKey: runtime.channelKey,
 			messageId: assistantMessageId,
 			thinkingMs,
+			attachments: webAttachments(config, reply.attachments),
 			usage,
 		});
 		locallyStreamedOutboundIds.add(assistantMessageId);
-		return { text: reply, messageId: assistantMessageId, thinking, thinkingMs };
+		return { text: reply.text, messageId: assistantMessageId, thinking, thinkingMs, attachments: reply.attachments };
 	};
 
 	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
@@ -604,6 +686,7 @@ export async function startWebDaemon(
 				await runtime.completeActiveJob({
 					text: reply.text,
 					messageIds: [reply.messageId],
+					attachments: reply.attachments,
 					thinking: reply.thinking,
 					thinkingMs: reply.thinkingMs,
 					replyToMessageId: dispatch.triggerMessageId,
@@ -663,6 +746,9 @@ export async function startWebDaemon(
 			return true;
 		}
 		try {
+			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
+				return serveAttachment(config, response, url.pathname);
+			}
 			if (request.method === "GET" && url.pathname === "/api/web/auth/mode") {
 				sendJson(response, 200, { mode: config.web.authMode, personaName });
 				return true;
@@ -678,7 +764,7 @@ export async function startWebDaemon(
 				const before = url.searchParams.get("before");
 				const messages = runtime
 					.getRecords()
-					.map((record) => webMessageFromRecord(record, personaName))
+					.map((record) => webMessageFromRecord(config, record, personaName))
 					.filter((message): message is WebMessage => !!message);
 				const end = before ? messages.findIndex((message) => message.id === before) : messages.length;
 				const safeEnd = end >= 0 ? end : messages.length;

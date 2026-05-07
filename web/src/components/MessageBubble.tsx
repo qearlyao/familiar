@@ -13,6 +13,7 @@ export function MessageBubble({ message }: { message: Message }) {
 
   const isUser = message.role === "user";
   const showThinking = !isUser && (message.thinking || message.thinkingMs != null);
+  const attachments = message.attachments ?? [];
 
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
@@ -29,6 +30,31 @@ export function MessageBubble({ message }: { message: Message }) {
         <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
           {message.text}
         </div>
+        {attachments.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {attachments.map((attachment) =>
+              attachment.mimeType?.startsWith("audio/") && attachment.url ? (
+                <audio
+                  key={attachment.id}
+                  controls
+                  preload="metadata"
+                  src={attachment.url}
+                  className="h-9 max-w-full"
+                >
+                  <a href={attachment.url}>{attachment.name}</a>
+                </audio>
+              ) : attachment.url ? (
+                <a
+                  key={attachment.id}
+                  href={attachment.url}
+                  className="text-sm italic text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  {attachment.name}
+                </a>
+              ) : null,
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

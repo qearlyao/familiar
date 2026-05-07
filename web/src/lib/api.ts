@@ -37,6 +37,7 @@ export type StreamEvent =
       channelKey?: string;
       messageId: string;
       thinkingMs?: number;
+      attachments?: Message["attachments"];
       usage?: {
         input: number;
         output: number;

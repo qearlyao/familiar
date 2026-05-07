@@ -11,6 +11,7 @@ Implemented or recently added:
 - Stage 0 and Stage 1 are effectively done: direct upstream `Agent`, Discord DM path, persona files, stable session/cache logging.
 - Stage 2 is partially done: chat runtime, append-only logs, transcript/payload logs, control commands, model/thinking controls, provider/base-url config, reply/chunk config, dispatch modes, group collection, per-channel agent transcripts, and payload inspection tooling.
 - Stage 3 v0 is shipped: WebUI at `web/` (React+Vite+Tailwind v4+shadcn, warm sepia tweakcn theme), side-door HTTP+WebSocket server in `src/web.ts`, three auth modes scaffolded, session picker exposing owner DM + allowed Discord channels, web tabs share runtime/transcript with their Discord counterpart so Discord-originated messages stream live into open web tabs, persona name auto-detected from SOUL.md `**Name:**`, streaming thinking blocks (collapsible, italic Lora serif).
+- Stage 5 TTS v0 is implemented: ElevenLabs-backed `tts` tool with configurable `voice_id`, generated audio saved under `data/attachments/generated`, outbound attachment logging, Discord file delivery, and WebUI audio playback/history.
 - Anthropic cache normalization is implemented in `src/agent.ts`: Familiar strips extra upstream `cache_control` points and keeps the latest user-message checkpoint, matching Claude Code's stable cache shape.
 - Payload inspection exists: `npm run payload:pretty -- --messages 12`, `--full`, `--date`, `--model`.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
@@ -310,13 +311,16 @@ Done when:
 
 ### Stage 5: TTS and Image Generation
 
-Status: current priority.
+Status: TTS v0 implemented; image generation still next.
 
-- Add a `tts` tool for generating speech audio from requested text.
+- Add a `tts` tool for generating speech audio from requested text. (Implemented with ElevenLabs.)
 - Add an `image_gen` tool for generating image attachments from prompts.
-- Add provider/config plumbing for media models, API keys, output formats, and per-tool limits.
-- Store generated assets under the workspace attachment/data area with durable metadata in chat logs.
-- Integrate attachment queue delivery for Discord replies and WebUI live events/history.
+- Add provider/config plumbing for media models, API keys, output formats, and per-tool limits. (TTS implemented.)
+- Store generated assets under the workspace attachment/data area with durable metadata in chat logs. (TTS implemented.)
+- Integrate attachment queue delivery for Discord replies and WebUI live events/history. (TTS implemented.)
+- Discord TTS delivery should send only the generated audio attachment; keep transcript text in logs for later WebUI toggle.
+- TODO WebUI TTS display: default to playable audio with an optional transcript/text view after frontend design settles.
+- Add generated-media retention/cleanup policy before high-volume production use.
 - Keep the tools simple and direct; do not route media generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 

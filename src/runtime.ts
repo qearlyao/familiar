@@ -8,6 +8,7 @@ import {
 	type ControlCommand,
 	type InboundChatRecord,
 	type JobTrigger,
+	type StoredAttachment,
 } from "./chat-log.js";
 import type { DiscordChannelTrigger } from "./config.js";
 
@@ -359,6 +360,7 @@ export class ConversationRuntime {
 	async noteOutbound(options: {
 		text: string;
 		messageIds: string[];
+		attachments?: StoredAttachment[];
 		thinking?: string;
 		thinkingMs?: number;
 		silent?: boolean;
@@ -373,6 +375,7 @@ export class ConversationRuntime {
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageIds: options.messageIds,
 			text,
+			attachments: options.attachments?.length ? options.attachments : undefined,
 			thinking: options.thinking,
 			thinkingMs: options.thinkingMs,
 			silent: options.silent || undefined,
@@ -387,6 +390,7 @@ export class ConversationRuntime {
 	async completeActiveJob(options: {
 		text: string;
 		messageIds: string[];
+		attachments?: StoredAttachment[];
 		thinking?: string;
 		thinkingMs?: number;
 		silent?: boolean;
@@ -397,6 +401,7 @@ export class ConversationRuntime {
 		const outboundRecordId = await this.noteOutbound({
 			text: options.text,
 			messageIds: options.messageIds,
+			attachments: options.attachments,
 			thinking: options.thinking,
 			thinkingMs: options.thinkingMs,
 			silent: options.silent,

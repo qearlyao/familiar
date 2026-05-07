@@ -24,6 +24,7 @@ function uid(): string {
 interface PendingMessage {
   text: string;
   thinking: string;
+  attachments?: Message["attachments"];
   thinkingStartedAt?: number;
   thinkingEndedAt?: number;
 }
@@ -65,6 +66,7 @@ export function useChat(): ChatHook {
           text: patch.text ?? "",
           thinking: patch.thinking,
           thinkingMs: patch.thinkingMs,
+          attachments: patch.attachments,
           ts: patch.ts ?? Date.now(),
         };
         return [...prev, seed];
@@ -112,7 +114,7 @@ export function useChat(): ChatHook {
             (pending?.thinkingStartedAt && pending?.thinkingEndedAt
               ? Math.max(0, pending.thinkingEndedAt - pending.thinkingStartedAt)
               : undefined);
-          upsertMessage(event.messageId, { thinkingMs: computedThinkingMs });
+          upsertMessage(event.messageId, { thinkingMs: computedThinkingMs, attachments: event.attachments });
           pendingRef.current.delete(event.messageId);
           break;
         }

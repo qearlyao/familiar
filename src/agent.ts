@@ -7,6 +7,7 @@ import { type Model, streamSimple } from "@mariozechner/pi-ai";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 
 import type { Config, ThinkingLevel } from "./config.js";
+import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import {
 	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
@@ -21,9 +22,19 @@ import {
 } from "./models.js";
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
+import { createTtsTool } from "./tts.js";
+
+export interface FamiliarAgentReply {
+	text: string;
+	attachments: GeneratedAttachment[];
+}
 
 export interface FamiliarAgent {
-	prompt(sessionKey: string, input: string, onEvent?: (event: AgentEvent) => void | Promise<void>): Promise<string>;
+	prompt(
+		sessionKey: string,
+		input: string,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+	): Promise<FamiliarAgentReply>;
 	steer(sessionKey: string, input: string): void;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
@@ -38,6 +49,7 @@ interface FamiliarAgentSession {
 	sessionId: string;
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;
+	mediaSink: GeneratedMediaSink;
 	promptQueue: Promise<void>;
 }
 
@@ -228,12 +240,13 @@ function logUsage(event: AgentEvent): void {
 	);
 }
 
-function createFamiliarTools(workspacePath: string): AgentTool<any>[] {
+function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): AgentTool<any>[] {
 	return [
-		createBashTool(workspacePath),
-		createReadTool(workspacePath),
-		createWriteTool(workspacePath),
-		createEditTool(workspacePath),
+		createBashTool(config.workspacePath),
+		createReadTool(config.workspacePath),
+		createWriteTool(config.workspacePath),
+		createEditTool(config.workspacePath),
+		createTtsTool(config, mediaSink),
 	];
 }
 
@@ -272,13 +285,14 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
 		const { model } = resolveChannelModel(sessionKey);
 		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
+		const mediaSink = createGeneratedMediaSink();
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
 		const agent = new Agent({
 			initialState: {
 				systemPrompt,
 				model,
 				messages,
-				tools: createFamiliarTools(config.workspacePath),
+				tools: createFamiliarTools(config, mediaSink),
 				thinkingLevel,
 			},
 			sessionId,
@@ -330,6 +344,7 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			sessionId,
 			model,
 			thinkingLevel,
+			mediaSink,
 			promptQueue: Promise.resolve(),
 		};
 	};
@@ -357,7 +372,8 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 		});
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
-		session.agent.state.tools = createFamiliarTools(config.workspacePath);
+		session.mediaSink.drain();
+		session.agent.state.tools = createFamiliarTools(config, session.mediaSink);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
@@ -427,16 +443,20 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			sessionKey: string,
 			input: string,
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
-		): Promise<string> {
+		): Promise<FamiliarAgentReply> {
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
+				session.mediaSink.drain();
 				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
 				try {
 					await session.agent.prompt(input);
 				} finally {
 					unsubscribe?.();
 				}
-				return getLastAssistantText(session.agent);
+				return {
+					text: getLastAssistantText(session.agent),
+					attachments: session.mediaSink.drain(),
+				};
 			});
 			session.promptQueue = run.then(
 				() => undefined,

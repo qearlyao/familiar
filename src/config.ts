@@ -11,6 +11,7 @@ export type DiscordChunkMode = "simple" | "paragraph";
 export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
+export type TtsProvider = "elevenlabs";
 
 export interface Config {
 	workspacePath: string;
@@ -47,6 +48,14 @@ export interface Config {
 		allow: string[];
 		baseUrls: Record<string, string>;
 		apiKeyEnvs: Record<string, string>;
+	};
+	tts: {
+		provider: TtsProvider;
+		apiKeyEnv: string;
+		voiceId: string;
+		modelId: string;
+		outputFormat: string;
+		maxInputChars: number;
 	};
 	persona: {
 		soul: string;
@@ -150,6 +159,11 @@ function readWebAuthMode(value: unknown): WebAuthMode {
 	throw new Error('Config value web.auth_mode must be one of "tailscale-only", "bearer", or "public-2fa"');
 }
 
+function readTtsProvider(value: unknown): TtsProvider {
+	if (value === "elevenlabs") return value;
+	throw new Error('Config value tts.provider must be "elevenlabs"');
+}
+
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
 	if (typeof value === "boolean") return value;
@@ -182,6 +196,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
+	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
@@ -238,6 +253,14 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allow: readStringArray(models.allow, "models.allow"),
 			baseUrls: readStringRecord(models.base_urls, "models.base_urls"),
 			apiKeyEnvs: readStringRecord(models.api_key_envs, "models.api_key_envs"),
+		},
+		tts: {
+			provider: readTtsProvider(readOptionalString(tts.provider, "elevenlabs")),
+			apiKeyEnv: readOptionalString(tts.api_key_env, "ELEVENLABS_API_KEY"),
+			voiceId: readOptionalString(tts.voice_id, ""),
+			modelId: readOptionalString(tts.model_id, "eleven_multilingual_v2"),
+			outputFormat: readOptionalString(tts.output_format, "mp3_44100_128"),
+			maxInputChars: readInteger(tts.max_input_chars, 5000, "tts.max_input_chars"),
 		},
 		persona: {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),

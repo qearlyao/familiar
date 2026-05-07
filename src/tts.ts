@@ -10,15 +10,12 @@ import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 
 const ELEVENLABS_TTS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech";
-const DEFAULT_VOICE_SETTINGS = {
-	stability: 0.5,
-	similarity_boost: 0.75,
-};
-
 const ttsSchema = Type.Object(
 	{
 		text: Type.String({ description: "Text to synthesize as speech." }),
-		voiceId: Type.Optional(Type.String({ description: "ElevenLabs voice ID. Overrides the configured voice_id." })),
+		voiceId: Type.Optional(
+			Type.String({ description: "Optional ElevenLabs voice ID. Overrides the configured voice_id." }),
+		),
 	},
 	{ additionalProperties: false },
 );
@@ -35,6 +32,14 @@ interface TtsToolDetails {
 	size: number;
 }
 
+interface ElevenLabsVoiceSettingsPayload {
+	stability: number;
+	similarity_boost?: number;
+	style?: number;
+	speed?: number;
+	use_speaker_boost?: boolean;
+}
+
 export function audioExtension(outputFormat: string): string {
 	if (outputFormat.startsWith("pcm_")) return "pcm";
 	if (outputFormat.startsWith("ulaw_")) return "ulaw";
@@ -49,6 +54,26 @@ export function audioMimeType(outputFormat: string): string {
 	if (outputFormat.startsWith("alaw_")) return "audio/basic";
 	if (outputFormat.startsWith("opus_")) return "audio/ogg";
 	return "audio/mpeg";
+}
+
+export function isElevenLabsV3Model(modelId: string): boolean {
+	return modelId === "eleven_v3" || modelId.startsWith("eleven_v3_");
+}
+
+export function buildElevenLabsVoiceSettings(config: Config): ElevenLabsVoiceSettingsPayload {
+	const settings = config.tts.voiceSettings;
+	if (isElevenLabsV3Model(config.tts.modelId)) {
+		return {
+			stability: settings.stability,
+		};
+	}
+	return {
+		stability: settings.stability,
+		similarity_boost: settings.similarityBoost,
+		style: settings.style,
+		speed: settings.speed,
+		use_speaker_boost: settings.useSpeakerBoost,
+	};
 }
 
 async function readElevenLabsError(response: Response): Promise<string> {
@@ -76,7 +101,7 @@ export function createTtsTool(
 		name: "tts",
 		label: "tts",
 		description:
-			"Generate a speech audio attachment from text using ElevenLabs. Use this when the user asks to say, speak, read aloud, or make an audio/voice message. Optionally pass voiceId to use a specific ElevenLabs voice.",
+			"Generate a speech audio attachment from text. Use when sending voice messages or speaking aloud. Custom bracketed tags are allowed; keep them short. Examples: voice tags like [laughs] or [whispers], sound effects like [applause] or [gunshot], and special tags like [sings] or [strong Manchester accent]. Place tags before the text they affect; combine tags when useful, like [excited][laughs].",
 		parameters: ttsSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: TtsToolInput, signal?: AbortSignal) {
@@ -102,7 +127,7 @@ export function createTtsTool(
 				body: JSON.stringify({
 					text,
 					model_id: config.tts.modelId,
-					voice_settings: DEFAULT_VOICE_SETTINGS,
+					voice_settings: buildElevenLabsVoiceSettings(config),
 				}),
 				signal,
 			});

@@ -33,6 +33,13 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.modelId, "eleven_multilingual_v2");
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
+		assert.deepEqual(config.tts.voiceSettings, {
+			stability: 0.5,
+			similarityBoost: 0.75,
+			style: 0,
+			speed: 1,
+			useSpeakerBoost: true,
+		});
 	});
 
 	it("interpolates voice id from the environment", async () => {
@@ -61,5 +68,43 @@ provider = "other"
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.provider/);
+	});
+
+	it("loads ElevenLabs voice settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		delete process.env.ELEVENLABS_VOICE_ID;
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[tts.voice_settings]
+stability = 0.62
+similarity_boost = 0.8
+style = 0.1
+speed = 1.05
+use_speaker_boost = false
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.tts.voiceSettings, {
+			stability: 0.62,
+			similarityBoost: 0.8,
+			style: 0.1,
+			speed: 1.05,
+			useSpeakerBoost: false,
+		});
+	});
+
+	it("rejects out-of-range ElevenLabs voice settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		delete process.env.ELEVENLABS_VOICE_ID;
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[tts.voice_settings]
+stability = 1.1
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /tts\.voice_settings\.stability/);
 	});
 });

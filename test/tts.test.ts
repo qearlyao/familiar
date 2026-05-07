@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { audioExtension, audioMimeType } from "../src/tts.js";
+import { audioExtension, audioMimeType, buildElevenLabsVoiceSettings } from "../src/tts.js";
+import { configWithDataDir } from "./helpers.js";
 
 describe("tts audio formats", () => {
 	const cases = [
@@ -18,4 +19,48 @@ describe("tts audio formats", () => {
 			assert.equal(audioMimeType(format), mimeType);
 		});
 	}
+});
+
+describe("ElevenLabs voice settings", () => {
+	it("includes full voice settings for v2-style models", async () => {
+		const config = await configWithDataDir("/workspace/data", {
+			tts: {
+				modelId: "eleven_multilingual_v2",
+				voiceSettings: {
+					stability: 0.6,
+					similarityBoost: 0.8,
+					style: 0.2,
+					speed: 1.05,
+					useSpeakerBoost: false,
+				},
+			},
+		});
+
+		assert.deepEqual(buildElevenLabsVoiceSettings(config), {
+			stability: 0.6,
+			similarity_boost: 0.8,
+			style: 0.2,
+			speed: 1.05,
+			use_speaker_boost: false,
+		});
+	});
+
+	it("omits v2-only settings for Eleven v3", async () => {
+		const config = await configWithDataDir("/workspace/data", {
+			tts: {
+				modelId: "eleven_v3",
+				voiceSettings: {
+					stability: 0.45,
+					similarityBoost: 0.8,
+					style: 0.2,
+					speed: 1.05,
+					useSpeakerBoost: false,
+				},
+			},
+		});
+
+		assert.deepEqual(buildElevenLabsVoiceSettings(config), {
+			stability: 0.45,
+		});
+	});
 });

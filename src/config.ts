@@ -13,6 +13,14 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 
+export interface TtsVoiceSettings {
+	stability: number;
+	similarityBoost: number;
+	style: number;
+	speed: number;
+	useSpeakerBoost: boolean;
+}
+
 export interface Config {
 	workspacePath: string;
 	discord: {
@@ -56,6 +64,7 @@ export interface Config {
 		modelId: string;
 		outputFormat: string;
 		maxInputChars: number;
+		voiceSettings: TtsVoiceSettings;
 	};
 	persona: {
 		soul: string;
@@ -178,6 +187,22 @@ function readInteger(value: unknown, fallback: number, path: string): number {
 	return value;
 }
 
+function readNumberInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
+	if (value === undefined) return fallback;
+	if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+		throw new Error(`Config value ${path} must be a number between ${min} and ${max}`);
+	}
+	return value;
+}
+
+function readPositiveNumber(value: unknown, fallback: number, path: string): number {
+	if (value === undefined) return fallback;
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+		throw new Error(`Config value ${path} must be a positive number`);
+	}
+	return value;
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
 }
@@ -197,6 +222,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
+	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
@@ -261,6 +287,23 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			modelId: readOptionalString(tts.model_id, "eleven_multilingual_v2"),
 			outputFormat: readOptionalString(tts.output_format, "mp3_44100_128"),
 			maxInputChars: readInteger(tts.max_input_chars, 5000, "tts.max_input_chars"),
+			voiceSettings: {
+				stability: readNumberInRange(ttsVoiceSettings.stability, 0.5, "tts.voice_settings.stability", 0, 1),
+				similarityBoost: readNumberInRange(
+					ttsVoiceSettings.similarity_boost,
+					0.75,
+					"tts.voice_settings.similarity_boost",
+					0,
+					1,
+				),
+				style: readNumberInRange(ttsVoiceSettings.style, 0, "tts.voice_settings.style", 0, 1),
+				speed: readPositiveNumber(ttsVoiceSettings.speed, 1, "tts.voice_settings.speed"),
+				useSpeakerBoost: readBoolean(
+					ttsVoiceSettings.use_speaker_boost,
+					true,
+					"tts.voice_settings.use_speaker_boost",
+				),
+			},
 		},
 		persona: {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),

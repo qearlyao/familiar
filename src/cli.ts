@@ -9,6 +9,7 @@ import { config as loadDotenv } from "dotenv";
 import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { startDiscordDaemon } from "./discord.js";
+import { cleanupGeneratedAttachments } from "./generated-media.js";
 import { loadSettingsStore } from "./settings.js";
 import { startWebDaemon } from "./web.js";
 
@@ -38,6 +39,10 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	}
 	const config = await loadConfig(workspacePath);
 	await mkdir(config.workspace.dataDir, { recursive: true });
+	const removedAttachments = await cleanupGeneratedAttachments(config);
+	if (removedAttachments > 0) {
+		console.log(`Removed ${removedAttachments} expired generated attachment(s)`);
+	}
 	const settings = await loadSettingsStore(config);
 	const familiarAgent = await createFamiliarAgent(config, settings);
 	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings);

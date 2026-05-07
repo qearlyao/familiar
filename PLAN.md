@@ -182,9 +182,8 @@ TTS v0 done:
 
 TTS follow-ups before heavy use:
 
-- Add a retention policy for `data/attachments/generated`: configurable max age and/or max bytes, startup cleanup, and a manual cleanup command.
-- Add focused Discord delivery coverage for audio-only replies, including the reply-fallback path and the "no broken placeholder" failure path.
-- Add a concise user-facing error path for ElevenLabs failures that avoids logging API response bodies into visible chat text.
+- Add a manual generated-media cleanup command later if startup retention is not enough.
+- Keep provider error details out of visible chat text; log details server-side and return concise tool errors. ✔︎
 - Add optional ElevenLabs voice settings as model-aware config, not one flat preset: v2/v2.5 support `stability`, `similarity_boost`, `style`, `speed`, and `use_speaker_boost`; v3 supports audio tags and does not support Speaker Boost. Keep defaults conservative and omit unsupported fields per `model_id`. ✔︎
 - Minimize `tts` prompt-facing description; keep provider details in config and only expose `voiceId` because it is an argument. ✔︎
 

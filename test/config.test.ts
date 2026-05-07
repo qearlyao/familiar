@@ -33,6 +33,7 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.modelId, "eleven_multilingual_v2");
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
+		assert.equal(config.media.generatedRetentionDays, 30);
 		assert.deepEqual(config.tts.voiceSettings, {
 			stability: 0.5,
 			similarityBoost: 0.75,
@@ -106,5 +107,20 @@ stability = 1.1
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.voice_settings\.stability/);
+	});
+
+	it("loads generated media retention settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		delete process.env.ELEVENLABS_VOICE_ID;
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[media.generated]
+retention_days = 7
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.media.generatedRetentionDays, 7);
 	});
 });

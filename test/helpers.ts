@@ -56,6 +56,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			models: { ...config.models, ...overrides.models },
 			tts: { ...config.tts, ...overrides.tts },
 			persona: { ...config.persona, ...overrides.persona },
+			media: { ...config.media, ...overrides.media },
 			workspace: { ...config.workspace, ...overrides.workspace, dataDir },
 		};
 	} finally {

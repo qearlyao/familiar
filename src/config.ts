@@ -71,6 +71,9 @@ export interface Config {
 		user: string;
 		memory: string;
 	};
+	media: {
+		generatedRetentionDays: number;
+	};
 	workspace: {
 		dataDir: string;
 	};
@@ -223,6 +226,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
+	const media = (parsed.media ?? {}) as Record<string, unknown>;
+	const generatedMedia = (media.generated ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
@@ -309,6 +314,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),
 			user: resolveWorkspacePath(workspacePath, readOptionalString(persona.user, "USER.md")),
 			memory: resolveWorkspacePath(workspacePath, readOptionalString(persona.memory, "MEMORY.md")),
+		},
+		media: {
+			generatedRetentionDays: readInteger(generatedMedia.retention_days, 30, "media.generated.retention_days"),
 		},
 		workspace: {
 			dataDir: resolveWorkspacePath(workspacePath, readOptionalString(workspace.data_dir, "data")),

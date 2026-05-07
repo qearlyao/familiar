@@ -61,6 +61,9 @@ style = 0
 speed = 1
 use_speaker_boost = true
 
+[media.generated]
+retention_days = 30
+
 [persona]
 soul = "SOUL.md"
 user = "USER.md"

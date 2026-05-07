@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
+import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@mariozechner/pi-agent-core";
 import { type Model, streamSimple } from "@mariozechner/pi-ai";
-import { createBashTool, createEditTool, createReadTool } from "@mariozechner/pi-coding-agent";
+import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 
 import type { Config, ThinkingLevel } from "./config.js";
 import {
@@ -228,6 +228,15 @@ function logUsage(event: AgentEvent): void {
 	);
 }
 
+function createFamiliarTools(workspacePath: string): AgentTool<any>[] {
+	return [
+		createBashTool(workspacePath),
+		createReadTool(workspacePath),
+		createWriteTool(workspacePath),
+		createEditTool(workspacePath),
+	];
+}
+
 export async function createFamiliarAgent(config: Config, settings: SettingsStore): Promise<FamiliarAgent> {
 	const persona = await loadPersona(config);
 	const systemPrompt = buildSystemPrompt(persona);
@@ -269,11 +278,7 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 				systemPrompt,
 				model,
 				messages,
-				tools: [
-					createBashTool(config.workspacePath),
-					createReadTool(config.workspacePath),
-					createEditTool(config.workspacePath),
-				],
+				tools: createFamiliarTools(config.workspacePath),
 				thinkingLevel,
 			},
 			sessionId,
@@ -352,11 +357,7 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 		});
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
-		session.agent.state.tools = [
-			createBashTool(config.workspacePath),
-			createReadTool(config.workspacePath),
-			createEditTool(config.workspacePath),
-		];
+		session.agent.state.tools = createFamiliarTools(config.workspacePath);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 

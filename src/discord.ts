@@ -32,7 +32,6 @@ const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
-const DISCORD_ATTACHMENT_ONLY_CONTENT = "\u200B";
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -283,14 +282,6 @@ function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
-function isAudioAttachment(attachment: StoredAttachment): boolean {
-	return attachment.mimeType?.startsWith("audio/") ?? false;
-}
-
-function shouldSendAttachmentsOnly(attachments: StoredAttachment[]): boolean {
-	return attachments.length > 0 && attachments.every(isAudioAttachment);
-}
-
 function parseAgentReply(text: string): { text: string; silent: boolean } {
 	const normalized = text.replace(/\r\n/g, "\n").trim();
 	if (normalized === SILENT_RESPONSE_MARKER) {
@@ -310,8 +301,7 @@ async function sendReply(
 	replyToMessageId?: string,
 	attachments: StoredAttachment[] = [],
 ): Promise<string[]> {
-	const attachmentOnly = shouldSendAttachmentsOnly(attachments);
-	const normalizedText = attachmentOnly ? DISCORD_ATTACHMENT_ONLY_CONTENT : normalizeOutboundText(text);
+	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {

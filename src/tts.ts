@@ -10,6 +10,8 @@ import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 
 const ELEVENLABS_TTS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech";
+const AUDIO_EXTENSIONS = ["mp3", "opus", "pcm", "ulaw", "alaw"] as const;
+const TTS_NOTICE_PREFIX = "Generated speech audio attachment:";
 const ttsSchema = Type.Object(
 	{
 		text: Type.String({ description: "Text to synthesize as speech." }),
@@ -41,11 +43,14 @@ interface ElevenLabsVoiceSettingsPayload {
 }
 
 export function audioExtension(outputFormat: string): string {
-	if (outputFormat.startsWith("pcm_")) return "pcm";
-	if (outputFormat.startsWith("ulaw_")) return "ulaw";
-	if (outputFormat.startsWith("alaw_")) return "alaw";
-	if (outputFormat.startsWith("opus_")) return "opus";
+	for (const extension of AUDIO_EXTENSIONS) {
+		if (outputFormat.startsWith(`${extension}_`)) return extension;
+	}
 	return "mp3";
+}
+
+function formatTtsNotice(name: string): string {
+	return `${TTS_NOTICE_PREFIX} ${name}`;
 }
 
 export function audioMimeType(outputFormat: string): string {
@@ -154,7 +159,7 @@ export function createTtsTool(
 			} as const;
 			mediaSink.add(attachment);
 			return {
-				content: [{ type: "text", text: `Generated speech audio attachment: ${name}` }],
+				content: [{ type: "text", text: formatTtsNotice(name) }],
 				details: {
 					provider: "elevenlabs",
 					voiceId,

@@ -171,26 +171,32 @@ Still open from these stages:
 
 Status: TTS v0 implemented; image generation still next.
 
-TTS v0 done:
+Completed in TTS v0:
 
-- ElevenLabs is the default TTS provider.
-- `tts` supports configured `tts.voice_id` plus per-call `voiceId` override for qearl's cloned voice.
-- Generated audio is saved under `data/attachments/generated` and logged as outbound attachments.
-- Discord sends TTS responses as audio-only attachments while retaining transcript text in logs.
-- Web backend/history can carry generated audio attachments; current WebUI can play audio, but transcript toggle UX is deferred.
-- Tests cover config/env interpolation, generated media public paths, attachment serving safety, TTS format helpers, TOTP/auth, and WebSocket framing.
+- ElevenLabs-backed `tts` with configured `tts.voice_id`, optional per-call `voiceId`, compact audio-tag guidance, and model-aware voice settings.
+- Generated audio is saved under `data/attachments/generated`, logged as outbound attachments, delivered through Discord/Web history, and cleaned on startup using `[media.generated].retention_days` (default 30, `0` disables).
+- Discord currently sends assistant text plus generated audio files, matching WebUI/backend behavior. Transcript-toggle UX for WebUI is deferred.
+- Tests cover config/env interpolation, voice-setting request shaping, generated-media cleanup/path safety, attachment serving safety, TOTP/auth, and WebSocket framing.
 
-TTS follow-ups before heavy use:
+Active Stage 5 to-dos:
 
+- Implement `image_gen`.
 - Add a manual generated-media cleanup command later if startup retention is not enough.
-- Keep provider error details out of visible chat text; log details server-side and return concise tool errors. ✔︎
-- Add optional ElevenLabs voice settings as model-aware config, not one flat preset: v2/v2.5 support `stability`, `similarity_boost`, `style`, `speed`, and `use_speaker_boost`; v3 supports audio tags and does not support Speaker Boost. Keep defaults conservative and omit unsupported fields per `model_id`. ✔︎
-- Minimize `tts` prompt-facing description; keep provider details in config and only expose `voiceId` because it is an argument. ✔︎
+- Add WebUI TTS transcript toggle after frontend coordination.
 
-Skills for media/character guidance:
+Image generation next:
+
+- Pick provider/config shape for `image_gen` before implementation.
+- Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, WebUI live/history attachment plumbing, and retention cleanup from TTS.
+- Store prompt, provider, model, mime type, size, local path, and public attachment path in durable metadata.
+- Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
+- Keep media tools simple and direct; do not route generation through subagents.
+- Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
+
+Skills after image generation:
 
 - Add Familiar skill discovery without `AgentSession`: load user/project skills and append pi's progressive skill index to the direct `Agent` system prompt.
-- Create skills for character-specific TTS and image-generation rules: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
+- Use skills for large, rarely used media/persona/character instructions: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
 - Keep tool definitions generic. The model should load relevant skills before calling `tts` or `image_gen` when a request matches a character/media workflow.
 - Keep LCM as the only automatic context compaction layer; skills are instruction loading, not conversation memory.
 
@@ -200,15 +206,6 @@ Deferred WebUI TTS polish:
 - Default render should be a playable audio element.
 - Provide a transcript/text toggle using the already logged assistant text.
 - Avoid showing duplicate text beside audio by default.
-
-Image generation next:
-
-- Pick provider/config shape for `image_gen` before implementation.
-- Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, and WebUI live/history attachment plumbing from TTS.
-- Store prompt, provider, model, mime type, size, local path, and public attachment path in durable metadata.
-- Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
-- Keep media tools simple and direct; do not route generation through subagents.
-- Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 
 Done when:
 

@@ -6,14 +6,7 @@ Before implementing features in subsequent development, first verify the latest 
 
 ## Commit Messages
 
-When writing commit messages for this repo, prefer the detailed style:
-
-- Use a specific imperative summary line.
-- Add a blank line, then bullets for the concrete changes.
-- Mention behavior, persistence/config changes, verification-relevant details, and important caveats when they matter.
-- Prefer useful detail over short mystery labels.
-
-Example shape:
+When writing commit messages for this repo, prefer the detailed style, example shape:
 
 ```text
 Add namespaced Discord slash controls

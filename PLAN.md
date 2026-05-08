@@ -9,19 +9,20 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 Implemented or recently added:
 
 - Stages 0-4 are v0-complete: upstream `Agent`, Discord runtime/logs/controls, Anthropic cache normalization, WebUI side-door, workspace tools, payload inspection, and focused backend tests.
-- Stage 5 TTS v0 is implemented: ElevenLabs `tts`, configurable `voice_id`, generated audio attachments, Discord audio-only delivery, WebUI playback/history plumbing, and attachment-serving safety tests.
+- Stage 5 is partially complete: TTS v0 is implemented, while `image_gen` is intentionally waiting for upstream `@earendil-works/pi-ai` image-generation APIs to publish beyond npm `0.74.0`.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next implementation chunks:
 
-- Tighten Stage 5 TTS follow-ups listed below before heavy usage.
 - Harden WebUI as the complete event stream/dashboard surface: persist Discord-origin thinking and tool lifecycle events for Web without exposing them in Discord replies.
-- Implement Stage 5 image generation using the existing generated-media attachment path.
+- Start Stage 6 media intake: Discord/Web uploads, image-to-model path, attachment metadata/storage, pure-attachment messages, and initial audio/video strategy.
+- Revisit Stage 5 `image_gen` after upstream `@earendil-works/pi-ai` publishes image-generation APIs to npm.
+- Keep Stage 5 TTS follow-ups low-priority unless heavy usage exposes pain.
 - Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 
 Important caution:
 
-- Stages after Stage 6 are directionally planned, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
+- Stages after Stage 6 media intake are directionally planned, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
 
 ## 1. Locked Decisions
 
@@ -173,11 +174,12 @@ Still open from these stages:
   - Backend records and streams tool lifecycle events (`start`, `update`, `end`, error state, concise result summary) with job/message correlation.
   - Discord-origin runs still send only the final assistant reply and outbound media back to Discord.
   - Frontend renders tool calls live, then folds completed calls by default while preserving full details for inspection.
+  - This is a near-term prerequisite for Stage 6 because WebUI is the canonical dashboard for full message/media/event history.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
 
-Status: TTS v0 implemented; image generation still next.
+Status: partially complete. TTS v0 is implemented; image generation is deferred until upstream image APIs ship in npm.
 
 Completed in TTS v0:
 
@@ -188,14 +190,14 @@ Completed in TTS v0:
 
 Active Stage 5 to-dos:
 
-- Implement `image_gen`, preferably by wrapping upstream `@earendil-works/pi-ai` image generation once it is published to npm.
+- Implement `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation once it is published to npm.
 - Add a manual generated-media cleanup command later if startup retention is not enough.
 - Add WebUI TTS transcript toggle after frontend coordination.
 
 Image generation next:
 
-- Upstream status: local `earendil-works/pi` main has a new image-generation API after `v0.74.0`: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support. npm `0.74.0` does not yet include this API.
-- Strategy: do not invent a parallel provider abstraction if upstream image APIs are close to release. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
+- Upstream status: local `earendil-works/pi` main has a new image-generation API after `v0.74.0`: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support. npm `0.74.0` still does not include this API.
+- Strategy: do not invent a parallel provider abstraction while upstream image APIs are close to release. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
 - If implementation must happen before upstream publishes image APIs, make the provider layer intentionally thin and easy to replace with upstream `generateImages()`.
 - Initial Familiar provider target is qearl's custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
 - Treat upstream's OpenRouter image implementation as an API-shape/reference implementation only, not the default provider choice.
@@ -223,10 +225,41 @@ Deferred WebUI TTS polish:
 Done when:
 
 - "say this out loud" returns an audio attachment in Discord and WebUI.
-- "draw X" returns an image attachment in Discord and WebUI.
+- After upstream image APIs publish: "draw X" returns an image attachment in Discord and WebUI.
 - Generated media paths are logged and survive restart/history replay.
 
-### Stage 6: LCM
+### Stage 6: Media Intake
+
+- Upstream check result: media intake is partially covered upstream, but no upstream repo currently provides the full Familiar path from chat attachment to safe durable event record to direct multimodal agent prompt.
+- Reuse/adapt `pi-chat` for channel attachment shape and logistics:
+  - `AttachmentInput`, `StoredAttachment`, `AttachmentKind = image|file|audio|video`.
+  - Discord/Telegram live adapters download inbound attachments and materialize them under the conversation files dir.
+  - Outbound adapters can send local attachment paths as Discord multipart files or Telegram photo/document uploads.
+- Do not copy `pi-chat` blindly: its download helper currently lacks Familiar-grade content-length checks, total byte limits, timeout policy, count limits, MIME sniffing, and retention semantics. Its runtime formats inbound attachments as transcript file-path lines, not as direct model `ImageContent`.
+- Reuse/adapt `pi` coding-agent image primitives:
+  - Magic-byte image MIME detection for jpg/png/gif/webp.
+  - Photon-backed resize/re-encode path with max dimensions and base64 payload limit.
+  - Dimension notes that preserve original-to-resized coordinate mapping.
+  - `read` tool behavior for returning `[text note, image]` content and warning when the selected model is non-vision.
+- Use upstream multimodal primitives directly where possible: `@earendil-works/pi-ai` `ImageContent` plus `Agent.prompt(input, images)` / explicit `AgentMessage` content arrays already support image input.
+- Familiar-owned Stage 6 work:
+  - Attachment metadata in chat records for both Discord and Web uploads, with stable IDs and WebUI URLs/previews.
+  - WebUI must render user-uploaded images/files and generated media attachments as first-class visible attachments. Chat logs and model transcript text may stay path/metadata-based, but the dashboard cannot collapse media into opaque path text only.
+  - Safe attachment store for user-supplied media: max count, max bytes before/after download, MIME allowlist, magic-byte sniffing, path safety, timeout/abort, Discord remote URL guards, retention policy, and audit-friendly errors.
+  - Image intake pipeline: store original, optionally derive resized inline image, pass images directly to vision-capable models, and keep durable metadata linking prompt record, stored file, derived inline payload, and model-facing dimension note.
+  - Model chat history may keep recent `ImageContent` blocks until LCM/compaction thresholds are reached. Later LCM should replace older large media blocks with summaries plus durable attachment references.
+  - Non-image files initially appear as stored file refs/metadata; add extraction/parsing per file class only when needed.
+  - Pure attachment messages must be accepted and visible even when text/content is empty. Discord DMs with only attachments should queue a job; allowed channels should queue in `always` mode, while mention-only channels still need either a mention/caption or an explicit future attachment-trigger policy.
+  - Voice memo transcription path.
+  - Video understanding strategy: decide frame sampling vs provider-native video input, transcript/audio extraction, long-video summarization, derived artifact storage, and what to persist in chat logs now and LCM later.
+  - WebUI upload controls and previews should use the same backend attachment metadata shape as Discord intake.
+- `pi` monorepo `packages/web-ui` has attachment/document extraction UI utilities (`loadAttachment`, `extract_document`) that can inspire future frontend behavior, but they are browser-side helpers and not the backend intake source of truth for Familiar.
+
+Done when:
+
+- Image attachments, voice memos, and short videos produce sensible replies without destabilizing Discord/Web message flow or context assembly.
+
+### Stage 7: LCM
 
 - Per-channel raw logs under `data/chat/{channel}/{date}.jsonl`.
 - Summary DAG under `data/lcm/{date}/`.
@@ -241,7 +274,7 @@ Done when:
 - Long same-day conversations avoid context overflow.
 - Agent can grep raw chat and read summary provenance.
 
-### Stage 7: Daily Diary and Cross-Session RAG
+### Stage 8: Daily Diary and Cross-Session RAG
 
 - Diary files at `data/diaries/YYYY-MM-DD.md`.
 - Diary-writer worker uses chat logs and previous diary through upstream tools. It may become a `task` subagent later, but should not block on the subagent tool.
@@ -253,20 +286,6 @@ Done when:
 Done when:
 
 - New-day conversations recall relevant past diary excerpts and manual diary edits update retrieval.
-
-### Stage 8: Media Intake
-
-- Stage 8 owns user-originated media intake and video-understanding strategy.
-- Attachment metadata in chat records for Discord and Web uploads.
-- Safe attachment store for user-supplied media: size limits, MIME allowlist, path safety, retention policy, and remote Discord attachment download guards.
-- Image attachment path through upstream `prompt(input, images)` for vision-capable models.
-- Voice memo transcription path.
-- Video understanding strategy: decide frame sampling vs provider-native video input, transcript extraction, long-video summarization, and what to persist in chat logs/LCM.
-- WebUI upload controls and previews should use the same backend attachment metadata shape as Discord intake.
-
-Done when:
-
-- Image attachments, voice memos, and short videos produce sensible replies without destabilizing Discord/Web message flow or context assembly.
 
 ### Stage 9: Heartbeat, Scheduler, and Active Check-Ins
 
@@ -382,7 +401,14 @@ Tool refs:
   - confirms current upstream built-ins are workspace/local tools, not web fetch/search tools
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/bash.ts`
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/read.ts`
+  - image read path returns text note plus `ImageContent`; warns for non-vision models
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/write.ts`
+- `/Users/qearl/pi-mono/packages/coding-agent/src/cli/file-processor.ts`
+  - `@file` argument handling: local image detection, resize, dimension note, `ImageContent[]`
+- `/Users/qearl/pi-mono/packages/coding-agent/src/utils/mime.ts`
+  - magic-byte supported image MIME detection for jpg/png/gif/webp
+- `/Users/qearl/pi-mono/packages/coding-agent/src/utils/image-resize.ts`
+  - Photon-backed resize/re-encode and max inline image payload policy
 
 Compaction/session refs:
 
@@ -394,13 +420,22 @@ pi-chat refs:
 
 - `/tmp/pi-chat/src/core/runtime-types.ts`: chat runtime/log record types.
 - `/tmp/pi-chat/src/runtime.ts`: runtime state machine, trigger slicing.
+  - attachment transcript formatting is path-based; it does not convert inbound files to direct `ImageContent`
 - `/tmp/pi-chat/src/log.ts`: append JSONL, locks, timestamps, attachment materialization.
 - `/tmp/pi-chat/src/live/types.ts`: small live adapter interface.
 - `/tmp/pi-chat/src/live/discord.ts`: Discord catch-up, mentions, reply-to, attachments.
 - `/tmp/pi-chat/src/live/common.ts`: shared live-adapter helpers, including remote attachment download.
+- `/tmp/pi-chat/src/live/telegram.ts`: richer inbound media reference for photos/documents/videos/audio plus outbound photo/document sending.
 - `/tmp/pi-chat/src/render/chunking.ts`: outbound chunking.
 - `/tmp/pi-chat/src/services/discord.ts`: Discord service setup and lifecycle wiring.
 - `/tmp/pi-chat/src/services/index.ts`: service entry aggregation.
+
+Upstream WebUI/media refs:
+
+- `/Users/qearl/pi-mono/packages/web-ui/src/utils/attachment-utils.ts`
+  - browser-side attachment loading and document text extraction helper; useful frontend reference, not Familiar backend storage policy
+- `/Users/qearl/pi-mono/packages/web-ui/src/tools/extract-document.ts`
+  - document fetch/extract tool with size guard pattern and collapsible renderer reference
 
 Local refs:
 

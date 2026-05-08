@@ -8,6 +8,7 @@ import {
 	type ControlCommand,
 	type InboundChatRecord,
 	type JobTrigger,
+	type StoredAgentEvent,
 	type StoredAttachment,
 } from "./chat-log.js";
 import type { DiscordChannelTrigger } from "./config.js";
@@ -65,6 +66,12 @@ export interface ConversationStatus {
 }
 
 export type RuntimeRecordListener = (record: ChatLogRecord) => void | Promise<void>;
+export type RuntimeAgentEventListener = (event: {
+	jobId: string;
+	messageId: string;
+	event: StoredAgentEvent;
+	ts: number;
+}) => void | Promise<void>;
 
 function formatAuthor(authorName: string | undefined, authorId: string): string {
 	return authorName ? `${authorName} (uid:${authorId})` : `uid:${authorId}`;
@@ -99,6 +106,7 @@ export class ConversationRuntime {
 	private pendingJobs: QueuedJob[] = [];
 	private activeJob: QueuedJob | undefined;
 	private listeners = new Set<RuntimeRecordListener>();
+	private agentEventListeners = new Set<RuntimeAgentEventListener>();
 
 	private constructor(options: {
 		channelKey: string;
@@ -162,10 +170,11 @@ export class ConversationRuntime {
 		});
 	}
 
-	private async appendRecord(record: ChatLogRecord): Promise<void> {
+	private async appendRecord(record: ChatLogRecord, options: { notify?: boolean } = {}): Promise<void> {
 		this.records.push(record);
 		this.nextRecordId = Math.max(this.nextRecordId, record.recordId + 1);
 		await this.log.append(record);
+		if (options.notify === false) return;
 		for (const listener of this.listeners) {
 			void Promise.resolve(listener(record)).catch((error) =>
 				console.error(`runtime listener failed for ${this.channelKey}`, error),
@@ -178,6 +187,22 @@ export class ConversationRuntime {
 		return () => {
 			this.listeners.delete(listener);
 		};
+	}
+
+	subscribeAgentEvents(listener: RuntimeAgentEventListener): () => void {
+		this.agentEventListeners.add(listener);
+		return () => {
+			this.agentEventListeners.delete(listener);
+		};
+	}
+
+	publishAgentEvent(jobId: string, messageId: string, event: StoredAgentEvent): void {
+		const payload = { jobId, messageId, event, ts: Date.now() };
+		for (const listener of this.agentEventListeners) {
+			void Promise.resolve(listener(payload)).catch((error) =>
+				console.error(`runtime agent event listener failed for ${this.channelKey}`, error),
+			);
+		}
 	}
 
 	private isOwnerMessage(input: Pick<InboundMessageInput, "authorId" | "isBot">): boolean {
@@ -360,6 +385,7 @@ export class ConversationRuntime {
 	async noteOutbound(options: {
 		text: string;
 		messageIds: string[];
+		webMessageId?: string;
 		attachments?: StoredAttachment[];
 		thinking?: string;
 		thinkingMs?: number;
@@ -374,6 +400,7 @@ export class ConversationRuntime {
 			type: "outbound",
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageIds: options.messageIds,
+			webMessageId: options.webMessageId,
 			text,
 			attachments: options.attachments?.length ? options.attachments : undefined,
 			thinking: options.thinking,
@@ -390,6 +417,7 @@ export class ConversationRuntime {
 	async completeActiveJob(options: {
 		text: string;
 		messageIds: string[];
+		webMessageId?: string;
 		attachments?: StoredAttachment[];
 		thinking?: string;
 		thinkingMs?: number;
@@ -401,6 +429,7 @@ export class ConversationRuntime {
 		const outboundRecordId = await this.noteOutbound({
 			text: options.text,
 			messageIds: options.messageIds,
+			webMessageId: options.webMessageId,
 			attachments: options.attachments,
 			thinking: options.thinking,
 			thinkingMs: options.thinkingMs,
@@ -416,6 +445,24 @@ export class ConversationRuntime {
 			outboundRecordId,
 		});
 		this.activeJob = undefined;
+	}
+
+	async noteAgentEvent(
+		jobId: string,
+		messageId: string,
+		event: StoredAgentEvent,
+		options: { notify?: boolean } = {},
+	): Promise<void> {
+		await this.appendRecord(
+			{
+				type: "agent_event",
+				...buildRecordBase(this.channel, this.nextRecordId),
+				jobId,
+				messageId,
+				event,
+			},
+			options,
+		);
 	}
 
 	async failActiveJob(error: string): Promise<void> {

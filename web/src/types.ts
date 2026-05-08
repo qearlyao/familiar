@@ -8,6 +8,9 @@ export interface Message {
   attachments?: Attachment[];
   thinking?: string;
   thinkingMs?: number;
+  tools?: ToolEvent[];
+  parts?: MessagePart[];
+  usage?: Usage;
   ts: number;
 }
 
@@ -18,3 +21,28 @@ export interface Attachment {
   size?: number;
   url?: string;
 }
+
+export interface ToolEvent {
+  id: string;
+  name: string;
+  status: "pending" | "running" | "completed" | "error";
+  args?: unknown;
+  partialResult?: unknown;
+  result?: unknown;
+  error?: string;
+  startedAt?: number;
+  updatedAt?: number;
+  completedAt?: number;
+}
+
+export interface Usage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+}
+
+export type MessagePart =
+  | { type: "text"; id: string; text: string }
+  | { type: "tool"; id: string; tool: ToolEvent };

@@ -11,6 +11,31 @@ export type WebAttachment = {
 	url?: string;
 };
 
+export type WebToolEvent = {
+	id: string;
+	name: string;
+	status: "pending" | "running" | "completed" | "error";
+	args?: unknown;
+	partialResult?: unknown;
+	result?: unknown;
+	error?: string;
+	startedAt?: number;
+	updatedAt?: number;
+	completedAt?: number;
+};
+
+export type WebUsage = {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	cost: number;
+};
+
+export type WebMessagePart =
+	| { type: "text"; id: string; text: string }
+	| { type: "tool"; id: string; tool: WebToolEvent };
+
 export type WebMessage = {
 	id: string;
 	role: "user" | "assistant" | "system";
@@ -19,6 +44,9 @@ export type WebMessage = {
 	attachments?: WebAttachment[];
 	thinking?: string;
 	thinkingMs?: number;
+	tools?: WebToolEvent[];
+	parts?: WebMessagePart[];
+	usage?: WebUsage;
 	ts: number;
 };
 
@@ -50,13 +78,15 @@ export type WebStreamEvent =
 			messageId: string;
 			thinkingMs?: number;
 			attachments?: WebAttachment[];
-			usage?: {
-				input: number;
-				output: number;
-				cacheRead: number;
-				cacheWrite: number;
-				cost: number;
-			};
+			usage?: WebUsage;
+	  }
+	| {
+			type: "tool_event";
+			eventId: string;
+			ts: number;
+			channelKey?: string;
+			messageId: string;
+			tool: WebToolEvent;
 	  }
 	| {
 			type: "status";

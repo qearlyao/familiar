@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
@@ -21,6 +22,13 @@ import {
 	Partials,
 } from "discord.js";
 import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
+import {
+	type AgentEventSummary,
+	createAgentEventRecorder,
+	storedAgentEventFromAgentEvent,
+	thinkingDurationMs,
+	updateAgentEventSummary,
+} from "./agent-events.js";
 import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
@@ -563,6 +571,10 @@ function canceledJobError(): Error {
 	return error;
 }
 
+function webMessageId(): string {
+	return `msg_${randomUUID()}`;
+}
+
 function startTypingIndicator(message: Message): () => void {
 	const sendTyping = () => {
 		if (!message.channel.isSendable()) return;
@@ -682,7 +694,24 @@ export async function startDiscordDaemon(
 			if (!dispatch) return;
 			const stopTyping = startTypingIndicator(message);
 			try {
-				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
+				const assistantMessageId = webMessageId();
+				const summary: AgentEventSummary = { thinking: "" };
+				const recorder = createAgentEventRecorder((storedEvent) =>
+					runtime.noteAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent, { notify: false }),
+				);
+				let reply: Awaited<ReturnType<typeof promptForRuntime>>;
+				try {
+					reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, async (event) => {
+						updateAgentEventSummary(summary, event);
+						const storedEvent = storedAgentEventFromAgentEvent(event);
+						if (storedEvent) {
+							runtime.publishAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent);
+							await recorder.record(storedEvent);
+						}
+					});
+				} finally {
+					await recorder.flush();
+				}
 				const parsedReply = parseAgentReply(reply.text);
 				const messageIds = parsedReply.silent
 					? []
@@ -696,7 +725,10 @@ export async function startDiscordDaemon(
 				await runtime.completeActiveJob({
 					text: parsedReply.text,
 					messageIds,
+					webMessageId: assistantMessageId,
 					attachments: reply.attachments,
+					thinking: summary.thinking,
+					thinkingMs: thinkingDurationMs(summary),
 					silent: parsedReply.silent,
 					replyToMessageId: dispatch.triggerMessageId,
 				});

@@ -169,12 +169,6 @@ Still open from these stages:
 - Decide whether web-originated messages should be visibly mirrored into Discord.
 - Add public-2fa login UI when the frontend pass resumes.
 - Add richer WebUI panes for memory/diary/transcript/payload inspection later.
-- Promote WebUI from side-door chat to first-class event stream/dashboard:
-  - Backend records and streams assistant thinking for Discord-origin and Web-origin runs.
-  - Backend records and streams tool lifecycle events (`start`, `update`, `end`, error state, concise result summary) with job/message correlation.
-  - Discord-origin runs still send only the final assistant reply and outbound media back to Discord.
-  - Frontend renders tool calls live, then folds completed calls by default while preserving full details for inspection.
-  - This is a near-term prerequisite for Stage 6 because WebUI is the canonical dashboard for full message/media/event history.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
@@ -227,6 +221,50 @@ Done when:
 - "say this out loud" returns an audio attachment in Discord and WebUI.
 - After upstream image APIs publish: "draw X" returns an image attachment in Discord and WebUI.
 - Generated media paths are logged and survive restart/history replay.
+
+### Near-Term TODO: WebUI Event Dashboard
+
+Goal: promote WebUI from side-door chat to the canonical full event stream/dashboard before Stage 6 media intake work.
+
+Upstream check result:
+
+- Reuse upstream `@earendil-works/pi-agent-core` `AgentEvent` semantics directly:
+  - `message_start`, `message_update`, `message_end`
+  - `tool_execution_start`, `tool_execution_update`, `tool_execution_end`
+  - `turn_start`, `turn_end`, `agent_start`, `agent_end`
+- Reuse upstream event naming/payload conventions from `pi-coding-agent` extension events where helpful. Its `tool_execution_*` events mirror core `AgentEvent`; its `tool_call` / `tool_result` hook shapes are good references for tool input/result/detail payloads.
+- Do not adopt upstream `AgentSession`, harness session JSONL, or extension runner for Familiar. Those are coding-session/TUI shaped and would reintroduce architecture Familiar intentionally avoided.
+- `pi-chat` does not provide agent/tool event persistence. It remains a chat runtime/log reference only.
+- `pi` `packages/web-ui` has useful rendering patterns: assistant messages render text/thinking/tool-call parts in order, `toolResultsById` attaches results to calls, pending tool calls render live, and completed tools can be folded with debug details.
+
+Backend work:
+
+- Record and stream assistant thinking for both Discord-origin and Web-origin runs.
+- Record and stream tool lifecycle events for both origins:
+  - start/update/end
+  - tool call id/name
+  - arguments/input
+  - partial updates when available
+  - final result summary/details
+  - error state
+  - job/message/channel correlation
+- Add a Familiar-owned durable chat-log event shape, likely `agent_event`, rather than overloading visible system messages.
+- Keep Discord clean: Discord-origin runs still send only final assistant text and outbound media to Discord. Thinking and tool details go to WebUI/logs only.
+- Keep WebSocket protocol Familiar-owned, but use upstream-compatible names where possible (`tool_execution_start/update/end` or a compact `tool_event` carrying those phases).
+- Make replay/history useful after refresh: WebUI should reconstruct completed thinking/tool events from durable records, not only from in-memory live events.
+
+Frontend work:
+
+- Render tool calls live under the associated assistant message.
+- Fold completed tool calls by default while preserving full input/output/details for inspection.
+- Preserve existing thinking block behavior and apply it to Discord-origin runs too.
+- Avoid showing tool lifecycle details as regular chat/system messages.
+
+Done when:
+
+- A Discord-origin message that triggers thinking/tools appears live in WebUI with thinking and tool lifecycle details, while Discord receives only the final clean reply/media.
+- A Web-origin message still streams thinking/text as before and also shows tool lifecycle details.
+- Refreshing WebUI preserves recent completed thinking/tool event history from chat logs.
 
 ### Stage 6: Media Intake
 

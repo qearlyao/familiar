@@ -4,7 +4,14 @@ import type { Socket } from "node:net";
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
-import type { ChatLogRecord, StoredAttachment } from "./chat-log.js";
+import {
+	type AgentEventSummary,
+	createAgentEventRecorder,
+	storedAgentEventFromAgentEvent,
+	thinkingDurationMs,
+	updateAgentEventSummary,
+} from "./agent-events.js";
+import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
@@ -21,8 +28,10 @@ import {
 	type WebAttachment,
 	type WebDaemon,
 	type WebMessage,
+	type WebMessagePart,
 	type WebPublishEvent,
 	type WebStreamEvent,
+	type WebToolEvent,
 } from "./web-types.js";
 
 function toUnixMs(ts: string | undefined): number {
@@ -53,6 +62,159 @@ function webAttachments(config: Config, attachments: StoredAttachment[] | undefi
 	}));
 }
 
+function toolError(result: unknown): string | undefined {
+	if (typeof result === "string") return result;
+	if (!isObject(result)) return undefined;
+	if (typeof result.error === "string") return result.error;
+	if (typeof result.message === "string") return result.message;
+	return undefined;
+}
+
+function toolFromStoredAgentEvent(event: StoredAgentEvent, ts: number): WebToolEvent | undefined {
+	if (event.type === "tool_execution_start") {
+		return {
+			id: event.toolCallId,
+			name: event.toolName,
+			status: "running",
+			args: event.args,
+			startedAt: ts,
+			updatedAt: ts,
+		};
+	}
+	if (event.type === "tool_execution_update") {
+		return {
+			id: event.toolCallId,
+			name: event.toolName,
+			status: "running",
+			args: event.args,
+			partialResult: event.partialResult,
+			updatedAt: ts,
+		};
+	}
+	if (event.type === "tool_execution_end") {
+		return {
+			id: event.toolCallId,
+			name: event.toolName,
+			status: event.isError ? "error" : "completed",
+			result: event.result,
+			error: event.isError ? toolError(event.result) : undefined,
+			completedAt: ts,
+			updatedAt: ts,
+		};
+	}
+	if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_end") {
+		return {
+			id: event.assistantMessageEvent.toolCall.id,
+			name: event.assistantMessageEvent.toolCall.name,
+			status: "pending",
+			args: event.assistantMessageEvent.toolCall.arguments,
+			updatedAt: ts,
+		};
+	}
+	return undefined;
+}
+
+function mergeToolEvent(existing: WebToolEvent | undefined, patch: WebToolEvent): WebToolEvent {
+	const terminal = patch.status === "completed" || patch.status === "error";
+	return {
+		...existing,
+		...patch,
+		args: patch.args ?? existing?.args,
+		partialResult: terminal ? undefined : (patch.partialResult ?? existing?.partialResult),
+		result: patch.result ?? existing?.result,
+		error: patch.error ?? existing?.error,
+		startedAt: existing?.startedAt ?? patch.startedAt,
+	};
+}
+
+function mergeToolPart(parts: WebMessagePart[], patch: WebToolEvent): WebMessagePart[] {
+	const index = parts.findIndex((part) => part.type === "tool" && part.tool.id === patch.id);
+	if (index >= 0) {
+		const next = parts.slice();
+		const existing = next[index];
+		if (existing?.type === "tool") next[index] = { ...existing, tool: mergeToolEvent(existing.tool, patch) };
+		return next;
+	}
+	return [...parts, { type: "tool", id: `tool_${patch.id}`, tool: patch }];
+}
+
+function appendTextPart(parts: WebMessagePart[], text: string): WebMessagePart[] {
+	const last = parts.at(-1);
+	if (last?.type === "text") return [...parts.slice(0, -1), { ...last, text: last.text + text }];
+	return [...parts, { type: "text", id: `text_${parts.length}`, text }];
+}
+
+function applyStoredAgentEventToMessage(
+	message: WebMessage,
+	record: Extract<ChatLogRecord, { type: "agent_event" }>,
+	options: { applyTextDeltas: boolean; applyThinkingDeltas: boolean },
+): void {
+	const event = record.event;
+	const ts = toUnixMs(record.ts);
+	if (event.type === "message_update") {
+		const assistantEvent = event.assistantMessageEvent;
+		if (assistantEvent.type === "text_delta") {
+			if (options.applyTextDeltas) message.text += assistantEvent.delta;
+			message.parts = appendTextPart(message.parts ?? [], assistantEvent.delta);
+		}
+		if (assistantEvent.type === "thinking_delta" && options.applyThinkingDeltas) {
+			message.thinking = `${message.thinking ?? ""}${assistantEvent.delta}`;
+		}
+	}
+	if (event.type === "message_end" && event.usage) message.usage = event.usage;
+	const tool = toolFromStoredAgentEvent(event, ts);
+	if (tool) {
+		const tools = message.tools ?? [];
+		const index = tools.findIndex((candidate) => candidate.id === tool.id);
+		if (index >= 0) {
+			tools[index] = mergeToolEvent(tools[index], tool);
+		} else {
+			tools.push(tool);
+		}
+		message.tools = tools;
+		message.parts = mergeToolPart(message.parts ?? [], tool);
+	}
+}
+
+function webMessagesFromRecords(
+	config: Config,
+	records: readonly ChatLogRecord[],
+	assistantName: string,
+): WebMessage[] {
+	const messages: WebMessage[] = [];
+	const messagesById = new Map<string, WebMessage>();
+	const pendingAgentEvents = new Map<string, Extract<ChatLogRecord, { type: "agent_event" }>[]>();
+	for (const record of records) {
+		const message = webMessageFromRecord(config, record, assistantName);
+		if (message) {
+			messages.push(message);
+			messagesById.set(message.id, message);
+			const pending = pendingAgentEvents.get(message.id) ?? [];
+			for (const pendingRecord of pending) {
+				applyStoredAgentEventToMessage(message, pendingRecord, {
+					applyTextDeltas: !message.text,
+					applyThinkingDeltas: !message.thinking,
+				});
+			}
+			pendingAgentEvents.delete(message.id);
+		}
+		if (record.type === "agent_event") {
+			const existing = messagesById.get(record.messageId);
+			if (existing) {
+				applyStoredAgentEventToMessage(existing, record, {
+					applyTextDeltas: true,
+					applyThinkingDeltas: true,
+				});
+			} else {
+				const pending = pendingAgentEvents.get(record.messageId) ?? [];
+				pending.push(record);
+				pendingAgentEvents.set(record.messageId, pending);
+			}
+		}
+	}
+	return messages;
+}
+
 function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantName: string): WebMessage | undefined {
 	if (!isUserVisibleRuntimeRecord(record)) return undefined;
 	if (record.type === "inbound") {
@@ -67,7 +229,7 @@ function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantNa
 	}
 	if (record.type === "outbound" && !record.control) {
 		return {
-			id: record.messageIds[0] || `out_${record.recordId}`,
+			id: record.webMessageId || record.messageIds[0] || `out_${record.recordId}`,
 			role: "assistant",
 			who: assistantName,
 			text: record.text,
@@ -87,20 +249,6 @@ function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantNa
 		};
 	}
 	return undefined;
-}
-
-function usageFromAgentEvent(
-	event: AgentEvent,
-): WebStreamEvent extends infer T ? (T extends { type: "message_completed"; usage?: infer U } ? U : never) : never {
-	if (event.type !== "message_end" || event.message.role !== "assistant") return undefined as never;
-	const usage = event.message.usage;
-	return {
-		input: usage.input,
-		output: usage.output,
-		cacheRead: usage.cacheRead,
-		cacheWrite: usage.cacheWrite,
-		cost: usage.cost.total,
-	};
 }
 
 function commandArgs(command: string, args: unknown): string {
@@ -165,9 +313,48 @@ export async function startWebDaemon(
 	): WebStreamEvent =>
 		publish({ type: "delta", channelKey, messageId: messageIdValue, part, content: text, text, ts });
 
+	const publishStoredAgentEvent = (
+		channelKey: string,
+		messageIdValue: string,
+		storedEvent: StoredAgentEvent,
+		ts?: number,
+	): void => {
+		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
+			locallyStreamedOutboundIds.add(messageIdValue);
+			publish({
+				type: "message_started",
+				channelKey,
+				messageId: messageIdValue,
+				role: "assistant",
+				who: personaName,
+				ts,
+			});
+		}
+		if (storedEvent.type === "message_update") {
+			const assistantEvent = storedEvent.assistantMessageEvent;
+			if (assistantEvent.type === "thinking_delta") {
+				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
+			}
+			if (assistantEvent.type === "text_delta") {
+				publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
+			}
+		}
+		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
+			publish({
+				type: "message_completed",
+				channelKey,
+				messageId: messageIdValue,
+				usage: storedEvent.usage,
+				ts,
+			});
+		}
+		const tool = toolFromStoredAgentEvent(storedEvent, ts ?? Date.now());
+		if (tool) publish({ type: "tool_event", channelKey, messageId: messageIdValue, tool, ts });
+	};
+
 	const subscribeRuntime = (runtime: ConversationRuntime): void => {
 		if (runtimeSubscriptions.has(runtime.channelKey)) return;
-		const unsubscribe = runtime.subscribe((record) => {
+		const unsubscribeRecords = runtime.subscribe((record) => {
 			if (record.type === "inbound") {
 				publish({
 					type: "message_started",
@@ -186,8 +373,19 @@ export async function startWebDaemon(
 				});
 			}
 			if (record.type === "outbound" && !record.control) {
-				const outboundId = record.messageIds[0] || `out_${record.recordId}`;
-				if (locallyStreamedOutboundIds.delete(outboundId)) return;
+				const outboundId = record.webMessageId || record.messageIds[0] || `out_${record.recordId}`;
+				const completion = {
+					type: "message_completed" as const,
+					channelKey: runtime.channelKey,
+					messageId: outboundId,
+					thinkingMs: record.thinkingMs,
+					attachments: webAttachments(config, record.attachments),
+					ts: toUnixMs(record.ts),
+				};
+				if (locallyStreamedOutboundIds.delete(outboundId)) {
+					publish(completion);
+					return;
+				}
 				publish({
 					type: "message_started",
 					channelKey: runtime.channelKey,
@@ -199,17 +397,16 @@ export async function startWebDaemon(
 				if (record.thinking)
 					publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
 				if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
-				publish({
-					type: "message_completed",
-					channelKey: runtime.channelKey,
-					messageId: outboundId,
-					thinkingMs: record.thinkingMs,
-					attachments: webAttachments(config, record.attachments),
-					ts: toUnixMs(record.ts),
-				});
+				publish(completion);
 			}
 		});
-		runtimeSubscriptions.set(runtime.channelKey, unsubscribe);
+		const unsubscribeAgentEvents = runtime.subscribeAgentEvents((agentEvent) => {
+			publishStoredAgentEvent(runtime.channelKey, agentEvent.messageId, agentEvent.event, agentEvent.ts);
+		});
+		runtimeSubscriptions.set(runtime.channelKey, () => {
+			unsubscribeRecords();
+			unsubscribeAgentEvents();
+		});
 	};
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
@@ -242,37 +439,27 @@ export async function startWebDaemon(
 		attachments?: StoredAttachment[];
 	}> => {
 		const assistantMessageId = messageId();
-		let thinkingStart: number | undefined;
-		let thinkingEnd: number | undefined;
-		let usage: ReturnType<typeof usageFromAgentEvent> | undefined;
+		const summary: AgentEventSummary = { thinking: "" };
+		const recorder = createAgentEventRecorder((storedEvent) =>
+			runtime.noteAgentEvent(jobId, assistantMessageId, storedEvent, { notify: false }),
+		);
 		let started = false;
-		let thinking = "";
-		const reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, (event: AgentEvent) => {
-			if (event.type === "message_start" && event.message.role === "assistant" && !started) {
-				started = true;
-				publish({
-					type: "message_started",
-					channelKey: runtime.channelKey,
-					messageId: assistantMessageId,
-					role: "assistant",
-					who: personaName,
-				});
-			}
-			if (event.type === "message_update") {
-				const assistantEvent = event.assistantMessageEvent;
-				if (assistantEvent.type === "thinking_delta") {
-					thinkingStart ??= Date.now();
-					thinkingEnd = Date.now();
-					thinking += assistantEvent.delta;
-					publishDelta(runtime.channelKey, assistantMessageId, "thinking", assistantEvent.delta);
+		let reply: Awaited<ReturnType<typeof discordDaemon.runPromptForWeb>>;
+		try {
+			reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, async (event: AgentEvent) => {
+				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+					started = true;
 				}
-				if (assistantEvent.type === "text_delta") {
-					if (thinkingStart !== undefined && thinkingEnd === undefined) thinkingEnd = Date.now();
-					publishDelta(runtime.channelKey, assistantMessageId, "text", assistantEvent.delta);
+				updateAgentEventSummary(summary, event);
+				const storedEvent = storedAgentEventFromAgentEvent(event);
+				if (storedEvent) {
+					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+					await recorder.record(storedEvent);
 				}
-			}
-			if (event.type === "message_end" && event.message.role === "assistant") usage = usageFromAgentEvent(event);
-		});
+			});
+		} finally {
+			await recorder.flush();
+		}
 		if (!started) {
 			publish({
 				type: "message_started",
@@ -283,18 +470,22 @@ export async function startWebDaemon(
 			});
 			publishDelta(runtime.channelKey, assistantMessageId, "text", reply.text);
 		}
-		const thinkingMs =
-			thinkingStart !== undefined ? Math.max(0, (thinkingEnd ?? Date.now()) - thinkingStart) : undefined;
+		const thinkingMs = thinkingDurationMs(summary);
 		publish({
 			type: "message_completed",
 			channelKey: runtime.channelKey,
 			messageId: assistantMessageId,
 			thinkingMs,
 			attachments: webAttachments(config, reply.attachments),
-			usage,
 		});
 		locallyStreamedOutboundIds.add(assistantMessageId);
-		return { text: reply.text, messageId: assistantMessageId, thinking, thinkingMs, attachments: reply.attachments };
+		return {
+			text: reply.text,
+			messageId: assistantMessageId,
+			thinking: summary.thinking,
+			thinkingMs,
+			attachments: reply.attachments,
+		};
 	};
 
 	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
@@ -306,6 +497,7 @@ export async function startWebDaemon(
 				await runtime.completeActiveJob({
 					text: reply.text,
 					messageIds: [reply.messageId],
+					webMessageId: reply.messageId,
 					attachments: reply.attachments,
 					thinking: reply.thinking,
 					thinkingMs: reply.thinkingMs,
@@ -382,10 +574,7 @@ export async function startWebDaemon(
 				const runtime = await getRuntime(getChannelKeyFromRequest(url));
 				const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
 				const before = url.searchParams.get("before");
-				const messages = runtime
-					.getRecords()
-					.map((record) => webMessageFromRecord(config, record, personaName))
-					.filter((message): message is WebMessage => !!message);
+				const messages = webMessagesFromRecords(config, runtime.getRecords(), personaName);
 				const end = before ? messages.findIndex((message) => message.id === before) : messages.length;
 				const safeEnd = end >= 0 ? end : messages.length;
 				const page = messages.slice(Math.max(0, safeEnd - limit), safeEnd);

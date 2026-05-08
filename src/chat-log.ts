@@ -66,6 +66,7 @@ export interface JobQueuedChatRecord extends ChatRecordBase {
 export interface OutboundChatRecord extends ChatRecordBase {
 	type: "outbound";
 	messageIds: string[];
+	webMessageId?: string;
 	text: string;
 	attachments?: StoredAttachment[];
 	thinking?: string;
@@ -88,6 +89,48 @@ export interface JobFailedChatRecord extends ChatRecordBase {
 	jobId: string;
 	triggerRecordId: number;
 	error: string;
+}
+
+export type StoredAssistantMessageEvent =
+	| { type: "text_delta"; delta: string }
+	| { type: "thinking_delta"; delta: string }
+	| { type: "toolcall_start"; contentIndex: number }
+	| { type: "toolcall_delta"; contentIndex: number; delta: string }
+	| {
+			type: "toolcall_end";
+			contentIndex: number;
+			toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+	  };
+
+export type StoredAgentEvent =
+	| { type: "message_start"; role: "user" | "assistant" | "toolResult" | string }
+	| { type: "message_update"; assistantMessageEvent: StoredAssistantMessageEvent }
+	| {
+			type: "message_end";
+			role: "user" | "assistant" | "toolResult" | string;
+			stopReason?: string;
+			errorMessage?: string;
+			usage?: {
+				input: number;
+				output: number;
+				cacheRead: number;
+				cacheWrite: number;
+				cost: number;
+			};
+	  }
+	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: unknown }
+	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args: unknown; partialResult: unknown }
+	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: unknown; isError: boolean }
+	| { type: "turn_start" }
+	| { type: "turn_end" }
+	| { type: "agent_start" }
+	| { type: "agent_end" };
+
+export interface AgentEventChatRecord extends ChatRecordBase {
+	type: "agent_event";
+	jobId: string;
+	messageId: string;
+	event: StoredAgentEvent;
 }
 
 export interface CheckpointChatRecord extends ChatRecordBase {
@@ -114,6 +157,7 @@ export type ChatLogRecord =
 	| OutboundChatRecord
 	| JobCompletedChatRecord
 	| JobFailedChatRecord
+	| AgentEventChatRecord
 	| CheckpointChatRecord
 	| RuntimeChatRecord
 	| ErrorChatRecord;

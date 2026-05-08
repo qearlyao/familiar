@@ -47,6 +47,14 @@ export type StreamEvent =
       };
     }
   | {
+      type: "tool_event";
+      eventId: string;
+      ts: number;
+      channelKey?: string;
+      messageId: string;
+      tool: NonNullable<Message["tools"]>[number];
+    }
+  | {
       type: "status";
       eventId: string;
       ts: number;

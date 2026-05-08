@@ -1,6 +1,7 @@
 import type { Message } from "../types";
 import { cn } from "@/lib/utils";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { ToolInlineBlock } from "./ToolBlock";
 
 export function MessageBubble({ message }: { message: Message }) {
   if (message.role === "system") {
@@ -14,6 +15,12 @@ export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const showThinking = !isUser && (message.thinking || message.thinkingMs != null);
   const attachments = message.attachments ?? [];
+  const parts =
+    message.parts?.length
+      ? message.parts
+      : message.text
+        ? [{ type: "text" as const, id: "text_legacy", text: message.text }]
+        : [];
 
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
@@ -27,9 +34,15 @@ export function MessageBubble({ message }: { message: Message }) {
             durationMs={message.thinkingMs}
           />
         )}
-        <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
-          {message.text}
-        </div>
+        {parts.map((part) =>
+          part.type === "tool" ? (
+            <ToolInlineBlock key={part.id} tool={part.tool} />
+          ) : (
+            <div key={part.id} className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
+              {part.text}
+            </div>
+          ),
+        )}
         {attachments.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
             {attachments.map((attachment) =>

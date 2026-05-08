@@ -9,16 +9,20 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 Implemented or recently added:
 
 - Stages 0-4 are v0-complete: upstream `Agent`, Discord runtime/logs/controls, Anthropic cache normalization, WebUI side-door, workspace tools, payload inspection, and focused backend tests.
-- Stage 5 is partially complete: TTS v0 is implemented, while `image_gen` is intentionally waiting for upstream `@earendil-works/pi-ai` image-generation APIs to publish beyond npm `0.74.0`.
+- Stage 5 TTS v0 is done; active Stage 5 work is `image_gen`, skills, and WebUI TTS polish.
+- WebUI event dashboard v0 is done.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
-Next implementation chunks:
+Next step checkpoint:
 
-- Harden WebUI as the complete event stream/dashboard surface: persist Discord-origin thinking and tool lifecycle events for Web without exposing them in Discord replies.
-- Start Stage 6 media intake: Discord/Web uploads, image-to-model path, attachment metadata/storage, pure-attachment messages, and initial audio/video strategy.
+- Start Stage 6 media intake v0: durable inbound attachment metadata/storage, safe Discord image download, WebUI upload controls/previews, pure-attachment message handling, direct image-to-model prompt path, and focused tests.
+
+Remaining short-term to-dos:
+
 - Revisit Stage 5 `image_gen` after upstream `@earendil-works/pi-ai` publishes image-generation APIs to npm.
-- Keep Stage 5 TTS follow-ups low-priority unless heavy usage exposes pain.
+- Add public-2fa login UI when the frontend pass resumes.
 - Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
+- Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 Important caution:
 
@@ -154,7 +158,7 @@ Turn assembly:
 
 ## 5. Stage Roadmap
 
-### Completed v0 Foundation: Stages 0-4
+### Completed v0 Archive
 
 Status: shipped enough for current development. Keep details in git history and source, not this roadmap.
 
@@ -163,33 +167,22 @@ Status: shipped enough for current development. Keep details in git history and 
 - Stage 2: added `ConversationRuntime`, append-only logs, replay safety, control commands, provider/model/thinking controls, Anthropic cache normalization, Discord dispatch modes, per-channel overrides/sessions, slash commands, silent response protocol, and payload inspection.
 - Stage 3: shipped WebUI side-door with HTTP/WebSocket transport, auth scaffolding, session picker, shared Discord/Web runtime, thinking/text streaming, persona label detection, and current frontend baseline.
 - Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
+- Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
+- WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
 
-Still open from these stages:
+Still open from completed foundations:
 
-- Decide whether web-originated messages should be visibly mirrored into Discord.
 - Add public-2fa login UI when the frontend pass resumes.
 - Add richer WebUI panes for memory/diary/transcript/payload inspection later.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
 
-Status: partially complete. TTS v0 is implemented; image generation is deferred until upstream image APIs ship in npm.
+Status: TTS v0 is done. Remaining work is image generation, skills, and WebUI TTS polish.
 
-Completed in TTS v0:
-
-- ElevenLabs-backed `tts` with configured `tts.voice_id`, optional per-call `voiceId`, compact audio-tag guidance, and model-aware voice settings.
-- Generated audio is saved under `data/attachments/generated`, logged as outbound attachments, delivered through Discord/Web history, and cleaned on startup using `[media.generated].retention_days` (default 30, `0` disables).
-- Discord currently sends assistant text plus generated audio files, matching WebUI/backend behavior. Transcript-toggle UX for WebUI is deferred.
-- Tests cover config/env interpolation, voice-setting request shaping, generated-media cleanup/path safety, attachment serving safety, TOTP/auth, and WebSocket framing.
-
-Active Stage 5 to-dos:
+Image-generation tool:
 
 - Implement `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation once it is published to npm.
-- Add a manual generated-media cleanup command later if startup retention is not enough.
-- Add WebUI TTS transcript toggle after frontend coordination.
-
-Image generation next:
-
 - Upstream status: local `earendil-works/pi` main has a new image-generation API after `v0.74.0`: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support. npm `0.74.0` still does not include this API.
 - Strategy: do not invent a parallel provider abstraction while upstream image APIs are close to release. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
 - If implementation must happen before upstream publishes image APIs, make the provider layer intentionally thin and easy to replace with upstream `generateImages()`.
@@ -201,15 +194,16 @@ Image generation next:
 - Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
 - Keep media tools simple and direct; do not route generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
+- Add a manual generated-media cleanup command later if startup retention is not enough.
 
-Skills after image generation:
+Skills:
 
 - Add Familiar skill discovery without `AgentSession`: load user/project skills and append pi's progressive skill index to the direct `Agent` system prompt.
 - Use skills for large, rarely used media/persona/character instructions: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
 - Keep tool definitions generic. The model should load relevant skills before calling `tts` or `image_gen` when a request matches a character/media workflow.
 - Keep LCM as the only automatic context compaction layer; skills are instruction loading, not conversation memory.
 
-Deferred WebUI TTS polish:
+WebUI TTS polish:
 
 - Coordinate with Claude before frontend changes.
 - Default render should be a playable audio element.
@@ -218,55 +212,24 @@ Deferred WebUI TTS polish:
 
 Done when:
 
-- "say this out loud" returns an audio attachment in Discord and WebUI.
 - After upstream image APIs publish: "draw X" returns an image attachment in Discord and WebUI.
 - Generated media paths are logged and survive restart/history replay.
 
-### Near-Term TODO: WebUI Event Dashboard
-
-Goal: promote WebUI from side-door chat to the canonical full event stream/dashboard before Stage 6 media intake work.
-
-Upstream check result:
-
-- Reuse upstream `@earendil-works/pi-agent-core` `AgentEvent` semantics directly:
-  - `message_start`, `message_update`, `message_end`
-  - `tool_execution_start`, `tool_execution_update`, `tool_execution_end`
-  - `turn_start`, `turn_end`, `agent_start`, `agent_end`
-- Reuse upstream event naming/payload conventions from `pi-coding-agent` extension events where helpful. Its `tool_execution_*` events mirror core `AgentEvent`; its `tool_call` / `tool_result` hook shapes are good references for tool input/result/detail payloads.
-- Do not adopt upstream `AgentSession`, harness session JSONL, or extension runner for Familiar. Those are coding-session/TUI shaped and would reintroduce architecture Familiar intentionally avoided.
-- `pi-chat` does not provide agent/tool event persistence. It remains a chat runtime/log reference only.
-- `pi` `packages/web-ui` has useful rendering patterns: assistant messages render text/thinking/tool-call parts in order, `toolResultsById` attaches results to calls, pending tool calls render live, and completed tools can be folded with debug details.
-
-Backend work:
-
-- Record and stream assistant thinking for both Discord-origin and Web-origin runs.
-- Record and stream tool lifecycle events for both origins:
-  - start/update/end
-  - tool call id/name
-  - arguments/input
-  - partial updates when available
-  - final result summary/details
-  - error state
-  - job/message/channel correlation
-- Add a Familiar-owned durable chat-log event shape, likely `agent_event`, rather than overloading visible system messages.
-- Keep Discord clean: Discord-origin runs still send only final assistant text and outbound media to Discord. Thinking and tool details go to WebUI/logs only.
-- Keep WebSocket protocol Familiar-owned, but use upstream-compatible names where possible (`tool_execution_start/update/end` or a compact `tool_event` carrying those phases).
-- Make replay/history useful after refresh: WebUI should reconstruct completed thinking/tool events from durable records, not only from in-memory live events.
-
-Frontend work:
-
-- Render tool calls live under the associated assistant message.
-- Fold completed tool calls by default while preserving full input/output/details for inspection.
-- Preserve existing thinking block behavior and apply it to Discord-origin runs too.
-- Avoid showing tool lifecycle details as regular chat/system messages.
-
-Done when:
-
-- A Discord-origin message that triggers thinking/tools appears live in WebUI with thinking and tool lifecycle details, while Discord receives only the final clean reply/media.
-- A Web-origin message still streams thinking/text as before and also shows tool lifecycle details.
-- Refreshing WebUI preserves recent completed thinking/tool event history from chat logs.
-
 ### Stage 6: Media Intake
+
+Checkpoint: next active implementation stage. Build the smallest safe path from chat attachment to durable event record to direct multimodal prompt.
+
+Near-term v0 checklist:
+
+- Define one inbound attachment metadata shape shared by Discord and Web uploads, including stable id, kind, name, MIME, byte size, source URL/local path, derived image path/payload metadata, and retention/audit fields.
+- Add safe Discord attachment materialization: count and byte limits, timeout/abort, content-length guard, magic-byte MIME sniffing, path safety, allowlist, and clear user-visible errors.
+- Add WebUI upload controls/previews using the same backend metadata shape as Discord intake.
+- Accept pure-attachment messages and queue them according to DM/channel trigger policy.
+- Wire image intake to model prompts with `ImageContent` for vision-capable models, including resize/re-encode and dimension notes.
+- Render user-uploaded images/files and generated media as first-class WebUI attachments in live and history views.
+- Add focused tests for attachment serialization, storage safety, path traversal rejection, pure-attachment queuing, and image prompt assembly.
+
+Reference decisions:
 
 - Upstream check result: media intake is partially covered upstream, but no upstream repo currently provides the full Familiar path from chat attachment to safe durable event record to direct multimodal agent prompt.
 - Reuse/adapt `pi-chat` for channel attachment shape and logistics:
@@ -281,16 +244,12 @@ Done when:
   - `read` tool behavior for returning `[text note, image]` content and warning when the selected model is non-vision.
 - Use upstream multimodal primitives directly where possible: `@earendil-works/pi-ai` `ImageContent` plus `Agent.prompt(input, images)` / explicit `AgentMessage` content arrays already support image input.
 - Familiar-owned Stage 6 work:
-  - Attachment metadata in chat records for both Discord and Web uploads, with stable IDs and WebUI URLs/previews.
-  - WebUI must render user-uploaded images/files and generated media attachments as first-class visible attachments. Chat logs and model transcript text may stay path/metadata-based, but the dashboard cannot collapse media into opaque path text only.
-  - Safe attachment store for user-supplied media: max count, max bytes before/after download, MIME allowlist, magic-byte sniffing, path safety, timeout/abort, Discord remote URL guards, retention policy, and audit-friendly errors.
-  - Image intake pipeline: store original, optionally derive resized inline image, pass images directly to vision-capable models, and keep durable metadata linking prompt record, stored file, derived inline payload, and model-facing dimension note.
+  - Chat logs and model transcript text may stay path/metadata-based, but the dashboard cannot collapse media into opaque path text only.
+  - Image intake pipeline should store original, optionally derive resized inline image, pass images directly to vision-capable models, and keep durable metadata linking prompt record, stored file, derived inline payload, and model-facing dimension note.
   - Model chat history may keep recent `ImageContent` blocks until LCM/compaction thresholds are reached. Later LCM should replace older large media blocks with summaries plus durable attachment references.
   - Non-image files initially appear as stored file refs/metadata; add extraction/parsing per file class only when needed.
-  - Pure attachment messages must be accepted and visible even when text/content is empty. Discord DMs with only attachments should queue a job; allowed channels should queue in `always` mode, while mention-only channels still need either a mention/caption or an explicit future attachment-trigger policy.
   - Voice memo transcription path.
   - Video understanding strategy: decide frame sampling vs provider-native video input, transcript/audio extraction, long-video summarization, derived artifact storage, and what to persist in chat logs now and LCM later.
-  - WebUI upload controls and previews should use the same backend attachment metadata shape as Discord intake.
 - `pi` monorepo `packages/web-ui` has attachment/document extraction UI utilities (`loadAttachment`, `extract_document`) that can inspire future frontend behavior, but they are browser-side helpers and not the backend intake source of truth for Familiar.
 
 Done when:

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
 import type { ChatLogRecord, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";

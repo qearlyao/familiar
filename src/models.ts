@@ -7,7 +7,7 @@ import {
 	type Model,
 	type ModelThinkingLevel,
 	type Provider,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
 import type { Config, ThinkingLevel } from "./config.js";
 

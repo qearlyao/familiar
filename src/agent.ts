@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@mariozechner/pi-agent-core";
-import { type Model, streamSimple } from "@mariozechner/pi-ai";
-import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
+import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import { type Model, streamSimple } from "@earendil-works/pi-ai";
+import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
 
 import type { Config, ThinkingLevel } from "./config.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";

@@ -15,6 +15,7 @@ Implemented or recently added:
 Next implementation chunks:
 
 - Tighten Stage 5 TTS follow-ups listed below before heavy usage.
+- Harden WebUI as the complete event stream/dashboard surface: persist Discord-origin thinking and tool lifecycle events for Web without exposing them in Discord replies.
 - Implement Stage 5 image generation using the existing generated-media attachment path.
 - Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 
@@ -36,8 +37,10 @@ Important caution:
   - Put large, rarely used media/persona/character instructions in skills, not tool descriptions.
   - Prioritize output/media tools now; postpone `task`/subagent delegation.
   - Keep one compact `browser` tool with structured actions later.
+- Upstream coding-agent currently does not ship dedicated `web_fetch` or `web_search` tool factories; its built-in factories remain local workspace tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). Familiar should own web-access tool design unless upstream adds a first-class web tool later.
 - Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local, remote sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, etc.
-- WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door.
+- WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door. Product direction: WebUI becomes the full information stream and dashboard for messages, reasoning, tool activity, memory, diagnostics, and generated media.
+- Discord remains a clean chat delivery adapter by default: show final assistant text and outbound media only. Do not expose thinking blocks or verbose tool lifecycle details in Discord unless a future explicit debug mode asks for them.
 - Single-owner is locked. Extensibility means tools, channels, providers, triggers, memory adapters, and subagent personas, not multi-user account isolation.
 - Secrets stay in env or workspace `.env`, never in `config.toml`.
 
@@ -45,22 +48,22 @@ Important caution:
 
 Use these upstream primitives instead of duplicating functionality:
 
-- `@mariozechner/pi-agent-core`
+- `@earendil-works/pi-agent-core`
   - `Agent`, `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`, event subscription.
   - `transformContext` is the insertion point for LCM and diary RAG.
   - Generic tool shape and tool execution lifecycle already exist.
-- `@mariozechner/pi-ai`
+- `@earendil-works/pi-ai`
   - Provider/model abstraction, streaming, usage/cost fields, `sessionId`, `cacheRetention`.
   - Usage includes `cacheRead`, `cacheWrite`, `input`, `output`, `cost`.
-- `@mariozechner/pi-coding-agent`
+- `@earendil-works/pi-coding-agent`
   - Tool factories for `bash`, `read`, `write`, `edit`, `grep`, `find`, `ls`.
   - Skill loader/formatter: `loadSkills()` and `formatSkillsForPrompt()` are reusable without adopting `AgentSession`.
   - Familiar uses `bash/read/write/edit`; shell `grep` through `bash` is enough.
   - Compaction/session utilities exist but are coding-session shaped and lossy.
-- `pi-chat` in `/tmp/pi-chat`
+- `pi-chat` in `/tmp/pi-chat` from `https://github.com/earendil-works/pi-chat`
   - Good reference for chat adapter/runtime/log shape.
   - Lift: append-only per-channel log, catch-up then arm, trigger/job slicing, reply-to, typing, chunking, attachment materialization.
-  - Do not copy: two memory files, VM sandbox, extension-only packaging, lack of RAG/WebUI/media/browser features.
+  - Do not copy: two memory files, VM sandbox, extension-only packaging, lack of Familiar's RAG/WebUI/dashboard/generated-media/browser layers.
   - Its heartbeat is only worker/status snapshots every 15s, not proactive check-ins.
 
 High-value local files:
@@ -165,6 +168,11 @@ Still open from these stages:
 - Decide whether web-originated messages should be visibly mirrored into Discord.
 - Add public-2fa login UI when the frontend pass resumes.
 - Add richer WebUI panes for memory/diary/transcript/payload inspection later.
+- Promote WebUI from side-door chat to first-class event stream/dashboard:
+  - Backend records and streams assistant thinking for Discord-origin and Web-origin runs.
+  - Backend records and streams tool lifecycle events (`start`, `update`, `end`, error state, concise result summary) with job/message correlation.
+  - Discord-origin runs still send only the final assistant reply and outbound media back to Discord.
+  - Frontend renders tool calls live, then folds completed calls by default while preserving full details for inspection.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
@@ -180,15 +188,20 @@ Completed in TTS v0:
 
 Active Stage 5 to-dos:
 
-- Implement `image_gen`.
+- Implement `image_gen`, preferably by wrapping upstream `@earendil-works/pi-ai` image generation once it is published to npm.
 - Add a manual generated-media cleanup command later if startup retention is not enough.
 - Add WebUI TTS transcript toggle after frontend coordination.
 
 Image generation next:
 
-- Pick provider/config shape for `image_gen` before implementation.
+- Upstream status: local `earendil-works/pi` main has a new image-generation API after `v0.74.0`: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support. npm `0.74.0` does not yet include this API.
+- Strategy: do not invent a parallel provider abstraction if upstream image APIs are close to release. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
+- If implementation must happen before upstream publishes image APIs, make the provider layer intentionally thin and easy to replace with upstream `generateImages()`.
+- Initial Familiar provider target is qearl's custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
+- Treat upstream's OpenRouter image implementation as an API-shape/reference implementation only, not the default provider choice.
+- Config shape should distinguish chat models from image models, e.g. provider/model/base URL/API shape for image generation, because upstream uses `ImagesModel`, not normal `Model`.
 - Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, WebUI live/history attachment plumbing, and retention cleanup from TTS.
-- Store prompt, provider, model, mime type, size, local path, and public attachment path in durable metadata.
+- Store prompt, provider, model, response id when available, mime type, size, local path, public attachment path, and any text side-output in durable metadata.
 - Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
 - Keep media tools simple and direct; do not route generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
@@ -243,14 +256,17 @@ Done when:
 
 ### Stage 8: Media Intake
 
-- Attachment metadata in chat records.
-- Gemini voice transcription.
-- Gemini video description.
-- Image attachment path through upstream `prompt(input, images)`.
+- Stage 8 owns user-originated media intake and video-understanding strategy.
+- Attachment metadata in chat records for Discord and Web uploads.
+- Safe attachment store for user-supplied media: size limits, MIME allowlist, path safety, retention policy, and remote Discord attachment download guards.
+- Image attachment path through upstream `prompt(input, images)` for vision-capable models.
+- Voice memo transcription path.
+- Video understanding strategy: decide frame sampling vs provider-native video input, transcript extraction, long-video summarization, and what to persist in chat logs/LCM.
+- WebUI upload controls and previews should use the same backend attachment metadata shape as Discord intake.
 
 Done when:
 
-- Voice memos and short videos produce sensible replies.
+- Image attachments, voice memos, and short videos produce sensible replies without destabilizing Discord/Web message flow or context assembly.
 
 ### Stage 9: Heartbeat, Scheduler, and Active Check-Ins
 
@@ -296,6 +312,8 @@ Done when:
 - One `browser` tool with structured actions like `navigate`, `eval`, `read_visible`, `screenshot`, `screen_read`, `activity`.
 - Prefer one tool with actions over many narrow browser tools.
 - Backend adapters for local host mode and remote sidecar mode.
+- Web access should be designed explicitly instead of assuming upstream coverage. As of local `earendil-works/pi` main, upstream has no dedicated `web_fetch`/`web_search` built-ins; `anthropic-dangerous-direct-browser-access` in provider code is SDK browser-runtime allowance, not a browsing/search feature.
+- Consider a small Familiar-owned `web` or `browser` action set later: `search`, `fetch`, `readability`, `screenshot`, `extract_links`, `navigate`, and `activity`. Keep server-side search/fetch and real browser control separable if that simplifies permissions and reliability.
 - Activity reads for Stage 9 should usually be scheduler context, but may be exposed through the compact `browser` surface if useful.
 - Conservative truncation and attachment handling.
 
@@ -323,10 +341,11 @@ Use `rg` first. Open only the target file/range you need.
 
 Upstream package roots:
 
+- `/Users/qearl/pi-mono` is a local reference clone of `https://github.com/earendil-works/pi` (directory name is historical).
 - `/Users/qearl/pi-mono/packages/agent`
 - `/Users/qearl/pi-mono/packages/ai`
 - `/Users/qearl/pi-mono/packages/coding-agent`
-- `/tmp/pi-chat`
+- `/tmp/pi-chat` is a local reference clone of `https://github.com/earendil-works/pi-chat`.
 
 Agent/runtime refs:
 
@@ -343,17 +362,24 @@ Agent/runtime refs:
 Provider/cache refs:
 
 - `/Users/qearl/pi-mono/packages/ai/src/types.ts`
-  - `cacheRetention`, usage fields
+  - `cacheRetention`, usage fields, image-generation types on main (`ImagesModel`, `ImagesContext`, `AssistantImages`)
 - `/Users/qearl/pi-mono/packages/ai/src/providers/anthropic.ts`
   - upstream `cache_control` behavior
 - `/Users/qearl/pi-mono/packages/ai/src/providers/openai-responses.ts`
   - session/cache headers
+- `/Users/qearl/pi-mono/packages/ai/src/images.ts`
+  - upstream `generateImages()` entry point on main; not in npm `0.74.0` yet
+- `/Users/qearl/pi-mono/packages/ai/src/image-models.ts`
+  - upstream image model discovery on main: `getImageModel`, `getImageModels`, `getImageProviders`
+- `/Users/qearl/pi-mono/packages/ai/src/providers/images/openrouter.ts`
+  - first upstream image provider implementation on main, returns base64 `ImageContent` plus optional text
 - `/Users/qearl/pi-mono/.pi/extensions/tps.ts`
   - cache read/write usage reporting pattern
 
 Tool refs:
 
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/index.ts`
+  - confirms current upstream built-ins are workspace/local tools, not web fetch/search tools
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/bash.ts`
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/read.ts`
 - `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/write.ts`
@@ -366,12 +392,15 @@ Compaction/session refs:
 
 pi-chat refs:
 
+- `/tmp/pi-chat/src/core/runtime-types.ts`: chat runtime/log record types.
 - `/tmp/pi-chat/src/runtime.ts`: runtime state machine, trigger slicing.
-- `/tmp/pi-chat/src/log.ts`: append JSONL, locks, timestamps, attachments.
+- `/tmp/pi-chat/src/log.ts`: append JSONL, locks, timestamps, attachment materialization.
 - `/tmp/pi-chat/src/live/types.ts`: small live adapter interface.
 - `/tmp/pi-chat/src/live/discord.ts`: Discord catch-up, mentions, reply-to, attachments.
+- `/tmp/pi-chat/src/live/common.ts`: shared live-adapter helpers, including remote attachment download.
 - `/tmp/pi-chat/src/render/chunking.ts`: outbound chunking.
-- `/tmp/pi-chat/index.ts`: control commands, dispatch, worker/status loop.
+- `/tmp/pi-chat/src/services/discord.ts`: Discord service setup and lifecycle wiring.
+- `/tmp/pi-chat/src/services/index.ts`: service entry aggregation.
 
 Local refs:
 

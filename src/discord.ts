@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
 	type ApplicationCommandData,
 	type ApplicationCommandOptionChoiceData,

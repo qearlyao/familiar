@@ -1,6 +1,6 @@
-import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
-import { type Model, streamSimple } from "@mariozechner/pi-ai";
-import { createBashTool } from "@mariozechner/pi-coding-agent";
+import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
+import { type Model, streamSimple } from "@earendil-works/pi-ai";
+import { createBashTool } from "@earendil-works/pi-coding-agent";
 
 function env(name: string, fallback: string): string {
 	return process.env[name] ?? fallback;

@@ -23,7 +23,6 @@ import {
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { createTtsTool } from "./tts.js";
-import { createVertexContextCacheNormalizer, type VertexContextCacheNormalizer } from "./vertex-context-cache.js";
 
 export interface FamiliarAgentReply {
 	text: string;
@@ -52,7 +51,6 @@ interface FamiliarAgentSession {
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;
 	mediaSink: GeneratedMediaSink;
-	vertexContextCache: VertexContextCacheNormalizer;
 	promptQueue: Promise<void>;
 }
 
@@ -289,12 +287,6 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 		const { model } = resolveChannelModel(sessionKey);
 		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
 		const mediaSink = createGeneratedMediaSink();
-		const vertexContextCache = createVertexContextCacheNormalizer({
-			retention: config.agent.cacheRetention,
-			sessionId,
-			getApiKey: (cacheModel) => getRequestApiKey(config, cacheModel),
-			onError: (error) => console.error("Vertex context cache unavailable", error),
-		});
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
 		const agent = new Agent({
 			initialState: {
@@ -310,9 +302,8 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 					...options,
 					apiKey: getRequestApiKey(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
-					onPayload: async (payload, payloadModel) => {
-						const normalizedPayload = normalizeProviderPayload(payload, payloadModel);
-						const requestPayload = await vertexContextCache.normalize(normalizedPayload, payloadModel);
+					onPayload: (payload, payloadModel) => {
+						const requestPayload = normalizeProviderPayload(payload, payloadModel);
 						writePayloadLog(config, {
 							ts: new Date().toISOString(),
 							direction: "request",
@@ -355,7 +346,6 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 			model,
 			thinkingLevel,
 			mediaSink,
-			vertexContextCache,
 			promptQueue: Promise.resolve(),
 		};
 	};

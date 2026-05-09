@@ -15,6 +15,7 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-l
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
+import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -28,7 +29,6 @@ import {
 	type WebAttachment,
 	type WebDaemon,
 	type WebMessage,
-	type WebMessagePart,
 	type WebPublishEvent,
 	type WebStreamEvent,
 	type WebToolEvent,
@@ -51,15 +51,114 @@ function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
 	return record.type !== "runtime" || !["armed", "reset", "stopped"].includes(record.event);
 }
 
+interface WebUploadAttachment {
+	name?: string;
+	mimeType?: string;
+	size?: number;
+	buffer: Buffer;
+}
+
+function isWebUploadAttachment(value: unknown): value is WebUploadAttachment {
+	return !!value && typeof value === "object" && Buffer.isBuffer((value as { buffer?: unknown }).buffer);
+}
+
+async function readRawBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {
+	const chunks: Buffer[] = [];
+	let total = 0;
+	for await (const chunk of request) {
+		const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+		total += buffer.length;
+		if (total > maxBytes) throw new Error("Request body too large");
+		chunks.push(buffer);
+	}
+	return Buffer.concat(chunks);
+}
+
+function multipartBoundary(contentType: string | string[]): string {
+	const header = Array.isArray(contentType) ? contentType.find((value) => value.includes("boundary=")) : contentType;
+	const match = header?.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+	if (!match?.[1] && !match?.[2]) throw new Error("Missing multipart boundary");
+	return match[1] ?? match[2] ?? "";
+}
+
+function parseContentDisposition(header: string): Record<string, string> {
+	const parts = header.split(";").map((part) => part.trim());
+	const values: Record<string, string> = {};
+	for (const part of parts.slice(1)) {
+		const [key, rawValue] = part.split("=");
+		if (!key || rawValue === undefined) continue;
+		values[key.toLowerCase()] = rawValue.replace(/^"|"$/g, "");
+	}
+	return values;
+}
+
+async function readMultipartBody(
+	request: IncomingMessage,
+	contentType: string | string[],
+): Promise<Record<string, unknown>> {
+	const boundary = multipartBoundary(contentType);
+	const raw = await readRawBody(request, 32 * 1024 * 1024);
+	const binary = raw.toString("binary");
+	const marker = `--${boundary}`;
+	const attachments: WebUploadAttachment[] = [];
+	const body: Record<string, unknown> = { text: "" };
+	for (const section of binary.split(marker).slice(1)) {
+		if (!section || section === "--\r\n" || section === "--") continue;
+		const trimmed = section.replace(/^\r\n/, "").replace(/\r\n--$/, "");
+		const headerEnd = trimmed.indexOf("\r\n\r\n");
+		if (headerEnd < 0) continue;
+		const headerText = trimmed.slice(0, headerEnd);
+		let contentBinary = trimmed.slice(headerEnd + 4);
+		if (contentBinary.endsWith("\r\n")) contentBinary = contentBinary.slice(0, -2);
+		const headers = Object.fromEntries(
+			headerText.split("\r\n").map((line) => {
+				const colon = line.indexOf(":");
+				return colon >= 0
+					? [line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()]
+					: [line.toLowerCase(), ""];
+			}),
+		);
+		const disposition = parseContentDisposition(headers["content-disposition"] ?? "");
+		const name = disposition.name;
+		if (!name) continue;
+		if (name === "text" || name === "channelKey" || name === "clientId") {
+			body[name] = Buffer.from(contentBinary, "binary").toString("utf8");
+			continue;
+		}
+		if (name !== "attachments") continue;
+		const buffer = Buffer.from(contentBinary, "binary");
+		if (buffer.length === 0) continue;
+		attachments.push({
+			name: disposition.filename,
+			mimeType: headers["content-type"],
+			size: buffer.length,
+			buffer,
+		});
+	}
+	body.attachments = attachments;
+	return body;
+}
+
 function webAttachments(config: Config, attachments: StoredAttachment[] | undefined): WebAttachment[] | undefined {
 	if (!attachments?.length) return undefined;
 	return attachments.map((attachment) => ({
 		id: attachment.id,
 		name: attachment.name,
+		kind: attachment.kind,
 		mimeType: attachment.mimeType,
 		size: attachment.size,
 		url: attachment.localPath ? publicAttachmentPath(config, attachment.localPath) : attachment.remoteUrl,
 	}));
+}
+
+function promptAttachmentNotes(attachments: StoredAttachment[]): string {
+	return attachments
+		.map(
+			(attachment) =>
+				`[attachment ${attachment.name} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}]`,
+		)
+		.join("\n")
+		.trim();
 }
 
 function toolError(result: unknown): string | undefined {
@@ -127,23 +226,6 @@ function mergeToolEvent(existing: WebToolEvent | undefined, patch: WebToolEvent)
 	};
 }
 
-function mergeToolPart(parts: WebMessagePart[], patch: WebToolEvent): WebMessagePart[] {
-	const index = parts.findIndex((part) => part.type === "tool" && part.tool.id === patch.id);
-	if (index >= 0) {
-		const next = parts.slice();
-		const existing = next[index];
-		if (existing?.type === "tool") next[index] = { ...existing, tool: mergeToolEvent(existing.tool, patch) };
-		return next;
-	}
-	return [...parts, { type: "tool", id: `tool_${patch.id}`, tool: patch }];
-}
-
-function appendTextPart(parts: WebMessagePart[], text: string): WebMessagePart[] {
-	const last = parts.at(-1);
-	if (last?.type === "text") return [...parts.slice(0, -1), { ...last, text: last.text + text }];
-	return [...parts, { type: "text", id: `text_${parts.length}`, text }];
-}
-
 function applyStoredAgentEventToMessage(
 	message: WebMessage,
 	record: Extract<ChatLogRecord, { type: "agent_event" }>,
@@ -155,7 +237,6 @@ function applyStoredAgentEventToMessage(
 		const assistantEvent = event.assistantMessageEvent;
 		if (assistantEvent.type === "text_delta") {
 			if (options.applyTextDeltas) message.text += assistantEvent.delta;
-			message.parts = appendTextPart(message.parts ?? [], assistantEvent.delta);
 		}
 		if (assistantEvent.type === "thinking_delta" && options.applyThinkingDeltas) {
 			message.thinking = `${message.thinking ?? ""}${assistantEvent.delta}`;
@@ -172,7 +253,6 @@ function applyStoredAgentEventToMessage(
 			tools.push(tool);
 		}
 		message.tools = tools;
-		message.parts = mergeToolPart(message.parts ?? [], tool);
 	}
 }
 
@@ -297,8 +377,14 @@ export async function startWebDaemon(
 		eventsByChannel.set(fullEvent.channelKey ?? "", events);
 		const frame = encodeFrame(JSON.stringify(fullEvent));
 		for (const client of clients) {
-			if (client.authed && client.channelKey === fullEvent.channelKey && !client.socket.destroyed) {
-				client.socket.write(frame);
+			if (client.channelKey === fullEvent.channelKey && !client.socket.destroyed) {
+				if (client.authed) {
+					client.socket.write(frame);
+				} else {
+					const pendingEvents = client.pendingEvents ?? [];
+					pendingEvents.push(fullEvent);
+					client.pendingEvents = pendingEvents;
+				}
 			}
 		}
 		return fullEvent;
@@ -415,6 +501,16 @@ export async function startWebDaemon(
 		return runtime;
 	};
 
+	const subscribeKnownRuntimes = async (): Promise<void> => {
+		const sessions = await discordDaemon.getWebSessions();
+		await Promise.all(
+			sessions.map(async (session) => {
+				const runtime = await discordDaemon.getRuntimeForWebChannel(session.key);
+				subscribeRuntime(runtime);
+			}),
+		);
+	};
+
 	const getChannelKeyFromRequest = (url: URL, body?: unknown): string | undefined => {
 		const queryKey = url.searchParams.get("channelKey");
 		if (queryKey) return queryKey;
@@ -431,6 +527,7 @@ export async function startWebDaemon(
 		runtime: ConversationRuntime,
 		jobId: string,
 		prompt: string,
+		attachments: StoredAttachment[] = [],
 	): Promise<{
 		text: string;
 		messageId: string;
@@ -446,17 +543,25 @@ export async function startWebDaemon(
 		let started = false;
 		let reply: Awaited<ReturnType<typeof discordDaemon.runPromptForWeb>>;
 		try {
-			reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, async (event: AgentEvent) => {
-				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
-					started = true;
-				}
-				updateAgentEventSummary(summary, event);
-				const storedEvent = storedAgentEventFromAgentEvent(event);
-				if (storedEvent) {
-					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
-					await recorder.record(storedEvent);
-				}
-			});
+			const promptNotes = attachments.length > 0 ? promptAttachmentNotes(attachments) : "";
+			const promptInput = [prompt, promptNotes].filter(Boolean).join("\n");
+			reply = await discordDaemon.runPromptForWeb(
+				runtime,
+				jobId,
+				promptInput,
+				attachments,
+				async (event: AgentEvent) => {
+					if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+						started = true;
+					}
+					updateAgentEventSummary(summary, event);
+					const storedEvent = storedAgentEventFromAgentEvent(event);
+					if (storedEvent) {
+						runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+						await recorder.record(storedEvent);
+					}
+				},
+			);
 		} finally {
 			await recorder.flush();
 		}
@@ -493,7 +598,7 @@ export async function startWebDaemon(
 			const dispatch = runtime.beginNextJob();
 			if (!dispatch) return;
 			try {
-				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt);
+				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments);
 				await runtime.completeActiveJob({
 					text: reply.text,
 					messageIds: [reply.messageId],
@@ -582,10 +687,29 @@ export async function startWebDaemon(
 				return true;
 			}
 			if (request.method === "POST" && url.pathname === "/api/web/send") {
-				const body = await readJsonBody(request);
+				const contentType = request.headers["content-type"] ?? "";
+				const isMultipart = Array.isArray(contentType)
+					? contentType.some((value) => value.includes("multipart/form-data"))
+					: contentType.includes("multipart/form-data");
+				const body = isMultipart ? await readMultipartBody(request, contentType) : await readJsonBody(request);
 				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isObject(body) || typeof body.text !== "string" || !body.text.trim()) {
+				if (!isObject(body) || typeof body.text !== "string") {
 					sendJson(response, 400, { error: "text is required" });
+					return true;
+				}
+				if (!isMultipart && isObject(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
+					sendJson(response, 400, { error: "attachments require multipart form data" });
+					return true;
+				}
+				const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+				const attachments = await materializeInboundAttachments(
+					config,
+					rawAttachments
+						.filter((attachment): attachment is WebUploadAttachment => isWebUploadAttachment(attachment))
+						.map((attachment) => ({ ...attachment, source: "web" })),
+				);
+				if (!body.text.trim() && attachments.length === 0) {
+					sendJson(response, 400, { error: "text or attachment is required" });
 					return true;
 				}
 				const id = messageId("user");
@@ -599,6 +723,7 @@ export async function startWebDaemon(
 					mentionedBot: true,
 					remoteTimestamp: new Date(ts).toISOString(),
 					checkpoint: { messageId: id },
+					attachments,
 				};
 				await runtime.ingestInbound(input, { mode: "queue" });
 				void drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
@@ -657,6 +782,8 @@ export async function startWebDaemon(
 		}
 	};
 
+	await subscribeKnownRuntimes();
+
 	const server = createServer((request, response) => {
 		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 		void handleApi(request, response, url).then(async (handled) => {
@@ -675,6 +802,7 @@ export async function startWebDaemon(
 			return;
 		}
 		if (!acceptWebSocket(request, netSocket)) return;
+		netSocket.setNoDelay(true);
 		const requestedChannelKey = url.searchParams.get("channelKey") || undefined;
 		const client: WebSocketClient = { socket: netSocket, channelKey: requestedChannelKey, authed: false };
 		clients.add(client);

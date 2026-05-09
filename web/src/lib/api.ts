@@ -106,12 +106,14 @@ export async function sendMessage(
   text: string,
   clientId: string,
   channelKey?: string,
+  attachments: File[] = [],
 ): Promise<{ id: string; ts: number; channelKey: string }> {
-  const res = await fetch("/api/web/send", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, clientId, channelKey }),
-  });
+  const body = new FormData();
+  body.set("text", text);
+  body.set("clientId", clientId);
+  if (channelKey) body.set("channelKey", channelKey);
+  for (const attachment of attachments) body.append("attachments", attachment, attachment.name);
+  const res = await fetch("/api/web/send", { method: "POST", body });
   if (!res.ok) throw new Error(`send: ${res.status}`);
   return (await res.json()) as { id: string; ts: number; channelKey: string };
 }

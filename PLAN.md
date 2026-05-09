@@ -256,6 +256,15 @@ Done when:
 
 - Image attachments, voice memos, and short videos produce sensible replies without destabilizing Discord/Web message flow or context assembly.
 
+Stage 6 follow-ups (deferred from v0):
+
+- Image resize/re-encode pipeline. `derived.image` is currently a placeholder. Populate it via a Photon-backed (or hand-rolled) resize path so large images can be inlined safely instead of dropped with a `[Image omitted]` note. Cheap dimension hints (parse PNG IHDR / JPEG SOF directly) can land before the full resize stack.
+- Vision-capability gating. Skip image attachments or warn when the active model is non-vision rather than relying on upstream errors. Consider model-aware composer disable.
+- Multipart body parsing efficiency. `readMultipartBody` converts the raw upload to a latin1 string for `String.split`. Replace with a byte-wise `buffer.indexOf` scanner (or a small dep like `busboy`) before this sees real upload volume.
+- Discord attachment materialization off the message hot path. `toInboundInput` currently awaits `materializeInboundAttachments` synchronously inside the discord.js message handler. Move the download/disk work into `drainJobs` so the handler stays fast even on multi-attachment uploads.
+- Auth coverage audit on `/api/web/attachments/*`. Verify the static attachment route runs through the same auth middleware as `/api/web/send` in bearer and public-2fa modes; tailscale-only mode is fine.
+- Broader Stage 6 tests. Current coverage: canonical extension + path-traversal containment, partial-write rollback, count cap, non-image filter for prompt images. Add: each magic-byte sniff path, total-bytes cap (vs per-attachment cap), pure-attachment message routing through queue/drain, oversize-base64 drop in `promptImagesFromAttachments`.
+
 ### Stage 7: LCM
 
 - Per-channel raw logs under `data/chat/{channel}/{date}.jsonl`.

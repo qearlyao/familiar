@@ -32,6 +32,7 @@ import {
 import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
+import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
@@ -49,6 +50,7 @@ export interface DiscordDaemon {
 		runtime: ConversationRuntime,
 		jobId: string,
 		prompt: string,
+		attachments?: StoredAttachment[],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 	): Promise<FamiliarAgentReply>;
 	abortWebRuntime(runtime: ConversationRuntime): void;
@@ -406,7 +408,18 @@ function messageMentionsBot(message: Message, botUserId: string): boolean {
 	return message.content.includes(`<@${botUserId}>`) || message.content.includes(`<@!${botUserId}>`);
 }
 
-function toInboundInput(message: Message, botUserId: string): InboundMessageInput {
+async function toInboundInput(config: Config, message: Message, botUserId: string): Promise<InboundMessageInput> {
+	const attachments = await materializeInboundAttachments(
+		config,
+		[...message.attachments.values()].map((attachment) => ({
+			id: attachment.id,
+			name: attachment.name,
+			mimeType: attachment.contentType ?? undefined,
+			size: attachment.size,
+			url: attachment.url,
+			source: "discord",
+		})),
+	);
 	return {
 		messageId: message.id,
 		authorId: message.author.id,
@@ -418,13 +431,7 @@ function toInboundInput(message: Message, botUserId: string): InboundMessageInpu
 		checkpoint: {
 			messageId: message.id,
 		},
-		attachments: [...message.attachments.values()].map((attachment) => ({
-			id: attachment.id,
-			name: attachment.name,
-			mimeType: attachment.contentType ?? undefined,
-			size: attachment.size,
-			remoteUrl: attachment.url,
-		})),
+		attachments,
 	};
 }
 
@@ -603,13 +610,16 @@ export async function startDiscordDaemon(
 		runtime: ConversationRuntime,
 		jobId: string,
 		prompt: string,
+		attachments: StoredAttachment[] = [],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 	): Promise<FamiliarAgentReply> => {
 		const run = agentWorkQueue.then(async () => {
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 			activeAgentOwner = runtime.channelKey;
 			try {
-				const reply = await familiarAgent.prompt(runtime.channelKey, prompt, onEvent);
+				const promptImages = await promptImagesFromAttachments(attachments);
+				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
+				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent);
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
 			} finally {
@@ -701,14 +711,20 @@ export async function startDiscordDaemon(
 				);
 				let reply: Awaited<ReturnType<typeof promptForRuntime>>;
 				try {
-					reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, async (event) => {
-						updateAgentEventSummary(summary, event);
-						const storedEvent = storedAgentEventFromAgentEvent(event);
-						if (storedEvent) {
-							runtime.publishAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent);
-							await recorder.record(storedEvent);
-						}
-					});
+					reply = await promptForRuntime(
+						runtime,
+						dispatch.job.jobId,
+						dispatch.prompt,
+						dispatch.attachments,
+						async (event) => {
+							updateAgentEventSummary(summary, event);
+							const storedEvent = storedAgentEventFromAgentEvent(event);
+							if (storedEvent) {
+								runtime.publishAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent);
+								await recorder.record(storedEvent);
+							}
+						},
+					);
 				} finally {
 					await recorder.flush();
 				}
@@ -784,7 +800,7 @@ export async function startDiscordDaemon(
 			runtime = await getRuntime(message);
 			const isDm = isDmChannel(message.channel);
 			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
-			const input = toInboundInput(message, client.user.id);
+			const input = await toInboundInput(config, message, client.user.id);
 			const control = runtime.parseControlCommand(input);
 			if (control) {
 				await runtime.noteControlCommand(input, control);

@@ -19,10 +19,24 @@ export interface ChatChannelRef {
 export interface StoredAttachment {
 	id: string;
 	name: string;
+	kind?: "image" | "file" | "audio" | "video";
 	mimeType?: string;
 	size?: number;
 	remoteUrl?: string;
 	localPath?: string;
+	source?: "discord" | "web" | "generated";
+	sourceUrl?: string;
+	sha256?: string;
+	derived?: {
+		image?: {
+			localPath?: string;
+			mimeType: string;
+			size: number;
+			width?: number;
+			height?: number;
+			note?: string;
+		};
+	};
 }
 
 interface ChatRecordBase {

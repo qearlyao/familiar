@@ -1,7 +1,7 @@
 import type { Message } from "../types";
 import { cn } from "@/lib/utils";
 import { ThinkingBlock } from "./ThinkingBlock";
-import { ToolInlineBlock } from "./ToolBlock";
+import { ToolBlock } from "./ToolBlock";
 
 export function MessageBubble({ message }: { message: Message }) {
   if (message.role === "system") {
@@ -15,12 +15,6 @@ export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
   const showThinking = !isUser && (message.thinking || message.thinkingMs != null);
   const attachments = message.attachments ?? [];
-  const parts =
-    message.parts?.length
-      ? message.parts
-      : message.text
-        ? [{ type: "text" as const, id: "text_legacy", text: message.text }]
-        : [];
 
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
@@ -34,19 +28,24 @@ export function MessageBubble({ message }: { message: Message }) {
             durationMs={message.thinkingMs}
           />
         )}
-        {parts.map((part) =>
-          part.type === "tool" ? (
-            <ToolInlineBlock key={part.id} tool={part.tool} />
-          ) : (
-            <div key={part.id} className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
-              {part.text}
-            </div>
-          ),
+        {!isUser && <ToolBlock tools={message.tools ?? []} />}
+        {message.text && (
+          <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
+            {message.text}
+          </div>
         )}
         {attachments.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
             {attachments.map((attachment) =>
-              attachment.mimeType?.startsWith("audio/") && attachment.url ? (
+              (attachment.kind === "image" || attachment.mimeType?.startsWith("image/")) && attachment.url ? (
+                <a key={attachment.id} href={attachment.url} className="block max-w-[24rem]">
+                  <img
+                    src={attachment.url}
+                    alt={attachment.name}
+                    className="max-h-72 w-full rounded border border-border object-contain"
+                  />
+                </a>
+              ) : attachment.mimeType?.startsWith("audio/") && attachment.url ? (
                 <audio
                   key={attachment.id}
                   controls

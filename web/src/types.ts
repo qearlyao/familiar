@@ -9,7 +9,6 @@ export interface Message {
   thinking?: string;
   thinkingMs?: number;
   tools?: ToolEvent[];
-  parts?: MessagePart[];
   usage?: Usage;
   ts: number;
 }
@@ -17,6 +16,7 @@ export interface Message {
 export interface Attachment {
   id: string;
   name: string;
+  kind?: "image" | "file" | "audio" | "video";
   mimeType?: string;
   size?: number;
   url?: string;
@@ -42,7 +42,3 @@ export interface Usage {
   cacheWrite: number;
   cost: number;
 }
-
-export type MessagePart =
-  | { type: "text"; id: string; text: string }
-  | { type: "tool"; id: string; tool: ToolEvent };

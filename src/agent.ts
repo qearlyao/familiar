@@ -3,7 +3,7 @@ import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
-import { type Model, streamSimple } from "@earendil-works/pi-ai";
+import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
 
 import type { Config, ThinkingLevel } from "./config.js";
@@ -33,6 +33,7 @@ export interface FamiliarAgent {
 	prompt(
 		sessionKey: string,
 		input: string,
+		images?: ImageContent[],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 	): Promise<FamiliarAgentReply>;
 	steer(sessionKey: string, input: string): void;
@@ -442,14 +443,17 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 		async prompt(
 			sessionKey: string,
 			input: string,
+			imagesOrOnEvent?: ImageContent[] | ((event: AgentEvent) => void | Promise<void>),
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
 		): Promise<FamiliarAgentReply> {
 			const session = await getSession(sessionKey);
+			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
+			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
 			const run = session.promptQueue.then(async () => {
 				session.mediaSink.drain();
-				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
+				const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
 				try {
-					await session.agent.prompt(input);
+					await session.agent.prompt(input, images);
 				} finally {
 					unsubscribe?.();
 				}

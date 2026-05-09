@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { SendHorizontal } from "lucide-react";
+import { Paperclip, SendHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function Composer({ onSend, personaName }: { onSend: (text: string) => void; personaName: string }) {
+export function Composer({
+  onSend,
+  personaName,
+}: {
+  onSend: (text: string, attachments: File[]) => void;
+  personaName: string;
+}) {
   const [value, setValue] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -15,40 +23,71 @@ export function Composer({ onSend, personaName }: { onSend: (text: string) => vo
 
   const send = () => {
     const text = value.trim();
-    if (!text) return;
-    onSend(text);
+    if (!text && attachments.length === 0) return;
+    onSend(text, attachments);
     setValue("");
+    setAttachments([]);
   };
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-3xl px-5 py-4">
-        <div className="flex items-end gap-2 rounded-md border border-input bg-card px-3 py-2.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-          <textarea
-            ref={ref}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            placeholder={`write to ${personaName}…`}
-            rows={1}
-            autoFocus
-            className="flex-1 resize-none bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none min-h-8 leading-8"
-          />
-          <Button
-            type="button"
-            size="sm"
-            onClick={send}
-            disabled={!value.trim()}
-            aria-label="send"
-            className="h-8 px-3"
-          >
-            <SendHorizontal className="size-4" />
-          </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            setAttachments([...(event.target.files ? Array.from(event.target.files) : [])]);
+            event.target.value = "";
+          }}
+        />
+        <div className="flex flex-col gap-2 rounded-md border border-input bg-card px-3 py-2.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((file, index) => (
+                <button
+                  key={`${file.name}-${index}`}
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+                >
+                  {file.name}
+                  <X className="size-3" />
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={ref}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder={`write to ${personaName}…`}
+              rows={1}
+              autoFocus
+              className="min-h-8 flex-1 resize-none bg-transparent leading-8 text-foreground placeholder:text-muted-foreground focus:outline-none"
+            />
+            <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()} aria-label="attach">
+              <Paperclip className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={send}
+              disabled={!value.trim() && attachments.length === 0}
+              aria-label="send"
+              className="h-8 px-3"
+            >
+              <SendHorizontal className="size-4" />
+            </Button>
+          </div>
         </div>
         <p className="mt-1.5 text-center text-[11px] tracking-wide text-muted-foreground">
           enter to send · shift+enter for newline

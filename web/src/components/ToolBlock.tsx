@@ -109,14 +109,6 @@ function ToolEntry({ tool }: { tool: ToolEvent }) {
   );
 }
 
-export function ToolInlineBlock({ tool }: { tool: ToolEvent }) {
-  return (
-    <div className="mt-1 mb-3 border-l-2 border-border pl-3">
-      <ToolEntry tool={tool} />
-    </div>
-  );
-}
-
 export function ToolBlock({ tools }: { tools: ToolEvent[] }) {
   const [open, setOpen] = useState(false);
   if (tools.length === 0) return null;

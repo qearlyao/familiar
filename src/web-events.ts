@@ -8,6 +8,7 @@ export interface WebSocketClient {
 	socket: Socket;
 	channelKey?: string;
 	authed: boolean;
+	pendingEvents?: WebStreamEvent[];
 }
 
 export function encodeFrame(text: string): Buffer {
@@ -96,16 +97,29 @@ export function replayEvents(
 ): void {
 	if (!lastEventId) {
 		client.authed = true;
+		for (const event of client.pendingEvents ?? []) {
+			client.socket.write(encodeFrame(JSON.stringify(event)));
+		}
+		client.pendingEvents = undefined;
 		return;
 	}
+	const pending = client.pendingEvents ?? [];
 	const index = events.findIndex((event) => event.eventId === lastEventId);
 	if (index < 0) {
 		client.authed = true;
 		client.socket.write(encodeFrame(JSON.stringify(onReplayWindowLost())));
+		for (const event of pending) {
+			client.socket.write(encodeFrame(JSON.stringify(event)));
+		}
+		client.pendingEvents = undefined;
 		return;
 	}
 	client.authed = true;
-	for (const event of events.slice(index + 1)) {
+	const eventIds = new Set<string>();
+	for (const event of [...events.slice(index + 1), ...pending]) {
+		if (eventIds.has(event.eventId)) continue;
+		eventIds.add(event.eventId);
 		client.socket.write(encodeFrame(JSON.stringify(event)));
 	}
+	client.pendingEvents = undefined;
 }

@@ -52,6 +52,7 @@ export interface QueuedJob {
 export interface DispatchableJob {
 	job: QueuedJob;
 	prompt: string;
+	attachments: StoredAttachment[];
 	triggerMessageId?: string;
 }
 
@@ -82,7 +83,15 @@ function formatPromptRecord(record: InboundChatRecord): string {
 	const author = record.authorName?.trim()
 		? `${record.authorName.trim()} uid:${record.authorId}`
 		: `uid:${record.authorId}`;
-	return `[${author} @ ${record.ts}] ${text}`;
+	const attachmentText = record.attachments.length
+		? `\n${record.attachments
+				.map(
+					(attachment) =>
+						`[attachment ${attachment.name} id:${attachment.id} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}]`,
+				)
+				.join("\n")}`
+		: "";
+	return `[${author} @ ${record.ts}] ${text}${attachmentText}`;
 }
 
 function getTriggerRecord(records: ChatLogRecord[], job: QueuedJob): InboundChatRecord | undefined {
@@ -368,6 +377,7 @@ export class ConversationRuntime {
 		return {
 			job,
 			prompt: this.buildPrompt(job),
+			attachments: this.buildPromptAttachments(job),
 			triggerMessageId: triggerRecord?.messageId,
 		};
 	}
@@ -380,6 +390,16 @@ export class ConversationRuntime {
 			);
 		});
 		return slice.map(formatPromptRecord).join("\n").trim();
+	}
+
+	private buildPromptAttachments(job: QueuedJob): StoredAttachment[] {
+		const completedBoundary = this.getLastCompletedTriggerRecordId();
+		const slice = this.records.filter((record): record is InboundChatRecord => {
+			return (
+				record.type === "inbound" && record.recordId > completedBoundary && record.recordId <= job.triggerRecordId
+			);
+		});
+		return slice.flatMap((record) => record.attachments);
 	}
 
 	async noteOutbound(options: {

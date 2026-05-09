@@ -5,7 +5,7 @@ import { extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Config } from "./config.js";
-import { generatedAttachmentsDir } from "./generated-media.js";
+import { attachmentsDir, generatedAttachmentsDir } from "./generated-media.js";
 import { sendText } from "./web-http.js";
 
 function getProjectRoot(): string {
@@ -19,6 +19,9 @@ function mimeType(path: string): string {
 	if (extension === ".css") return "text/css; charset=utf-8";
 	if (extension === ".svg") return "image/svg+xml";
 	if (extension === ".png") return "image/png";
+	if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+	if (extension === ".gif") return "image/gif";
+	if (extension === ".webp") return "image/webp";
 	if (extension === ".ico") return "image/x-icon";
 	if (extension === ".mp3") return "audio/mpeg";
 	if (extension === ".opus" || extension === ".ogg") return "audio/ogg";
@@ -45,48 +48,44 @@ export async function serveStatic(response: ServerResponse, requestPath: string)
 }
 
 export async function serveAttachment(config: Config, response: ServerResponse, requestPath: string): Promise<boolean> {
-	const root = generatedAttachmentsDir(config);
-	const rootRealPath = await realpath(root).catch(() => undefined);
-	if (!rootRealPath) {
-		sendText(response, 404, "Not found");
-		return true;
-	}
 	const relativePath = decodeURIComponent(requestPath.replace(/^\/api\/web\/attachments\/?/, ""));
 	if (!relativePath) {
 		sendText(response, 404, "Not found");
 		return true;
 	}
-	const filePath = resolve(root, relativePath);
-	const rel = relative(root, filePath);
-	if (rel.startsWith("..") || rel.startsWith("/") || rel.startsWith("\\") || rel === "") {
-		sendText(response, 403, "Forbidden");
+	const candidates = [generatedAttachmentsDir(config), attachmentsDir(config)];
+	for (const root of candidates) {
+		const rootRealPath = await realpath(root).catch(() => undefined);
+		if (!rootRealPath) continue;
+		const filePath = resolve(root, relativePath);
+		const rel = relative(root, filePath);
+		if (rel.startsWith("..") || rel.startsWith("/") || rel.startsWith("\\") || rel === "") {
+			sendText(response, 403, "Forbidden");
+			return true;
+		}
+		const linkStat = await lstat(filePath).catch(() => undefined);
+		if (!linkStat) continue;
+		if (linkStat.isSymbolicLink()) {
+			sendText(response, 403, "Forbidden");
+			return true;
+		}
+		const fileRealPath = await realpath(filePath).catch(() => undefined);
+		if (!fileRealPath) continue;
+		const realRel = relative(rootRealPath, fileRealPath);
+		if (realRel.startsWith("..") || realRel.startsWith("/") || realRel.startsWith("\\") || realRel === "") {
+			sendText(response, 403, "Forbidden");
+			return true;
+		}
+		const fileStat = await stat(fileRealPath).catch(() => undefined);
+		if (!fileStat?.isFile()) continue;
+		response.writeHead(200, {
+			"content-type": mimeType(filePath),
+			"content-length": String(fileStat.size),
+			"cache-control": "private, max-age=31536000, immutable",
+		});
+		createReadStream(fileRealPath).pipe(response);
 		return true;
 	}
-	const linkStat = await lstat(filePath).catch(() => undefined);
-	if (!linkStat || linkStat.isSymbolicLink()) {
-		sendText(response, linkStat ? 403 : 404, linkStat ? "Forbidden" : "Not found");
-		return true;
-	}
-	const fileRealPath = await realpath(filePath).catch(() => undefined);
-	if (!fileRealPath) {
-		sendText(response, 404, "Not found");
-		return true;
-	}
-	const realRel = relative(rootRealPath, fileRealPath);
-	if (realRel.startsWith("..") || realRel.startsWith("/") || realRel.startsWith("\\") || realRel === "") {
-		sendText(response, 403, "Forbidden");
-		return true;
-	}
-	const fileStat = await stat(fileRealPath).catch(() => undefined);
-	if (!fileStat?.isFile()) {
-		sendText(response, 404, "Not found");
-		return true;
-	}
-	response.writeHead(200, {
-		"content-type": mimeType(filePath),
-		"content-length": String(fileStat.size),
-		"cache-control": "private, max-age=31536000, immutable",
-	});
-	createReadStream(fileRealPath).pipe(response);
+	sendText(response, 404, "Not found");
 	return true;
 }

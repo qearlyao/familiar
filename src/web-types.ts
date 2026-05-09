@@ -6,6 +6,7 @@ export const EVENT_REPLAY_LIMIT = 1000;
 export type WebAttachment = {
 	id: string;
 	name: string;
+	kind?: "image" | "file" | "audio" | "video";
 	mimeType?: string;
 	size?: number;
 	url?: string;
@@ -32,10 +33,6 @@ export type WebUsage = {
 	cost: number;
 };
 
-export type WebMessagePart =
-	| { type: "text"; id: string; text: string }
-	| { type: "tool"; id: string; tool: WebToolEvent };
-
 export type WebMessage = {
 	id: string;
 	role: "user" | "assistant" | "system";
@@ -45,7 +42,6 @@ export type WebMessage = {
 	thinking?: string;
 	thinkingMs?: number;
 	tools?: WebToolEvent[];
-	parts?: WebMessagePart[];
 	usage?: WebUsage;
 	ts: number;
 };

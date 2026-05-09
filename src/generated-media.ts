@@ -30,6 +30,10 @@ export function generatedAttachmentsDir(config: Config): string {
 	return resolve(config.workspace.dataDir, "attachments", "generated");
 }
 
+export function attachmentsDir(config: Config): string {
+	return resolve(config.workspace.dataDir, "attachments");
+}
+
 export async function ensureGeneratedAttachmentsDir(config: Config): Promise<string> {
 	const dir = generatedAttachmentsDir(config);
 	await mkdir(dir, { recursive: true });
@@ -63,9 +67,20 @@ export async function cleanupGeneratedAttachments(config: Config, now = Date.now
 
 export function publicAttachmentPath(config: Config, localPath: string): string {
 	const absolutePath = resolve(localPath);
-	const relativePath = relative(generatedAttachmentsDir(config), absolutePath);
+	const generatedRelativePath = relative(generatedAttachmentsDir(config), absolutePath);
+	if (
+		generatedRelativePath &&
+		!generatedRelativePath.startsWith("..") &&
+		!isAbsolute(generatedRelativePath)
+	) {
+		return `/api/web/attachments/${generatedRelativePath
+			.split(/[\\/]+/)
+			.map(encodeURIComponent)
+			.join("/")}`;
+	}
+	const relativePath = relative(attachmentsDir(config), absolutePath);
 	if (relativePath.startsWith("..") || isAbsolute(relativePath) || relativePath === "") {
-		throw new Error(`Generated attachment path is outside generated attachments dir: ${localPath}`);
+		throw new Error(`Attachment path is outside generated attachments dir: ${localPath}`);
 	}
 	return `/api/web/attachments/${relativePath
 		.split(/[\\/]+/)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Message, MessagePart, ToolEvent } from "../types";
+import type { Message, ToolEvent } from "../types";
 import {
   fetchAuthMode,
   fetchHistory,
@@ -45,27 +45,6 @@ function mergeTool(
   };
 }
 
-function appendTextPart(parts: MessagePart[] | undefined, text: string): MessagePart[] {
-  const existing = parts ?? [];
-  const last = existing.at(-1);
-  if (last?.type === "text") {
-    return [...existing.slice(0, -1), { ...last, text: last.text + text }];
-  }
-  return [...existing, { type: "text", id: `text_${existing.length}`, text }];
-}
-
-function mergeToolPart(parts: MessagePart[] | undefined, patch: ToolEvent): MessagePart[] {
-  const existing = parts ?? [];
-  const index = existing.findIndex((part) => part.type === "tool" && part.tool.id === patch.id);
-  if (index >= 0) {
-    const next = existing.slice();
-    const part = next[index];
-    if (part?.type === "tool") next[index] = { ...part, tool: mergeTool(part.tool, patch) };
-    return next;
-  }
-  return [...existing, { type: "tool", id: `tool_${patch.id}`, tool: patch }];
-}
-
 export interface ChatHook {
   messages: Message[];
   connection: ConnectionState;
@@ -73,7 +52,7 @@ export interface ChatHook {
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
   selectSession: (key: string) => void;
-  send: (text: string) => Promise<void>;
+  send: (text: string, attachments?: File[]) => Promise<void>;
 }
 
 export function useChat(): ChatHook {
@@ -85,7 +64,7 @@ export function useChat(): ChatHook {
 
   const lastEventIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Map<string, PendingMessage>>(new Map());
-  const sendRef = useRef<(text: string) => Promise<void>>(async () => undefined);
+  const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
 
   const upsertMessage = useCallback(
     (id: string, patch: Partial<Message> & { role?: Message["role"]; who?: string }) => {
@@ -93,7 +72,12 @@ export function useChat(): ChatHook {
         const idx = prev.findIndex((m) => m.id === id);
         if (idx >= 0) {
           const next = prev.slice();
-          next[idx] = { ...next[idx], ...patch };
+          next[idx] = {
+            ...next[idx],
+            ...patch,
+            attachments: patch.attachments ?? next[idx].attachments,
+            usage: patch.usage ?? next[idx].usage,
+          };
           return next;
         }
         const seed: Message = {
@@ -104,7 +88,6 @@ export function useChat(): ChatHook {
           thinking: patch.thinking,
           thinkingMs: patch.thinkingMs,
           attachments: patch.attachments,
-          parts: patch.parts,
           usage: patch.usage,
           ts: patch.ts ?? Date.now(),
         };
@@ -144,7 +127,7 @@ export function useChat(): ChatHook {
             setMessages((prev) =>
               prev.map((message) =>
                 message.id === event.messageId
-                  ? { ...message, text: pending.text, parts: appendTextPart(message.parts, event.content) }
+                  ? { ...message, text: pending.text }
                   : message,
               ),
             );
@@ -178,7 +161,7 @@ export function useChat(): ChatHook {
               } else {
                 tools.push(event.tool);
               }
-              return { ...message, tools, parts: mergeToolPart(message.parts, event.tool) };
+              return { ...message, tools };
             }),
           );
           break;
@@ -292,10 +275,10 @@ export function useChat(): ChatHook {
 
     connect();
 
-    sendRef.current = async (text: string) => {
+    sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
-      await sendMessageApi(trimmed, uid(), activeSessionKey);
+      if (!trimmed && attachments.length === 0) return;
+      await sendMessageApi(trimmed, uid(), activeSessionKey, attachments);
     };
 
     return () => {
@@ -305,7 +288,7 @@ export function useChat(): ChatHook {
     };
   }, [activeSessionKey, handleEvent]);
 
-  const send = useCallback((text: string) => sendRef.current(text), []);
+  const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
 
   return { messages, connection, personaName, sessions, activeSessionKey, selectSession, send };

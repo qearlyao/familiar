@@ -336,6 +336,24 @@ Done when:
 
 - A fresh Debian VPS can run Familiar in under 10 minutes after secrets are provided.
 
+### Future Optimizations (optional, defer until pain shows up)
+
+These aren't blocking any stage. Keep in mind, address when boot time, browser jank, or RAM actually start to hurt.
+
+**WebUI message list — virtualize before it gets long.**
+`web/src/components/MessageList.tsx` is a flat `messages.map(...)` with no virtualization, plus a smooth `scrollIntoView` on every `messages` change. Initial load is paginated (server caps at 50, max 200) and the frontend has no "load more", so cold open is always fast. The risk is accumulation within a single long-lived tab (many `/new` cycles, lots of streamed deltas). Rough thresholds: 100s fine, ~1k noticeable jank, 10k+ visibly bad.
+Fix when needed: drop in `react-virtuoso` (handles dynamic-height bubbles and stick-to-bottom natively). Avoid both virtualization and a client-side trim — pick one.
+
+**Chat log — bounded in-memory window for old days.**
+`src/chat-log.ts:206` partitions logs by calendar date (`chat/{channelKey}/{YYYY-MM-DD}.jsonl`), so no single file grows forever. But on startup `createChatLog` loads *every* `.jsonl` in the channel dir into the in-memory `records` array, so boot time, RAM, and runtime hot paths all scale with total lifetime history. Months-of-use territory before this matters; worth knowing the shape.
+Fix when needed, in increasing invasiveness:
+1. Cold-storage: move files older than N days into an `archive/` subdir not loaded at startup; remain queryable on demand.
+2. In-memory window: load only the last N days into `records`; keep older on disk. Most consumers (`buildPrompt`, web pagination) only inspect recent records anyway.
+3. Post-compaction pruning: after `/compact`, drop pre-compaction inbound records once the summary covers them.
+
+**`/new` reset boundary in WebUI — visual divider, not clear.**
+Today `/new` resets agent context (`armedAfterRecordId` in `src/runtime.ts:514`) but leaves prior messages visible in the WebUI, which can feel like nothing happened. Lightest fix: when the WebSocket sees a `runtime/reset` event, insert a `── new conversation ──` separator in the message list. Don't actually clear — let the user scroll back to prior turns. Cheap, signals the boundary, no state migration.
+
 ## 6. Reference Index
 
 Use `rg` first. Open only the target file/range you need.

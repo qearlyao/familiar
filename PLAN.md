@@ -9,6 +9,7 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 Implemented or recently added:
 
 - Stages 0-6 are v0-complete: core runtime, WebUI, TTS v0, event dashboard, and media intake.
+- Native `web_search` and `web_fetch` tools are shipped: Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, SSRF-style URL guards, page cache, and untrusted web-content prompt warning.
 - Stage 5 `image_gen`, skills, and WebUI TTS polish remain active.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
@@ -35,11 +36,12 @@ Important caution:
 - `MEMORY.md` is small and durable. Episodic recall belongs in LCM and diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
+  - Use Familiar-owned `web_search` and `web_fetch` for open-web lookup/reading; keep provider credentials in env.
   - Avoid bespoke memory/diary wrappers.
   - Put large, rarely used media/persona/character instructions in skills, not tool descriptions.
   - Prioritize output/media tools now; postpone `task`/subagent delegation.
   - Keep one compact `browser` tool with structured actions later.
-- Upstream coding-agent currently does not ship dedicated `web_fetch` or `web_search` tool factories; its built-in factories remain local workspace tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). Familiar should own web-access tool design unless upstream adds a first-class web tool later.
+- Upstream coding-agent currently does not ship dedicated `web_fetch` or `web_search` tool factories; its built-in factories remain local workspace tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). Familiar owns server-side web search/fetch unless upstream adds a first-class web tool later.
 - Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local, remote sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, etc.
 - WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door. Product direction: WebUI becomes the full information stream and dashboard for messages, reasoning, tool activity, memory, diagnostics, and generated media.
 - Discord remains a clean chat delivery adapter by default: show final assistant text and outbound media only. Do not expose thinking blocks or verbose tool lifecycle details in Discord unless a future explicit debug mode asks for them.
@@ -165,6 +167,7 @@ Status: shipped enough for current development. Keep details in git history and 
 - Stage 3: shipped WebUI side-door with HTTP/WebSocket transport, auth scaffolding, session picker, shared Discord/Web runtime, thinking/text streaming, persona label detection, and current frontend baseline.
 - Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
 - Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
+- Web access v0: shipped native `web_search` and `web_fetch`, with Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, cache behavior, and focused tests.
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
 - Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
 
@@ -298,8 +301,7 @@ Done when:
 - One `browser` tool with structured actions like `navigate`, `eval`, `read_visible`, `screenshot`, `screen_read`, `activity`.
 - Prefer one tool with actions over many narrow browser tools.
 - Backend adapters for local host mode and remote sidecar mode.
-- Web access should be designed explicitly instead of assuming upstream coverage. As of local `earendil-works/pi` main, upstream has no dedicated `web_fetch`/`web_search` built-ins; `anthropic-dangerous-direct-browser-access` in provider code is SDK browser-runtime allowance, not a browsing/search feature.
-- Consider a small Familiar-owned `web` or `browser` action set later: `search`, `fetch`, `readability`, `screenshot`, `extract_links`, `navigate`, and `activity`. Keep server-side search/fetch and real browser control separable if that simplifies permissions and reliability.
+- Keep real browser control separate from the already-shipped server-side `web_search`/`web_fetch` tools.
 - Activity reads for Stage 9 should usually be scheduler context, but may be exposed through the compact `browser` surface if useful.
 - Conservative truncation and attachment handling.
 
@@ -429,6 +431,7 @@ Upstream WebUI/media refs:
 Local refs:
 
 - `src/agent.ts`: Familiar agent wrapper, cache normalization, transcript/payload logging.
+- `src/web-tools.ts`: Familiar-owned `web_search` and `web_fetch` providers, URL/domain validation, page cache, and web-content prompt warning.
 - `src/runtime.ts`: conversation runtime, control parser, trigger records.
 - `src/discord.ts`: Discord glue, runtime promise cache, replies, queue draining.
 - `src/chat-log.ts`: channel log layout.

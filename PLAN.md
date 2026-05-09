@@ -8,25 +8,22 @@ This is the session-start operating plan. It keeps only the decisions, stage map
 
 Implemented or recently added:
 
-- Stages 0-4 are v0-complete: upstream `Agent`, Discord runtime/logs/controls, Anthropic cache normalization, WebUI side-door, workspace tools, payload inspection, and focused backend tests.
-- Stage 5 TTS v0 is done; active Stage 5 work is `image_gen`, skills, and WebUI TTS polish.
-- WebUI event dashboard v0 is done.
+- Stages 0-6 are v0-complete: core runtime, WebUI, TTS v0, event dashboard, and media intake.
+- Stage 5 `image_gen`, skills, and WebUI TTS polish remain active.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next step checkpoint:
 
-- Start Stage 6 media intake v0: durable inbound attachment metadata/storage, safe Discord image download, WebUI upload controls/previews, pure-attachment message handling, direct image-to-model prompt path, and focused tests.
+- Finish Stage 5 `image_gen` once upstream image APIs land, then pick from the deferred Stage 6 follow-ups as needed.
 
 Remaining short-term to-dos:
 
-- Revisit Stage 5 `image_gen` after upstream `@earendil-works/pi-ai` publishes image-generation APIs to npm.
 - Add public-2fa login UI when the frontend pass resumes.
-- Decide whether web→Discord cross-posting is desired (currently web messages share Familiar's runtime/log with the Discord session but are not echoed as visible Discord messages).
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 Important caution:
 
-- Stages after Stage 6 media intake are directionally planned, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
+- Stages after Stage 6 are directional, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
 
 ## 1. Locked Decisions
 
@@ -169,6 +166,7 @@ Status: shipped enough for current development. Keep details in git history and 
 - Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
 - Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
+- Stage 6 Media Intake v0: shipped shared inbound attachment metadata/storage, safe Discord/Web upload intake, pure-attachment routing, image prompt assembly, WebUI media rendering, and focused tests.
 
 Still open from completed foundations:
 
@@ -217,44 +215,22 @@ Done when:
 
 ### Stage 6: Media Intake
 
-Checkpoint: next active implementation stage. Build the smallest safe path from chat attachment to durable event record to direct multimodal prompt.
+Status: v0 is done. The shipped path covers durable inbound attachment records, safe Discord/Web intake, pure-attachment routing, direct image prompt assembly, WebUI media rendering, and focused storage/prompt tests.
 
-Near-term v0 checklist:
+Next Steps:
 
-- Define one inbound attachment metadata shape shared by Discord and Web uploads, including stable id, kind, name, MIME, byte size, source URL/local path, derived image path/payload metadata, and retention/audit fields.
-- Add safe Discord attachment materialization: count and byte limits, timeout/abort, content-length guard, magic-byte MIME sniffing, path safety, allowlist, and clear user-visible errors.
-- Add WebUI upload controls/previews using the same backend metadata shape as Discord intake.
-- Accept pure-attachment messages and queue them according to DM/channel trigger policy.
-- Wire image intake to model prompts with `ImageContent` for vision-capable models, including resize/re-encode and dimension notes.
-- Render user-uploaded images/files and generated media as first-class WebUI attachments in live and history views.
-- Add focused tests for attachment serialization, storage safety, path traversal rejection, pure-attachment queuing, and image prompt assembly.
-
-Reference decisions:
-
-- Upstream check result: media intake is partially covered upstream, but no upstream repo currently provides the full Familiar path from chat attachment to safe durable event record to direct multimodal agent prompt.
-- Reuse/adapt `pi-chat` for channel attachment shape and logistics:
-  - `AttachmentInput`, `StoredAttachment`, `AttachmentKind = image|file|audio|video`.
-  - Discord/Telegram live adapters download inbound attachments and materialize them under the conversation files dir.
-  - Outbound adapters can send local attachment paths as Discord multipart files or Telegram photo/document uploads.
-- Do not copy `pi-chat` blindly: its download helper currently lacks Familiar-grade content-length checks, total byte limits, timeout policy, count limits, MIME sniffing, and retention semantics. Its runtime formats inbound attachments as transcript file-path lines, not as direct model `ImageContent`.
-- Reuse/adapt `pi` coding-agent image primitives:
-  - Magic-byte image MIME detection for jpg/png/gif/webp.
-  - Photon-backed resize/re-encode path with max dimensions and base64 payload limit.
-  - Dimension notes that preserve original-to-resized coordinate mapping.
-  - `read` tool behavior for returning `[text note, image]` content and warning when the selected model is non-vision.
-- Use upstream multimodal primitives directly where possible: `@earendil-works/pi-ai` `ImageContent` plus `Agent.prompt(input, images)` / explicit `AgentMessage` content arrays already support image input.
-- Familiar-owned Stage 6 work:
-  - Chat logs and model transcript text may stay path/metadata-based, but the dashboard cannot collapse media into opaque path text only.
-  - Image intake pipeline should store original, optionally derive resized inline image, pass images directly to vision-capable models, and keep durable metadata linking prompt record, stored file, derived inline payload, and model-facing dimension note.
-  - Model chat history may keep recent `ImageContent` blocks until LCM/compaction thresholds are reached. Later LCM should replace older large media blocks with summaries plus durable attachment references.
-  - Non-image files initially appear as stored file refs/metadata; add extraction/parsing per file class only when needed.
-  - Voice memo transcription path.
-  - Video understanding strategy: decide frame sampling vs provider-native video input, transcript/audio extraction, long-video summarization, derived artifact storage, and what to persist in chat logs now and LCM later.
-- `pi` monorepo `packages/web-ui` has attachment/document extraction UI utilities (`loadAttachment`, `extract_document`) that can inspire future frontend behavior, but they are browser-side helpers and not the backend intake source of truth for Familiar.
+- Add media understanding for audio/video attachments.
+  - Audio: when a Discord/Web user sends a voice/audio attachment, run STT automatically and inject a transcript message alongside the attachment reference, e.g. `audio path` plus `transcription: ...`.
+  - Audio config: add a configurable STT model/provider section. Default provider should be Groq; users only need to configure model and API key/env.
+  - Video: when a Discord/Web user sends a video attachment, run video understanding automatically and inject a concise derived description/transcript/summary alongside the attachment reference.
+  - Video config: default provider should be Gemini, reusing the existing Gemini provider/base URL/API-key configuration where possible. User only needs to configure model; default model is `gemini-3-flash-preview`.
+  - Persist derived transcript/summary metadata with the attachment/chat record so WebUI can display both the original media and the model-derived text, while logs/transcript remain path/metadata oriented.
 
 Done when:
 
-- Image attachments, voice memos, and short videos produce sensible replies without destabilizing Discord/Web message flow or context assembly.
+- Voice/audio attachments produce a persisted transcript and the agent responds with that transcript in context.
+- Video attachments produce a persisted Gemini-derived summary/transcript/description and the agent responds with that derived media context.
+- Discord and WebUI both show the original media attachment plus the derived understanding text without destabilizing message flow.
 
 Stage 6 follow-ups (deferred from v0):
 

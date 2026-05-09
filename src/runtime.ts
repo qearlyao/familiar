@@ -12,6 +12,7 @@ import {
 	type StoredAttachment,
 } from "./chat-log.js";
 import type { DiscordChannelTrigger } from "./config.js";
+import { promptAttachmentNotes } from "./inbound-attachments.js";
 
 export interface InboundMessageInput {
 	messageId: string;
@@ -83,14 +84,7 @@ function formatPromptRecord(record: InboundChatRecord): string {
 	const author = record.authorName?.trim()
 		? `${record.authorName.trim()} uid:${record.authorId}`
 		: `uid:${record.authorId}`;
-	const attachmentText = record.attachments.length
-		? `\n${record.attachments
-				.map((attachment) => {
-					const derived = attachment.derived?.text?.text ? ` derived:${attachment.derived.text.text}` : "";
-					return `[attachment ${attachment.name} id:${attachment.id} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}${derived}]`;
-				})
-				.join("\n")}`
-		: "";
+	const attachmentText = record.attachments.length ? `\n${promptAttachmentNotes(record.attachments)}` : "";
 	return `[${author} @ ${record.ts}] ${text}${attachmentText}`;
 }
 

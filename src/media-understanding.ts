@@ -23,16 +23,20 @@ async function transcribeAudioAttachment(
 ): Promise<DerivedText | undefined> {
 	if (!attachment.localPath || !attachment.mimeType?.startsWith("audio/")) return undefined;
 	const apiKey = process.env[config.mediaUnderstanding.audio.apiKeyEnv];
-	if (!apiKey) return undefined;
+	if (!apiKey) {
+		console.warn(`media understanding skipped: ${config.mediaUnderstanding.audio.apiKeyEnv} is not set`);
+		return undefined;
+	}
 	const form = new FormData();
 	form.set("model", config.mediaUnderstanding.audio.model);
-	form.set("file", new Blob([await readFile(attachment.localPath)]), attachment.name);
+	form.set("file", new Blob([await readFile(attachment.localPath)], { type: attachment.mimeType }), attachment.name);
 	const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
 		method: "POST",
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
 		},
 		body: form,
+		signal: AbortSignal.timeout(30_000),
 	});
 	if (!response.ok) throw new Error(`Groq transcription failed: HTTP ${response.status}`);
 	const parsed = (await response.json()) as { text?: string };
@@ -52,7 +56,10 @@ async function summarizeVideoAttachment(
 ): Promise<DerivedText | undefined> {
 	if (!attachment.localPath || !attachment.mimeType?.startsWith("video/")) return undefined;
 	const apiKey = process.env[config.mediaUnderstanding.video.apiKeyEnv];
-	if (!apiKey) return undefined;
+	if (!apiKey) {
+		console.warn(`media understanding skipped: ${config.mediaUnderstanding.video.apiKeyEnv} is not set`);
+		return undefined;
+	}
 	const ai = new GoogleGenAI({ apiKey });
 	const video = await readFile(attachment.localPath);
 	const response = await ai.models.generateContent({

@@ -281,13 +281,14 @@ export async function promptImagesFromAttachments(attachments: StoredAttachment[
 export function promptAttachmentNotes(attachments: StoredAttachment[]): string {
 	return attachments
 		.map((attachment) => {
+			const attrs = `name="${attachment.name}" id="${attachment.id}" kind="${attachment.kind ?? "file"}" mime="${attachment.mimeType ?? "unknown"}" size="${attachment.size ?? "unknown"}"`;
 			const derivedText = attachment.derived?.text?.text;
 			if (derivedText) {
 				const label =
 					attachment.derived?.text?.label || (attachment.kind === "audio" ? "transcription" : "summary");
-				return `<attachment name="${attachment.name}" mime="${attachment.mimeType}">[${label}: ${derivedText}]</attachment>`;
+				return `<attachment ${attrs}>[${label}: ${derivedText}]</attachment>`;
 			}
-			return `<attachment name="${attachment.name}" kind="${attachment.kind ?? "file"}" mime="${attachment.mimeType ?? "unknown"}" size="${attachment.size ?? "unknown"}"></attachment>`;
+			return `<attachment ${attrs}></attachment>`;
 		})
 		.join("\n")
 		.trim();

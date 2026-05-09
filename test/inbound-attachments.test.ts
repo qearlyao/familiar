@@ -18,6 +18,10 @@ function pngBytes(): Buffer {
 	);
 }
 
+function mp4Bytes(): Buffer {
+	return Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from("ftypmp42", "ascii"), Buffer.alloc(16)]);
+}
+
 describe("inbound attachments", () => {
 	it("materializes image attachments with canonical extensions and derived metadata", async () => {
 		const dataDir = await createTempDataDir();
@@ -135,6 +139,59 @@ describe("inbound attachments", () => {
 			globalThis.fetch = previousFetch;
 			if (previousGroq === undefined) delete process.env.GROQ_API_KEY;
 			else process.env.GROQ_API_KEY = previousGroq;
+		}
+	});
+
+	it("summarizes video attachments through the configured Gemini base URL", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = (async (input) => {
+			requestedUrls.push(String(input));
+			return new Response(
+				JSON.stringify({
+					candidates: [
+						{
+							content: { parts: [{ text: "A short clip with visible motion." }] },
+							finishReason: "STOP",
+							index: 0,
+						},
+					],
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
+		}) as typeof fetch;
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "summary");
+			assert.equal(attachments[0]?.derived?.text?.text, "A short clip with visible motion.");
+			assert.equal(requestedUrls.length, 1);
+			assert.match(
+				requestedUrls[0] ?? "",
+				/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/,
+			);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
 		}
 	});
 });

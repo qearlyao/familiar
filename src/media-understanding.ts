@@ -4,8 +4,10 @@ import { createPartFromBase64, createUserContent, GoogleGenAI } from "@google/ge
 
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
+import { parseModelRef, resolveModel } from "./models.js";
 
 type DerivedText = NonNullable<StoredAttachment["derived"]>["text"];
+const GEMINI_API_VERSION_PATTERN = /\/(v1(?:beta|alpha)?|v\d+beta\d*)\/?$/;
 
 function normalizeDerivedText(text: string): string {
 	return text.trim().replace(/\n{3,}/g, "\n\n");
@@ -15,6 +17,20 @@ function labelForAttachment(kind: StoredAttachment["kind"]): string {
 	if (kind === "audio") return "transcription";
 	if (kind === "video") return "summary";
 	return "text";
+}
+
+function geminiHttpOptions(config: Config): { baseUrl?: string; apiVersion?: string; timeout: number } {
+	const ref = parseModelRef(`google/${config.mediaUnderstanding.video.model}`);
+	const model = ref ? resolveModel(ref, config) : undefined;
+	const baseUrl = model?.baseUrl;
+	if (!baseUrl) return { timeout: 60_000 };
+	const match = baseUrl.match(GEMINI_API_VERSION_PATTERN);
+	if (!match) return { baseUrl, timeout: 60_000 };
+	return {
+		baseUrl: baseUrl.slice(0, match.index),
+		apiVersion: match[1],
+		timeout: 60_000,
+	};
 }
 
 async function transcribeAudioAttachment(
@@ -60,7 +76,7 @@ async function summarizeVideoAttachment(
 		console.warn(`media understanding skipped: ${config.mediaUnderstanding.video.apiKeyEnv} is not set`);
 		return undefined;
 	}
-	const ai = new GoogleGenAI({ apiKey });
+	const ai = new GoogleGenAI({ apiKey, httpOptions: geminiHttpOptions(config) });
 	const video = await readFile(attachment.localPath);
 	const response = await ai.models.generateContent({
 		model: config.mediaUnderstanding.video.model,

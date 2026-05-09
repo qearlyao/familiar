@@ -23,6 +23,7 @@ import {
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { createTtsTool } from "./tts.js";
+import { createWebTools, webContentWarning } from "./web-tools.js";
 
 export interface FamiliarAgentReply {
 	text: string;
@@ -248,12 +249,13 @@ function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): Age
 		createWriteTool(config.workspacePath),
 		createEditTool(config.workspacePath),
 		createTtsTool(config, mediaSink),
+		...createWebTools(config),
 	];
 }
 
 export async function createFamiliarAgent(config: Config, settings: SettingsStore): Promise<FamiliarAgent> {
 	const persona = await loadPersona(config);
-	const systemPrompt = buildSystemPrompt(persona);
+	const systemPrompt = [buildSystemPrompt(persona), webContentWarning()].join("\n\n");
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");

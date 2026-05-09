@@ -34,6 +34,10 @@ const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }> = {
 		api: "openai-responses",
 		baseUrl: "https://api.openai.com/v1",
 	},
+	groq: {
+		api: "openai-completions",
+		baseUrl: "https://api.groq.com/openai/v1",
+	},
 };
 
 export function parseModelRef(value: string): ModelRef | undefined {

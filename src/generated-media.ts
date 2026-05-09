@@ -68,11 +68,7 @@ export async function cleanupGeneratedAttachments(config: Config, now = Date.now
 export function publicAttachmentPath(config: Config, localPath: string): string {
 	const absolutePath = resolve(localPath);
 	const generatedRelativePath = relative(generatedAttachmentsDir(config), absolutePath);
-	if (
-		generatedRelativePath &&
-		!generatedRelativePath.startsWith("..") &&
-		!isAbsolute(generatedRelativePath)
-	) {
+	if (generatedRelativePath && !generatedRelativePath.startsWith("..") && !isAbsolute(generatedRelativePath)) {
 		return `/api/web/attachments/${generatedRelativePath
 			.split(/[\\/]+/)
 			.map(encodeURIComponent)

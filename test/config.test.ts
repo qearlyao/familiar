@@ -123,4 +123,22 @@ retention_days = 7
 
 		assert.equal(config.media.generatedRetentionDays, 7);
 	});
+
+	it("loads media understanding defaults", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(minimalConfigToml());
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.mediaUnderstanding.audio, {
+			provider: "groq",
+			model: "whisper-large-v3",
+			apiKeyEnv: "GROQ_API_KEY",
+		});
+		assert.deepEqual(config.mediaUnderstanding.video, {
+			provider: "google",
+			model: "gemini-3-flash-preview",
+			apiKeyEnv: "GEMINI_API_KEY",
+		});
+	});
 });

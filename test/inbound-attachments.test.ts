@@ -107,4 +107,34 @@ describe("inbound attachments", () => {
 		assert.equal(result.images.length, 1);
 		assert.match(result.promptSuffix, /photo\.png/);
 	});
+
+	it("preserves derived attachment text during materialization", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir);
+		const previousFetch = globalThis.fetch;
+		const previousGroq = process.env.GROQ_API_KEY;
+		process.env.GROQ_API_KEY = "groq-test";
+		globalThis.fetch = (async () =>
+			new Response(JSON.stringify({ text: "transcribed words" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			})) as typeof fetch;
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp3",
+					mimeType: "audio/mpeg",
+					buffer: Buffer.from([0xff, 0xfb, 0x90, 0x64]),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "transcription");
+			assert.equal(attachments[0]?.derived?.text?.text, "transcribed words");
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGroq === undefined) delete process.env.GROQ_API_KEY;
+			else process.env.GROQ_API_KEY = previousGroq;
+		}
+	});
 });

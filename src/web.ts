@@ -15,7 +15,7 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-l
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
-import { materializeInboundAttachments } from "./inbound-attachments.js";
+import { materializeInboundAttachments, promptAttachmentNotes } from "./inbound-attachments.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -151,14 +151,8 @@ function webAttachments(config: Config, attachments: StoredAttachment[] | undefi
 	}));
 }
 
-function promptAttachmentNotes(attachments: StoredAttachment[]): string {
-	return attachments
-		.map(
-			(attachment) =>
-				`[attachment ${attachment.name} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}]`,
-		)
-		.join("\n")
-		.trim();
+function attachmentDerivedText(attachment: StoredAttachment): string | undefined {
+	return attachment.derived?.text?.text;
 }
 
 function toolError(result: unknown): string | undefined {
@@ -298,11 +292,15 @@ function webMessagesFromRecords(
 function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantName: string): WebMessage | undefined {
 	if (!isUserVisibleRuntimeRecord(record)) return undefined;
 	if (record.type === "inbound") {
+		const attachmentText = record.attachments
+			.map((attachment) => attachmentDerivedText(attachment))
+			.filter((text): text is string => !!text)
+			.join("\n");
 		return {
 			id: record.messageId,
 			role: "user",
 			who: record.authorName || WEB_USER_NAME,
-			text: record.text,
+			text: [record.text, attachmentText].filter(Boolean).join("\n"),
 			attachments: webAttachments(config, record.attachments),
 			ts: toUnixMs(record.ts),
 		};

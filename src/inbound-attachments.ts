@@ -7,6 +7,7 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
+import { deriveInboundAttachmentText } from "./media-understanding.js";
 
 export const MAX_INBOUND_ATTACHMENTS = 4;
 export const MAX_INBOUND_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -61,7 +62,9 @@ const EXTENSIONS_BY_MIME: Record<string, string> = {
 };
 
 function safeName(name: string | undefined, fallback: string): string {
-	const base = basename(name || fallback).replace(/[^A-Za-z0-9._=-]+/g, "_").slice(0, 120);
+	const base = basename(name || fallback)
+		.replace(/[^A-Za-z0-9._=-]+/g, "_")
+		.slice(0, 120);
 	return base || fallback;
 }
 
@@ -86,12 +89,21 @@ function sniffMimeType(buffer: Buffer, declared?: string): string {
 	if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) detected = "image/jpeg";
 	else if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
 		detected = "image/png";
-	} else if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") {
+	} else if (
+		buffer.subarray(0, 6).toString("ascii") === "GIF87a" ||
+		buffer.subarray(0, 6).toString("ascii") === "GIF89a"
+	) {
 		detected = "image/gif";
-	} else if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+	} else if (
+		buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+		buffer.subarray(8, 12).toString("ascii") === "WEBP"
+	) {
 		detected = "image/webp";
 	} else if (buffer.subarray(0, 4).toString("ascii") === "%PDF") detected = "application/pdf";
-	else if (buffer.subarray(0, 3).toString("ascii") === "ID3" || buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfb]))) {
+	else if (
+		buffer.subarray(0, 3).toString("ascii") === "ID3" ||
+		buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfb]))
+	) {
 		detected = "audio/mpeg";
 	} else if (buffer.subarray(0, 4).toString("ascii") === "OggS") detected = "audio/ogg";
 	else if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WAVE") {
@@ -230,7 +242,7 @@ export async function materializeInboundAttachments(
 			};
 			stored.push(finalAttachment);
 		}
-		return stored;
+		return await deriveInboundAttachmentText(config, stored);
 	} catch (error) {
 		await Promise.all(writtenPaths.map((path) => unlink(path).catch(() => undefined)));
 		throw error;
@@ -264,6 +276,21 @@ export async function promptImagesFromAttachments(attachments: StoredAttachment[
 		images,
 		promptSuffix: notes.join("\n"),
 	};
+}
+
+export function promptAttachmentNotes(attachments: StoredAttachment[]): string {
+	return attachments
+		.map((attachment) => {
+			const derivedText = attachment.derived?.text?.text;
+			if (derivedText) {
+				const label =
+					attachment.derived?.text?.label || (attachment.kind === "audio" ? "transcription" : "summary");
+				return `<attachment name="${attachment.name}" mime="${attachment.mimeType}">[${label}: ${derivedText}]</attachment>`;
+			}
+			return `<attachment name="${attachment.name}" kind="${attachment.kind ?? "file"}" mime="${attachment.mimeType ?? "unknown"}" size="${attachment.size ?? "unknown"}"></attachment>`;
+		})
+		.join("\n")
+		.trim();
 }
 
 export function publicInboundAttachmentPath(config: Config, localPath: string): string {

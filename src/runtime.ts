@@ -85,10 +85,10 @@ function formatPromptRecord(record: InboundChatRecord): string {
 		: `uid:${record.authorId}`;
 	const attachmentText = record.attachments.length
 		? `\n${record.attachments
-				.map(
-					(attachment) =>
-						`[attachment ${attachment.name} id:${attachment.id} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}]`,
-				)
+				.map((attachment) => {
+					const derived = attachment.derived?.text?.text ? ` derived:${attachment.derived.text.text}` : "";
+					return `[attachment ${attachment.name} id:${attachment.id} kind:${attachment.kind ?? "file"} mime:${attachment.mimeType ?? "unknown"} size:${attachment.size ?? "unknown"}${derived}]`;
+				})
 				.join("\n")}`
 		: "";
 	return `[${author} @ ${record.ts}] ${text}${attachmentText}`;

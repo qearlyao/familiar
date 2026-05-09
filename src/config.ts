@@ -12,6 +12,7 @@ export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
+export type MediaUnderstandingProvider = "groq" | "google";
 
 export interface TtsVoiceSettings {
 	stability: number;
@@ -65,6 +66,18 @@ export interface Config {
 		outputFormat: string;
 		maxInputChars: number;
 		voiceSettings: TtsVoiceSettings;
+	};
+	mediaUnderstanding: {
+		audio: {
+			provider: MediaUnderstandingProvider;
+			model: string;
+			apiKeyEnv: string;
+		};
+		video: {
+			provider: MediaUnderstandingProvider;
+			model: string;
+			apiKeyEnv: string;
+		};
 	};
 	persona: {
 		soul: string;
@@ -176,6 +189,11 @@ function readTtsProvider(value: unknown): TtsProvider {
 	throw new Error('Config value tts.provider must be "elevenlabs"');
 }
 
+function readMediaUnderstandingProvider(value: unknown): MediaUnderstandingProvider {
+	if (value === "groq" || value === "google") return value;
+	throw new Error('Config value media_understanding provider must be "groq" or "google"');
+}
+
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
 	if (typeof value === "boolean") return value;
@@ -228,6 +246,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
 	const media = (parsed.media ?? {}) as Record<string, unknown>;
 	const generatedMedia = (media.generated ?? {}) as Record<string, unknown>;
+	const mediaUnderstanding = (media.understanding ?? {}) as Record<string, unknown>;
+	const mediaUnderstandingAudio = (mediaUnderstanding.audio ?? {}) as Record<string, unknown>;
+	const mediaUnderstandingVideo = (mediaUnderstanding.video ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 
@@ -308,6 +329,18 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					true,
 					"tts.voice_settings.use_speaker_boost",
 				),
+			},
+		},
+		mediaUnderstanding: {
+			audio: {
+				provider: readMediaUnderstandingProvider(readOptionalString(mediaUnderstandingAudio.provider, "groq")),
+				model: readOptionalString(mediaUnderstandingAudio.model, "whisper-large-v3"),
+				apiKeyEnv: readOptionalString(mediaUnderstandingAudio.api_key_env, "GROQ_API_KEY"),
+			},
+			video: {
+				provider: readMediaUnderstandingProvider(readOptionalString(mediaUnderstandingVideo.provider, "google")),
+				model: readOptionalString(mediaUnderstandingVideo.model, "gemini-3-flash-preview"),
+				apiKeyEnv: readOptionalString(mediaUnderstandingVideo.api_key_env, "GEMINI_API_KEY"),
 			},
 		},
 		persona: {

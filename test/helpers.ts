@@ -55,6 +55,10 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			agent: { ...config.agent, ...overrides.agent },
 			models: { ...config.models, ...overrides.models },
 			tts: { ...config.tts, ...overrides.tts },
+			mediaUnderstanding: {
+				audio: { ...config.mediaUnderstanding.audio, ...overrides.mediaUnderstanding?.audio },
+				video: { ...config.mediaUnderstanding.video, ...overrides.mediaUnderstanding?.video },
+			},
 			persona: { ...config.persona, ...overrides.persona },
 			media: { ...config.media, ...overrides.media },
 			workspace: { ...config.workspace, ...overrides.workspace, dataDir },

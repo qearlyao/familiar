@@ -28,6 +28,12 @@ export interface StoredAttachment {
 	sourceUrl?: string;
 	sha256?: string;
 	derived?: {
+		text?: {
+			provider: string;
+			model: string;
+			text: string;
+			label?: string;
+		};
 		image?: {
 			localPath?: string;
 			mimeType: string;

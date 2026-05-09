@@ -64,6 +64,16 @@ use_speaker_boost = true
 [media.generated]
 retention_days = 30
 
+[media.understanding.audio]
+provider = "groq"
+model = "whisper-large-v3"
+api_key_env = "GROQ_API_KEY"
+
+[media.understanding.video]
+provider = "google"
+model = "gemini-3-flash-preview"
+api_key_env = "GEMINI_API_KEY"
+
 [persona]
 soul = "SOUL.md"
 user = "USER.md"

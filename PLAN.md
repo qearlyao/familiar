@@ -166,7 +166,7 @@ Status: shipped enough for current development. Keep details in git history and 
 - Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
 - Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
-- Stage 6 Media Intake v0: shipped shared inbound attachment metadata/storage, safe Discord/Web upload intake, pure-attachment routing, image prompt assembly, WebUI media rendering, and focused tests.
+- Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
 
 Still open from completed foundations:
 
@@ -215,22 +215,7 @@ Done when:
 
 ### Stage 6: Media Intake
 
-Status: v0 is done. The shipped path covers durable inbound attachment records, safe Discord/Web intake, pure-attachment routing, direct image prompt assembly, WebUI media rendering, and focused storage/prompt tests.
-
-Next Steps:
-
-- Add media understanding for audio/video attachments.
-  - Audio: when a Discord/Web user sends a voice/audio attachment, run STT automatically and inject a transcript message alongside the attachment reference, e.g. `audio path` plus `transcription: ...`.
-  - Audio config: add a configurable STT model/provider section. Default provider should be Groq; users only need to configure model and API key/env.
-  - Video: when a Discord/Web user sends a video attachment, run video understanding automatically and inject a concise derived description/transcript/summary alongside the attachment reference.
-  - Video config: default provider should be Gemini, reusing the existing Gemini provider/base URL/API-key configuration where possible. User only needs to configure model; default model is `gemini-3-flash-preview`.
-  - Persist derived transcript/summary metadata with the attachment/chat record so WebUI can display both the original media and the model-derived text, while logs/transcript remain path/metadata oriented.
-
-Done when:
-
-- Voice/audio attachments produce a persisted transcript and the agent responds with that transcript in context.
-- Video attachments produce a persisted Gemini-derived summary/transcript/description and the agent responds with that derived media context.
-- Discord and WebUI both show the original media attachment plus the derived understanding text without destabilizing message flow.
+Status: done. Completed media intake and media understanding work is archived above; deferred follow-ups remain below.
 
 Stage 6 follow-ups (deferred from v0):
 

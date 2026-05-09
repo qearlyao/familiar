@@ -28,4 +28,116 @@ describe("web tools", () => {
 
 		assert.equal(parsed.content, "# Title\n\nBody");
 	});
+
+	it("parses TinyFish live API text-shaped results", () => {
+		const parsed = __webToolsTest.parseTinyfishResponse({
+			results: [
+				{
+					url: "https://example.com",
+					final_url: "https://example.com/",
+					title: "Example Domain",
+					text: "This domain is for use in documentation examples.\n\nLearn more",
+					format: "markdown",
+				},
+			],
+			errors: [],
+		});
+
+		assert.equal(parsed.content, "This domain is for use in documentation examples.\n\nLearn more");
+	});
+
+	it("rejects unsafe fetch URLs", () => {
+		const blocked = [
+			"ftp://example.com",
+			"http://user:pass@example.com",
+			"http://localhost",
+			"http://metadata.google.internal",
+			"http://169.254.169.254/latest/meta-data",
+			"http://[::1]/",
+			"http://2130706433",
+			"http://0x7f000001",
+			"http://0177.0.0.1",
+		];
+
+		for (const url of blocked) {
+			assert.throws(() => __webToolsTest.validateFetchUrl(url), /Invalid URL|Blocked URL/);
+		}
+	});
+
+	it("normalizes and validates search domain filters", () => {
+		assert.deepEqual(__webToolsTest.normalizeDomains([" Example.COM ", "docs.example.com"]), [
+			"example.com",
+			"docs.example.com",
+		]);
+		assert.throws(() => __webToolsTest.normalizeDomains(["https://example.com"]), /Invalid domain/);
+		assert.throws(() => __webToolsTest.normalizeDomains(["example.com/path"]), /Invalid domain/);
+		assert.throws(() => __webToolsTest.normalizeDomains(["example.com:443"]), /Invalid domain/);
+	});
+
+	it("does not route multi-domain searches to Brave", () => {
+		const brave = __webToolsTest.createTestSearchProvider("brave", ["search", "freshness"]);
+		const tavily = __webToolsTest.createTestSearchProvider("tavily", ["search", "content", "domainFilter"]);
+
+		const providers = __webToolsTest.resolveSearchProviders(
+			{ depth: "basic", domains: ["a.example", "b.example"] },
+			{ brave, tavily },
+		);
+
+		assert.deepEqual(
+			providers.map((provider) => provider.name),
+			["tavily"],
+		);
+	});
+
+	it("keeps page cache entries hot on repeated reads", () => {
+		const cache = new __webToolsTest.PageCache({ ttlMs: 100, capacity: 2 });
+		cache.set("https://example.com/a", "a", "tinyfish");
+		const firstFetchedAt = cache.entries.get("https://example.com/a")?.fetchedAt ?? 0;
+
+		const entry = cache.get("https://example.com/a");
+
+		assert.equal(entry?.content, "a");
+		assert.ok((cache.entries.get("https://example.com/a")?.fetchedAt ?? 0) >= firstFetchedAt);
+	});
+
+	it("paginates content and reports offsets past the end", () => {
+		assert.deepEqual(__webToolsTest.paginateContent("abcdef", 2, 3), {
+			text: "cde",
+			offset: 2,
+			returnedChars: 3,
+			totalChars: 6,
+			nextOffset: 5,
+			hasMore: true,
+		});
+		assert.deepEqual(__webToolsTest.paginateContent("abc", 10, 3), {
+			text: "",
+			offset: 10,
+			returnedChars: 0,
+			totalChars: 3,
+			hasMore: false,
+		});
+	});
+
+	it("normalizes provider result payloads", () => {
+		assert.equal(
+			__webToolsTest.parseBraveResults({
+				web: { results: [{ title: "A", url: "https://example.com", description: "Hello world" }] },
+			})[0]?.title,
+			"A",
+		);
+		assert.equal(
+			__webToolsTest.parseExaResults(
+				{ results: [{ title: "B", url: "https://example.com", text: "Long body" }] },
+				true,
+			)[0]?.content,
+			"Long body",
+		);
+		assert.equal(
+			__webToolsTest.parseTavilyResults(
+				{ results: [{ title: "C", url: "https://example.com", raw_content: "Markdown body" }] },
+				true,
+			)[0]?.content,
+			"Markdown body",
+		);
+	});
 });

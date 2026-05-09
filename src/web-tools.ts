@@ -142,15 +142,23 @@ class ProviderError extends Error {
 }
 
 class PageCache {
+	readonly ttlMs: number;
+	readonly capacity: number;
 	readonly entries = new Map<string, PageCacheEntry>();
+
+	constructor(options: { ttlMs?: number; capacity?: number } = {}) {
+		this.ttlMs = options.ttlMs ?? 5 * 60 * 1000;
+		this.capacity = options.capacity ?? 20;
+	}
 
 	get(url: string): PageCacheEntry | undefined {
 		const entry = this.entries.get(url);
 		if (!entry) return undefined;
-		if (Date.now() - entry.fetchedAt > 5 * 60 * 1000) {
+		if (Date.now() - entry.fetchedAt > this.ttlMs) {
 			this.entries.delete(url);
 			return undefined;
 		}
+		entry.fetchedAt = Date.now();
 		this.entries.delete(url);
 		this.entries.set(url, entry);
 		return entry;
@@ -164,7 +172,7 @@ class PageCache {
 			provider,
 			fetchedAt: Date.now(),
 		});
-		while (this.entries.size > 20) {
+		while (this.entries.size > this.capacity) {
 			const oldest = this.entries.keys().next().value as string | undefined;
 			if (!oldest) break;
 			this.entries.delete(oldest);
@@ -254,6 +262,7 @@ async function fetchJson<T>(
 			method: options.method ?? "GET",
 			headers: options.headers,
 			body: options.body,
+			redirect: "error",
 			signal: buildRequestSignal(options.signal, options.timeoutMs),
 		});
 		if (!response.ok) throw createHttpError(provider, response);
@@ -287,6 +296,7 @@ async function fetchText(
 		const response = await fetch(url, {
 			method: "GET",
 			headers: options.headers,
+			redirect: "error",
 			signal: buildRequestSignal(options.signal, options.timeoutMs),
 		});
 		if (!response.ok) throw createHttpError(provider, response);
@@ -892,10 +902,7 @@ function collectSearchNotes(requested: SearchDepth, served: SearchDepth, notes: 
 	return [...new Set(notes)];
 }
 
-function searchProviderOrder(
-	depth: SearchDepth,
-	args: { freshness?: SearchFreshness; domains?: string[] },
-): SearchProviderName[] {
+function searchProviderOrder(depth: SearchDepth, args: { domains?: string[] }): SearchProviderName[] {
 	if (depth === "thorough") return ["tavily", "exa", "brave"];
 	if (args.domains?.length) return ["tavily", "exa", "brave"];
 	return ["brave", "tavily", "exa"];
@@ -904,6 +911,18 @@ function searchProviderOrder(
 function canServe(provider: SearchProvider, depth: SearchDepth): boolean {
 	if (depth === "thorough") return provider.capabilities.has("search") && provider.capabilities.has("content");
 	return provider.capabilities.has("search");
+}
+
+function canServeSearchArgs(
+	provider: SearchProvider,
+	args: {
+		depth: SearchDepth;
+		domains?: string[];
+	},
+): boolean {
+	if (!canServe(provider, args.depth)) return false;
+	if ((args.domains?.length ?? 0) > 1 && !provider.capabilities.has("domainFilter")) return false;
+	return true;
 }
 
 function resolveSearchProviders(
@@ -917,7 +936,7 @@ function resolveSearchProviders(
 	const providers: SearchProvider[] = [];
 	for (const name of searchProviderOrder(args.depth, args)) {
 		const candidate = searchProviders[name];
-		if (candidate && canServe(candidate, args.depth) && !providers.includes(candidate)) {
+		if (candidate && canServeSearchArgs(candidate, args) && !providers.includes(candidate)) {
 			providers.push(candidate);
 		}
 	}
@@ -1086,17 +1105,35 @@ function createFetchProviders(config: LoadedConfig): FetchProvider[] {
 	return providers;
 }
 
+function createTestSearchProvider(name: SearchProviderName, capabilities: SearchCapability[]): SearchProvider {
+	return {
+		name,
+		capabilities: new Set(capabilities),
+		async search() {
+			return { results: [] };
+		},
+	};
+}
+
 export function webContentWarning(): string {
 	return WEB_UNTRUSTED_PROMPT;
 }
 
-export function createWebTools(config: Config): AgentTool<any>[] {
+export function createWebTools(_config: Config): AgentTool<any>[] {
 	const loaded = loadWebConfig();
-	void config;
 	return [makeSearchTool(loaded), makeFetchTool(loaded)];
 }
 
 export const __webToolsTest = {
+	PageCache,
+	createTestSearchProvider,
 	createFetchProviders,
+	normalizeDomains,
+	parseBraveResults,
+	parseExaResults,
+	parseTavilyResults,
 	parseTinyfishResponse,
+	paginateContent,
+	resolveSearchProviders,
+	validateFetchUrl,
 };

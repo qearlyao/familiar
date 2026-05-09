@@ -354,6 +354,10 @@ Fix when needed, in increasing invasiveness:
 **`/new` reset boundary in WebUI — visual divider, not clear.**
 Today `/new` resets agent context (`armedAfterRecordId` in `src/runtime.ts:514`) but leaves prior messages visible in the WebUI, which can feel like nothing happened. Lightest fix: when the WebSocket sees a `runtime/reset` event, insert a `── new conversation ──` separator in the message list. Don't actually clear — let the user scroll back to prior turns. Cheap, signals the boundary, no state migration.
 
+**`/new` transcript reset marker — persist even before agent load.**
+Today `familiarAgent.reset(sessionKey)` returns early when the agent session is not already loaded in memory, so `/new` can reset the chat runtime without writing an agent transcript reset marker. That can let an agent created later replay old pre-`/new` transcript messages after a process restart or fresh session.
+Fix when needed: make reset marker writing independent from the in-memory `Agent` instance, then reset live agent state only when a session is already loaded.
+
 ## 6. Reference Index
 
 Use `rg` first. Open only the target file/range you need.

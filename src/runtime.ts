@@ -79,13 +79,35 @@ function formatAuthor(authorName: string | undefined, authorId: string): string 
 	return authorName ? `${authorName} (uid:${authorId})` : `uid:${authorId}`;
 }
 
+function formatLocalTimestamp(ts: string): string {
+	const date = new Date(ts);
+	if (Number.isNaN(date.getTime())) return ts;
+	const offsetMinutes = -date.getTimezoneOffset();
+	const sign = offsetMinutes >= 0 ? "+" : "-";
+	const absolute = Math.abs(offsetMinutes);
+	const hours = Math.floor(absolute / 60);
+	const minutes = absolute % 60;
+	const offset = minutes === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${String(minutes).padStart(2, "0")}`;
+	const local = [
+		date.getFullYear(),
+		String(date.getMonth() + 1).padStart(2, "0"),
+		String(date.getDate()).padStart(2, "0"),
+	].join("-");
+	const time = [
+		String(date.getHours()).padStart(2, "0"),
+		String(date.getMinutes()).padStart(2, "0"),
+		String(date.getSeconds()).padStart(2, "0"),
+	].join(":");
+	return `${local} ${time} ${offset}`;
+}
+
 function formatPromptRecord(record: InboundChatRecord): string {
 	const text = record.text.trim() || "(no text)";
 	const author = record.authorName?.trim()
 		? `${record.authorName.trim()} uid:${record.authorId}`
 		: `uid:${record.authorId}`;
 	const attachmentText = record.attachments.length ? `\n${promptAttachmentNotes(record.attachments)}` : "";
-	return `[${author} @ ${record.ts}] ${text}${attachmentText}`;
+	return `[${author} @ ${formatLocalTimestamp(record.ts)}] ${text}${attachmentText}`;
 }
 
 function getTriggerRecord(records: ChatLogRecord[], job: QueuedJob): InboundChatRecord | undefined {
@@ -558,7 +580,7 @@ export class ConversationRuntime {
 	}
 
 	formatInboundForLog(record: InboundChatRecord): string {
-		return `${formatAuthor(record.authorName, record.authorId)} @ ${record.ts}: ${record.text}`;
+		return `${formatAuthor(record.authorName, record.authorId)} @ ${formatLocalTimestamp(record.ts)}: ${record.text}`;
 	}
 
 	getRecords(): readonly ChatLogRecord[] {

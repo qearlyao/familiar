@@ -15,7 +15,7 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-l
 import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
-import { materializeInboundAttachments, promptAttachmentNotes } from "./inbound-attachments.js";
+import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -541,25 +541,17 @@ export async function startWebDaemon(
 		let started = false;
 		let reply: Awaited<ReturnType<typeof discordDaemon.runPromptForWeb>>;
 		try {
-			const promptNotes = attachments.length > 0 ? promptAttachmentNotes(attachments) : "";
-			const promptInput = [prompt, promptNotes].filter(Boolean).join("\n");
-			reply = await discordDaemon.runPromptForWeb(
-				runtime,
-				jobId,
-				promptInput,
-				attachments,
-				async (event: AgentEvent) => {
-					if (event.type === "message_start" && event.message.role === "assistant" && !started) {
-						started = true;
-					}
-					updateAgentEventSummary(summary, event);
-					const storedEvent = storedAgentEventFromAgentEvent(event);
-					if (storedEvent) {
-						runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
-						await recorder.record(storedEvent);
-					}
-				},
-			);
+			reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, attachments, async (event: AgentEvent) => {
+				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+					started = true;
+				}
+				updateAgentEventSummary(summary, event);
+				const storedEvent = storedAgentEventFromAgentEvent(event);
+				if (storedEvent) {
+					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+					await recorder.record(storedEvent);
+				}
+			});
 		} finally {
 			await recorder.flush();
 		}

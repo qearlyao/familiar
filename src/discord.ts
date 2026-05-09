@@ -32,11 +32,7 @@ import {
 import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
-import {
-	materializeInboundAttachments,
-	promptAttachmentNotes,
-	promptImagesFromAttachments,
-} from "./inbound-attachments.js";
+import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
@@ -345,11 +341,6 @@ async function sendReply(
 	return sentIds;
 }
 
-function attachmentTextForDiscord(attachments: StoredAttachment[]): string {
-	const notes = promptAttachmentNotes(attachments);
-	return notes ? `\n${notes}` : "";
-}
-
 type DiscordInteractionChannel = NonNullable<
 	ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]
 >;
@@ -627,9 +618,7 @@ export async function startDiscordDaemon(
 			activeAgentOwner = runtime.channelKey;
 			try {
 				const promptImages = await promptImagesFromAttachments(attachments);
-				const input = [prompt, promptImages.promptSuffix, attachmentTextForDiscord(attachments)]
-					.filter(Boolean)
-					.join("\n");
+				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
 				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent);
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;

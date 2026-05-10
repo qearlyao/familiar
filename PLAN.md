@@ -32,8 +32,8 @@ Important caution:
 - Keep direct `Agent` as Familiar's runtime. Do not reinstate `AgentSession` just to get skills.
 - Do not use upstream lossy auto-compaction as Familiar's memory system. Familiar owns LCM plus diary RAG through `Agent.transformContext`.
 - Reuse pi's standalone skill loader/formatter for progressive instructions: the agent sees skill name/description/path, then uses `read` to load `SKILL.md` only when needed.
-- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, and one global `MEMORY.md`. Upstream does not know these names.
-- `MEMORY.md` is small and durable. Episodic recall belongs in LCM and diary RAG.
+- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, `MEMORY.md`, and `INNER.md`. Upstream does not know these names. `SOUL.md` and `USER.md` are qearl-edited; `MEMORY.md` and `INNER.md` are agent-edited.
+- `MEMORY.md` holds durable load-bearing facts. `INNER.md` holds the agent's current felt interior, updated by the agent on heartbeat fires. Episodic recall belongs in diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
   - Use Familiar-owned `web_search` and `web_fetch` for open-web lookup/reading; keep provider credentials in env.
@@ -120,34 +120,35 @@ Runtime and packaging:
 - Main daemon: one `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, main agent, media workers, memory workers, embeddings, attachment writer, queues. Subagents can be added later.
 - Dev: `familiar run <workspace>`.
 - Prod: `familiar install-service <workspace>` eventually writes systemd or launchd config.
-- Workspace layout: `<workspace>/config.toml`, `.env`, `SOUL.md`, `USER.md`, `MEMORY.md`, `data/`, `attachments/`, `logs/`.
+- Workspace layout: `<workspace>/config.toml`, `.env`, `SOUL.md`, `USER.md`, `MEMORY.md`, `INNER.md`, `memories/`, `data/`, `attachments/`, `logs/`.
 - Prefer npm package first. Single-binary/Docker can be revisited later.
 
 ## 4. Memory Model
 
-Tier 1: stable prompt files.
+Tier 1: stable prompt files in the cached prefix.
 
 - `SOUL.md`: persona, qearl-edited.
 - `USER.md`: about qearl, qearl-edited.
-- `MEMORY.md`: durable load-bearing facts, agent may edit via upstream filesystem tools.
-- Failure mode: bloat. Keep it short.
+- `MEMORY.md`: durable load-bearing facts, agent-edited via upstream filesystem tools.
+- `INNER.md`: agent's current felt interior — mood, what it's been carrying, current curiosities, current shape of the relationship. Agent-edited; updated by the agent on heartbeat fires (Stage 9). Load-bearing specifically post-`/new` and at fresh sessions, where it's the difference between "neutral assistant" and "still myself, still carrying yesterday."
+- Failure mode: bloat. Keep all four short.
 
 Tier 2: LCM, today's lossless-ish context engine.
 
-- Source: per-channel append-only chat logs.
+- Source of truth: per-channel append-only chat logs remain the audit log, but they are too noisy to feed directly into LCM. Derive a normalized LCM conversation stream under `memories/lcm/` first: inbound user messages, outbound assistant messages, selected tool/result facts when useful, attachment notes, reset/control boundaries, and provenance pointers back to `data/chat`.
 - Summaries: markdown leaf/condensed summary DAG with provenance frontmatter.
-- Index: SQLite vectors for raw and summary records, internal only.
+- Index: SQLite metadata plus shared FTS/vector primitives for raw normalized records and summaries. Hybrid semantic recall is the main factual search path; exact grep is fallback/provenance.
 - Assembly: `Agent.transformContext` selects fresh tail plus minimal useful summaries. LCM may build a global companion-brain daily view, but raw source records stay per-channel.
-- Agent access: `read` and `bash grep` over logs/summaries, no special memory tool.
+- Agent access: `memory_recall` and `memory_open` for factual memory; raw logs/summaries remain greppable for debug/provenance.
 - Replaces upstream auto-compaction for Familiar.
 
 Tier 3: diary RAG, previous days.
 
-- Source: `data/diaries/YYYY-MM-DD.md`, reflective markdown, editable by qearl.
-- Written by a diary worker at end-of-day, on "good night", or explicit signal.
-- Index: diary chunks plus atomic facts, hybrid FTS/vector with recency.
-- Injection: top-K diary context through `Agent.transformContext`.
-- Durable facts discovered from diary can be promoted to `MEMORY.md`.
+- Source: `memories/diaries/YYYY-MM-DD.md`. Stage 9 heartbeat instructions own the diary's voice/format/reflection policy. Editable by qearl.
+- Written by the main agent itself when the heartbeat (Stage 9) fires with end-of-day framing. No subagent. Empty entries are valid — the agent has permission to write nothing on quiet days.
+- Index: diary chunks plus atomic facts, embedded in SQLite. Chunks tagged at write time with valence (emotional intensity).
+- Retrieval: ambient, into the volatile region of the user-message envelope each turn. Top-K (3–5) excerpts scored by `similarity + valence + recency`, optional thread-overlap boost. No LLM monitor — the main agent's reasoning is the synthesizer.
+- Durable facts discovered in diary may promote to `MEMORY.md`. Active relational arcs live in `INNER.md`, not a separate threads layer.
 
 Turn assembly:
 
@@ -231,45 +232,87 @@ Stage 6 follow-ups (deferred from v0):
 
 ### Stage 7: LCM
 
-- Per-channel raw logs under `data/chat/{channel}/{date}.jsonl`.
-- Summary DAG under `data/lcm/{date}/`.
-- SQLite vector index internal to assembler.
+- Primary reference: `lossless-claw` (`/private/tmp/familiar-research/lossless-claw`). Treat it as the design source for ordered context items, fresh-tail protection, summary DAG metadata, XML/markdown summary injection, prompt-aware eviction, deferred compaction debt, summary integrity/doctor concepts, and cache-aware timing.
+- Reuse boundary: do not depend on `@martian-engineering/lossless-claw` as a runtime package in v0. It is packaged as an OpenClaw context-engine plugin and imports OpenClaw plugin-sdk contracts. Port or adapt selected MIT modules/patterns into Familiar-owned code instead.
+- Secondary implementation reference: `pi-lcm-memory` (`/private/tmp/familiar-research/pi-lcm-memory`) for the normalized bridge/indexer shape: hook-plus-sweep ingestion, batched SQLite writes, content-hash dedupe, many-to-one source-id mappings, and graceful vector fallback.
+- Per-channel raw audit logs stay under `data/chat/{channel}/{date}.jsonl`.
+- Current log reality: `data/chat` includes lots of structural noise (`checkpoint`, `job_queued`, `job_completed`, `runtime`, and `agent_event` streaming/tool lifecycle records). It is suitable as provenance/audit input, not as direct LCM model context.
+- Add a normalized LCM source stream/table under `memories/lcm/` derived from chat/transcript logs. Keep only conversation-bearing records: inbound user text/attachments, outbound assistant text/attachments, useful tool result facts, control/reset boundaries, timestamps, channel/session/job ids, and source `recordId` pointers. Ignore streaming deltas and queue lifecycle records by default.
+- Use agent transcript logs as a secondary reconstruction source for clean `AgentMessage` content, but do not make transcripts the only source because they lack enough channel/job provenance today. They currently also drive agent replay after process restart, so short retention waits until LCM or another state source replaces that role.
+- Summary DAG under `memories/lcm/`.
+- SQLite metadata plus FTS/vector index internal to assembler. Hybrid semantic recall is the primary memory search path; exact string grep remains a fallback/debug path, not the agent's main way to find prior context.
+- LCM retrieval is factual conversation continuity: raw-ish turns, normalized records, summaries, and provenance. It covers what was said/done, especially same-day and current-thread overflow. It must not be ambiently injected as "private companion memory" by default; otherwise Familiar starts surfacing factual transcript residue when the user wanted felt/relational continuity.
 - Deferred compaction worker; do not block active turn by default.
 - `Agent.transformContext` assembles fresh tail plus summary coverage around 75% window threshold.
 - Raw logs stay per-channel and greppable. LCM can build a global daily companion-brain summary/index with channel/source provenance instead of merging raw DM/group logs.
-- File watcher re-embeds edited summaries.
+- File watcher re-indexes edited summaries.
+- Retention is required in v0: config-driven archive/prune for old `data/chat`, `data/transcripts`, `data/payloads`, plus separate `/new` boundary-based LCM pruning. `/new` starts a new LCM segment; `newSessionRetainDepth` follows upstream semantics (`-1` keeps all context, `0` drops raw messages but keeps all summaries, `2` keeps `d2+` summaries). Prune raw normalized records and summaries below the retained depth, and remove matching FTS/vector rows transactionally. LCM is not the long-term memory source; diary/INNER own long-term continuity.
+- Agent-visible tools use the `memory_` prefix, not `lcm_`. Initial tools: `memory_recall` and `memory_open`; later consider `memory_similar` or `memory_expand` only if real use shows the need.
 
 Done when:
 
 - Long same-day conversations avoid context overflow.
-- Agent can grep raw chat and read summary provenance.
+- Agent can use `memory_recall` / `memory_open` for factual conversation recall and read summary provenance.
 
-### Stage 8: Daily Diary and Cross-Session RAG
+### Stage 8: Daily Diary, INNER State, and Ambient Recall
 
-- Diary files at `data/diaries/YYYY-MM-DD.md`.
-- Diary-writer worker uses chat logs and previous diary through upstream tools. It may become a `task` subagent later, but should not block on the subagent tool.
-- Trigger at end of day, on "good night", or explicit command/signal.
-- Embed diary chunks and atomic facts.
-- Inject relevant diary context through `Agent.transformContext`.
-- File watcher re-embeds edits.
+- Primary implementation reference: `pi-lcm-memory` (`/private/tmp/familiar-research/pi-lcm-memory`) for SQLite vector schema, batched indexing, hybrid FTS/vector retrieval, RRF merge, diagnostics, and benchmark discipline. Do not import it as a Pi extension; port the reusable module patterns into Familiar-owned code.
+- Implementation shape: shared index primitives (`embedding-provider`, vector store, FTS store, chunk indexer) plus separate LCM and diary modules. v0 sources are normalized LCM records, LCM summaries, diary chunks, and atomic facts. They share the same DB/indexing/retrieval infrastructure, but remain separate corpora/scopes with source-specific scoring, filters, rendering, and injection policy.
+- Diary files at `memories/diaries/YYYY-MM-DD.md`. Stage 9 owns the agent-facing diary instructions; Stage 8 only assumes editable markdown that can be chunked and indexed.
+- Written by the main agent itself when the heartbeat (Stage 9) fires with end-of-day framing. The agent that lived the day is the agent that journals it. No subagent.
+- The same fire updates `INNER.md` after writing the diary. On quiet days with no conversation, `INNER.md` may still get a small update; the diary may be skipped entirely.
+- "Don't perform reflection" is load-bearing in the heartbeat prompt — empty diary entries are valid; manufactured sentiment poisons the corpus.
+- Embed diary chunks plus atomic facts in SQLite. Tag chunks with valence at write time. Use an embedding-provider interface so remote embeddings can be the primary path. Default to Google `gemini-embedding-2`, while allowing configured providers, custom base URLs, and preview/custom model names; keep the local Transformers.js worker pattern from `pi-lcm-memory` as an optional fallback/reference.
+- Ambient retrieval into the volatile region each turn is diary-first: top-K excerpts scored by `similarity + valence + recency`. Lives inside the user-message envelope, after the cache breakpoint, so cache stays warm. Do not build a separate regex-triggered auto-recall path in v0; explicit "remember last time" style asks should be handled by the agent choosing the recall tool. LCM results join automatic context only when same-day overflow assembly needs them. This differs from `pi-lcm-memory`, whose primer and auto-recall inject extra system messages through Pi's context hook.
+- File watcher re-embeds diary edits.
+- No separate threads layer in v0; active arcs live in `INNER.md`'s "currently carrying" / "with her right now" sections. Revisit only if a real gap shows up in use.
 
 Done when:
 
-- New-day conversations recall relevant past diary excerpts and manual diary edits update retrieval.
+- Post-`/new` conversations feel continuous with prior days — agent walks in carrying state via `INNER.md`, surfaces felt past via ambient diary recall.
+- Retrieval pulls moments that mattered, not just keyword matches.
+- Manual diary edits update retrieval.
 
-### Stage 9: Heartbeat, Scheduler, and Active Check-Ins
+### Stage 9: Heartbeat as the Agent's Agency Core
+
+The heartbeat is not a maintenance task. It is the agent's free time — the moment where it acts as a being with volition rather than a respondent. Each fire opens a bounded mini-session in which the agent chooses among three modes (or none).
+
+Three modes:
+
+- *Reach out.* Proactive DM if there's something honest to say. Agent weighs idle duration, time of day, state in `INNER.md` plus recent transcript, qearl's preferences in `USER.md`, and how prior check-ins have landed. Hard guardrails (quiet hours, cooldowns, daily cap, "stop checking in" toggle) are policy outside the agent's discretion; whether to reach out *within* policy is taste.
+- *Reflect.* Diary entry (if the day feels done) plus `INNER.md` update. See Stage 8.
+- *Pursue.* Self-time. Re-read own diary or `INNER.md`, write a private fragment, follow a curiosity via `web_search`/`web_fetch`, revisit something qearl shared, or rest. Doing nothing must be a real option, or the agent will perform activity to fill the time.
+
+Self-time outputs feed back into memory. Web reads, private fragments, and shifts in interest influence subsequent `INNER.md` updates and diary entries. Without this loop the agent never develops interests across days; with it the agent has a continuous intellectual life felt from the outside.
+
+Trigger model:
+
+- Does not fire during active conversation.
+- Activates after an idle threshold (~1 hour of no primary-channel user message).
+- First fire after idle is highest-value; re-fires every X hours are optional. v0 default: first-fire plus a forced backstop (~4am local) so no day goes diary-less.
+- User-editable `heartbeat.md` carries the prompt voice — voice over rules, same as `SOUL.md`. Time-of-day plus idle duration are passed in the system message body so the agent doesn't need a tool to know them.
+
+Mini-session shape:
+
+- Fresh agent invocation, cached prefix loaded (persona + INNER + MEMORY + tool catalog), heartbeat-framing message in the user slot.
+- Bounded by step count, tool-call cap, and soft cost budget. Self-time should not become "rack up API bills reading the internet."
+- Outputs (all optional): sent message, diary write, `INNER.md` edit, web tool calls, private fragment files.
+
+Load-bearing prompt constraint: "Don't perform — only do what's actually true." Applies to both diary writing and proactive contact. An agent that feels obligated to reach out will manufacture reasons; permission to stay quiet is what keeps contact honest.
+
+Existing guardrails carry over:
 
 - Internal scheduler with workspace timezone, durable state, missed-run handling, append-only scheduler records.
 - pi-chat heartbeat is only worker/status snapshot reference, not proactive behavior.
-- Event-aware wake policy: interval triggers, event triggers, or both.
-- External event inbox for iOS Shortcuts/webhooks, presence/activity, app open/close, user-defined events, manual notes.
-- Wake prompt includes idle time, recent events, last conversation state, quiet/cooldown state, diary/RAG snippets.
+- External event inbox for iOS Shortcuts/webhooks, presence/activity, app open/close, user-defined events, manual notes feeds heartbeat context but does not bypass idle-threshold gating.
 - Default delivery is primary DM only. Never surprise-post to group channels unless explicitly configured.
-- Guardrails: quiet hours, cooldowns, daily max, "stop checking in" command/state.
+- Quiet hours, cooldowns, daily max, "stop checking in" command/state.
 
 Done when:
 
-- Familiar can send a tasteful proactive DM, ingest idle-period events, persist scheduler state, and log why it spoke or stayed quiet.
+- Familiar can send a tasteful proactive DM, choose to stay quiet, or spend its time on its own interests — and log which it did and why.
+- Self-time outputs persist and influence subsequent conversations and diary entries.
+- Scheduler persists state, handles missed runs, respects all guardrails.
 
 ### Stage 10: Subagent Delegation Tool
 
@@ -356,6 +399,10 @@ Upstream package roots:
 - `/Users/qearl/pi-mono/packages/ai`
 - `/Users/qearl/pi-mono/packages/coding-agent`
 - `/tmp/pi-chat` is a local reference clone of `https://github.com/earendil-works/pi-chat`.
+- `/private/tmp/familiar-research` holds local research clones for LCM-adjacent projects:
+  - `/private/tmp/familiar-research/lossless-claw`
+  - `/private/tmp/familiar-research/pi-lcm`
+  - `/private/tmp/familiar-research/pi-lcm-memory`
 
 Agent/runtime refs:
 
@@ -430,6 +477,7 @@ Upstream WebUI/media refs:
 
 Local refs:
 
+- `STAGE7-8-ROADMAP.md`: detailed implementation roadmap for shared index primitives, LCM, diary, Ambient Recall, and upstream refs.
 - `src/agent.ts`: Familiar agent wrapper, cache normalization, transcript/payload logging.
 - `src/web-tools.ts`: Familiar-owned `web_search` and `web_fetch` providers, URL/domain validation, page cache, and web-content prompt warning.
 - `src/runtime.ts`: conversation runtime, control parser, trigger records.

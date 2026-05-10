@@ -8,6 +8,7 @@ import { buildRecordBase, type ChatChannelRef } from "../src/chat-log.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
+import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
@@ -30,7 +31,19 @@ async function memoryConfig() {
 				dimensions: 3,
 				batchSize: 8,
 			},
-			lcm: { newSessionRetainDepth: 2 },
+			lcm: {
+				newSessionRetainDepth: 2,
+				enabled: false,
+				model: "anthropic/claude-sonnet-4-5",
+				provider: "anthropic",
+				modelId: "claude-sonnet-4-5",
+				contextThreshold: 0.75,
+				freshTailCount: 64,
+				leafChunkTokens: 20000,
+				leafTargetTokens: 2400,
+				maxRounds: 10,
+				timeoutMs: 60000,
+			},
 		},
 	});
 }
@@ -111,7 +124,7 @@ describe("MemoryService", () => {
 		const baseConfig = await memoryConfig();
 		const config = {
 			...baseConfig,
-			memory: { ...baseConfig.memory, lcm: { newSessionRetainDepth: -1 } },
+			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
 			const service = createMemoryService(config);
@@ -150,6 +163,74 @@ describe("MemoryService", () => {
 			}
 		});
 	});
+
+	it("automatically summarizes old LCM context once it exceeds the leaf trigger", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 23,
+					leafTargetTokens: 8,
+					maxRounds: 1,
+				},
+			},
+		};
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf(input) {
+				calls += 1;
+				assert.match(input.text, /old detail alpha/);
+				return 'Files: none\nThe old alpha and beta details were compacted.\nExpand for details about: old chat wording';
+			},
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			try {
+				const messages = [
+					{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
+					{ role: "assistant" as const, content: [{ type: "text" as const, text: "old detail beta" }], api: "test", provider: "test", model: "test", usage: zeroUsage(), stopReason: "stop" as const, timestamp: 2 },
+					{ role: "user" as const, content: "fresh detail gamma", timestamp: 3 },
+				];
+
+				const first = await service.transformContext(messages, undefined, {
+					sessionKey: "room-a",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 1);
+				assert.equal(first.length, 2);
+				assert.equal(first[0]?.role, "assistant");
+				assert.match(contentText(first[0]), /Familiar retained LCM summary/);
+				assert.match(contentText(first[0]), /old alpha and beta/);
+				assert.equal(first[1]?.role, "user");
+				assert.match(contentText(first[1]), /fresh detail gamma/);
+
+				const second = await service.transformContext(messages, undefined, {
+					sessionKey: "room-a",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 1);
+				assert.deepEqual(second.map((message) => message.role), first.map((message) => message.role));
+
+				const lcmStore = LcmStore.open(config);
+				try {
+					const summaries = lcmStore.listSummaries();
+					assert.equal(summaries.length, 1);
+					assert.match(summaries[0]?.text ?? "", /old alpha and beta/);
+				} finally {
+					lcmStore.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
 });
 
 function memoryLog() {
@@ -178,4 +259,15 @@ function zeroUsage() {
 		totalTokens: 0,
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 	};
+}
+
+function contentText(message: { content?: unknown } | undefined): string {
+	if (!message) return "";
+	const content = message.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.filter((item): item is { type: "text"; text: string } => item?.type === "text")
+		.map((item) => item.text)
+		.join("\n");
 }

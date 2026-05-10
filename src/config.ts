@@ -115,7 +115,24 @@ export interface Config {
 			batchSize: number;
 		};
 		lcm: {
+			enabled: boolean;
+			model: string;
+			provider: string;
+			modelId: string;
+			baseUrl?: string;
+			apiKeyEnv?: string;
+			contextThreshold: number;
+			freshTailCount: number;
+			freshTailMaxTokens?: number;
+			leafChunkTokens: number;
+			leafTargetTokens: number;
 			newSessionRetainDepth: number;
+			maxRounds: number;
+			timeoutMs: number;
+			prompt?: string;
+			promptPath?: string;
+			systemPrompt?: string;
+			systemPromptPath?: string;
 		};
 	};
 }
@@ -265,6 +282,14 @@ function readNumberInRange(value: unknown, fallback: number, path: string, min: 
 	return value;
 }
 
+function readFraction(value: unknown, fallback: number, path: string): number {
+	if (value === undefined) return fallback;
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1) {
+		throw new Error(`Config value ${path} must be a number > 0 and <= 1`);
+	}
+	return value;
+}
+
 function readPositiveNumber(value: unknown, fallback: number, path: string): number {
 	if (value === undefined) return fallback;
 	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -273,8 +298,56 @@ function readPositiveNumber(value: unknown, fallback: number, path: string): num
 	return value;
 }
 
+function readOptionalInteger(value: unknown, path: string, min = 0): number | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
+		throw new Error(`Config value ${path} must be an integer >= ${min}`);
+	}
+	return value;
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
+}
+
+function parseProviderModelRef(value: string, path: string): { provider: string; modelId: string; key: string } {
+	const trimmed = value.trim();
+	const separator = trimmed.indexOf("/");
+	if (separator <= 0 || separator === trimmed.length - 1) {
+		throw new Error(`Config value ${path} must be a provider/model id`);
+	}
+	const provider = trimmed.slice(0, separator).trim();
+	const modelId = trimmed.slice(separator + 1).trim();
+	if (!provider || !modelId) throw new Error(`Config value ${path} must be a provider/model id`);
+	return { provider, modelId, key: `${provider}/${modelId}` };
+}
+
+function assertKnownKeys(value: Record<string, unknown>, path: string, knownKeys: readonly string[]): void {
+	const known = new Set(knownKeys);
+	for (const key of Object.keys(value)) {
+		if (!known.has(key)) throw new Error(`Unknown config value: ${path}.${key}`);
+	}
+}
+
+function readPromptOverrides(
+	value: Record<string, unknown>,
+	workspacePath: string,
+	prefix: string,
+): { prompt?: string; promptPath?: string; systemPrompt?: string; systemPromptPath?: string } {
+	const prompt = readOptionalConfigString(value.prompt, `${prefix}.prompt`);
+	const promptPath = readOptionalConfigString(value.prompt_path, `${prefix}.prompt_path`);
+	const systemPrompt = readOptionalConfigString(value.system_prompt, `${prefix}.system_prompt`);
+	const systemPromptPath = readOptionalConfigString(value.system_prompt_path, `${prefix}.system_prompt_path`);
+	if (prompt && promptPath) throw new Error(`Set either ${prefix}.prompt or ${prefix}.prompt_path, not both`);
+	if (systemPrompt && systemPromptPath) {
+		throw new Error(`Set either ${prefix}.system_prompt or ${prefix}.system_prompt_path, not both`);
+	}
+	return {
+		...(prompt ? { prompt } : {}),
+		...(promptPath ? { promptPath: resolveWorkspacePath(workspacePath, promptPath) } : {}),
+		...(systemPrompt ? { systemPrompt } : {}),
+		...(systemPromptPath ? { systemPromptPath: resolveWorkspacePath(workspacePath, systemPromptPath) } : {}),
+	};
 }
 
 export async function loadConfig(workspacePathInput: string): Promise<Config> {
@@ -312,6 +385,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const baseUrl = readOptionalString(agent.base_url, "");
 	const apiKeyEnv = readOptionalString(agent.api_key_env, "");
 	const legacyModel = modelId ? `${provider}/${modelId}` : "";
+	const agentModel = model || legacyModel;
 	const usingLegacyAgentModel = !model;
 	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
 		throw new Error(
@@ -320,6 +394,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	}
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
+	const modelAllow = readStringArray(models.allow, "models.allow");
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
 	const memoryEmbeddingApi = readMemoryEmbeddingApi(readOptionalString(memoryEmbedding.api, "gemini"));
@@ -340,6 +415,52 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	}
 	// Empty apiKeyEnv is allowed for no-auth local gateways. Hosted providers
 	// should either inherit from models.api_key_envs or set memory.embedding.api_key_env.
+	assertKnownKeys(memoryLcm, "memory.lcm", [
+		"enabled",
+		"model",
+		"context_threshold",
+		"fresh_tail_count",
+		"fresh_tail_max_tokens",
+		"leaf_chunk_tokens",
+		"leaf_target_tokens",
+		"new_session_retain_depth",
+		"max_rounds",
+		"timeout_ms",
+		"prompt",
+		"prompt_path",
+		"system_prompt",
+		"system_prompt_path",
+	]);
+	const memoryLcmModel = readConfigString(memoryLcm.model, agentModel, "memory.lcm.model");
+	const memoryLcmRef = parseProviderModelRef(memoryLcmModel, "memory.lcm.model");
+	if (modelAllow.length > 0 && !modelAllow.includes(memoryLcmRef.key)) {
+		throw new Error(`Config value memory.lcm.model is not in models.allow: ${memoryLcmRef.key}`);
+	}
+	const memoryLcmBaseUrl =
+		resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId) ??
+		(usingLegacyAgentModel && memoryLcmRef.key === legacyModel ? baseUrl : undefined);
+	const memoryLcmApiKeyEnv =
+		resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId) ??
+		(usingLegacyAgentModel && memoryLcmRef.provider === provider ? apiKeyEnv : undefined);
+	const memoryLcmFreshTailMaxTokens = readOptionalInteger(
+		memoryLcm.fresh_tail_max_tokens,
+		"memory.lcm.fresh_tail_max_tokens",
+		1,
+	);
+	const memoryLcmLeafChunkTokens = readInteger(memoryLcm.leaf_chunk_tokens, 20_000, "memory.lcm.leaf_chunk_tokens", 1);
+	const memoryLcmLeafTargetTokens = readInteger(
+		memoryLcm.leaf_target_tokens,
+		2400,
+		"memory.lcm.leaf_target_tokens",
+		1,
+	);
+	if (memoryLcmLeafTargetTokens > memoryLcmLeafChunkTokens) {
+		throw new Error("Config value memory.lcm.leaf_target_tokens must be <= leaf_chunk_tokens");
+	}
+	if (memoryLcmFreshTailMaxTokens !== undefined && memoryLcmFreshTailMaxTokens > memoryLcmLeafChunkTokens) {
+		throw new Error("Config value memory.lcm.fresh_tail_max_tokens must be <= leaf_chunk_tokens");
+	}
+	const memoryLcmPromptOverrides = readPromptOverrides(memoryLcm, workspacePath, "memory.lcm");
 
 	return {
 		workspacePath,
@@ -366,7 +487,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),
 		},
 		agent: {
-			model: model || legacyModel,
+			model: agentModel,
 			api: usingLegacyAgentModel ? api : undefined,
 			modelId: usingLegacyAgentModel ? modelId : undefined,
 			baseUrl: usingLegacyAgentModel ? baseUrl : undefined,
@@ -376,7 +497,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
 		},
 		models: {
-			allow: readStringArray(models.allow, "models.allow"),
+			allow: modelAllow,
 			baseUrls: modelBaseUrls,
 			apiKeyEnvs: modelApiKeyEnvs,
 		},
@@ -444,12 +565,26 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				batchSize: readInteger(memoryEmbedding.batch_size, 32, "memory.embedding.batch_size", 1),
 			},
 			lcm: {
+				enabled: readBoolean(memoryLcm.enabled, true, "memory.lcm.enabled"),
+				model: memoryLcmRef.key,
+				provider: memoryLcmRef.provider,
+				modelId: memoryLcmRef.modelId,
+				...(memoryLcmBaseUrl !== undefined ? { baseUrl: memoryLcmBaseUrl } : {}),
+				...(memoryLcmApiKeyEnv !== undefined ? { apiKeyEnv: memoryLcmApiKeyEnv } : {}),
+				contextThreshold: readFraction(memoryLcm.context_threshold, 0.75, "memory.lcm.context_threshold"),
+				freshTailCount: readInteger(memoryLcm.fresh_tail_count, 64, "memory.lcm.fresh_tail_count"),
+				...(memoryLcmFreshTailMaxTokens !== undefined ? { freshTailMaxTokens: memoryLcmFreshTailMaxTokens } : {}),
+				leafChunkTokens: memoryLcmLeafChunkTokens,
+				leafTargetTokens: memoryLcmLeafTargetTokens,
 				newSessionRetainDepth: readInteger(
 					memoryLcm.new_session_retain_depth,
 					2,
 					"memory.lcm.new_session_retain_depth",
 					-1,
 				),
+				maxRounds: readInteger(memoryLcm.max_rounds, 10, "memory.lcm.max_rounds", 1),
+				timeoutMs: readInteger(memoryLcm.timeout_ms, 60_000, "memory.lcm.timeout_ms", 1),
+				...memoryLcmPromptOverrides,
 			},
 		},
 	};

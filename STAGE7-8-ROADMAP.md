@@ -149,7 +149,9 @@ Keep in normalized LCM:
 LCM transformContext:
 
 - Protect fresh tail.
-- Inject minimal summaries when context pressure requires it.
+- Automatically summarize the oldest compactable raw chunk outside the fresh
+  tail when leaf/budget pressure requires it, then replace that raw chunk with
+  the generated summary for subsequent turns.
 - Use `lossless-claw` for architecture ideas: ordered context items, summary DAG,
   fresh-tail protection, prompt-aware eviction, deferred compaction debt,
   integrity/doctor concepts, and cache-aware timing.
@@ -287,7 +289,7 @@ Primer:
 
 2. Land the thin Stage 7 LCM slice.
    - normalized LCM source from chat/transcripts
-   - minimal summary/fresh-tail assembly
+   - automatic leaf summarization plus fresh-tail assembly
    - factual recall tool
    - provenance links back to source records
 

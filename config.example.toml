@@ -96,6 +96,22 @@ dimensions = 3072
 batch_size = 32
 
 [memory.lcm]
+# Lossless-claw style LCM. Set enabled = false to disable the LCM context engine.
+enabled = true
+# Omit model to inherit [agent].model, or set an explicit provider/model ref.
+# model = "anthropic/claude-sonnet-4-5"
+# Connection settings inherit from [models.base_urls] and [models.api_key_envs].
+context_threshold = 0.75
+fresh_tail_count = 64
+# fresh_tail_max_tokens = 4000
+leaf_chunk_tokens = 20000
+leaf_target_tokens = 2400
 # Context retained after /new. -1 keeps all context, 0 keeps all summaries,
 # and positive values keep summaries at that depth or higher; 2 keeps d2+.
 new_session_retain_depth = 2
+max_rounds = 10
+timeout_ms = 60000
+# prompt = "Inline summarization prompt override."
+# prompt_path = "prompts/lcm-summary.md"
+# system_prompt = "Inline summarization system prompt override."
+# system_prompt_path = "prompts/lcm-system.md"

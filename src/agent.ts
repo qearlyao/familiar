@@ -336,7 +336,8 @@ export async function createFamiliarAgent(
 					},
 				}),
 			transformContext: memoryService
-				? (contextMessages, signal) => memoryService.transformContext(contextMessages, signal)
+				? (contextMessages, signal) =>
+						memoryService.transformContext(contextMessages, signal, { sessionKey, sessionId, model })
 				: undefined,
 		});
 

@@ -136,9 +136,9 @@ Tier 1: stable prompt files in the cached prefix.
 Tier 2: LCM, today's lossless-ish context engine.
 
 - Source of truth: per-channel append-only chat logs remain the audit log, but they are too noisy to feed directly into LCM. Derive a normalized LCM conversation stream under `memories/lcm/` first: inbound user messages, outbound assistant messages, selected tool/result facts when useful, attachment notes, reset/control boundaries, and provenance pointers back to `data/chat`.
-- Summaries: markdown leaf/condensed summary DAG with provenance frontmatter.
+- Summaries: automatic leaf compaction with a future condensed summary DAG and provenance frontmatter.
 - Index: SQLite metadata plus shared FTS/vector primitives for raw normalized records and summaries. Hybrid semantic recall is the main factual search path; exact grep is fallback/provenance.
-- Assembly: `Agent.transformContext` selects fresh tail plus minimal useful summaries. LCM may build a global companion-brain daily view, but raw source records stay per-channel.
+- Assembly: `Agent.transformContext` protects the fresh tail and replaces older raw context with generated summaries when leaf/budget pressure requires it. LCM may build a global companion-brain daily view, but raw source records stay per-channel.
 - Agent access: `memory_recall` and `memory_open` for factual memory; raw logs/summaries remain greppable for debug/provenance.
 - Replaces upstream auto-compaction for Familiar.
 

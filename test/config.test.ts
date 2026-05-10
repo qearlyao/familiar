@@ -164,6 +164,19 @@ retention_days = 7
 			batchSize: 32,
 		});
 		assert.equal(config.memory.lcm.newSessionRetainDepth, 2);
+		assert.deepEqual(config.memory.lcm, {
+			newSessionRetainDepth: 2,
+			enabled: true,
+			model: "anthropic/claude-sonnet-4-5",
+			provider: "anthropic",
+			modelId: "claude-sonnet-4-5",
+			contextThreshold: 0.75,
+			freshTailCount: 64,
+			leafChunkTokens: 20000,
+			leafTargetTokens: 2400,
+			maxRounds: 10,
+			timeoutMs: 60000,
+		});
 	});
 
 	it("loads memory overrides", async () => {
@@ -183,7 +196,18 @@ dimensions = 1536
 batch_size = 8
 
 [memory.lcm]
+enabled = true
+model = "google/gemini-3-flash-preview"
+context_threshold = 0.8
+fresh_tail_count = 5
+fresh_tail_max_tokens = 1200
+leaf_chunk_tokens = 16000
+leaf_target_tokens = 700
 new_session_retain_depth = -1
+max_rounds = 4
+timeout_ms = 45000
+prompt = "Summarize this branch."
+system_prompt_path = "prompts/lcm-system.md"
 `),
 		);
 
@@ -200,6 +224,22 @@ new_session_retain_depth = -1
 			batchSize: 8,
 		});
 		assert.equal(config.memory.lcm.newSessionRetainDepth, -1);
+		assert.deepEqual(config.memory.lcm, {
+			newSessionRetainDepth: -1,
+			enabled: true,
+			model: "google/gemini-3-flash-preview",
+			provider: "google",
+			modelId: "gemini-3-flash-preview",
+			contextThreshold: 0.8,
+			freshTailCount: 5,
+			freshTailMaxTokens: 1200,
+			leafChunkTokens: 16000,
+			leafTargetTokens: 700,
+			maxRounds: 4,
+			timeoutMs: 45000,
+			prompt: "Summarize this branch.",
+			systemPromptPath: resolve(workspacePath, "prompts/lcm-system.md"),
+		});
 	});
 
 	it("inherits memory embedding provider settings from configured models", async () => {
@@ -225,6 +265,54 @@ model = "gemini-embedding-2"
 
 		assert.equal(config.memory.embedding.baseUrl, "https://gateway.example.test/google-embedding");
 		assert.equal(config.memory.embedding.apiKeyEnv, "GOOGLE_EMBEDDING_KEY");
+	});
+
+	it("inherits memory lcm summarization provider settings from configured models", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[models.base_urls]
+anthropic = "https://gateway.example.test/anthropic"
+"anthropic/claude-sonnet-4-5" = "https://gateway.example.test/summary"
+
+[models.api_key_envs]
+anthropic = "ANTHROPIC_GATEWAY_KEY"
+"anthropic/claude-sonnet-4-5" = "SUMMARY_GATEWAY_KEY"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+		assert.equal(config.memory.lcm.model, "anthropic/claude-sonnet-4-5");
+		assert.equal(config.memory.lcm.baseUrl, "https://gateway.example.test/summary");
+		assert.equal(config.memory.lcm.apiKeyEnv, "SUMMARY_GATEWAY_KEY");
+	});
+
+	it("rejects direct memory lcm connection settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.lcm]
+model = "anthropic/claude-sonnet-4-5"
+base_url = "https://summary.example.test"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.base_url/);
+	});
+
+	it("requires memory lcm model to be allowlisted when models.allow is set", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[models]
+allow = ["anthropic/claude-sonnet-4-5"]
+
+[memory.lcm]
+model = "google/gemini-3-flash-preview"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.model is not in models\.allow/);
 	});
 
 	it("allows custom memory embedding providers with explicit connection settings", async () => {
@@ -266,6 +354,44 @@ new_session_retain_depth = -2
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.dimensions/);
+	});
+
+	it("rejects invalid memory lcm settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.lcm]
+context_threshold = 1.25
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.context_threshold/);
+	});
+
+	it("rejects unknown memory lcm settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.lcm]
+enabled = true
+surprise = "nope"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.surprise/);
+	});
+
+	it("rejects conflicting memory lcm prompts", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.lcm]
+prompt = "inline"
+prompt_path = "prompt.md"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /prompt or memory\.lcm\.prompt_path/);
 	});
 
 	it("rejects unsupported memory embedding apis", async () => {

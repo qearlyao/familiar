@@ -62,6 +62,12 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			persona: { ...config.persona, ...overrides.persona },
 			media: { ...config.media, ...overrides.media },
 			workspace: { ...config.workspace, ...overrides.workspace, dataDir },
+			memory: {
+				...config.memory,
+				...overrides.memory,
+				embedding: { ...config.memory.embedding, ...overrides.memory?.embedding },
+				lcm: { ...config.memory.lcm, ...overrides.memory?.lcm },
+			},
 		};
 	} finally {
 		if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;

@@ -81,3 +81,20 @@ memory = "MEMORY.md"
 
 [workspace]
 data_dir = "data"
+
+[memory]
+root_dir = "memories"
+
+[memory.embedding]
+provider = "google"
+model = "gemini-embedding-2"
+# base_url and api_key_env inherit from [models.*], then fall back to provider defaults.
+# base_url = "https://generativelanguage.googleapis.com/v1beta"
+# api_key_env = "GEMINI_API_KEY"
+dimensions = 3072
+batch_size = 32
+
+[memory.lcm]
+# Context retained after /new. -1 keeps all context, 0 keeps all summaries,
+# and positive values keep summaries at that depth or higher; 2 keeps d2+.
+new_session_retain_depth = 2

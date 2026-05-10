@@ -16,6 +16,45 @@ import { startWebDaemon } from "./web.js";
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
 
+interface WorkspaceDirs {
+	dataDir: string;
+	memoryIndexDir: string;
+	memoryLcmDir: string;
+	memoryDiariesDir: string;
+	memoryArchiveDir: string;
+}
+
+function defaultWorkspaceDirs(workspacePath: string): WorkspaceDirs {
+	const memoryRoot = resolve(workspacePath, "memories");
+	return {
+		dataDir: resolve(workspacePath, "data"),
+		memoryIndexDir: resolve(memoryRoot, "index"),
+		memoryLcmDir: resolve(memoryRoot, "lcm"),
+		memoryDiariesDir: resolve(memoryRoot, "diaries"),
+		memoryArchiveDir: resolve(memoryRoot, "archive"),
+	};
+}
+
+function configuredWorkspaceDirs(config: Awaited<ReturnType<typeof loadConfig>>): WorkspaceDirs {
+	return {
+		dataDir: config.workspace.dataDir,
+		memoryIndexDir: config.memory.indexDir,
+		memoryLcmDir: config.memory.lcmDir,
+		memoryDiariesDir: config.memory.diariesDir,
+		memoryArchiveDir: config.memory.archiveDir,
+	};
+}
+
+async function ensureWorkspaceDirs(dirs: WorkspaceDirs): Promise<void> {
+	await Promise.all([
+		mkdir(dirs.dataDir, { recursive: true }),
+		mkdir(dirs.memoryIndexDir, { recursive: true }),
+		mkdir(dirs.memoryLcmDir, { recursive: true }),
+		mkdir(dirs.memoryDiariesDir, { recursive: true }),
+		mkdir(dirs.memoryArchiveDir, { recursive: true }),
+	]);
+}
+
 async function initWorkspace(workspaceInput: string): Promise<void> {
 	const workspacePath = resolve(workspaceInput);
 	await mkdir(workspacePath, { recursive: true });
@@ -27,7 +66,7 @@ async function initWorkspace(workspaceInput: string): Promise<void> {
 	await copyFile(resolve(PROJECT_ROOT, "SOUL.md"), resolve(workspacePath, "SOUL.md"));
 	await copyFile(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
 	await copyFile(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
-	await mkdir(resolve(workspacePath, "data"), { recursive: true });
+	await ensureWorkspaceDirs(defaultWorkspaceDirs(workspacePath));
 	console.log(`Initialized familiar workspace at ${workspacePath}`);
 }
 
@@ -38,7 +77,7 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 		loadDotenv({ path: envPath, override: false });
 	}
 	const config = await loadConfig(workspacePath);
-	await mkdir(config.workspace.dataDir, { recursive: true });
+	await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
 	const removedAttachments = await cleanupGeneratedAttachments(config);
 	if (removedAttachments > 0) {
 		console.log(`Removed ${removedAttachments} expired generated attachment(s)`);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { resolve } from "node:path";
 
 import { loadConfig } from "../src/config.js";
 import { createWorkspace, minimalConfigToml } from "./helpers.js";
@@ -140,5 +141,137 @@ retention_days = 7
 			model: "gemini-3-flash-preview",
 			apiKeyEnv: "GEMINI_API_KEY",
 		});
+	});
+
+	it("loads memory defaults under the workspace root", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(minimalConfigToml());
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.rootDir, resolve(workspacePath, "memories"));
+		assert.equal(config.memory.indexDir, resolve(workspacePath, "memories", "index"));
+		assert.equal(config.memory.lcmDir, resolve(workspacePath, "memories", "lcm"));
+		assert.equal(config.memory.diariesDir, resolve(workspacePath, "memories", "diaries"));
+		assert.equal(config.memory.archiveDir, resolve(workspacePath, "memories", "archive"));
+		assert.deepEqual(config.memory.embedding, {
+			provider: "google",
+			model: "gemini-embedding-2",
+			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+			apiKeyEnv: "GEMINI_API_KEY",
+			dimensions: 3072,
+			batchSize: 32,
+		});
+		assert.equal(config.memory.lcm.newSessionRetainDepth, 2);
+	});
+
+	it("loads memory overrides", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory]
+root_dir = "brain"
+
+[memory.embedding]
+provider = "google"
+model = "custom-embedding"
+base_url = "https://memory.example.test/v1beta"
+api_key_env = "CUSTOM_EMBEDDING_KEY"
+dimensions = 1536
+batch_size = 8
+
+[memory.lcm]
+new_session_retain_depth = -1
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.rootDir, resolve(workspacePath, "brain"));
+		assert.deepEqual(config.memory.embedding, {
+			provider: "google",
+			model: "custom-embedding",
+			baseUrl: "https://memory.example.test/v1beta",
+			apiKeyEnv: "CUSTOM_EMBEDDING_KEY",
+			dimensions: 1536,
+			batchSize: 8,
+		});
+		assert.equal(config.memory.lcm.newSessionRetainDepth, -1);
+	});
+
+	it("inherits memory embedding provider settings from configured models", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[models.base_urls]
+google = "https://gateway.example.test/google"
+"google/gemini-embedding-2" = "https://gateway.example.test/google-embedding"
+
+[models.api_key_envs]
+google = "GOOGLE_GATEWAY_KEY"
+"google/gemini-embedding-2" = "GOOGLE_EMBEDDING_KEY"
+
+[memory.embedding]
+provider = "google"
+model = "gemini-embedding-2"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.embedding.baseUrl, "https://gateway.example.test/google-embedding");
+		assert.equal(config.memory.embedding.apiKeyEnv, "GOOGLE_EMBEDDING_KEY");
+	});
+
+	it("allows custom memory embedding providers with explicit connection settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.embedding]
+provider = "local-gateway"
+model = "media-embed"
+base_url = "http://localhost:8788/v1"
+api_key_env = "LOCAL_GATEWAY_KEY"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.memory.embedding, {
+			provider: "local-gateway",
+			model: "media-embed",
+			baseUrl: "http://localhost:8788/v1",
+			apiKeyEnv: "LOCAL_GATEWAY_KEY",
+			dimensions: 3072,
+			batchSize: 32,
+		});
+	});
+
+	it("rejects invalid memory numeric settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.embedding]
+dimensions = 0
+
+[memory.lcm]
+new_session_retain_depth = -2
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.dimensions/);
+	});
+
+	it("rejects custom memory embedding providers without a base url", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.embedding]
+provider = "local-gateway"
+model = "media-embed"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.base_url/);
 	});
 });

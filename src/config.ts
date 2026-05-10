@@ -14,6 +14,14 @@ export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
 
+const DEFAULT_MEMORY_EMBEDDING_BASE_URLS: Record<string, string> = {
+	google: "https://generativelanguage.googleapis.com/v1beta",
+};
+
+const DEFAULT_MEMORY_EMBEDDING_API_KEY_ENVS: Record<string, string> = {
+	google: "GEMINI_API_KEY",
+};
+
 export interface TtsVoiceSettings {
 	stability: number;
 	similarityBoost: number;
@@ -90,6 +98,24 @@ export interface Config {
 	workspace: {
 		dataDir: string;
 	};
+	memory: {
+		rootDir: string;
+		indexDir: string;
+		lcmDir: string;
+		diariesDir: string;
+		archiveDir: string;
+		embedding: {
+			provider: string;
+			model: string;
+			baseUrl: string;
+			apiKeyEnv: string;
+			dimensions: number;
+			batchSize: number;
+		};
+		lcm: {
+			newSessionRetainDepth: number;
+		};
+	};
 }
 
 function interpolateEnv(value: string): string {
@@ -116,6 +142,18 @@ function readString(value: unknown, path: string): string {
 
 function readOptionalString(value: unknown, fallback: string): string {
 	return typeof value === "string" && value.trim() !== "" ? value : fallback;
+}
+
+function readOptionalConfigString(value: unknown, path: string): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") throw new Error(`Config value ${path} must be a string`);
+	const trimmed = value.trim();
+	return trimmed ? trimmed : undefined;
+}
+
+function readConfigString(value: unknown, fallback: string, path: string): string {
+	const read = readOptionalConfigString(value, path);
+	return read ?? fallback;
 }
 
 function readStringArray(value: unknown, path: string): string[] {
@@ -200,12 +238,16 @@ function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	throw new Error(`Config value ${path} must be a boolean`);
 }
 
-function readInteger(value: unknown, fallback: number, path: string): number {
+function readInteger(value: unknown, fallback: number, path: string, min = 0): number {
 	if (value === undefined) return fallback;
-	if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-		throw new Error(`Config value ${path} must be a non-negative integer`);
+	if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
+		throw new Error(`Config value ${path} must be an integer >= ${min}`);
 	}
 	return value;
+}
+
+function resolveProviderSetting(records: Record<string, string>, provider: string, model: string): string | undefined {
+	return records[`${provider}/${model}`] ?? records[provider];
 }
 
 function readNumberInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
@@ -251,6 +293,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const mediaUnderstandingVideo = (mediaUnderstanding.video ?? {}) as Record<string, unknown>;
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
+	const memory = (parsed.memory ?? {}) as Record<string, unknown>;
+	const memoryEmbedding = (memory.embedding ?? {}) as Record<string, unknown>;
+	const memoryLcm = (memory.lcm ?? {}) as Record<string, unknown>;
 
 	const ownerId = readString(discord.owner_id, "discord.owner_id");
 	const model = readOptionalString(agent.model, "");
@@ -266,6 +311,31 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			'Set agent.model = "provider/model", or for a legacy custom endpoint set all of agent.api, agent.model_id, agent.base_url, and agent.api_key_env.',
 		);
 	}
+
+	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
+	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
+	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
+	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
+	const memoryEmbeddingModel = readConfigString(
+		memoryEmbedding.model,
+		"gemini-embedding-2",
+		"memory.embedding.model",
+	);
+	const memoryEmbeddingBaseUrl =
+		readOptionalConfigString(memoryEmbedding.base_url, "memory.embedding.base_url") ??
+		resolveProviderSetting(modelBaseUrls, memoryEmbeddingProvider, memoryEmbeddingModel) ??
+		DEFAULT_MEMORY_EMBEDDING_BASE_URLS[memoryEmbeddingProvider] ??
+		"";
+	const memoryEmbeddingApiKeyEnv =
+		readOptionalConfigString(memoryEmbedding.api_key_env, "memory.embedding.api_key_env") ??
+		resolveProviderSetting(modelApiKeyEnvs, memoryEmbeddingProvider, memoryEmbeddingModel) ??
+		DEFAULT_MEMORY_EMBEDDING_API_KEY_ENVS[memoryEmbeddingProvider] ??
+		"";
+	if (!memoryEmbeddingBaseUrl) {
+		throw new Error(`Missing memory.embedding.base_url for provider: ${memoryEmbeddingProvider}`);
+	}
+	// Empty apiKeyEnv is allowed for no-auth local gateways. Hosted providers
+	// should either inherit from models.api_key_envs or set memory.embedding.api_key_env.
 
 	return {
 		workspacePath,
@@ -303,8 +373,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		models: {
 			allow: readStringArray(models.allow, "models.allow"),
-			baseUrls: readStringRecord(models.base_urls, "models.base_urls"),
-			apiKeyEnvs: readStringRecord(models.api_key_envs, "models.api_key_envs"),
+			baseUrls: modelBaseUrls,
+			apiKeyEnvs: modelApiKeyEnvs,
 		},
 		tts: {
 			provider: readTtsProvider(readOptionalString(tts.provider, "elevenlabs")),
@@ -353,6 +423,29 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		workspace: {
 			dataDir: resolveWorkspacePath(workspacePath, readOptionalString(workspace.data_dir, "data")),
+		},
+		memory: {
+			rootDir: memoryRootDir,
+			indexDir: resolve(memoryRootDir, "index"),
+			lcmDir: resolve(memoryRootDir, "lcm"),
+			diariesDir: resolve(memoryRootDir, "diaries"),
+			archiveDir: resolve(memoryRootDir, "archive"),
+			embedding: {
+				provider: memoryEmbeddingProvider,
+				model: memoryEmbeddingModel,
+				baseUrl: memoryEmbeddingBaseUrl,
+				apiKeyEnv: memoryEmbeddingApiKeyEnv,
+				dimensions: readInteger(memoryEmbedding.dimensions, 3072, "memory.embedding.dimensions", 1),
+				batchSize: readInteger(memoryEmbedding.batch_size, 32, "memory.embedding.batch_size", 1),
+			},
+			lcm: {
+				newSessionRetainDepth: readInteger(
+					memoryLcm.new_session_retain_depth,
+					2,
+					"memory.lcm.new_session_retain_depth",
+					-1,
+				),
+			},
 		},
 	};
 }

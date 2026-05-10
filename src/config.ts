@@ -13,6 +13,7 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
+export type MemoryEmbeddingApi = "gemini";
 
 const DEFAULT_MEMORY_EMBEDDING_BASE_URLS: Record<string, string> = {
 	google: "https://generativelanguage.googleapis.com/v1beta",
@@ -105,6 +106,7 @@ export interface Config {
 		diariesDir: string;
 		archiveDir: string;
 		embedding: {
+			api: MemoryEmbeddingApi;
 			provider: string;
 			model: string;
 			baseUrl: string;
@@ -232,6 +234,11 @@ function readMediaUnderstandingProvider(value: unknown): MediaUnderstandingProvi
 	throw new Error('Config value media_understanding provider must be "groq" or "google"');
 }
 
+function readMemoryEmbeddingApi(value: unknown): MemoryEmbeddingApi {
+	if (value === "gemini") return value;
+	throw new Error('Config value memory.embedding.api must be "gemini"');
+}
+
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
 	if (typeof value === "boolean") return value;
@@ -315,6 +322,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
+	const memoryEmbeddingApi = readMemoryEmbeddingApi(readOptionalString(memoryEmbedding.api, "gemini"));
 	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
 	const memoryEmbeddingModel = readConfigString(
 		memoryEmbedding.model,
@@ -431,6 +439,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			diariesDir: resolve(memoryRootDir, "diaries"),
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
+				api: memoryEmbeddingApi,
 				provider: memoryEmbeddingProvider,
 				model: memoryEmbeddingModel,
 				baseUrl: memoryEmbeddingBaseUrl,

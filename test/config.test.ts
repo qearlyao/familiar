@@ -155,6 +155,7 @@ retention_days = 7
 		assert.equal(config.memory.diariesDir, resolve(workspacePath, "memories", "diaries"));
 		assert.equal(config.memory.archiveDir, resolve(workspacePath, "memories", "archive"));
 		assert.deepEqual(config.memory.embedding, {
+			api: "gemini",
 			provider: "google",
 			model: "gemini-embedding-2",
 			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -173,6 +174,7 @@ retention_days = 7
 root_dir = "brain"
 
 [memory.embedding]
+api = "gemini"
 provider = "google"
 model = "custom-embedding"
 base_url = "https://memory.example.test/v1beta"
@@ -189,6 +191,7 @@ new_session_retain_depth = -1
 
 		assert.equal(config.memory.rootDir, resolve(workspacePath, "brain"));
 		assert.deepEqual(config.memory.embedding, {
+			api: "gemini",
 			provider: "google",
 			model: "custom-embedding",
 			baseUrl: "https://memory.example.test/v1beta",
@@ -212,6 +215,7 @@ google = "GOOGLE_GATEWAY_KEY"
 "google/gemini-embedding-2" = "GOOGLE_EMBEDDING_KEY"
 
 [memory.embedding]
+api = "gemini"
 provider = "google"
 model = "gemini-embedding-2"
 `),
@@ -228,6 +232,7 @@ model = "gemini-embedding-2"
 		const workspacePath = await createWorkspace(
 			minimalConfigToml(`
 [memory.embedding]
+api = "gemini"
 provider = "local-gateway"
 model = "media-embed"
 base_url = "http://localhost:8788/v1"
@@ -238,6 +243,7 @@ api_key_env = "LOCAL_GATEWAY_KEY"
 		const config = await loadConfig(workspacePath);
 
 		assert.deepEqual(config.memory.embedding, {
+			api: "gemini",
 			provider: "local-gateway",
 			model: "media-embed",
 			baseUrl: "http://localhost:8788/v1",
@@ -260,6 +266,20 @@ new_session_retain_depth = -2
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.dimensions/);
+	});
+
+	it("rejects unsupported memory embedding apis", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.embedding]
+api = "openai"
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.api/);
 	});
 
 	it("rejects custom memory embedding providers without a base url", async () => {

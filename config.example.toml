@@ -86,6 +86,7 @@ data_dir = "data"
 root_dir = "memories"
 
 [memory.embedding]
+api = "gemini"
 provider = "google"
 model = "gemini-embedding-2"
 # base_url and api_key_env inherit from [models.*], then fall back to provider defaults.

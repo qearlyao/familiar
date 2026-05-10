@@ -8,6 +8,7 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool } from 
 
 import type { Config, ThinkingLevel } from "./config.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
+import type { MemoryService } from "./memory/service.js";
 import { createMemoryTools } from "./memory/tools.js";
 import {
 	assertModelCanAuthenticate,
@@ -255,7 +256,11 @@ function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): Age
 	];
 }
 
-export async function createFamiliarAgent(config: Config, settings: SettingsStore): Promise<FamiliarAgent> {
+export async function createFamiliarAgent(
+	config: Config,
+	settings: SettingsStore,
+	memoryService?: MemoryService,
+): Promise<FamiliarAgent> {
 	const persona = await loadPersona(config);
 	const systemPrompt = [buildSystemPrompt(persona), webContentWarning()].join("\n\n");
 	console.log("---SYSTEM PROMPT (start)---");
@@ -330,6 +335,9 @@ export async function createFamiliarAgent(config: Config, settings: SettingsStor
 						});
 					},
 				}),
+			transformContext: memoryService
+				? (contextMessages, signal) => memoryService.transformContext(contextMessages, signal)
+				: undefined,
 		});
 
 		agent.subscribe((event) => {

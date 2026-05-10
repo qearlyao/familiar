@@ -10,6 +10,7 @@ import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { startDiscordDaemon } from "./discord.js";
 import { cleanupGeneratedAttachments } from "./generated-media.js";
+import { createMemoryService } from "./memory/service.js";
 import { loadSettingsStore } from "./settings.js";
 import { startWebDaemon } from "./web.js";
 
@@ -83,8 +84,10 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 		console.log(`Removed ${removedAttachments} expired generated attachment(s)`);
 	}
 	const settings = await loadSettingsStore(config);
-	const familiarAgent = await createFamiliarAgent(config, settings);
-	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings);
+	const memoryService = createMemoryService(config);
+	await memoryService.indexDiaries().catch((error) => console.error("initial diary indexing failed", error));
+	const familiarAgent = await createFamiliarAgent(config, settings, memoryService);
+	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService);
 	const webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon);
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
@@ -93,6 +96,7 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	const stop = async () => {
 		console.log("Stopping familiar");
 		await Promise.all([webDaemon.stop(), discordDaemon.stop()]);
+		memoryService.close();
 		process.exit(0);
 	};
 	process.once("SIGINT", () => void stop());

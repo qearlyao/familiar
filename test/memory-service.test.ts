@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { describe, it } from "node:test";
+
+import { buildRecordBase, type ChatChannelRef } from "../src/chat-log.js";
+import { MemoryIndexStore } from "../src/memory/index/store.js";
+import { createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
+import { LcmStore } from "../src/memory/lcm/store.js";
+import { ConversationRuntime } from "../src/runtime.js";
+import { configWithDataDir, createTempDataDir } from "./helpers.js";
+
+async function memoryConfig() {
+	const dataDir = await createTempDataDir();
+	const memoryRootDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-service-"));
+	return configWithDataDir(dataDir, {
+		memory: {
+			rootDir: memoryRootDir,
+			indexDir: resolve(memoryRootDir, "index"),
+			lcmDir: resolve(memoryRootDir, "lcm"),
+			diariesDir: resolve(memoryRootDir, "diaries"),
+			archiveDir: resolve(memoryRootDir, "archive"),
+			embedding: {
+				api: "gemini",
+				provider: "google",
+				model: "gemini-embedding-test",
+				baseUrl: "https://embedding.test",
+				apiKeyEnv: "",
+				dimensions: 3,
+				batchSize: 8,
+			},
+			lcm: { newSessionRetainDepth: 2 },
+		},
+	});
+}
+
+async function withEmbeddingFetch<T>(values: number[], run: () => Promise<T>): Promise<T> {
+	const previousFetch = globalThis.fetch;
+	globalThis.fetch = (async () =>
+		new Response(JSON.stringify({ embeddings: [{ values }] }), {
+			status: 200,
+			headers: { "content-type": "application/json" },
+		})) as typeof fetch;
+	try {
+		return await run();
+	} finally {
+		globalThis.fetch = previousFetch;
+	}
+}
+
+function vector(values: number[]): Float32Array {
+	return new Float32Array(values);
+}
+
+const channel: ChatChannelRef = {
+	service: "web",
+	scope: "web",
+	channelId: "room",
+};
+
+describe("MemoryService", () => {
+	it("injects ambient diary recall into the last user message", () => {
+		const messages = [
+			{ role: "user" as const, content: "hello", timestamp: 1 },
+			{ role: "assistant" as const, content: [], api: "test", provider: "test", model: "test", usage: zeroUsage(), stopReason: "stop" as const, timestamp: 2 },
+			{ role: "user" as const, content: [{ type: "text" as const, text: "blue lantern" }], timestamp: 3 },
+		];
+
+		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "[Familiar diary recall]\n1. 2026-05-10: warm");
+
+		assert.deepEqual(messages[0], next[0]);
+		const last = next[2];
+		assert.equal(last?.role, "user");
+		assert.equal(Array.isArray(last?.content), true);
+		assert.match(Array.isArray(last?.content) ? (last.content.at(-1) as { text: string }).text : "", /diary recall/);
+	});
+
+	it("recalls indexed diary chunks through transformContext", async () => {
+		const config = await memoryConfig();
+		const store = MemoryIndexStore.open(config);
+		try {
+			store.insertChunk({
+				corpus: "diary_chunk",
+				sourceId: "2026-05-10.md",
+				text: "The blue lantern felt close.",
+				snippet: "2026-05-10 Evening: The blue lantern felt close.",
+				metadata: { date: "2026-05-10", heading: "Evening", valence: 1, intensity: 1 },
+				embedding: vector([1, 0, 0]),
+			});
+		} finally {
+			store.close();
+		}
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config);
+			try {
+				const [message] = await service.transformContext([
+					{ role: "user", content: "blue lantern", timestamp: Date.now() },
+				]);
+				assert.equal(message?.role, "user");
+				assert.match(typeof message?.content === "string" ? message.content : "", /Familiar diary recall/);
+				assert.match(typeof message?.content === "string" ? message.content : "", /blue lantern/);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("projects runtime records into LCM and rotates segments on reset", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: { ...baseConfig.memory, lcm: { newSessionRetainDepth: -1 } },
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config);
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				await runtime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "Remember the compact toolbar.",
+				});
+				await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				const lcmStore = LcmStore.open(config);
+				try {
+					const records = lcmStore.listRecords();
+					assert.deepEqual(
+						records.map((record) => record.kind),
+						["user", "assistant", "boundary"],
+					);
+					assert.equal(lcmStore.listSegments().some((segment) => segment.status === "closed"), true);
+				} finally {
+					lcmStore.close();
+				}
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+});
+
+function memoryLog() {
+	const records: any[] = [];
+	return {
+		channel,
+		dir: "memory",
+		lockPath: "memory.lock",
+		async read() {
+			return records;
+		},
+		async append(record: any) {
+			records.push(record);
+		},
+		async acquire() {},
+		async release() {},
+	};
+}
+
+function zeroUsage() {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}

@@ -33,6 +33,7 @@ import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
+import type { MemoryService } from "./memory/service.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
@@ -598,6 +599,7 @@ export async function startDiscordDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
 	settings: SettingsStore,
+	memoryService?: MemoryService,
 ): Promise<DiscordDaemon> {
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
@@ -643,6 +645,7 @@ export async function startDiscordDaemon(
 			ownerId: config.discord.ownerId,
 			botUserId: client.user.id,
 		}).then(async (runtime) => {
+			memoryService?.subscribeRuntime(runtime, runtime.channelKey);
 			await runtime.armAfterCurrentTail();
 			return runtime;
 		});

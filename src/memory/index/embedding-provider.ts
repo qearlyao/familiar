@@ -1,8 +1,6 @@
 import type { Config } from "../../config.js";
 
-export type EmbeddingPart =
-	| { type: "text"; text: string }
-	| { type: "inlineData"; mimeType: string; data: string };
+export type EmbeddingPart = { type: "text"; text: string } | { type: "inlineData"; mimeType: string; data: string };
 
 export type EmbeddingInput = string | { parts: EmbeddingPart[] };
 
@@ -97,7 +95,9 @@ class GeminiEmbeddingProvider implements EmbeddingProvider {
 		const { body, rawText } = await parseJsonResponse(response);
 		if (!response.ok) {
 			const message =
-				typeof body.error?.message === "string" ? body.error.message : truncate(rawText.trim() || response.statusText);
+				typeof body.error?.message === "string"
+					? body.error.message
+					: truncate(rawText.trim() || response.statusText);
 			throw new Error(`Embedding request failed: HTTP ${response.status} ${message}`.trim());
 		}
 

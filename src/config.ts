@@ -324,11 +324,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
 	const memoryEmbeddingApi = readMemoryEmbeddingApi(readOptionalString(memoryEmbedding.api, "gemini"));
 	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
-	const memoryEmbeddingModel = readConfigString(
-		memoryEmbedding.model,
-		"gemini-embedding-2",
-		"memory.embedding.model",
-	);
+	const memoryEmbeddingModel = readConfigString(memoryEmbedding.model, "gemini-embedding-2", "memory.embedding.model");
 	const memoryEmbeddingBaseUrl =
 		readOptionalConfigString(memoryEmbedding.base_url, "memory.embedding.base_url") ??
 		resolveProviderSetting(modelBaseUrls, memoryEmbeddingProvider, memoryEmbeddingModel) ??

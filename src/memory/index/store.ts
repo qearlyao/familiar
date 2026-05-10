@@ -43,6 +43,11 @@ export interface MemorySearchHit {
 	chunk: StoredMemoryChunk;
 }
 
+export interface MemorySearchOptions {
+	limit?: number;
+	corpus?: string | undefined;
+}
+
 export interface MemoryIndexStats {
 	indexed: number;
 	ftsRows: number;
@@ -52,6 +57,12 @@ export interface MemoryIndexStats {
 	embeddingModel: string | null;
 	embeddingDimensions: number | null;
 	dbSizeBytes: number;
+}
+
+export interface MemoryEmbeddingConfig {
+	provider: string;
+	model: string;
+	dimensions: number;
 }
 
 interface MemoryChunkRow {
@@ -121,6 +132,14 @@ export class MemoryIndexStore {
 		if (this.ownsDb) this.db.close();
 	}
 
+	embeddingConfig(): MemoryEmbeddingConfig {
+		return {
+			provider: this.embeddingProvider,
+			model: this.embeddingModel,
+			dimensions: this.embeddingDimensions,
+		};
+	}
+
 	insertChunk(input: MemoryChunkInput): number {
 		return this.insertChunks([input])[0] as number;
 	}
@@ -167,27 +186,34 @@ export class MemoryIndexStore {
 		return row ? rowToChunk(row) : null;
 	}
 
-	searchLexical(query: string, limit = 10): MemorySearchHit[] {
+	searchLexical(query: string, options: number | MemorySearchOptions = {}): MemorySearchHit[] {
+		const normalized = normalizeSearchOptions(options);
+		const params: unknown[] = [query];
+		const corpusFilter = normalized.corpus ? "AND c.corpus = ?" : "";
+		if (normalized.corpus) params.push(normalized.corpus);
+		params.push(normalized.limit);
 		const rows = this.db
 			.prepare(
 				`SELECT c.*, f.rank AS score
 				 FROM memory_fts f
 				 JOIN memory_chunks c ON c.id = f.rowid
 				 WHERE memory_fts MATCH ?
+				 ${corpusFilter}
 				 ORDER BY f.rank
 				 LIMIT ?`,
 			)
-			.all(query, limit) as Array<MemoryChunkRow & { score: number }>;
+			.all(...params) as Array<MemoryChunkRow & { score: number }>;
 		return rows.map((row) => ({ id: row.id, score: row.score, chunk: rowToChunk(row) }));
 	}
 
-	searchSemantic(query: Float32Array, limit = 10, corpus?: string): MemorySearchHit[] {
+	searchSemantic(query: Float32Array, options: number | MemorySearchOptions = {}): MemorySearchHit[] {
+		const normalized = normalizeSearchOptions(options);
 		if (query.length !== this.embeddingDimensions) {
 			throw new Error(`Query vector dimension mismatch: expected ${this.embeddingDimensions}, got ${query.length}`);
 		}
 		const rows = this.db
-			.prepare(corpus ? "SELECT * FROM memory_chunks WHERE corpus = ?" : "SELECT * FROM memory_chunks")
-			.all(...(corpus ? [corpus] : [])) as MemoryChunkRow[];
+			.prepare(normalized.corpus ? "SELECT * FROM memory_chunks WHERE corpus = ?" : "SELECT * FROM memory_chunks")
+			.all(...(normalized.corpus ? [normalized.corpus] : [])) as MemoryChunkRow[];
 		return rows
 			.map((row) => ({
 				id: row.id,
@@ -195,7 +221,7 @@ export class MemoryIndexStore {
 				chunk: rowToChunk(row),
 			}))
 			.sort((a, b) => a.score - b.score)
-			.slice(0, limit);
+			.slice(0, normalized.limit);
 	}
 
 	deleteChunk(id: number): void {
@@ -208,6 +234,33 @@ export class MemoryIndexStore {
 
 	deleteBySource(corpus: string, sourceId: string): void {
 		this.db.transaction(() => this.deleteBySourceInternal(corpus, sourceId)).immediate();
+	}
+
+	deleteBySourceExceptHashes(corpus: string, sourceId: string, contentHashes: readonly string[]): void {
+		const uniqueHashes = [...new Set(contentHashes)];
+		if (uniqueHashes.length === 0) {
+			this.deleteBySource(corpus, sourceId);
+			return;
+		}
+
+		const placeholders = uniqueHashes.map(() => "?").join(",");
+		this.db
+			.transaction(() => {
+				const rows = this.db
+					.prepare(
+						`SELECT id FROM memory_chunks
+						 WHERE corpus = ? AND source_id = ? AND content_hash NOT IN (${placeholders})`,
+					)
+					.all(corpus, sourceId, ...uniqueHashes) as { id: number }[];
+				for (const row of rows) this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);
+				this.db
+					.prepare(
+						`DELETE FROM memory_chunks
+						 WHERE corpus = ? AND source_id = ? AND content_hash NOT IN (${placeholders})`,
+					)
+					.run(corpus, sourceId, ...uniqueHashes);
+			})
+			.immediate();
 	}
 
 	clearAll(): void {
@@ -348,6 +401,14 @@ export function createMemoryContentHash(input: {
 			}),
 		)
 		.digest("hex");
+}
+
+function normalizeSearchOptions(options: number | MemorySearchOptions): { limit: number; corpus?: string } {
+	if (typeof options === "number") return { limit: options };
+	return {
+		limit: options.limit ?? 10,
+		corpus: options.corpus,
+	};
 }
 
 function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {

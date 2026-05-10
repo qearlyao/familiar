@@ -78,10 +78,13 @@ describe("MemoryIndexStore", () => {
 			const lexical = store.searchLexical("lantern", 5);
 			assert.equal(lexical.length, 1);
 			assert.equal(lexical[0]?.chunk.sourceId, "a");
+			assert.equal(store.searchLexical("indexes", { corpus: "diary_chunk" }).length, 0);
+			assert.equal(store.searchLexical("indexes", { corpus: "lcm_record" }).length, 1);
 
 			const semantic = store.searchSemantic(vector([0.9, 0.1, 0]), 2);
 			assert.equal(semantic[0]?.chunk.sourceId, "a");
 			assert.equal(semantic[1]?.chunk.sourceId, "b");
+			assert.equal(store.searchSemantic(vector([0.9, 0.1, 0]), { corpus: "lcm_record" })[0]?.chunk.sourceId, "b");
 		} finally {
 			store.close();
 		}
@@ -108,6 +111,28 @@ describe("MemoryIndexStore", () => {
 			store.deleteBySource("diary_chunk", "day.md");
 			assert.equal(store.searchLexical("new", 5).length, 0);
 			assert.equal(store.stats().indexed, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("deletes stale source rows while preserving selected hashes", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			const ids = store.insertChunks([
+				{ corpus: "diary_chunk", sourceId: "day.md", chunkIndex: 0, text: "keep memory", embedding: vector([1, 0, 0]) },
+				{ corpus: "diary_chunk", sourceId: "day.md", chunkIndex: 1, text: "drop memory", embedding: vector([0, 1, 0]) },
+				{ corpus: "diary_chunk", sourceId: "other.md", chunkIndex: 0, text: "other memory", embedding: vector([0, 0, 1]) },
+			]);
+			const keepHash = store.getChunk(ids[0] as number)?.contentHash;
+			assert.ok(keepHash);
+
+			store.deleteBySourceExceptHashes("diary_chunk", "day.md", [keepHash]);
+
+			assert.equal(store.searchLexical("keep", 5).length, 1);
+			assert.equal(store.searchLexical("drop", 5).length, 0);
+			assert.equal(store.searchLexical("other", 5).length, 1);
+			assert.equal(store.stats().indexed, 2);
 		} finally {
 			store.close();
 		}

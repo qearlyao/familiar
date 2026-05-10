@@ -14,3 +14,17 @@ export {
 	type IndexDiaryMarkdownOptions,
 	indexDiaryMarkdown,
 } from "./chunks.js";
+export {
+	DIARY_INDEX_FILE_RE,
+	type DiaryFileIndexResult,
+	type DiaryFileSkipReason,
+	type DiaryIndexerOptions,
+	type IndexAllDiaryFilesResult,
+	type IndexDiaryFileOptions,
+	type IndexDiaryFileResult,
+	indexAllDiaryFiles,
+	indexDiaryFile,
+	isDatedDiaryMarkdownFile,
+	listDiaryMarkdownFiles,
+	type SkippedDiaryFileIndexResult,
+} from "./indexer.js";

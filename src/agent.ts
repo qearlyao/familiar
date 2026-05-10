@@ -8,6 +8,7 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool } from 
 
 import type { Config, ThinkingLevel } from "./config.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
+import { createMemoryTools } from "./memory/tools.js";
 import {
 	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
@@ -250,6 +251,7 @@ function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): Age
 		createEditTool(config.workspacePath),
 		createTtsTool(config, mediaSink),
 		...createWebTools(config),
+		...createMemoryTools(config),
 	];
 }
 

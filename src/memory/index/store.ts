@@ -188,7 +188,9 @@ export class MemoryIndexStore {
 
 	searchLexical(query: string, options: number | MemorySearchOptions = {}): MemorySearchHit[] {
 		const normalized = normalizeSearchOptions(options);
-		const params: unknown[] = [query];
+		const matchQuery = normalizeFtsMatchQuery(query);
+		if (!matchQuery) return [];
+		const params: unknown[] = [matchQuery];
 		const corpusFilter = normalized.corpus ? "AND c.corpus = ?" : "";
 		if (normalized.corpus) params.push(normalized.corpus);
 		params.push(normalized.limit);
@@ -409,6 +411,14 @@ function normalizeSearchOptions(options: number | MemorySearchOptions): { limit:
 		limit: options.limit ?? 10,
 		corpus: options.corpus,
 	};
+}
+
+function normalizeFtsMatchQuery(query: string): string | null {
+	const tokens = query
+		.normalize("NFKC")
+		.match(/[\p{L}\p{N}_]+/gu)
+		?.map((token) => `"${token.replaceAll('"', '""')}"`);
+	return tokens && tokens.length > 0 ? tokens.join(" ") : null;
 }
 
 function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {

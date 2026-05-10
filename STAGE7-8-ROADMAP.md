@@ -549,6 +549,47 @@ High-value `pi-lcm-memory` files:
 - `/private/tmp/familiar-research/pi-lcm-memory/ROADMAP.md`
   - stabilization history and reranker postmortem.
 
+## TODOs From Recent Stage 7-8 Review
+
+Recent thin-slice fixes handled FTS query sanitization, semantic-to-lexical
+fallback, LCM segment restart continuity, shared-index cleanup after LCM
+retention, and direct dependency declaration for `typebox`.
+
+Remaining migration TODOs:
+
+- Add persisted ordered LCM context items with ordinals, then make live
+  compaction replace raw/summary ranges in that table instead of only in the
+  in-memory `transformContext` state.
+- Rehydrate `transformContext` from persisted LCM context items and retained
+  summaries after daemon restart, so transcript replay is no longer the only
+  continuity source for compressed long conversations.
+- Connect persisted runtime summaries to normalized LCM provenance:
+  `covers_from_record_id`, `covers_to_record_id`, `summary_sources.record_id`,
+  and parent summary links for later expansion.
+- Add condensed summary passes and depth promotion, not just leaf summaries.
+- Add structured message reconstruction/sanitization around tool calls, tool
+  results, and reasoning blocks before LCM summary generation and context
+  assembly.
+- Add prompt-aware eviction and budget selection from `lossless-claw` once the
+  ordered context model exists.
+- Add deferred compaction debt, cache-aware compaction timing, and compaction
+  telemetry so prompt-mutating work can be delayed or retried safely.
+- Add LCM integrity/doctor/clean checks for dangling summary sources, stale
+  shared-index rows, broken context ordering, and missing source records.
+- Add startup/backfill sweep over existing `data/chat` and `data/transcripts`,
+  plus a transcript source adapter for normalized LCM ingestion.
+- Add config-driven retention/archive for `data/chat`, `data/transcripts`, and
+  `data/payloads`; keep transcript pruning conservative until LCM can fully
+  replace replay after restart.
+- Add operator memory commands or CLI equivalents: status, reindex, prune,
+  backup, doctor/clean, and relevant diagnostics.
+- Add sqlite-vec dynamic loading and soft-fail behavior; keep the current
+  linear BLOB scan as fallback when sqlite-vec is unavailable.
+- Add many-to-one source mappings for content-hash dedupe so identical chunks
+  can share one embedding while retaining every source id.
+- Add `memory_similar` or deeper `memory_open`/expand behavior once summary DAG
+  compression needs deterministic drill-down.
+
 ## Open Questions
 
 - Exact DB layout: one shared physical DB with corpus-scoped tables, or separate

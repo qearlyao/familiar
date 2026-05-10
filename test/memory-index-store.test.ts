@@ -90,6 +90,36 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
+	it("quotes natural-language FTS queries with punctuation", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			store.insertChunks([
+				{
+					corpus: "diary_chunk",
+					sourceId: "punctuated",
+					text: "Did we keep the agent-runtime handoff alive?",
+					embedding: vector([1, 0, 0]),
+				},
+				{
+					corpus: "diary_chunk",
+					sourceId: "other",
+					text: "The calendar mentioned lunch plans.",
+					embedding: vector([0, 1, 0]),
+				},
+			]);
+
+			const hits = store.searchLexical("agent-runtime: alive?", 5);
+
+			assert.deepEqual(
+				hits.map((hit) => hit.chunk.sourceId),
+				["punctuated"],
+			);
+			assert.deepEqual(store.searchLexical("?:-", 5), []);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("replaces and deletes source chunks transactionally", async () => {
 		const store = openStore(await tempDbPath());
 		try {

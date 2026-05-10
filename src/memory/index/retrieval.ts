@@ -90,7 +90,13 @@ async function searchSemanticByScope(
 	scope: MemoryRetrievalScope | undefined,
 	signal: AbortSignal | undefined,
 ): Promise<MemorySearchHit[]> {
-	const vector = await provider.embedOne(query, signal);
+	let vector: Float32Array;
+	try {
+		vector = await provider.embedOne(query, signal);
+	} catch (error) {
+		if (signal?.aborted) throw error;
+		return [];
+	}
 	const corpora = uniqueStrings(scope?.corpora);
 	if (corpora.length === 0) return store.searchSemantic(vector, { limit });
 	return corpora.flatMap((corpus) => store.searchSemantic(vector, { limit, corpus }));

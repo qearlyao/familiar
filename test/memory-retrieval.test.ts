@@ -41,6 +41,12 @@ class FakeEmbeddingProvider {
 	}
 }
 
+class FailingEmbeddingProvider {
+	async embedOne(_input: string, _signal?: AbortSignal): Promise<Float32Array> {
+		throw new Error("embedding unavailable");
+	}
+}
+
 describe("retrieveMemory", () => {
 	it("merges lexical and semantic hits with stable rank scoring", async () => {
 		const lantern = hit(1, "diary_chunk", "a", "blue lantern", 0.5);
@@ -120,6 +126,24 @@ describe("retrieveMemory", () => {
 			[1],
 		);
 		assert.deepEqual(provider.queries, []);
+		assert.deepEqual(store.lexicalCorpora, [undefined]);
+		assert.deepEqual(store.semanticCorpora, []);
+	});
+
+	it("falls back to lexical hits when semantic embedding fails", async () => {
+		const lexical = hit(1, "lcm_summary", "summary-1", "migration summary", -1.2);
+		const store = new FakeStore([lexical], new Map([[undefined, [hit(2, "lcm_summary", "summary-2", "semantic", 0.1)]]]));
+
+		const results = await retrieveMemory({
+			query: "migration",
+			store,
+			embeddingProvider: new FailingEmbeddingProvider(),
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1],
+		);
 		assert.deepEqual(store.lexicalCorpora, [undefined]);
 		assert.deepEqual(store.semanticCorpora, []);
 	});

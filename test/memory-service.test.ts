@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 
 import { buildRecordBase, type ChatChannelRef } from "../src/chat-log.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
+import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
 import { createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
@@ -155,6 +156,128 @@ describe("MemoryService", () => {
 					assert.equal(lcmStore.listSegments().some((segment) => segment.status === "closed"), true);
 				} finally {
 					lcmStore.close();
+				}
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("continues segment IDs after restart instead of reusing closed segments", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const firstService = createMemoryService(config);
+			const firstLog = memoryLog();
+			const firstRuntime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log: firstLog,
+				ownerId: "owner",
+			});
+			const firstUnsubscribe = firstService.subscribeRuntime(firstRuntime, "session-a");
+			try {
+				await firstRuntime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "First session detail.",
+				});
+				await firstRuntime.resetConversation("new conversation requested");
+				await firstService.flush();
+			} finally {
+				firstUnsubscribe();
+				await firstRuntime.disconnect();
+				firstService.close();
+			}
+
+			const secondService = createMemoryService(config);
+			const secondLog = memoryLog();
+			const secondRuntime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log: secondLog,
+				ownerId: "owner",
+			});
+			const secondUnsubscribe = secondService.subscribeRuntime(secondRuntime, "session-b");
+			try {
+				await secondRuntime.ingestInbound({
+					messageId: "m2",
+					authorId: "owner",
+					text: "Second session detail.",
+				});
+				await secondService.flush();
+
+				const lcmStore = LcmStore.open(config);
+				try {
+					assert.deepEqual(
+						lcmStore.listRecords().map((record) => ({ kind: record.kind, segmentId: record.segmentId })),
+						[
+							{ kind: "user", segmentId: "web-web-room:seg-1" },
+							{ kind: "boundary", segmentId: "web-web-room:seg-1" },
+							{ kind: "user", segmentId: "web-web-room:seg-2" },
+						],
+					);
+					assert.equal(lcmStore.getSegment("web-web-room:seg-1")?.status, "closed");
+					assert.equal(lcmStore.getSegment("web-web-room:seg-2")?.status, "active");
+				} finally {
+					lcmStore.close();
+				}
+			} finally {
+				secondUnsubscribe();
+				await secondRuntime.disconnect();
+				secondService.close();
+			}
+		});
+	});
+
+	it("removes pruned LCM records from the shared memory index on reset", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config);
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				await runtime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "Recall should not find the pruned toolbar detail.",
+				});
+				await service.flush();
+
+				let memoryStore = MemoryIndexStore.open(config);
+				try {
+					assert.equal(memoryStore.searchLexical("toolbar", { corpus: LCM_RECORD_CORPUS }).length, 1);
+				} finally {
+					memoryStore.close();
+				}
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				const lcmStore = LcmStore.open(config);
+				try {
+					assert.deepEqual(lcmStore.listRecords(), []);
+				} finally {
+					lcmStore.close();
+				}
+
+				memoryStore = MemoryIndexStore.open(config);
+				try {
+					assert.equal(memoryStore.searchLexical("toolbar", { corpus: LCM_RECORD_CORPUS }).length, 0);
+				} finally {
+					memoryStore.close();
 				}
 			} finally {
 				unsubscribe();

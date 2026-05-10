@@ -184,15 +184,25 @@ class DefaultMemoryService implements MemoryService {
 				sourceRef: `chat:${record.recordId}`,
 			},
 		});
-		this.lcmStore.applyNewSessionRetention({
+		const retention = this.lcmStore.applyNewSessionRetention({
 			newSessionRetainDepth: this.config.memory.lcm.newSessionRetainDepth,
 			activeSegmentId: nextSegmentId,
 		});
+		for (const deleted of retention.indexDeletes) {
+			this.memoryStore.deleteBySource(deleted.corpus, deleted.sourceId);
+		}
 	}
 
 	private activeSegmentId(channelKey: string): string {
 		const existing = this.activeSegments.get(channelKey);
 		if (existing) return existing;
+		const persisted = this.findPersistedActiveSegmentId(channelKey);
+		if (persisted) {
+			this.activeSegments.set(channelKey, persisted);
+			this.seedSegmentCounter(channelKey);
+			return persisted;
+		}
+		this.seedSegmentCounter(channelKey);
 		const next = this.nextSegmentId(channelKey);
 		this.activeSegments.set(channelKey, next);
 		return next;
@@ -202,6 +212,26 @@ class DefaultMemoryService implements MemoryService {
 		const next = (this.segmentCounters.get(channelKey) ?? 0) + 1;
 		this.segmentCounters.set(channelKey, next);
 		return `${channelKey}:seg-${next}`;
+	}
+
+	private findPersistedActiveSegmentId(channelKey: string): string | null {
+		const segments = this.lcmStore
+			.listSegments()
+			.filter((segment) => segment.channelKey === channelKey && segment.status === "active")
+			.sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id));
+		return segments[0]?.id ?? null;
+	}
+
+	private seedSegmentCounter(channelKey: string): void {
+		const existing = this.segmentCounters.get(channelKey) ?? 0;
+		let max = existing;
+		for (const segment of this.lcmStore.listSegments()) {
+			if (segment.channelKey !== channelKey) continue;
+			const match = segment.id.match(/:seg-(\d+)$/);
+			if (!match) continue;
+			max = Math.max(max, Number(match[1]));
+		}
+		this.segmentCounters.set(channelKey, max);
 	}
 
 	private async transformLcmContext(

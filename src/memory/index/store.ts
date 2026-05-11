@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import type { Config } from "../../config.js";
 import { normalizeFtsMatchQuery } from "./fts-query.js";
 import { readMeta, runMemoryIndexMigrations } from "./schema.js";
+import { type VectorCapability } from "./vec.js";
 import { cosineDistance, decodeVector, encodeVector } from "./vector-codec.js";
 
 export interface MemoryChunkInput {
@@ -62,6 +63,8 @@ export interface MemoryIndexStats {
 	ftsRows: number;
 	vectorRows: number;
 	vectorAvailable: boolean;
+	vectorCapability: VectorCapability;
+	requiresReindex: boolean;
 	embeddingProvider: string | null;
 	embeddingModel: string | null;
 	embeddingDimensions: number | null;
@@ -240,6 +243,35 @@ export class MemoryIndexStore {
 		if (query.length !== this.embeddingDimensions) {
 			throw new Error(`Query vector dimension mismatch: expected ${this.embeddingDimensions}, got ${query.length}`);
 		}
+		if (this.vectorCapability() === "sqlite-vec") return this.searchSemanticVec(query, normalized);
+		return this.searchSemanticLinear(query, normalized);
+	}
+
+	private searchSemanticVec(
+		query: Float32Array,
+		normalized: { limit: number; corpus?: string },
+	): MemorySearchHit[] {
+		const params: unknown[] = [encodeVector(query), normalized.limit];
+		if (normalized.corpus) params.push(normalized.corpus);
+		const corpusFilter = normalized.corpus ? "WHERE c.corpus = ?" : "";
+		const rows = this.db
+			.prepare(
+				`SELECT c.*, v.distance AS score, ${sourcesJsonSelect("c.id")}
+				 FROM (
+					SELECT rowid AS chunk_id, distance
+					FROM memory_vec
+					WHERE embedding MATCH ? AND k = ?
+				 ) v
+				 JOIN memory_chunks c ON c.id = v.chunk_id
+				 ${corpusFilter}
+				 ORDER BY v.distance
+				 LIMIT ?`,
+			)
+			.all(...params, normalized.limit) as Array<MemoryChunkRow & { score: number }>;
+		return rows.map((row) => ({ id: row.id, score: row.score, chunk: rowToChunk(row) }));
+	}
+
+	private searchSemanticLinear(query: Float32Array, normalized: { limit: number; corpus?: string }): MemorySearchHit[] {
 		const rows = this.db
 			.prepare(
 				normalized.corpus
@@ -325,6 +357,7 @@ export class MemoryIndexStore {
 		this.db
 			.transaction(() => {
 				this.db.prepare("INSERT INTO memory_fts(memory_fts) VALUES ('delete-all')").run();
+				if (this.vectorCapability() === "sqlite-vec") this.db.prepare("DELETE FROM memory_vec").run();
 				this.db.prepare("DELETE FROM memory_index_sources").run();
 				this.db.prepare("DELETE FROM memory_chunks").run();
 			})
@@ -368,16 +401,33 @@ export class MemoryIndexStore {
 			.prepare("SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()")
 			.get() as { bytes: number };
 		const dimensionsRaw = readMeta(this.db, "embedding_dimensions");
+		const vectorCapability = this.vectorCapability();
+		const vectorRows = vectorCapability === "sqlite-vec" ? this.vectorRowCount() : indexed;
 		return {
 			indexed,
 			ftsRows,
-			vectorRows: indexed,
-			vectorAvailable: true,
+			vectorRows,
+			vectorAvailable: vectorCapability === "sqlite-vec",
+			vectorCapability,
+			requiresReindex: readMeta(this.db, "requires_reindex") === "1",
 			embeddingProvider: readMeta(this.db, "embedding_provider"),
 			embeddingModel: readMeta(this.db, "embedding_model"),
 			embeddingDimensions: dimensionsRaw ? Number(dimensionsRaw) : null,
 			dbSizeBytes: size.bytes,
 		};
+	}
+
+	private vectorCapability(): VectorCapability {
+		return readMeta(this.db, "vector_capability") === "sqlite-vec" ? "sqlite-vec" : "blob-js";
+	}
+
+	private vectorRowCount(): number {
+		try {
+			const row = this.db.prepare("SELECT COUNT(*) AS n FROM memory_vec").get() as { n: number };
+			return row.n;
+		} catch {
+			return 0;
+		}
 	}
 
 	private normalizeInput(input: MemoryChunkInput): NormalizedChunkInput {
@@ -441,6 +491,9 @@ export class MemoryIndexStore {
 		this.db
 			.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)")
 			.run(id, item.text, item.snippet);
+		if (this.vectorCapability() === "sqlite-vec") {
+			this.db.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)").run(id, encodeVector(item.embedding));
+		}
 		this.insertSourceMapping(id, item);
 		return id;
 	}
@@ -481,6 +534,7 @@ export class MemoryIndexStore {
 		if (!row) return;
 		this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(id);
 	}
+
 }
 
 interface NormalizedChunkInput {

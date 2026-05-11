@@ -655,14 +655,14 @@ shipped. Fix before adding more surface area.
 - [x] Add operator memory commands or CLI equivalents: status, reindex, prune,
   backup, doctor/clean, and relevant diagnostics. Agent-facing
   `memory_recall` / `memory_open` exist; no operator surface does.
-- Add sqlite-vec dynamic loading and soft-fail behavior; keep the current
+- [x] Add sqlite-vec dynamic loading and soft-fail behavior; keep the current
   linear BLOB scan as fallback when sqlite-vec is unavailable. Expose a real
   capability probe so `stats().vectorAvailable` and `meta.vector_capability`
   stop lying.
 - [x] Add many-to-one source mappings for content-hash dedupe so identical
   chunks can share one embedding while retaining every source id. Landed
   together with the `content_hash` fix via `memory_index_sources` table.
-- Add a reindex-from-source registry so embedding-model or dimension changes
+- [x] Add a reindex-from-source registry so embedding-model or dimension changes
   can repopulate the index automatically instead of permanently wiping
   content the operator must re-feed.
 - Cascade-delete shared-index rows when their LCM record or diary chunk is

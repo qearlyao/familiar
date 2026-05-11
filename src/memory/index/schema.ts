@@ -1,16 +1,19 @@
 import type Database from "better-sqlite3";
 
+import { loadSqliteVec, type VectorCapability } from "./vec.js";
+
 export interface MemoryIndexMigrationOptions {
 	embeddingProvider: string;
 	embeddingModel: string;
 	embeddingDimensions: number;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function runMemoryIndexMigrations(db: Database.Database, options: MemoryIndexMigrationOptions): void {
 	db.pragma("journal_mode = WAL");
 	db.pragma("foreign_keys = ON");
+	const vec = loadSqliteVec(db);
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS memory_meta (
 			k TEXT PRIMARY KEY,
@@ -56,12 +59,13 @@ export function runMemoryIndexMigrations(db: Database.Database, options: MemoryI
 	`);
 
 	migrateMemoryIndexSources(db);
+	const vectorCapability = reconcileVectorTable(db, options, vec.available);
 	reconcileEmbeddingConfig(db, options);
 	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
 	writeMeta(db, "embedding_provider", options.embeddingProvider);
 	writeMeta(db, "embedding_model", options.embeddingModel);
 	writeMeta(db, "embedding_dimensions", String(options.embeddingDimensions));
-	writeMeta(db, "vector_capability", "blob-js");
+	writeMeta(db, "vector_capability", vectorCapability);
 }
 
 export function readMeta(db: Database.Database, key: string): string | null {
@@ -85,9 +89,44 @@ function reconcileEmbeddingConfig(db: Database.Database, options: MemoryIndexMig
 	) {
 		db.transaction(() => {
 			db.prepare("DELETE FROM memory_fts").run();
+			if (tableExists(db, "memory_vec")) db.prepare("DELETE FROM memory_vec").run();
 			db.prepare("DELETE FROM memory_index_sources").run();
 			db.prepare("DELETE FROM memory_chunks").run();
+			writeMeta(db, "requires_reindex", "1");
 		}).immediate();
+	}
+}
+
+function reconcileVectorTable(
+	db: Database.Database,
+	options: MemoryIndexMigrationOptions,
+	sqliteVecAvailable: boolean,
+): VectorCapability {
+	if (!sqliteVecAvailable) {
+		db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
+		return "blob-js";
+	}
+	try {
+		if (!tableExists(db, "memory_vec")) {
+			db.prepare(
+				`CREATE VIRTUAL TABLE memory_vec USING vec0(
+					embedding float[${options.embeddingDimensions}]
+				)`,
+			).run();
+		}
+		// Virtual tables cannot own FK constraints, so this mirrors ON DELETE
+		// CASCADE for direct memory_chunks deletes while sqlite-vec is loaded.
+		db.prepare(
+			`CREATE TRIGGER IF NOT EXISTS trg_memory_chunks_delete_vec
+			 AFTER DELETE ON memory_chunks
+			 BEGIN
+				DELETE FROM memory_vec WHERE rowid = old.id;
+			 END`,
+		).run();
+		return "sqlite-vec";
+	} catch {
+		db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
+		return "blob-js";
 	}
 }
 
@@ -128,4 +167,11 @@ function migrateMemoryIndexSources(db: Database.Database): void {
 			for (const row of rows) insert.run(row.id, row.text_full, row.snippet);
 		}).immediate();
 	}
+}
+
+function tableExists(db: Database.Database, name: string): boolean {
+	const row = db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) as
+		| { ok: number }
+		| undefined;
+	return !!row;
 }

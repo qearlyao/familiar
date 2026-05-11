@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 
+import { runDoctor } from "../src/memory/doctor.js";
 import { createMemoryContentHash, MemoryIndexStore } from "../src/memory/index/store.js";
+import { __memoryVecTest } from "../src/memory/index/vec.js";
+import { LcmStore } from "../src/memory/lcm/store.js";
 
 async function tempDbPath(): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-memory-index-"));
@@ -20,11 +23,24 @@ function openStore(path: string, dimensions = 3): MemoryIndexStore {
 	});
 }
 
+function openStoreWithModel(path: string, model: string, dimensions = 3): MemoryIndexStore {
+	return new MemoryIndexStore({
+		path,
+		embeddingProvider: "google",
+		embeddingModel: model,
+		embeddingDimensions: dimensions,
+	});
+}
+
 function vector(values: number[]): Float32Array {
 	return new Float32Array(values);
 }
 
 describe("MemoryIndexStore", () => {
+	afterEach(() => {
+		__memoryVecTest.setLoader(null);
+	});
+
 	it("inserts, dedupes, and reads chunks", async () => {
 		const store = openStore(await tempDbPath());
 		try {
@@ -85,6 +101,60 @@ describe("MemoryIndexStore", () => {
 			assert.equal(semantic[0]?.chunk.sourceId, "a");
 			assert.equal(semantic[1]?.chunk.sourceId, "b");
 			assert.equal(store.searchSemantic(vector([0.9, 0.1, 0]), { corpus: "lcm_record" })[0]?.chunk.sourceId, "b");
+		} finally {
+			store.close();
+		}
+	});
+
+	it("sqlite-vec unavailable soft-fall uses linear scan", async () => {
+		__memoryVecTest.setLoader(() => {
+			throw new Error("sqlite-vec unavailable in test");
+		});
+		const store = openStore(await tempDbPath());
+		try {
+			store.insertChunks([
+				{ corpus: "diary_chunk", sourceId: "a", text: "near vector", embedding: vector([1, 0, 0]) },
+				{ corpus: "diary_chunk", sourceId: "b", text: "far vector", embedding: vector([0, 1, 0]) },
+			]);
+
+			const semantic = store.searchSemantic(vector([0.9, 0.1, 0]), 2);
+
+			assert.equal(semantic[0]?.chunk.sourceId, "a");
+			assert.equal(semantic[1]?.chunk.sourceId, "b");
+			assert.equal(store.stats().vectorAvailable, false);
+			assert.equal(store.stats().vectorCapability, "blob-js");
+		} finally {
+			store.close();
+		}
+	});
+
+	it("sqlite-vec available matches linear-scan baseline", async (t) => {
+		const sqliteVec = __memoryVecTest.probePackage();
+		if (!sqliteVec) {
+			t.skip("sqlite-vec is not installed in this environment");
+			return;
+		}
+		const path = await tempDbPath();
+		const store = openStore(path);
+		try {
+			const inputs = Array.from({ length: 50 }, (_, index) => {
+				const values = vector([index + 1, 50 - index, (index % 7) + 1]);
+				return {
+					corpus: "diary_chunk",
+					sourceId: `chunk-${index}`,
+					text: `semantic chunk ${index}`,
+					embedding: values,
+				};
+			});
+			store.insertChunks(inputs);
+			assert.equal(store.stats().vectorAvailable, true);
+
+			const query = vector([42, 8, 1]);
+			const vecHits = store.searchSemantic(query, 10).map((hit) => hit.id);
+			store.db.prepare("UPDATE memory_meta SET v = 'blob-js' WHERE k = 'vector_capability'").run();
+			const linearHits = store.searchSemantic(query, 10).map((hit) => hit.id);
+
+			assert.deepEqual(vecHits, linearHits);
 		} finally {
 			store.close();
 		}
@@ -255,6 +325,65 @@ describe("MemoryIndexStore", () => {
 			assert.equal(secondStore.searchLexical("summary", 5).length, 0);
 		} finally {
 			secondStore.close();
+		}
+	});
+
+	it("sets requires_reindex after embedding config changes", async () => {
+		const path = await tempDbPath();
+		const firstStore = openStore(path);
+		try {
+			firstStore.insertChunk({
+				corpus: "lcm_summary",
+				sourceId: "sum1",
+				text: "summary survives until dimension change",
+				embedding: vector([1, 0, 0]),
+			});
+		} finally {
+			firstStore.close();
+		}
+
+		const secondStore = openStoreWithModel(path, "gemini-embedding-2", 4);
+		try {
+			assert.equal(secondStore.stats().indexed, 0);
+			assert.equal(
+				(secondStore.db.prepare("SELECT v FROM memory_meta WHERE k = 'requires_reindex'").get() as { v: string }).v,
+				"1",
+			);
+			assert.equal(secondStore.stats().requiresReindex, true);
+		} finally {
+			secondStore.close();
+		}
+	});
+
+	it("doctor reports requires_reindex and clean does not clear it", async () => {
+		const path = await tempDbPath();
+		const lcmPath = await tempDbPath();
+		const firstStore = openStore(path);
+		try {
+			firstStore.insertChunk({
+				corpus: "lcm_summary",
+				sourceId: "sum1",
+				text: "summary survives until doctor sees reindex",
+				embedding: vector([1, 0, 0]),
+			});
+		} finally {
+			firstStore.close();
+		}
+
+		const index = openStoreWithModel(path, "gemini-embedding-2", 4);
+		const lcm = new LcmStore({ path: lcmPath });
+		try {
+			const report = runDoctor({ lcm, index });
+			assert.ok(report.findings.some((finding) => finding.kind === "requires_reindex"));
+
+			runDoctor({ lcm, index }, {});
+			assert.equal(
+				(index.db.prepare("SELECT v FROM memory_meta WHERE k = 'requires_reindex'").get() as { v: string }).v,
+				"1",
+			);
+		} finally {
+			lcm.close();
+			index.close();
 		}
 	});
 

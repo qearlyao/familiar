@@ -28,6 +28,7 @@ export function runDoctor(stores: DoctorStores, opts: Record<string, never> = {}
 	findBrokenContextOrdering(stores, findings);
 	findSummaryFkViolations(stores, findings);
 	findMissingPrunedSnapshots(stores, findings);
+	findRequiresReindex(stores, findings);
 	findEmbeddingMismatches(stores, findings);
 	return { findings, clean: findings.length === 0 };
 }
@@ -103,6 +104,9 @@ export function applyDoctorFixes(stores: DoctorStores, report: DoctorReport): { 
 	}
 	if (report.findings.some((finding) => finding.kind === "embedding_mismatch")) {
 		warnings.push("embedding mismatches were not rebuilt; run 'familiar memory reindex'");
+	}
+	if (report.findings.some((finding) => finding.kind === "requires_reindex")) {
+		warnings.push("reindex requirement was not cleared; run 'familiar memory reindex --force'");
 	}
 
 	const summary = [`fixed ${fixed} item(s)`, ...warnings].join("; ");
@@ -241,6 +245,18 @@ function findMissingPrunedSnapshots(stores: DoctorStores, findings: DoctorFindin
 			fixable: false,
 		});
 	}
+}
+
+function findRequiresReindex(stores: DoctorStores, findings: DoctorFinding[]): void {
+	const row = stores.index.db.prepare("SELECT v FROM memory_meta WHERE k = 'requires_reindex'").get() as
+		| { v: string }
+		| undefined;
+	if (row?.v !== "1") return;
+	findings.push({
+		kind: "requires_reindex",
+		detail: "memory index was cleared after embedding config changed; run 'familiar memory reindex --force'",
+		fixable: false,
+	});
 }
 
 function findEmbeddingMismatches(stores: DoctorStores, findings: DoctorFinding[]): void {

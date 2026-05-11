@@ -109,8 +109,14 @@ function collectStatus(config: FamiliarConfig, service: MemoryOperatorService): 
 			),
 			memoryIndexSources: countRows(service.memoryStore, "memory_index_sources"),
 			memoryFtsRows: indexStats.ftsRows,
+			memoryVectorRows: indexStats.vectorRows,
 		},
 		embedding: service.memoryStore.embeddingConfig(),
+		vector: {
+			capability: indexStats.vectorCapability,
+			available: indexStats.vectorAvailable,
+		},
+		requiresReindex: indexStats.requiresReindex,
 		schemaVersions: {
 			lcm: service.lcmStore.schemaVersion(),
 			index: readMemoryMeta(service.memoryStore, "schema_version"),
@@ -142,7 +148,7 @@ async function reindex(
 ): Promise<void> {
 	if (options.force) {
 		service.memoryStore.db
-			.prepare("DELETE FROM memory_meta WHERE k IN ('embedding_model', 'embedding_dimensions')")
+			.prepare("DELETE FROM memory_meta WHERE k IN ('embedding_model', 'embedding_dimensions', 'requires_reindex')")
 			.run();
 	}
 	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
@@ -392,7 +398,11 @@ function printPlainStatus(status: MemoryStatus): void {
 	console.log(`Memory chunks by corpus: ${JSON.stringify(status.counts.memoryChunksByCorpus)}`);
 	console.log(`Memory index sources: ${status.counts.memoryIndexSources}`);
 	console.log(`Memory FTS rows: ${status.counts.memoryFtsRows}`);
+	console.log(
+		`Memory vector rows: ${status.counts.memoryVectorRows} (${status.vector.available ? status.vector.capability : "blob-js fallback"})`,
+	);
 	console.log(`Embedding: ${status.embedding.provider}/${status.embedding.model} dim=${status.embedding.dimensions}`);
+	if (status.requiresReindex) console.log("Reindex required: run familiar memory reindex --force");
 	console.log(
 		`Schema versions: lcm=${status.schemaVersions.lcm ?? "unknown"} index=${status.schemaVersions.index ?? "unknown"}`,
 	);
@@ -455,8 +465,11 @@ interface MemoryStatus {
 		memoryChunksByCorpus: Record<string, number>;
 		memoryIndexSources: number;
 		memoryFtsRows: number;
+		memoryVectorRows: number;
 	};
 	embedding: { provider: string; model: string; dimensions: number };
+	vector: { capability: string; available: boolean };
+	requiresReindex: boolean;
 	schemaVersions: { lcm: number | null; index: number | null };
 }
 

@@ -95,6 +95,7 @@ export class ChunkIndexer {
 		skipped: number,
 		signal?: AbortSignal,
 	): Promise<ChunkIndexResult> {
+		const startedAt = Date.now();
 		if (prepared.length === 0) return { ids: [], embedded: 0, reused: 0, skipped };
 
 		const present = this.store.whichHashesPresent(prepared.map((item) => item.contentHash));
@@ -118,11 +119,15 @@ export class ChunkIndexer {
 		}
 
 		const itemsToEmbed = [...pendingEmbeddings.values()];
+		let embeddingCost = 0;
 		const embeddings =
 			itemsToEmbed.length === 0
 				? []
 				: await this.embeddingProvider.embed(
-						itemsToEmbed.map((item): EmbeddingInput => item.text),
+						itemsToEmbed.map((item): EmbeddingInput => {
+							embeddingCost += item.text.length;
+							return item.text;
+						}),
 						signal,
 					);
 		if (embeddings.length !== itemsToEmbed.length) {
@@ -181,11 +186,22 @@ export class ChunkIndexer {
 			ids[insertPositions[index] as number] = insertedIds[index] as number;
 		}
 
-		return {
+		const result = {
 			ids,
 			embedded: itemsToEmbed.length,
 			reused: prepared.length - toInsert.length,
 			skipped,
 		};
+		logMemoryIndexBatch({
+			chunks: prepared.length,
+			durationMs: Date.now() - startedAt,
+			embeddingCost,
+		});
+		return result;
 	}
+}
+
+function logMemoryIndexBatch(payload: { chunks: number; durationMs: number; embeddingCost: number }): void {
+	if (process.env.DEBUG !== "memory-index") return;
+	console.error(JSON.stringify({ event: "memory_index_batch", ...payload }));
 }

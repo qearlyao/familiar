@@ -44,11 +44,24 @@ export function isDatedDiaryMarkdownFile(path: string): boolean {
 }
 
 export async function listDiaryMarkdownFiles(config: Config): Promise<string[]> {
-	const entries = await readdir(config.memory.diariesDir, { withFileTypes: true });
+	let entries: Awaited<ReturnType<typeof readdir>>;
+	try {
+		entries = await readdir(config.memory.diariesDir, { withFileTypes: true });
+	} catch (error) {
+		if (isEnoent(error)) {
+			console.info(`diary indexer found no diary directory at ${config.memory.diariesDir}; indexed 0 files`);
+			return [];
+		}
+		throw error;
+	}
 	return entries
 		.filter((entry) => entry.isFile() && DIARY_INDEX_FILE_RE.test(entry.name))
 		.map((entry) => join(config.memory.diariesDir, entry.name))
 		.sort();
+}
+
+function isEnoent(error: unknown): boolean {
+	return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
 
 export async function indexDiaryFile(options: IndexDiaryFileOptions): Promise<IndexDiaryFileResult> {

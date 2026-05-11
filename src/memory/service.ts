@@ -32,6 +32,7 @@ export interface MemoryOperatorService extends MemoryService {
 	readonly lcmStore: LcmStore;
 	readonly memoryStore: MemoryIndexStore;
 	readonly indexer: ChunkIndexer;
+	stats(): { projectionFailures: number };
 }
 
 export interface MemoryTransformOptions {
@@ -90,6 +91,13 @@ class DefaultMemoryService implements MemoryOperatorService {
 		this.ambientInjector = new AmbientDiaryInjector({
 			store: this.memoryStore,
 			embeddingProvider: this.embeddingProvider,
+			topK: config.memory.ambient.topK,
+			minQueryLength: config.memory.ambient.minQueryLength,
+			throttleSeconds: config.memory.ambient.throttleSeconds,
+			weightSimilarity: config.memory.ambient.weightSimilarity,
+			weightValence: config.memory.ambient.weightValence,
+			weightRecency: config.memory.ambient.weightRecency,
+			weightIntensity: config.memory.ambient.weightIntensity,
 		});
 	}
 
@@ -111,7 +119,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 		options: MemoryTransformOptions = {},
 	): Promise<AgentMessage[]> {
 		const compacted = await this.contextTransformer.transformLcmContext(messages, signal, options);
-		return this.ambientInjector.inject(compacted, signal);
+		return this.ambientInjector.inject(compacted, signal, options.sessionKey ?? options.sessionId ?? "default");
 	}
 
 	async serviceCompactionDebt(sessionKey: string): Promise<void> {
@@ -125,6 +133,10 @@ class DefaultMemoryService implements MemoryOperatorService {
 
 	async flush(): Promise<void> {
 		await this.segmentManager.flush();
+	}
+
+	stats(): { projectionFailures: number } {
+		return { projectionFailures: this.segmentManager.stats().projectionFailures };
 	}
 
 	private reconcileSharedIndex(): void {

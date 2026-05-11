@@ -6,20 +6,16 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	createAgentMessageFingerprint,
 	createRawContextItems,
-	detectLcmCompactionPressure,
 	estimateAgentMessageTokens,
 	estimateLcmRecordTokens,
 	estimateTextTokens,
 	lcmRecordToAgentMessage,
 	selectLcmCompactionCandidatePromptAware,
-	selectFreshTailRecords,
 } from "../src/memory/lcm/context.js";
 import type {
 	LcmRecordKind,
 	LcmSourceProvenance,
-	LcmSummaryStatus,
 	StoredLcmRecord,
-	StoredLcmSummary,
 } from "../src/memory/lcm/types.js";
 
 const source: LcmSourceProvenance = {
@@ -68,66 +64,6 @@ describe("LCM context helpers", () => {
 
 		assert.ok(plain > 0);
 		assert.ok(withAttachment > plain);
-	});
-
-	it("protects a fresh tail by count even when the token cap is exceeded", () => {
-		const records = [
-			record(1, "user", "old one"),
-			record(2, "assistant", "old two"),
-			record(3, "tool", "ignored tool"),
-			record(4, "user", "fresh " + "x".repeat(60)),
-			record(5, "assistant", "fresh " + "y".repeat(60)),
-		];
-
-		const selection = selectFreshTailRecords(records, { messageCount: 2, maxTokens: 5 });
-
-		assert.deepEqual(
-			selection.records.map((item) => item.id),
-			[4, 5],
-		);
-		assert.ok(selection.tokenCount > 5);
-		assert.ok(selection.overflowTokens > 0);
-	});
-
-	it("extends the fresh tail backward until the optional token cap is reached", () => {
-		const records = [
-			record(1, "user", "one"),
-			record(2, "assistant", "two"),
-			record(3, "user", "three"),
-			record(4, "assistant", "four"),
-		];
-
-		const selection = selectFreshTailRecords(records, { messageCount: 1, maxTokens: 40 });
-
-		assert.deepEqual(
-			selection.records.map((item) => item.id),
-			[1, 2, 3, 4],
-		);
-	});
-
-	it("detects compaction pressure from evictable tokens outside the fresh tail", () => {
-		const records = [
-			record(1, "user", "old " + "a".repeat(120)),
-			record(2, "assistant", "old " + "b".repeat(120)),
-			record(3, "boundary", "Session boundary"),
-			record(4, "user", "fresh question"),
-			record(5, "assistant", "fresh answer"),
-		];
-
-		const pressure = detectLcmCompactionPressure({
-			records,
-			summaries: [summary(1, "seg-a", 1, "ready", "Existing retained summary.")],
-			freshTail: { messageCount: 2 },
-			evictableTokenThreshold: 10,
-			evictableTokenBudget: 1_000,
-		});
-
-		assert.equal(pressure.shouldCompact, true);
-		assert.deepEqual(pressure.reasons, ["evictable_threshold"]);
-		assert.equal(pressure.evictableRecordCount, 2);
-		assert.equal(pressure.freshTailRecordCount, 2);
-		assert.ok(pressure.evictableTokens > pressure.freshTailTokens);
-		assert.ok(pressure.summaryTokens > 0);
 	});
 
 	it("creates stable AgentMessage fingerprints independent of starting index", () => {
@@ -233,33 +169,6 @@ function record(
 		source,
 		attachments: null,
 		metadata: null,
-		createdAt: id,
-		updatedAt: id,
-	};
-}
-
-function summary(
-	id: number,
-	segmentId: string,
-	depth: number,
-	status: LcmSummaryStatus,
-	text: string,
-	pinned = false,
-): StoredLcmSummary {
-	return {
-		id,
-		summaryKey: `summary-${id}`,
-		segmentId,
-		depth,
-		status,
-		text,
-		pinned,
-		coversFromRecordId: id,
-		coversToRecordId: id,
-		source,
-		metadata: null,
-		snapshot: null,
-		parents: [],
 		createdAt: id,
 		updatedAt: id,
 	};

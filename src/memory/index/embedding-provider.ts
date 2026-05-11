@@ -32,8 +32,10 @@ interface GeminiEmbeddingResponse {
 }
 
 export function createEmbeddingProvider(config: Config, options: EmbeddingProviderOptions = {}): EmbeddingProvider {
-	if (config.memory.embedding.api === "gemini") return new GeminiEmbeddingProvider(config, options.fetchFn ?? fetch);
-	throw new Error(`Unsupported memory embedding api: ${config.memory.embedding.api}`);
+	if (config.memory.embedding.format === "gemini") return new GeminiEmbeddingProvider(config, options.fetchFn ?? fetch);
+	throw new Error(
+		`NotImplementedError: memory.embedding.format=${config.memory.embedding.format} is recognized but only gemini is implemented in v0`,
+	);
 }
 
 class GeminiEmbeddingProvider implements EmbeddingProvider {

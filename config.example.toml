@@ -18,7 +18,7 @@ bind_address = "127.0.0.1"
 
 [agent]
 model = "anthropic/claude-sonnet-4-5"
-cacheRetention = "long"
+cache_retention = "long"
 thinking_level = "medium"
 
 [models]
@@ -64,6 +64,16 @@ use_speaker_boost = true
 [media.generated]
 retention_days = 30
 
+[data.chat]
+retention_days = 0
+
+[data.transcripts]
+# Keep transcript retention disabled unless LCM fully covers restart replay needs.
+retention_days = 0
+
+[data.payloads]
+retention_days = 7
+
 [media.understanding.audio]
 provider = "groq"
 model = "whisper-large-v3"
@@ -86,7 +96,8 @@ data_dir = "data"
 root_dir = "memories"
 
 [memory.embedding]
-api = "gemini"
+# Embedding wire format: gemini, openai, or voyage. v0 implements gemini only.
+format = "gemini"
 provider = "google"
 model = "gemini-embedding-2"
 # base_url and api_key_env inherit from [models.*], then fall back to provider defaults.
@@ -94,6 +105,15 @@ model = "gemini-embedding-2"
 # api_key_env = "GEMINI_API_KEY"
 dimensions = 3072
 batch_size = 32
+
+[memory.ambient]
+top_k = 3
+min_query_length = 8
+throttle_seconds = 30
+weight_similarity = 1.0
+weight_valence = 0.08
+weight_recency = 0.08
+weight_intensity = 0.1
 
 [memory.lcm]
 # Lossless-claw style LCM. Set enabled = false to disable the LCM context engine.

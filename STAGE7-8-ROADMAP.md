@@ -646,7 +646,7 @@ shipped. Fix before adding more surface area.
   plus a transcript source adapter for normalized LCM ingestion. Pair with
   event-loop yielding (1024-row chunks) so backfill cannot starve Discord/HTTP
   loops.
-- Add config-driven retention/archive for `data/chat`, `data/transcripts`, and
+- [x] Add config-driven retention/archive for `data/chat`, `data/transcripts`, and
   `data/payloads`; keep transcript pruning conservative until LCM can fully
   replace replay after restart.
 - Add an optional age-based LCM segment backstop
@@ -672,10 +672,10 @@ shipped. Fix before adding more surface area.
   compression needs deterministic drill-down. `memory_open` today returns
   only the immediate chunk row; for summaries it should follow
   `summary_sources` back to the underlying records.
-- Generalize `memory.embedding.api` beyond the locked `"gemini"` enum (or
+- [x] Generalize `memory.embedding.api` beyond the locked `"gemini"` enum (or
   rename to `embedding.format`) and document the wire-protocol contract in
   `config.example.toml`.
-- Expose ambient diary recall tuning knobs (top-K, valence/recency/intensity
+- [x] Expose ambient diary recall tuning knobs (top-K, valence/recency/intensity
   weights, throttle interval, minimum-query-length gate) rather than the
   hardcoded `limit = 3` and unconditional fire on every non-empty user turn.
 - Document the cache-boundary contract for ambient injection: ambient text
@@ -689,11 +689,8 @@ shipped. Fix before adding more surface area.
   `selectFreshTailRecords` (`lcm/context.ts`) into the real
   `transformContext` path or delete them. Today the runtime ignores them and
   operates directly over `state.items`; the dead code is a maintenance trap.
-  (Partially done: `assembleLcmContext` and `renderLcmSummaryContext` are
-  gone, but `detectLcmCompactionPressure` is a new orphan — defined and
-  unit-tested in `lcm/context.ts` but never called from the real
-  `LcmContextTransformer` flow. Wire it as the actual compaction-trigger
-  signal or delete it on a follow-up pass.)
+  (done in prior phase for `assembleLcmContext`/`renderLcmSummaryContext`;
+  final pass deleted the remaining `detectLcmCompactionPressure` orphan.)
 - [x] Default `memory_recall.scope` should be `factual`, not `all`. Roadmap calls
   for "context-sensitive but conservative" and the current default leaks
   diary into provenance-style queries.
@@ -702,22 +699,23 @@ shipped. Fix before adding more surface area.
   after raw records are pruned. Today `covers_from_record_id` /
   `covers_to_record_id` are nulled by `ON DELETE SET NULL`, losing range
   provenance permanently.
-- Plumb the `vacuum` flag of `applyNewSessionRetention` to an opt-in operator
+- [x] Plumb the `vacuum` flag of `applyNewSessionRetention` to an opt-in operator
   command; do not run on every `/new`. Index growth on prune is currently
   unbounded because vacuum is always `false`.
-- Add FTS prefix matching (`lantern*` form) for recall — current sanitizer
+- [x] Add FTS prefix matching (`lantern*` form) for recall — current sanitizer
   strips `*` so "lanterns" never matches "lantern".
-- Add basic timing/structured-log hooks at indexer batch boundaries; the
+- [x] Add basic timing/structured-log hooks at indexer batch boundaries; the
   current pipeline is silent and hard to debug for embedding throughput.
-- Add diagnostic visibility for the projection-queue failure path (repeat
+- [x] Add diagnostic visibility for the projection-queue failure path (repeat
   rejection counts, last error). Today failures are swallowed into a chained
   `.catch` that only flush callers can observe.
-- Cover positive-depth retention end-to-end in tests
+- [x] Cover positive-depth retention end-to-end in tests
   (`newSessionRetainDepth >= 1` keeps `d>=N` and prunes lower); today only
-  `-1` and `0` paths are exercised.
-- Handle empty/missing diary directories gracefully in `indexAllDiaryFiles`;
+  `-1` and `0` paths are exercised. (done in prior phase; final pass kept the
+  coverage and added the requested validation bundle.)
+- [x] Handle empty/missing diary directories gracefully in `indexAllDiaryFiles`;
   today `readdir` throws ENOENT on misconfigured workspaces.
-- Document or fix the `agent.cacheRetention` camelCase TOML key — every other
+- [x] Document or fix the `agent.cacheRetention` camelCase TOML key — every other
   key in `config.example.toml` is snake-case.
 
 ## Open Questions

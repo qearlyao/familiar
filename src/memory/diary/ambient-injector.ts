@@ -9,35 +9,82 @@ const AMBIENT_CONTEXT_PREFIX = "[Familiar diary recall]";
 export interface AmbientDiaryInjectorOptions {
 	store: MemoryIndexStore;
 	embeddingProvider: EmbeddingProvider;
+	topK?: number;
+	minQueryLength?: number;
+	throttleSeconds?: number;
+	weightSimilarity?: number;
+	weightValence?: number;
+	weightRecency?: number;
+	weightIntensity?: number;
+	now?: () => number;
 }
 
 export class AmbientDiaryInjector {
 	private readonly store: MemoryIndexStore;
 	private readonly embeddingProvider: EmbeddingProvider;
+	private readonly topK: number;
+	private readonly minQueryLength: number;
+	private readonly throttleMs: number;
+	private readonly weightSimilarity: number;
+	private readonly weightValence: number;
+	private readonly weightRecency: number;
+	private readonly weightIntensity: number;
+	private readonly now: () => number;
+	private readonly lastInjectedAtBySession = new Map<string, number>();
 
 	constructor(options: AmbientDiaryInjectorOptions) {
 		this.store = options.store;
 		this.embeddingProvider = options.embeddingProvider;
+		this.topK = positiveIntegerOrDefault(options.topK, 3);
+		this.minQueryLength = nonNegativeIntegerOrDefault(options.minQueryLength, 8);
+		this.throttleMs = nonNegativeIntegerOrDefault(options.throttleSeconds, 30) * 1000;
+		this.weightSimilarity = nonNegativeNumberOrDefault(options.weightSimilarity, 1.0);
+		this.weightValence = nonNegativeNumberOrDefault(options.weightValence, 0.08);
+		this.weightRecency = nonNegativeNumberOrDefault(options.weightRecency, 0.08);
+		this.weightIntensity = nonNegativeNumberOrDefault(options.weightIntensity, 0.1);
+		this.now = options.now ?? Date.now;
 	}
 
-	async inject(messages: AgentMessage[], signal?: AbortSignal): Promise<AgentMessage[]> {
+	async inject(messages: AgentMessage[], signal?: AbortSignal, sessionKey = "default"): Promise<AgentMessage[]> {
 		try {
 			const query = lastUserText(messages);
-			if (!query) return messages;
+			if (!query || query.length < this.minQueryLength) return messages;
+			const now = this.now();
+			const lastInjectedAt = this.lastInjectedAtBySession.get(sessionKey);
+			if (lastInjectedAt !== undefined && this.throttleMs > 0 && now - lastInjectedAt < this.throttleMs) return messages;
 			const hits = await retrieveAmbientDiary({
 				query,
 				store: this.store,
 				embeddingProvider: this.embeddingProvider,
-				limit: 3,
+				limit: this.topK,
+				weights: {
+					similarity: this.weightSimilarity,
+					valence: this.weightValence,
+					recency: this.weightRecency,
+					intensity: this.weightIntensity,
+				},
 				signal,
 			});
 			if (hits.length === 0) return messages;
+			this.lastInjectedAtBySession.set(sessionKey, now);
 			return injectAmbientDiaryRecall(messages, renderAmbientDiaryRecall(hits));
 		} catch (error) {
 			console.error("memory ambient recall failed", error);
 			return messages;
 		}
 	}
+}
+
+function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
+	return value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function nonNegativeIntegerOrDefault(value: number | undefined, fallback: number): number {
+	return value !== undefined && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function nonNegativeNumberOrDefault(value: number | undefined, fallback: number): number {
+	return value !== undefined && Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 function injectAmbientDiaryRecall(messages: AgentMessage[], recallText: string): AgentMessage[] {

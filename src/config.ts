@@ -13,7 +13,9 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
-export type MemoryEmbeddingApi = "gemini";
+export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
+
+const loggedConfigWarnings = new Set<string>();
 
 const DEFAULT_MEMORY_EMBEDDING_BASE_URLS: Record<string, string> = {
 	google: "https://generativelanguage.googleapis.com/v1beta",
@@ -93,8 +95,19 @@ export interface Config {
 		user: string;
 		memory: string;
 	};
-	media: {
+		media: {
 		generatedRetentionDays: number;
+	};
+	data: {
+		chat: {
+			retentionDays: number;
+		};
+		transcripts: {
+			retentionDays: number;
+		};
+		payloads: {
+			retentionDays: number;
+		};
 	};
 	workspace: {
 		dataDir: string;
@@ -106,13 +119,23 @@ export interface Config {
 		diariesDir: string;
 		archiveDir: string;
 		embedding: {
-			api: MemoryEmbeddingApi;
+			format: MemoryEmbeddingFormat;
+			api: MemoryEmbeddingFormat;
 			provider: string;
 			model: string;
 			baseUrl: string;
 			apiKeyEnv: string;
 			dimensions: number;
 			batchSize: number;
+		};
+		ambient: {
+			topK: number;
+			minQueryLength: number;
+			throttleSeconds: number;
+			weightSimilarity: number;
+			weightValence: number;
+			weightRecency: number;
+			weightIntensity: number;
 		};
 		lcm: {
 			enabled: boolean;
@@ -201,9 +224,15 @@ function readStringRecord(value: unknown, path: string): Record<string, string> 
 	return Object.fromEntries(entries) as Record<string, string>;
 }
 
-function readCacheRetention(value: unknown): CacheRetention {
+function warnOnce(key: string, message: string): void {
+	if (loggedConfigWarnings.has(key)) return;
+	loggedConfigWarnings.add(key);
+	console.warn(message);
+}
+
+function readCacheRetention(value: unknown, path = "agent.cache_retention"): CacheRetention {
 	if (value === "none" || value === "short" || value === "long") return value;
-	throw new Error('Config value agent.cacheRetention must be one of "none", "short", or "long"');
+	throw new Error(`Config value ${path} must be one of "none", "short", or "long"`);
 }
 
 function readThinkingLevel(value: unknown): ThinkingLevel {
@@ -257,9 +286,9 @@ function readMediaUnderstandingProvider(value: unknown): MediaUnderstandingProvi
 	throw new Error('Config value media_understanding provider must be "groq" or "google"');
 }
 
-function readMemoryEmbeddingApi(value: unknown): MemoryEmbeddingApi {
-	if (value === "gemini") return value;
-	throw new Error('Config value memory.embedding.api must be "gemini"');
+function readMemoryEmbeddingFormat(value: unknown, path = "memory.embedding.format"): MemoryEmbeddingFormat {
+	if (value === "gemini" || value === "openai" || value === "voyage") return value;
+	throw new Error(`Config value ${path} must be one of "gemini", "openai", or "voyage"`);
 }
 
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
@@ -374,6 +403,10 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
 	const media = (parsed.media ?? {}) as Record<string, unknown>;
 	const generatedMedia = (media.generated ?? {}) as Record<string, unknown>;
+	const data = (parsed.data ?? {}) as Record<string, unknown>;
+	const dataChat = (data.chat ?? {}) as Record<string, unknown>;
+	const dataTranscripts = (data.transcripts ?? {}) as Record<string, unknown>;
+	const dataPayloads = (data.payloads ?? {}) as Record<string, unknown>;
 	const mediaUnderstanding = (media.understanding ?? {}) as Record<string, unknown>;
 	const mediaUnderstandingAudio = (mediaUnderstanding.audio ?? {}) as Record<string, unknown>;
 	const mediaUnderstandingVideo = (mediaUnderstanding.video ?? {}) as Record<string, unknown>;
@@ -381,6 +414,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 	const memory = (parsed.memory ?? {}) as Record<string, unknown>;
 	const memoryEmbedding = (memory.embedding ?? {}) as Record<string, unknown>;
+	const memoryAmbient = (memory.ambient ?? {}) as Record<string, unknown>;
 	const memoryLcm = (memory.lcm ?? {}) as Record<string, unknown>;
 
 	const ownerId = readString(discord.owner_id, "discord.owner_id");
@@ -393,6 +427,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const legacyModel = modelId ? `${provider}/${modelId}` : "";
 	const agentModel = model || legacyModel;
 	const usingLegacyAgentModel = !model;
+	let agentCacheRetentionRaw: unknown = agent.cache_retention;
+	if (agentCacheRetentionRaw === undefined && agent.cacheRetention !== undefined) {
+		warnOnce("agent.cacheRetention", "Config value agent.cacheRetention is deprecated; use agent.cache_retention instead.");
+		agentCacheRetentionRaw = agent.cacheRetention;
+	}
 	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
 		throw new Error(
 			'Set agent.model = "provider/model", or for a legacy custom endpoint set all of agent.api, agent.model_id, agent.base_url, and agent.api_key_env.',
@@ -403,7 +442,20 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const modelAllow = readStringArray(models.allow, "models.allow");
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
-	const memoryEmbeddingApi = readMemoryEmbeddingApi(readOptionalString(memoryEmbedding.api, "gemini"));
+	let memoryEmbeddingFormatRaw: unknown = memoryEmbedding.format;
+	if (memoryEmbeddingFormatRaw === undefined && memoryEmbedding.api !== undefined) {
+		warnOnce(
+			"memory.embedding.api",
+			"Config value memory.embedding.api is deprecated; use memory.embedding.format instead.",
+		);
+		memoryEmbeddingFormatRaw = memoryEmbedding.api;
+	}
+	const memoryEmbeddingFormat = readMemoryEmbeddingFormat(
+		readOptionalString(memoryEmbeddingFormatRaw, "gemini"),
+		memoryEmbedding.format === undefined && memoryEmbedding.api !== undefined
+			? "memory.embedding.api"
+			: "memory.embedding.format",
+	);
 	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
 	const memoryEmbeddingModel = readConfigString(memoryEmbedding.model, "gemini-embedding-2", "memory.embedding.model");
 	const memoryEmbeddingBaseUrl =
@@ -502,7 +554,12 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			baseUrl: usingLegacyAgentModel ? baseUrl : undefined,
 			apiKeyEnv: usingLegacyAgentModel ? apiKeyEnv : undefined,
 			provider: usingLegacyAgentModel ? provider : undefined,
-			cacheRetention: readCacheRetention(readOptionalString(agent.cacheRetention, "long")),
+			cacheRetention: readCacheRetention(
+				readOptionalString(agentCacheRetentionRaw, "long"),
+				agent.cache_retention === undefined && agent.cacheRetention !== undefined
+					? "agent.cacheRetention"
+					: "agent.cache_retention",
+			),
 			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
 		},
 		models: {
@@ -555,6 +612,17 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		media: {
 			generatedRetentionDays: readInteger(generatedMedia.retention_days, 30, "media.generated.retention_days"),
 		},
+		data: {
+			chat: {
+				retentionDays: readInteger(dataChat.retention_days, 0, "data.chat.retention_days"),
+			},
+			transcripts: {
+				retentionDays: readInteger(dataTranscripts.retention_days, 0, "data.transcripts.retention_days"),
+			},
+			payloads: {
+				retentionDays: readInteger(dataPayloads.retention_days, 7, "data.payloads.retention_days"),
+			},
+		},
 		workspace: {
 			dataDir: resolveWorkspacePath(workspacePath, readOptionalString(workspace.data_dir, "data")),
 		},
@@ -565,13 +633,33 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			diariesDir: resolve(memoryRootDir, "diaries"),
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
-				api: memoryEmbeddingApi,
+				format: memoryEmbeddingFormat,
+				api: memoryEmbeddingFormat,
 				provider: memoryEmbeddingProvider,
 				model: memoryEmbeddingModel,
 				baseUrl: memoryEmbeddingBaseUrl,
 				apiKeyEnv: memoryEmbeddingApiKeyEnv,
 				dimensions: readInteger(memoryEmbedding.dimensions, 3072, "memory.embedding.dimensions", 1),
 				batchSize: readInteger(memoryEmbedding.batch_size, 32, "memory.embedding.batch_size", 1),
+			},
+			ambient: {
+				topK: readInteger(memoryAmbient.top_k, 3, "memory.ambient.top_k", 1),
+				minQueryLength: readInteger(memoryAmbient.min_query_length, 8, "memory.ambient.min_query_length"),
+				throttleSeconds: readInteger(memoryAmbient.throttle_seconds, 30, "memory.ambient.throttle_seconds"),
+				weightSimilarity: readPositiveNumber(
+					memoryAmbient.weight_similarity,
+					1.0,
+					"memory.ambient.weight_similarity",
+				),
+				weightValence: readNumberInRange(memoryAmbient.weight_valence, 0.08, "memory.ambient.weight_valence", 0, 10),
+				weightRecency: readNumberInRange(memoryAmbient.weight_recency, 0.08, "memory.ambient.weight_recency", 0, 10),
+				weightIntensity: readNumberInRange(
+					memoryAmbient.weight_intensity,
+					0.1,
+					"memory.ambient.weight_intensity",
+					0,
+					10,
+				),
 			},
 			lcm: {
 				enabled: readBoolean(memoryLcm.enabled, true, "memory.lcm.enabled"),

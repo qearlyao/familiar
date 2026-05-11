@@ -35,6 +35,11 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
 		assert.equal(config.media.generatedRetentionDays, 30);
+		assert.deepEqual(config.data, {
+			chat: { retentionDays: 0 },
+			transcripts: { retentionDays: 0 },
+			payloads: { retentionDays: 7 },
+		});
 		assert.deepEqual(config.tts.voiceSettings, {
 			stability: 0.5,
 			similarityBoost: 0.75,
@@ -155,6 +160,7 @@ retention_days = 7
 		assert.equal(config.memory.diariesDir, resolve(workspacePath, "memories", "diaries"));
 		assert.equal(config.memory.archiveDir, resolve(workspacePath, "memories", "archive"));
 		assert.deepEqual(config.memory.embedding, {
+			format: "gemini",
 			api: "gemini",
 			provider: "google",
 			model: "gemini-embedding-2",
@@ -162,6 +168,15 @@ retention_days = 7
 			apiKeyEnv: "GEMINI_API_KEY",
 			dimensions: 3072,
 			batchSize: 32,
+		});
+		assert.deepEqual(config.memory.ambient, {
+			topK: 3,
+			minQueryLength: 8,
+			throttleSeconds: 30,
+			weightSimilarity: 1,
+			weightValence: 0.08,
+			weightRecency: 0.08,
+			weightIntensity: 0.1,
 		});
 		assert.equal(config.memory.lcm.newSessionRetainDepth, 2);
 		assert.deepEqual(config.memory.lcm, {
@@ -193,13 +208,22 @@ retention_days = 7
 root_dir = "brain"
 
 [memory.embedding]
-api = "gemini"
+format = "gemini"
 provider = "google"
 model = "custom-embedding"
 base_url = "https://memory.example.test/v1beta"
 api_key_env = "CUSTOM_EMBEDDING_KEY"
 dimensions = 1536
 batch_size = 8
+
+[memory.ambient]
+top_k = 5
+min_query_length = 12
+throttle_seconds = 60
+weight_similarity = 0.5
+weight_valence = 0.2
+weight_recency = 0.3
+weight_intensity = 0.4
 
 [memory.lcm]
 enabled = true
@@ -224,6 +248,7 @@ system_prompt_path = "prompts/lcm-system.md"
 
 		assert.equal(config.memory.rootDir, resolve(workspacePath, "brain"));
 		assert.deepEqual(config.memory.embedding, {
+			format: "gemini",
 			api: "gemini",
 			provider: "google",
 			model: "custom-embedding",
@@ -231,6 +256,15 @@ system_prompt_path = "prompts/lcm-system.md"
 			apiKeyEnv: "CUSTOM_EMBEDDING_KEY",
 			dimensions: 1536,
 			batchSize: 8,
+		});
+		assert.deepEqual(config.memory.ambient, {
+			topK: 5,
+			minQueryLength: 12,
+			throttleSeconds: 60,
+			weightSimilarity: 0.5,
+			weightValence: 0.2,
+			weightRecency: 0.3,
+			weightIntensity: 0.4,
 		});
 		assert.equal(config.memory.lcm.newSessionRetainDepth, -1);
 		assert.deepEqual(config.memory.lcm, {
@@ -270,7 +304,7 @@ google = "GOOGLE_GATEWAY_KEY"
 "google/gemini-embedding-2" = "GOOGLE_EMBEDDING_KEY"
 
 [memory.embedding]
-api = "gemini"
+format = "gemini"
 provider = "google"
 model = "gemini-embedding-2"
 `),
@@ -335,7 +369,7 @@ model = "google/gemini-3-flash-preview"
 		const workspacePath = await createWorkspace(
 			minimalConfigToml(`
 [memory.embedding]
-api = "gemini"
+format = "gemini"
 provider = "local-gateway"
 model = "media-embed"
 base_url = "http://localhost:8788/v1"
@@ -346,6 +380,7 @@ api_key_env = "LOCAL_GATEWAY_KEY"
 		const config = await loadConfig(workspacePath);
 
 		assert.deepEqual(config.memory.embedding, {
+			format: "gemini",
 			api: "gemini",
 			provider: "local-gateway",
 			model: "media-embed",
@@ -414,13 +449,71 @@ prompt_path = "prompt.md"
 		const workspacePath = await createWorkspace(
 			minimalConfigToml(`
 [memory.embedding]
+format = "invalid"
+provider = "openai"
+base_url = "https://api.openai.com/v1"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.format/);
+	});
+
+	it("accepts deprecated memory embedding api alias but createEmbeddingProvider gates non-gemini formats", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.embedding]
 api = "openai"
 provider = "openai"
 base_url = "https://api.openai.com/v1"
 `),
 		);
 
-		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.api/);
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.embedding.format, "openai");
+		assert.equal(config.memory.embedding.api, "openai");
+	});
+
+	it("loads snake_case agent cache retention and accepts deprecated camelCase alias", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const canonicalWorkspace = await createWorkspace(
+			minimalConfigToml(`
+cache_retention = "short"
+`),
+		);
+		const legacyWorkspace = await createWorkspace(
+			minimalConfigToml(`
+cacheRetention = "none"
+`),
+		);
+
+		assert.equal((await loadConfig(canonicalWorkspace)).agent.cacheRetention, "short");
+		assert.equal((await loadConfig(legacyWorkspace)).agent.cacheRetention, "none");
+	});
+
+	it("loads data retention settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[data.chat]
+retention_days = 14
+
+[data.transcripts]
+retention_days = 30
+
+[data.payloads]
+retention_days = 3
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.data, {
+			chat: { retentionDays: 14 },
+			transcripts: { retentionDays: 30 },
+			payloads: { retentionDays: 3 },
+		});
 	});
 
 	it("rejects custom memory embedding providers without a base url", async () => {

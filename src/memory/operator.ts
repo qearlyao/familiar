@@ -55,7 +55,7 @@ export function memoryHelp(): string {
 		"  familiar memory <workspace> doctor [--clean]",
 		"  familiar memory <workspace> reindex [--corpus <name>] [--force]",
 		"  familiar memory <workspace> backfill [--channels <ch1,ch2>] [--data-dir <path>] [--dry-run]",
-		"  familiar memory <workspace> prune --new-session-retain-depth <N> [--yes]",
+		"  familiar memory <workspace> prune --new-session-retain-depth <N> [--yes] [--vacuum]",
 		"  familiar memory <workspace> backup <out-dir>",
 	].join("\n");
 }
@@ -116,6 +116,7 @@ function collectStatus(config: FamiliarConfig, service: MemoryOperatorService): 
 			capability: indexStats.vectorCapability,
 			available: indexStats.vectorAvailable,
 		},
+		projectionFailures: service.stats().projectionFailures,
 		requiresReindex: indexStats.requiresReindex,
 		schemaVersions: {
 			lcm: service.lcmStore.schemaVersion(),
@@ -127,6 +128,15 @@ function collectStatus(config: FamiliarConfig, service: MemoryOperatorService): 
 function runDoctorCommand(service: MemoryOperatorService, args: string[]): void {
 	const clean = hasOnlyFlags(args, ["--clean"]) && args.includes("--clean");
 	const report = runDoctor({ lcm: service.lcmStore, index: service.memoryStore });
+	const projectionFailures = service.stats().projectionFailures;
+	if (projectionFailures > 0) {
+		report.findings.push({
+			kind: "projection_failures",
+			detail: `${projectionFailures} memory projection failure(s) swallowed in this process`,
+			fixable: false,
+		});
+		report.clean = false;
+	}
 	if (report.findings.length === 0) {
 		console.log("Memory doctor: clean");
 	} else {
@@ -207,7 +217,10 @@ async function backfill(
 	if (report.errors.length > 0) process.exitCode = 1;
 }
 
-async function prune(service: MemoryOperatorService, options: { retainDepth: number; yes: boolean }): Promise<void> {
+async function prune(
+	service: MemoryOperatorService,
+	options: { retainDepth: number; yes: boolean; vacuum: boolean },
+): Promise<void> {
 	if (!options.yes && !(await confirm(`Prune closed LCM raw records with retain depth ${options.retainDepth}?`))) {
 		console.log("Prune cancelled");
 		return;
@@ -225,6 +238,7 @@ async function prune(service: MemoryOperatorService, options: { retainDepth: num
 	const report = service.lcmStore.applyNewSessionRetention({
 		newSessionRetainDepth: options.retainDepth,
 		activeSegmentId,
+		vacuum: options.vacuum,
 	});
 	for (const ref of report.indexDeletes) service.memoryStore.deleteBySource(ref.corpus, ref.sourceId);
 	const closedActive = activeSegments.filter((segment) => segment.id !== activeSegmentId);
@@ -310,13 +324,18 @@ function parseBackfillArgs(
 	return { dataDir, channels, dryRun };
 }
 
-async function parsePruneArgs(args: string[]): Promise<{ retainDepth: number; yes: boolean }> {
+async function parsePruneArgs(args: string[]): Promise<{ retainDepth: number; yes: boolean; vacuum: boolean }> {
 	let retainDepth: number | undefined;
 	let yes = false;
+	let vacuum = false;
 	for (let index = 0; index < args.length; index++) {
 		const arg = args[index];
 		if (arg === "--yes") {
 			yes = true;
+			continue;
+		}
+		if (arg === "--vacuum") {
+			vacuum = true;
 			continue;
 		}
 		if (arg === "--new-session-retain-depth") {
@@ -330,7 +349,7 @@ async function parsePruneArgs(args: string[]): Promise<{ retainDepth: number; ye
 	if (retainDepth === undefined || !Number.isInteger(retainDepth) || retainDepth < -1) {
 		throw new Error("prune requires --new-session-retain-depth <integer >= -1>");
 	}
-	return { retainDepth, yes };
+	return { retainDepth, yes, vacuum };
 }
 
 function parseBackupArgs(args: string[]): string {
@@ -402,6 +421,7 @@ function printPlainStatus(status: MemoryStatus): void {
 		`Memory vector rows: ${status.counts.memoryVectorRows} (${status.vector.available ? status.vector.capability : "blob-js fallback"})`,
 	);
 	console.log(`Embedding: ${status.embedding.provider}/${status.embedding.model} dim=${status.embedding.dimensions}`);
+	console.log(`Projection failures: ${status.projectionFailures}`);
 	if (status.requiresReindex) console.log("Reindex required: run familiar memory reindex --force");
 	console.log(
 		`Schema versions: lcm=${status.schemaVersions.lcm ?? "unknown"} index=${status.schemaVersions.index ?? "unknown"}`,
@@ -469,6 +489,7 @@ interface MemoryStatus {
 	};
 	embedding: { provider: string; model: string; dimensions: number };
 	vector: { capability: string; available: boolean };
+	projectionFailures: number;
 	requiresReindex: boolean;
 	schemaVersions: { lcm: number | null; index: number | null };
 }

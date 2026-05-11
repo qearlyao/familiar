@@ -239,6 +239,52 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
+	it("allows trailing-star FTS prefix queries", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			store.insertChunks([
+				{
+					corpus: "diary_chunk",
+					sourceId: "prefix",
+					text: "The lanternlight stayed visible.",
+					embedding: vector([1, 0, 0]),
+				},
+				{
+					corpus: "diary_chunk",
+					sourceId: "other",
+					text: "The lunch plan stayed visible.",
+					embedding: vector([0, 1, 0]),
+				},
+			]);
+
+			const hits = store.searchLexical("lantern*", 5);
+
+			assert.deepEqual(
+				hits.map((hit) => hit.chunk.sourceId),
+				["prefix"],
+			);
+			assert.deepEqual(store.searchLexical("*", 5), []);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("sanitizes prefix query bodies before preserving trailing star", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			store.insertChunk({
+				corpus: "diary_chunk",
+				sourceId: "prefix",
+				text: "toolbar marker",
+				embedding: vector([1, 0, 0]),
+			});
+
+			assert.equal(store.searchLexical("tool-*", 5).length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("replaces and deletes source chunks transactionally", async () => {
 		const store = openStore(await tempDbPath());
 		try {

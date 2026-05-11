@@ -3,40 +3,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Provider, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import { scoreEvictable, tokenBag } from "./eviction-score.js";
-import type { LcmAttachmentNote, LcmRecordKind, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
-
-export interface FreshTailOptions {
-	messageCount: number;
-	maxTokens?: number;
-}
-
-export interface FreshTailSelection {
-	records: StoredLcmRecord[];
-	tokenCount: number;
-	overflowTokens: number;
-}
-
-export interface LcmCompactionPressureInput {
-	records: readonly StoredLcmRecord[];
-	summaries?: readonly StoredLcmSummary[];
-	freshTail: FreshTailOptions;
-	evictableTokenThreshold?: number;
-	evictableTokenBudget?: number;
-	evictableKinds?: readonly LcmRecordKind[];
-}
-
-export interface LcmCompactionPressure {
-	shouldCompact: boolean;
-	reasons: ("evictable_threshold" | "evictable_budget")[];
-	evictableTokens: number;
-	evictableRecordCount: number;
-	freshTailTokens: number;
-	freshTailRecordCount: number;
-	summaryTokens: number;
-	assembledTokens: number;
-	evictableTokenThreshold: number | null;
-	evictableTokenBudget: number | null;
-}
+import type { LcmAttachmentNote, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export interface LcmContextCompactionConfig {
 	contextThreshold: number;
@@ -187,76 +154,6 @@ export function selectLcmCompactionCandidatePromptAware(
 		freshTailStartIndex,
 		totalTokens,
 		contextThresholdTokens,
-	};
-}
-
-export function selectFreshTailRecords(
-	records: readonly StoredLcmRecord[],
-	options: FreshTailOptions,
-): FreshTailSelection {
-	const messageCount = nonNegativeInteger(options.messageCount, "freshTail.messageCount");
-	const maxTokens =
-		options.maxTokens === undefined ? undefined : nonNegativeInteger(options.maxTokens, "freshTail.maxTokens");
-	const candidates = records.filter(isConversationRecord).sort(compareRecords);
-	const selected: StoredLcmRecord[] = [];
-	let tokenCount = 0;
-
-	for (let index = candidates.length - 1; index >= 0; index -= 1) {
-		const record = candidates[index];
-		if (!record) continue;
-		const recordTokens = estimateLcmRecordTokens(record);
-		const protectedByCount = selected.length < messageCount;
-		if (!protectedByCount) {
-			if (maxTokens === undefined || tokenCount + recordTokens > maxTokens) break;
-		}
-		selected.push(record);
-		tokenCount += recordTokens;
-	}
-
-	selected.reverse();
-	return {
-		records: selected,
-		tokenCount,
-		overflowTokens: maxTokens === undefined ? 0 : Math.max(0, tokenCount - maxTokens),
-	};
-}
-
-export function detectLcmCompactionPressure(input: LcmCompactionPressureInput): LcmCompactionPressure {
-	const freshTail = selectFreshTailRecords(input.records, input.freshTail);
-	const freshTailIds = new Set(freshTail.records.map((record) => record.id));
-	const evictableKinds = new Set(
-		input.evictableKinds ?? (["user", "assistant", "tool", "note"] satisfies LcmRecordKind[]),
-	);
-	let evictableTokens = 0;
-	let evictableRecordCount = 0;
-
-	for (const record of input.records) {
-		if (freshTailIds.has(record.id) || !evictableKinds.has(record.kind)) continue;
-		evictableTokens += estimateLcmRecordTokens(record);
-		evictableRecordCount += 1;
-	}
-
-	const summaryTokens = selectRetainedSummaries(input.summaries ?? []).reduce(
-		(total, summary) => total + estimateTextTokens(summary.text) + RECORD_OVERHEAD_TOKENS,
-		0,
-	);
-	const threshold = optionalNonNegativeInteger(input.evictableTokenThreshold, "evictableTokenThreshold");
-	const budget = optionalNonNegativeInteger(input.evictableTokenBudget, "evictableTokenBudget");
-	const reasons: LcmCompactionPressure["reasons"] = [];
-	if (threshold !== null && evictableTokens > threshold) reasons.push("evictable_threshold");
-	if (budget !== null && evictableTokens > budget) reasons.push("evictable_budget");
-
-	return {
-		shouldCompact: reasons.length > 0,
-		reasons,
-		evictableTokens,
-		evictableRecordCount,
-		freshTailTokens: freshTail.tokenCount,
-		freshTailRecordCount: freshTail.records.length,
-		summaryTokens,
-		assembledTokens: summaryTokens + freshTail.tokenCount,
-		evictableTokenThreshold: threshold,
-		evictableTokenBudget: budget,
 	};
 }
 
@@ -415,10 +312,6 @@ function renderAttachmentForEstimate(attachment: LcmAttachmentNote): string {
 		.join(" ");
 }
 
-function isConversationRecord(record: StoredLcmRecord): boolean {
-	return record.kind === "user" || record.kind === "assistant";
-}
-
 export function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
 	const ready = summaries
 		.filter((summary) => summary.status === "ready" && summary.text.trim().length > 0)
@@ -454,16 +347,6 @@ function compareSummaries(a: StoredLcmSummary, b: StoredLcmSummary): number {
 		(a.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) - (b.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) ||
 		a.id - b.id
 	);
-}
-
-function nonNegativeInteger(value: number, name: string): number {
-	if (!Number.isInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`);
-	return value;
-}
-
-function optionalNonNegativeInteger(value: number | undefined, name: string): number | null {
-	if (value === undefined) return null;
-	return nonNegativeInteger(value, name);
 }
 
 function structuredLcmRecordToAgentMessage(record: StoredLcmRecord, timestamp: number): AgentMessage {

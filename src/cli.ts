@@ -8,6 +8,7 @@ import { config as loadDotenv } from "dotenv";
 
 import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
+import { runDataRetention } from "./data-retention.js";
 import { startDiscordDaemon } from "./discord.js";
 import { cleanupGeneratedAttachments } from "./generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
@@ -83,6 +84,11 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 	const removedAttachments = await cleanupGeneratedAttachments(config);
 	if (removedAttachments > 0) {
 		console.log(`Removed ${removedAttachments} expired generated attachment(s)`);
+	}
+	const retention = await runDataRetention(config);
+	const removedData = retention.chat + retention.transcripts + retention.payloads;
+	if (removedData > 0) {
+		console.log(`Removed ${removedData} expired data file(s)`);
 	}
 	const settings = await loadSettingsStore(config);
 	const memoryService = createMemoryService(config);

@@ -17,9 +17,14 @@ export interface AmbientDiaryRecallOptions {
 	now?: Date;
 	recencyHalfLifeDays?: number;
 	metadataBoosts?: AmbientDiaryMetadataBoosts;
+	weights?: AmbientDiaryWeights;
 	useLexical?: boolean;
 	useSemantic?: boolean;
 	signal?: AbortSignal;
+}
+
+export interface AmbientDiaryWeights extends AmbientDiaryMetadataBoosts {
+	similarity?: number;
 }
 
 export interface AmbientDiaryMetadataBoosts {
@@ -41,10 +46,11 @@ export interface AmbientDiaryHit extends MemoryRetrievalHit {
 const DEFAULT_LIMIT = 4;
 const DEFAULT_CANDIDATE_MULTIPLIER = 5;
 const DEFAULT_HALF_LIFE_DAYS = 45;
-const DEFAULT_METADATA_BOOSTS: Required<AmbientDiaryMetadataBoosts> = {
+const DEFAULT_WEIGHTS: Required<AmbientDiaryWeights> = {
+	similarity: 1.0,
 	valence: 0.08,
-	intensity: 0.08,
-	recency: 0.1,
+	intensity: 0.1,
+	recency: 0.08,
 };
 
 export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): Promise<AmbientDiaryHit[]> {
@@ -65,7 +71,7 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 		signal: options.signal,
 	} satisfies RetrieveMemoryOptions);
 
-	const weights = { ...DEFAULT_METADATA_BOOSTS, ...options.metadataBoosts };
+	const weights = { ...DEFAULT_WEIGHTS, ...options.metadataBoosts, ...options.weights };
 	const now = options.now ?? new Date();
 	const halfLifeDays = positiveIntegerOrDefault(options.recencyHalfLifeDays, DEFAULT_HALF_LIFE_DAYS);
 
@@ -77,9 +83,9 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 
 function scoreAmbientHit(
 	hit: MemoryRetrievalHit,
-	options: { now: Date; halfLifeDays: number; weights: Required<AmbientDiaryMetadataBoosts> },
+	options: { now: Date; halfLifeDays: number; weights: Required<AmbientDiaryWeights> },
 ): AmbientDiaryHit {
-	const similarity = hit.score;
+	const similarity = hit.score * options.weights.similarity;
 	const valence = normalizeValence(metadataNumber(hit.chunk, "valence")) * options.weights.valence;
 	const intensity = normalizeUnit(metadataNumber(hit.chunk, "intensity")) * options.weights.intensity;
 	const recency = recencyScore(hit.chunk, options.now, options.halfLifeDays) * options.weights.recency;

@@ -143,4 +143,21 @@ describe("diary file indexer", () => {
 			store.close();
 		}
 	});
+
+	it("indexes zero diary files when the diary directory is missing", async () => {
+		const root = await tempRoot();
+		const diariesDir = resolve(root, "missing-diaries");
+		const store = openStore(resolve(root, "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			const result = await indexAllDiaryFiles({ config: configFor(diariesDir), indexer });
+
+			assert.deepEqual(result.files, []);
+			assert.equal(store.stats().indexed, 0);
+			assert.equal(provider.batches.length, 0);
+		} finally {
+			store.close();
+		}
+	});
 });

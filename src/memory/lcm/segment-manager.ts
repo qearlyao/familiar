@@ -21,6 +21,7 @@ export class LcmSegmentManager {
 	private readonly activeSegments = new Map<string, string>();
 	private readonly segmentCounters = new Map<string, number>();
 	private projectionQueue = Promise.resolve();
+	private projectionFailures = 0;
 
 	constructor(options: LcmSegmentManagerOptions) {
 		this.lcmStore = options.lcmStore;
@@ -35,15 +36,20 @@ export class LcmSegmentManager {
 				() => this.projectRuntimeRecord(runtime, record, sessionId),
 				() => this.projectRuntimeRecord(runtime, record, sessionId),
 			);
-			void this.projectionQueue.catch((error) =>
-				console.error(`memory projection failed for ${runtime.channelKey}`, error),
-			);
+			void this.projectionQueue.catch((error) => {
+				this.projectionFailures += 1;
+				console.error(`memory projection failed for ${runtime.channelKey}`, error);
+			});
 		});
 		return unsubscribe;
 	}
 
 	async flush(): Promise<void> {
 		await this.projectionQueue.catch(() => undefined);
+	}
+
+	stats(): { projectionFailures: number } {
+		return { projectionFailures: this.projectionFailures };
 	}
 
 	activeSegmentId(channelKey: string): string {

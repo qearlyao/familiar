@@ -79,6 +79,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 			memoryStore: this.memoryStore,
 			indexer: this.indexer,
 			newSessionRetainDepth: config.memory.lcm.newSessionRetainDepth,
+			onRotate: (sessionKey) => this.contextTransformer.invalidateSession(sessionKey),
 		});
 		this.contextTransformer = new LcmContextTransformer({
 			settings: config.memory.lcm,

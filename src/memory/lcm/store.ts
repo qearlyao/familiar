@@ -270,14 +270,8 @@ export class LcmStore {
 			throw new Error("LCM summary depth must be an integer >= 0");
 		}
 		const normalized = normalizeSummaryInput(input);
-		this.ensureSegment({ id: normalized.segmentId });
-		const existing = this.db
-			.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?")
-			.get(normalized.summaryKey) as { id: number } | undefined;
-		if (existing) return existing.id;
-
 		const runInsert = () =>
-			insertSummaryPrepared(this.db, normalized, (id, sources, parents) => {
+			runSummaryInsertTransaction(this, normalized, (id, sources, parents) => {
 				this.insertSummarySources(id, sources);
 				this.insertSummaryParents(id, parents);
 			});
@@ -718,6 +712,19 @@ function insertSummaryPrepared(
 	db.prepare("INSERT INTO lcm_summaries_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
 	insertEdges(id, normalized.sourceItems, normalized.parents);
 	return id;
+}
+
+function runSummaryInsertTransaction(
+	store: LcmStore,
+	normalized: NormalizedSummaryInput,
+	insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
+): number {
+	store.ensureSegment({ id: normalized.segmentId });
+	const existing = store.db
+		.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?")
+		.get(normalized.summaryKey) as { id: number } | undefined;
+	if (existing) return existing.id;
+	return insertSummaryPrepared(store.db, normalized, insertEdges);
 }
 
 function dedupeNumbers(values: readonly number[]): number[] {

@@ -11,6 +11,7 @@ export interface LcmSegmentManagerOptions {
 	memoryStore: MemoryIndexStore;
 	indexer: ChunkIndexer;
 	newSessionRetainDepth: number;
+	onRotate?: (sessionKey: string) => void;
 }
 
 export class LcmSegmentManager {
@@ -18,6 +19,7 @@ export class LcmSegmentManager {
 	private readonly memoryStore: MemoryIndexStore;
 	private readonly indexer: ChunkIndexer;
 	private readonly newSessionRetainDepth: number;
+	private readonly onRotate?: (sessionKey: string) => void;
 	private readonly activeSegments = new Map<string, string>();
 	private readonly segmentCounters = new Map<string, number>();
 	private projectionQueue = Promise.resolve();
@@ -28,6 +30,7 @@ export class LcmSegmentManager {
 		this.memoryStore = options.memoryStore;
 		this.indexer = options.indexer;
 		this.newSessionRetainDepth = options.newSessionRetainDepth;
+		this.onRotate = options.onRotate;
 	}
 
 	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void {
@@ -124,6 +127,7 @@ export class LcmSegmentManager {
 			})
 			.immediate();
 		this.activeSegments.set(runtime.channelKey, nextSegmentId);
+		this.onRotate?.(runtime.channelKey);
 		this.memoryStore.db
 			.transaction((deletes: typeof indexDeletes) => {
 				for (const deleted of deletes) this.memoryStore.deleteBySourceUnsafe(deleted.corpus, deleted.sourceId);

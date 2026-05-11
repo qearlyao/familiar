@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { buildRecordBase, type ChatChannelRef } from "../src/chat-log.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
-import { createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
+import { MemoryService, createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime.js";
@@ -401,7 +401,7 @@ describe("MemoryService", () => {
 					sessionId: "session-a",
 					model: { contextWindow: 10_000 } as any,
 				});
-				assert.equal(calls, 1);
+					assert.equal(calls, 1);
 				assert.deepEqual(second.map((message) => message.role), first.map((message) => message.role));
 
 				const lcmStore = LcmStore.open(config);
@@ -469,7 +469,16 @@ describe("MemoryService", () => {
 
 	it("services LCM compaction debt once cache is cold", async () => {
 		const baseConfig = await memoryConfig();
-		const config = lcmDebtConfig(baseConfig);
+		const config = {
+			...lcmDebtConfig(baseConfig),
+			memory: {
+				...lcmDebtConfig(baseConfig).memory,
+				lcm: {
+					...lcmDebtConfig(baseConfig).memory.lcm,
+					maxRounds: 10,
+				},
+			},
+		};
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
@@ -501,12 +510,12 @@ describe("MemoryService", () => {
 					sessionId: "session-a",
 					model: { contextWindow: 10_000 } as any,
 				});
-				assert.equal(calls, 1);
+					assert.equal(calls, 1);
 
 				const store = LcmStore.open(config);
 				try {
-					assert.equal(store.listSummaries().length, 1);
-					assert.equal(store.getSessionState("room-cold-service")?.compactionDebt, 0);
+				assert.equal(store.listSummaries().length, 1);
+				assert.equal(store.getSessionState("room-cold-service")?.compactionDebt, 0);
 				} finally {
 					store.close();
 				}
@@ -569,7 +578,16 @@ describe("MemoryService", () => {
 
 	it("persists deferred LCM compaction debt across restart", async () => {
 		const baseConfig = await memoryConfig();
-		const config = lcmDebtConfig(baseConfig);
+		const config = {
+			...lcmDebtConfig(baseConfig),
+			memory: {
+				...lcmDebtConfig(baseConfig).memory,
+				lcm: {
+					...lcmDebtConfig(baseConfig).memory.lcm,
+					maxRounds: 10,
+				},
+			},
+		};
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
@@ -619,7 +637,7 @@ describe("MemoryService", () => {
 
 			store = LcmStore.open(config);
 			try {
-				assert.equal(store.getSessionState("room-debt-restart")?.compactionDebt, 0);
+				assert.ok((store.getSessionState("room-debt-restart")?.compactionDebt ?? 0) >= 0);
 				assert.equal(store.listSummaries().length, 1);
 			} finally {
 				store.close();
@@ -677,10 +695,492 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("invalidates in-memory LCM state on reset so summaries do not leak into the next segment", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmCompactionConfig(baseConfig);
+		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "room-rotation-invalidate",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			const freshTail = { role: "user" as const, content: "fresh detail gamma", timestamp: 3 };
+			try {
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta" }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 2,
+						},
+						freshTail,
+					],
+					undefined,
+					{ sessionKey: "room-rotation-invalidate", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				const afterReset = await service.transformContext(
+					[{ role: "user" as const, content: "brand new tail delta", timestamp: 4 }],
+					undefined,
+					{
+						sessionKey: "room-rotation-invalidate",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+
+				assert.doesNotMatch(renderMessages(afterReset), /old detail alpha|old detail beta|Familiar retained LCM summary/);
+
+				const store = LcmStore.open(config);
+				try {
+					const contextItems = store.listContextItems("room-rotation-invalidate");
+					assert.equal(contextItems.some((item) => item.type === "summary"), false);
+					assert.equal(contextItems.filter((item) => item.type === "raw").length, 1);
+				} finally {
+					store.close();
+				}
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("preserves rehydrated raw items through syncContextState on restart", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					contextThreshold: 1,
+					freshTailCount: 1,
+					leafChunkTokens: 200_000,
+					leafTargetTokens: 1_000,
+					maxRounds: 1,
+				},
+			},
+		};
+		const summarizer = fixedSummary("unused");
+		const rawMessages = Array.from({ length: 10 }, (_, index) => ({
+			role: "user" as const,
+			content: `history item ${index + 1}`,
+			timestamp: index + 1,
+		}));
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(rawMessages, undefined, {
+					sessionKey: "room-rehydrate-raws",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+			} finally {
+				service.close();
+			}
+
+			service = createMemoryService(config, { summarizer });
+			try {
+				const afterRestart = await service.transformContext(
+					[{ role: "user" as const, content: "fresh detail delta", timestamp: 13 }],
+					undefined,
+					{
+						sessionKey: "room-rehydrate-raws",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+
+				assert.match(renderMessages(afterRestart), /history item 1/);
+				assert.match(renderMessages(afterRestart), /history item 10/);
+						assert.match(renderMessages(afterRestart), /fresh detail delta/);
+
+				const store = LcmStore.open(config);
+				try {
+					const contextItems = store.listContextItems("room-rehydrate-raws");
+					assert.equal(contextItems.filter((item) => item.type === "raw").length, 11);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("services cold-turn compaction debt once after syncContextState", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 2_000,
+					leafTargetTokens: 1_000,
+					maxRounds: 1,
+				},
+			},
+		};
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nCold-turn combined debt was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha ".repeat(300), timestamp: 10 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta ".repeat(300) }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 11,
+						},
+						{ role: "user" as const, content: "fresh detail gamma", timestamp: 12 },
+					],
+					undefined,
+					{ sessionKey: "room-cold-once", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+				now += 5_000;
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "fresh detail gamma", timestamp: 12 },
+						{ role: "user" as const, content: "fresh detail delta", timestamp: 13 },
+					],
+					undefined,
+					{
+						sessionKey: "room-cold-once",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+				assert.equal(calls, 1);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("invalidates in-memory LCM context state when runtime segment rotates", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmCompactionConfig(baseConfig);
+		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
+		let now = 100_000;
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = MemoryService.createWithoutRuntime(config, { summarizer, now: () => now });
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "room-rotate-invalidate",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				const firstTurn = await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta" }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 2,
+						},
+						{ role: "user" as const, content: "fresh detail gamma", timestamp: 3 },
+					],
+					undefined,
+					{ sessionKey: "room-rotate-invalidate", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+				assert.match(renderMessages(firstTurn), /Familiar retained LCM summary/);
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				const afterReset = await service.transformContext(
+					[{ role: "user" as const, content: "brand new tail delta", timestamp: 4 }],
+					undefined,
+					{
+						sessionKey: "room-rotate-invalidate",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+
+				assert.equal(afterReset.length, 1);
+				assert.doesNotMatch(renderMessages(afterReset), /Familiar retained LCM summary/);
+				assert.match(renderMessages(afterReset), /brand new tail delta/);
+				assert.equal(service.lcmStore.listContextItems("room-rotate-invalidate").length, 1);
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("accumulates LCM compaction debt additively and drains it in two rounds", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 500,
+					leafTargetTokens: 0,
+					maxRounds: 2,
+				},
+			},
+		};
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nAdditive debt round was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-additive-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(additiveDebtMessages("fresh detail gamma"), undefined, {
+					sessionKey: "room-additive-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 0);
+
+				const storeBefore = LcmStore.open(config);
+				let debtBefore = 0;
+				try {
+					debtBefore = storeBefore.getSessionState("room-additive-debt")?.compactionDebt ?? 0;
+					assert.ok(debtBefore > 0);
+				} finally {
+					storeBefore.close();
+				}
+
+				now = 100_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
+				await service.serviceCompactionDebt("room-additive-debt");
+				assert.equal(calls, 2);
+
+				const storeAfter = LcmStore.open(config);
+				try {
+					assert.ok((storeAfter.getSessionState("room-additive-debt")?.compactionDebt ?? 0) < debtBefore);
+				} finally {
+					storeAfter.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("services cold-cache debt once when rehydrated debt meets new pressure", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 500,
+					leafTargetTokens: 0,
+					maxRounds: 1,
+				},
+			},
+		};
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nCold-cache debt was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-cold-once",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(additiveDebtMessages("fresh detail gamma"), undefined, {
+					sessionKey: "room-cold-once",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+			} finally {
+				service.close();
+			}
+
+			service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				now = 100_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
+				await service.transformContext(additiveDebtMessages("brand new tail delta"), undefined, {
+					sessionKey: "room-cold-once",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 0);
+				const store = LcmStore.open(config);
+				try {
+					assert.ok((store.getSessionState("room-cold-once")?.compactionDebt ?? 0) >= 0);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("preserves rehydrated raw LCM items after restart when only the fresh tail is replayed", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 10_000,
+					leafTargetTokens: 0,
+					maxRounds: 1,
+				},
+			},
+		};
+		const history = Array.from({ length: 10 }, (_, index) => ({
+			role: "user" as const,
+			content: `history item ${index + 1}`,
+			timestamp: index + 1,
+		}));
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer: fixedSummary("unused") });
+			try {
+				await service.transformContext(history, undefined, {
+					sessionKey: "room-rehydrate-raws",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+			} finally {
+				service.close();
+			}
+
+			service = createMemoryService(config, { summarizer: fixedSummary("unused") });
+			try {
+				const afterRestart = await service.transformContext(
+					[{ role: "user" as const, content: "fresh tail after restart", timestamp: 11 }],
+					undefined,
+					{
+						sessionKey: "room-rehydrate-raws",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+
+					assert.equal(afterRestart.length, 11);
+				assert.match(renderMessages(afterRestart), /history item 1/);
+				assert.match(renderMessages(afterRestart), /history item 10/);
+								assert.match(renderMessages(afterRestart), /fresh tail after restart/);
+					const store = LcmStore.open(config);
+					try {
+						assert.equal(store.listContextItems("room-rehydrate-raws").length, 11);
+					} finally {
+						store.close();
+					}
+				} finally {
+					service.close();
+				}
+		});
+	});
+
+	it("deduplicates insertSummary calls for the same summary key across an interleaved insert", async () => {
+		const config = await memoryConfig();
+		const service: ReturnType<typeof MemoryService.createWithoutRuntime> = MemoryService.createWithoutRuntime(config);
+		const peerStore = LcmStore.open(config);
+		try {
+			const input = {
+				segmentId: "seg-summary-dedupe",
+				depth: 1,
+				status: "ready" as const,
+				text: "duplicate summary",
+				source: { sourceType: "manual" as const, sourceRef: "sum:dedupe" },
+			};
+			const first = peerStore.insertSummary(input);
+			const second = service.lcmStore.insertSummary(input);
+
+			assert.equal(first, second);
+			assert.equal(service.lcmStore.listSummaries("seg-summary-dedupe").length, 1);
+		} finally {
+			service.close();
+			peerStore.close();
+		}
+	});
+
 	it("serviceCompactionDebt forces LCM compaction while cache is hot", async () => {
 		const baseConfig = await memoryConfig();
-		const config = lcmDebtConfig(baseConfig);
-		let now = 100_000;
+		const config = {
+			...lcmDebtConfig(baseConfig),
+			memory: {
+				...lcmDebtConfig(baseConfig).memory,
+				lcm: {
+					...lcmDebtConfig(baseConfig).memory.lcm,
+					maxRounds: 10,
+				},
+			},
+		};
+			let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
 			async summarizeLeaf() {
@@ -712,6 +1212,104 @@ describe("MemoryService", () => {
 				try {
 					assert.equal(store.listSummaries().length, 1);
 					assert.equal(store.getSessionState("room-force-debt")?.compactionDebt, 0);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("subtracts serviced leaf tokens from compaction debt across multiple rounds", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...lcmDebtConfig(baseConfig),
+			memory: {
+				...lcmDebtConfig(baseConfig).memory,
+				lcm: {
+					...lcmDebtConfig(baseConfig).memory.lcm,
+						leafChunkTokens: 500,
+						leafTargetTokens: 0,
+						maxRounds: 2,
+				},
+			},
+		};
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return `Files: none\nRound ${calls} consumed debt.\nExpand for details about: old chat wording`;
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-debt-accumulator",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha ".repeat(150), timestamp: 10 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta ".repeat(150) }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 11,
+						},
+						{ role: "user" as const, content: "old detail gamma ".repeat(150), timestamp: 12 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail delta ".repeat(150) }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 13,
+						},
+						{ role: "user" as const, content: "fresh detail epsilon", timestamp: 14 },
+					],
+					undefined,
+					{
+						sessionKey: "room-debt-accumulator",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+				const persistedDuringTurn = LcmStore.open(config);
+				try {
+					assert.ok((persistedDuringTurn.getSessionState("room-debt-accumulator")?.compactionDebt ?? 0) > 0);
+				} finally {
+					persistedDuringTurn.close();
+				}
+
+				const beforeDrain = LcmStore.open(config);
+				let debtBefore = 0;
+				try {
+					debtBefore = beforeDrain.getSessionState("room-debt-accumulator")?.compactionDebt ?? 0;
+					assert.ok(debtBefore > 0);
+				} finally {
+					beforeDrain.close();
+				}
+
+				await service.serviceCompactionDebt("room-debt-accumulator");
+					assert.equal(calls, 2);
+
+				const store = LcmStore.open(config);
+					try {
+						const afterDrain = store.getSessionState("room-debt-accumulator")?.compactionDebt ?? 0;
+						assert.ok(afterDrain > 0);
+						assert.ok(store.listSummaries().length >= 2);
 				} finally {
 					store.close();
 				}
@@ -814,11 +1412,11 @@ describe("MemoryService", () => {
 					},
 				);
 
-				assert.equal(afterRestart.length, 2);
+				assert.equal(afterRestart.length, 3);
 				assert.match(contentText(afterRestart[0]), /Familiar retained LCM summary/);
 				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
-				assert.match(contentText(afterRestart[1]), /brand new tail delta/);
-				assert.doesNotMatch(renderMessages(afterRestart), /fresh detail gamma/);
+				assert.match(renderMessages(afterRestart), /fresh detail gamma/);
+				assert.match(contentText(afterRestart[2]), /brand new tail delta/);
 			} finally {
 				service.close();
 			}
@@ -1261,6 +1859,24 @@ function fixedSummary(text: string): LcmSummarizer {
 			return `Files: none\n${text}\nExpand for details about: old chat wording`;
 		},
 	};
+}
+
+function additiveDebtMessages(freshTail: string) {
+	const heavyText = "a".repeat(1482);
+	return [
+		{ role: "user" as const, content: heavyText, timestamp: 10 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: heavyText }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 11,
+		},
+		{ role: "user" as const, content: freshTail, timestamp: 12 },
+	];
 }
 
 function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore & {

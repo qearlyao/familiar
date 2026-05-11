@@ -105,28 +105,18 @@ export class LcmContextTransformer {
 		const now = this.now();
 		const previousCacheTouchedAt = state.cacheTouchedAt;
 		state.cacheTouchedAt = now;
-		if (state.compactionDebt > 0) {
-			// Drain persisted debt before syncing incoming messages so a restart with only fresh-tail replay
-			// can still compact the rehydrated context items that created the debt.
-			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
-			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
-				await this.serviceCompactionDebtForState({
-					state,
-					sessionKey,
-					sessionId: options.sessionId,
-					signal,
-					model: options.model,
-					promptText,
-				});
-			}
-		}
 		syncContextState(state, messages);
 		this.projectContextState(sessionKey, options.sessionId, state);
 
 		try {
 			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
 			state.compactionDebt += pressure.pressureScore;
-			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
+			if (shouldServiceCompactionDebt({
+				settings,
+				now,
+				previousCacheTouchedAt,
+				pressureScore: state.compactionDebt,
+			})) {
 				await this.serviceCompactionDebtForState({
 					state,
 					sessionKey,
@@ -176,6 +166,7 @@ export class LcmContextTransformer {
 				input.state.compactionDebt = 0;
 				break;
 			}
+			const servicedTokens = pressure.candidate.chunkTokens;
 			await this.compactLcmCandidate({
 				state: input.state,
 				candidate: pressure.candidate,
@@ -183,8 +174,7 @@ export class LcmContextTransformer {
 				sessionId: input.sessionId,
 				signal: input.signal,
 			});
-			const nextPressure = this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
-			input.state.compactionDebt = nextPressure.candidate.shouldCompact ? nextPressure.pressureScore : 0;
+			input.state.compactionDebt = Math.max(0, input.state.compactionDebt - servicedTokens);
 		}
 	}
 
@@ -342,6 +332,10 @@ export class LcmContextTransformer {
 		return state;
 	}
 
+	invalidateSession(sessionKey: string): void {
+		this.contextStates.delete(sessionKey);
+	}
+
 	private projectContextState(sessionKey: string, sessionId: string | undefined, state: LcmContextState): void {
 		const segmentId = this.segmentManager.activeSegmentId(sessionKey);
 		const inserts = state.items
@@ -448,6 +442,7 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 		}
 		const replacement = rawById.get(item.id);
 		if (replacement && !covered.has(item.id)) next.push(replacement);
+		else if (item.recordId !== null && !covered.has(item.id)) next.push(item);
 	}
 
 	for (const item of rawItems) {

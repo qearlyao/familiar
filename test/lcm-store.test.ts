@@ -314,6 +314,25 @@ describe("LcmStore", () => {
 		}
 	});
 
+	it("insertSummary dedupes concurrent summary_key inserts in one transaction path", async () => {
+		const store = await openStore();
+		try {
+			const input = {
+				segmentId: "seg-concurrent",
+				depth: 1,
+				status: "ready" as const,
+				text: "concurrent summary",
+				source: { sourceType: "manual" as const, sourceRef: "sum:concurrent" },
+			};
+			const [first, second] = await Promise.all([store.insertSummary(input), store.insertSummary(input)]);
+
+			assert.equal(first, second);
+			assert.equal(store.listSummaries("seg-concurrent").length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("deleting a parent summary cascades through lcm_summary_parents", async () => {
 		const store = await openStore();
 		try {

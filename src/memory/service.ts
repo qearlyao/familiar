@@ -3,7 +3,7 @@ import type { Model } from "@earendil-works/pi-ai";
 
 import type { Config } from "../config.js";
 import type { ConversationRuntime } from "../runtime.js";
-import { AmbientDiaryInjector, __ambientDiaryInjectorTest } from "./diary/ambient-injector.js";
+import { __ambientDiaryInjectorTest, AmbientDiaryInjector } from "./diary/ambient-injector.js";
 import { indexAllDiaryFiles } from "./diary/indexer.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
 import { createEmbeddingProvider } from "./index/embedding-provider.js";
@@ -28,6 +28,12 @@ export interface MemoryService {
 	close(): void;
 }
 
+export interface MemoryOperatorService extends MemoryService {
+	readonly lcmStore: LcmStore;
+	readonly memoryStore: MemoryIndexStore;
+	readonly indexer: ChunkIndexer;
+}
+
 export interface MemoryTransformOptions {
 	sessionKey?: string;
 	sessionId?: string;
@@ -43,11 +49,17 @@ export function createMemoryService(config: Config, options: MemoryServiceOption
 	return new DefaultMemoryService(config, options);
 }
 
-class DefaultMemoryService implements MemoryService {
-	private readonly lcmStore: LcmStore;
-	private readonly memoryStore: MemoryIndexStore;
+export const MemoryService = {
+	createWithoutRuntime(config: Config, options: MemoryServiceOptions = {}): MemoryOperatorService {
+		return new DefaultMemoryService(config, options);
+	},
+};
+
+class DefaultMemoryService implements MemoryOperatorService {
+	readonly lcmStore: LcmStore;
+	readonly memoryStore: MemoryIndexStore;
 	private readonly embeddingProvider;
-	private readonly indexer: ChunkIndexer;
+	readonly indexer: ChunkIndexer;
 	private readonly segmentManager: LcmSegmentManager;
 	private readonly contextTransformer: LcmContextTransformer;
 	private readonly ambientInjector: AmbientDiaryInjector;

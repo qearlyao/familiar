@@ -1,0 +1,393 @@
+import { existsSync, statSync } from "node:fs";
+import { mkdir, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
+
+import type { Config as FamiliarConfig } from "../config.js";
+import { indexAllDiaryFiles } from "./diary/indexer.js";
+import { applyDoctorFixes, type DoctorFinding, runDoctor } from "./doctor.js";
+import { ChunkIndexer } from "./index/chunk-indexer.js";
+import { createEmbeddingProvider, type EmbeddingProvider } from "./index/embedding-provider.js";
+import type { MemoryIndexStore } from "./index/store.js";
+import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
+import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
+import { type MemoryOperatorService, MemoryService } from "./service.js";
+
+export async function runMemoryOperator(config: FamiliarConfig, argv: string[]): Promise<void> {
+	const [command, ...args] = argv;
+	if (!command || command === "--help" || command === "help") {
+		console.log(memoryHelp());
+		return;
+	}
+
+	switch (command) {
+		case "status":
+			await withOperatorService(config, async (service) => printStatus(config, service, args));
+			return;
+		case "doctor":
+			await withOperatorService(config, async (service) => runDoctorCommand(service, args));
+			return;
+		case "reindex":
+			await withOperatorService(config, async (service) => reindex(config, service, parseReindexArgs(args)));
+			return;
+		case "prune":
+			await withOperatorService(config, async (service) => prune(service, await parsePruneArgs(args)));
+			return;
+		case "backup":
+			await withOperatorService(config, async (service) => backup(config, service, parseBackupArgs(args)));
+			return;
+		default:
+			throw new Error(`Unknown memory subcommand: ${command}\n${memoryHelp()}`);
+	}
+}
+
+export function memoryHelp(): string {
+	return [
+		"Usage:",
+		"  familiar memory <workspace> status [--json]",
+		"  familiar memory <workspace> doctor [--clean]",
+		"  familiar memory <workspace> reindex [--corpus <name>] [--force]",
+		"  familiar memory <workspace> prune --new-session-retain-depth <N> [--yes]",
+		"  familiar memory <workspace> backup <out-dir>",
+	].join("\n");
+}
+
+async function withOperatorService<T>(
+	config: FamiliarConfig,
+	fn: (service: MemoryOperatorService) => Promise<T> | T,
+): Promise<T> {
+	const service = MemoryService.createWithoutRuntime(config);
+	try {
+		return await fn(service);
+	} finally {
+		service.close();
+	}
+}
+
+function printStatus(config: FamiliarConfig, service: MemoryOperatorService, args: string[]): void {
+	const json = hasOnlyFlags(args, ["--json"]) && args.includes("--json");
+	const status = collectStatus(config, service);
+	if (json) {
+		console.log(JSON.stringify(status, null, 2));
+		return;
+	}
+	printPlainStatus(status);
+}
+
+function collectStatus(config: FamiliarConfig, service: MemoryOperatorService): MemoryStatus {
+	const lcmPath = resolve(config.memory.lcmDir, "lcm.sqlite");
+	const indexPath = resolve(config.memory.indexDir, "memory.sqlite");
+	const indexStats = service.memoryStore.stats();
+	return {
+		paths: {
+			lcm: { path: lcmPath, sizeBytes: fileSize(lcmPath) },
+			index: { path: indexPath, sizeBytes: fileSize(indexPath) },
+		},
+		counts: {
+			lcmRecords: countRows(service.lcmStore, "lcm_records"),
+			lcmSummariesByDepth: countGrouped(
+				service.lcmStore,
+				"SELECT depth AS key, COUNT(*) AS n FROM lcm_summaries GROUP BY depth",
+			),
+			lcmSegments: {
+				active: countWhere(service.lcmStore, "lcm_segments", "status = 'active'"),
+				closed: countWhere(service.lcmStore, "lcm_segments", "status = 'closed'"),
+			},
+			lcmContextItems: countRows(service.lcmStore, "lcm_context_items"),
+			lcmSessionState: countRows(service.lcmStore, "lcm_session_state"),
+			memoryChunksByCorpus: countGrouped(
+				service.memoryStore,
+				"SELECT corpus AS key, COUNT(*) AS n FROM memory_chunks GROUP BY corpus",
+			),
+			memoryIndexSources: countRows(service.memoryStore, "memory_index_sources"),
+			memoryFtsRows: indexStats.ftsRows,
+		},
+		embedding: service.memoryStore.embeddingConfig(),
+		schemaVersions: {
+			lcm: service.lcmStore.schemaVersion(),
+			index: readMemoryMeta(service.memoryStore, "schema_version"),
+		},
+	};
+}
+
+function runDoctorCommand(service: MemoryOperatorService, args: string[]): void {
+	const clean = hasOnlyFlags(args, ["--clean"]) && args.includes("--clean");
+	const report = runDoctor({ lcm: service.lcmStore, index: service.memoryStore });
+	if (report.findings.length === 0) {
+		console.log("Memory doctor: clean");
+	} else {
+		console.log(`Memory doctor: ${report.findings.length} finding(s)`);
+		for (const finding of report.findings) console.log(`- ${formatFinding(finding)}`);
+	}
+	if (clean) {
+		const result = applyDoctorFixes({ lcm: service.lcmStore, index: service.memoryStore }, report);
+		console.log(result.summary);
+	}
+	if (!report.clean) process.exitCode = 1;
+}
+
+async function reindex(
+	config: FamiliarConfig,
+	service: MemoryOperatorService,
+	options: { corpus?: string; force: boolean },
+	embeddingProvider?: EmbeddingProvider,
+): Promise<void> {
+	if (options.force) {
+		service.memoryStore.db
+			.prepare("DELETE FROM memory_meta WHERE k IN ('embedding_model', 'embedding_dimensions')")
+			.run();
+	}
+	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
+	const runDelete = () => {
+		for (const corpus of corpora) deleteCorpus(service.memoryStore, corpus);
+	};
+	if (service.memoryStore.db.inTransaction) runDelete();
+	else service.memoryStore.db.transaction(runDelete).immediate();
+
+	const indexer = options.force
+		? new ChunkIndexer({
+				store: service.memoryStore,
+				embeddingProvider: embeddingProvider ?? createEmbeddingProvider(config),
+			})
+		: embeddingProvider
+			? new ChunkIndexer({ store: service.memoryStore, embeddingProvider })
+			: service.indexer;
+	let chunks = 0;
+	if (corpora.includes("lcm_record")) {
+		const result = await indexLcmRecords({ indexer, records: service.lcmStore.listRecords() });
+		chunks += result.ids.length;
+		printProgress(chunks);
+	}
+	if (corpora.includes("lcm_summary")) {
+		const result = await indexLcmSummaries({ indexer, summaries: service.lcmStore.listSummaries() });
+		chunks += result.ids.length;
+		printProgress(chunks);
+	}
+	if (corpora.includes("diary_chunk")) {
+		const result = await indexAllDiaryFiles({ config, indexer });
+		for (const file of result.files) {
+			chunks += file.result.ids.length;
+			printProgress(chunks);
+		}
+	}
+	console.log(`Reindexed ${chunks} chunk(s)`);
+}
+
+async function prune(service: MemoryOperatorService, options: { retainDepth: number; yes: boolean }): Promise<void> {
+	if (!options.yes && !(await confirm(`Prune closed LCM raw records with retain depth ${options.retainDepth}?`))) {
+		console.log("Prune cancelled");
+		return;
+	}
+	const activeSegments = service.lcmStore.listSegments().filter((segment) => segment.status === "active");
+	const activeSegmentId = activeSegments.at(-1)?.id ?? null;
+	const runClose = () => {
+		for (const segment of activeSegments) {
+			if (segment.id !== activeSegmentId) service.lcmStore.closeSegment(segment.id);
+		}
+	};
+	if (service.lcmStore.db.inTransaction) runClose();
+	else service.lcmStore.db.transaction(runClose).immediate();
+
+	const report = service.lcmStore.applyNewSessionRetention({
+		newSessionRetainDepth: options.retainDepth,
+		activeSegmentId,
+	});
+	for (const ref of report.indexDeletes) service.memoryStore.deleteBySource(ref.corpus, ref.sourceId);
+	const closedActive = activeSegments.filter((segment) => segment.id !== activeSegmentId);
+	if (closedActive.length > 0) {
+		const runReopen = () => {
+			for (const segment of closedActive) {
+				service.lcmStore.db
+					.prepare(
+						"UPDATE lcm_segments SET status = 'active', closed_at = NULL, updated_at = unixepoch() WHERE id = ?",
+					)
+					.run(segment.id);
+			}
+		};
+		if (service.lcmStore.db.inTransaction) runReopen();
+		else service.lcmStore.db.transaction(runReopen).immediate();
+	}
+	console.log(
+		`Pruned ${report.rawRecordsDeleted} raw record(s), ${report.summariesDeleted} summary row(s), ` +
+			`${report.affectedSegments.length} closed segment(s) scanned`,
+	);
+}
+
+async function backup(config: FamiliarConfig, service: MemoryOperatorService, outDir: string): Promise<void> {
+	await mkdir(outDir, { recursive: true });
+	const lcmOut = resolve(outDir, "lcm.sqlite");
+	const memoryOut = resolve(outDir, "memory.sqlite");
+	await Promise.all([service.lcmStore.db.backup(lcmOut), service.memoryStore.db.backup(memoryOut)]);
+	const [lcmStat, memoryStat] = await Promise.all([stat(lcmOut), stat(memoryOut)]);
+	console.log(`LCM backup: ${lcmOut} (${formatBytes(lcmStat.size)})`);
+	console.log(`Index backup: ${memoryOut} (${formatBytes(memoryStat.size)})`);
+	void config;
+}
+
+function parseReindexArgs(args: string[]): { corpus?: string; force: boolean } {
+	let corpus: string | undefined;
+	let force = false;
+	for (let index = 0; index < args.length; index++) {
+		const arg = args[index];
+		if (arg === "--force") {
+			force = true;
+			continue;
+		}
+		if (arg === "--corpus") {
+			corpus = args[++index];
+			if (!corpus) throw new Error("Missing value for --corpus");
+			continue;
+		}
+		throw new Error(`Unknown reindex argument: ${arg}`);
+	}
+	return { corpus, force };
+}
+
+async function parsePruneArgs(args: string[]): Promise<{ retainDepth: number; yes: boolean }> {
+	let retainDepth: number | undefined;
+	let yes = false;
+	for (let index = 0; index < args.length; index++) {
+		const arg = args[index];
+		if (arg === "--yes") {
+			yes = true;
+			continue;
+		}
+		if (arg === "--new-session-retain-depth") {
+			const raw = args[++index];
+			if (!raw) throw new Error("Missing value for --new-session-retain-depth");
+			retainDepth = Number(raw);
+			continue;
+		}
+		throw new Error(`Unknown prune argument: ${arg}`);
+	}
+	if (retainDepth === undefined || !Number.isInteger(retainDepth) || retainDepth < -1) {
+		throw new Error("prune requires --new-session-retain-depth <integer >= -1>");
+	}
+	return { retainDepth, yes };
+}
+
+function parseBackupArgs(args: string[]): string {
+	if (args.length !== 1) throw new Error("backup requires <out-dir>");
+	return resolve(args[0] as string);
+}
+
+function hasOnlyFlags(args: string[], allowed: readonly string[]): boolean {
+	for (const arg of args) {
+		if (!allowed.includes(arg)) throw new Error(`Unknown argument: ${arg}`);
+	}
+	return true;
+}
+
+function deleteCorpus(store: MemoryIndexStore, corpus: string): void {
+	const rows = store.db.prepare("SELECT source_id FROM memory_index_sources WHERE corpus = ?").all(corpus) as {
+		source_id: string;
+	}[];
+	const sourceIds = new Set(rows.map((row) => row.source_id));
+	for (const sourceId of sourceIds) store.deleteBySourceUnsafe(corpus, sourceId);
+	const orphanRows = store.db.prepare("SELECT id FROM memory_chunks WHERE corpus = ?").all(corpus) as { id: number }[];
+	for (const row of orphanRows) {
+		store.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);
+		store.db.prepare("DELETE FROM memory_chunks WHERE id = ?").run(row.id);
+	}
+}
+
+function countRows(store: { db: LcmStore["db"] }, table: string): number {
+	const row = store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+	return row.n;
+}
+
+function countWhere(store: { db: LcmStore["db"] }, table: string, where: string): number {
+	const row = store.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get() as { n: number };
+	return row.n;
+}
+
+function countGrouped(store: { db: LcmStore["db"] }, sql: string): Record<string, number> {
+	const rows = store.db.prepare(sql).all() as Array<{ key: string | number; n: number }>;
+	return Object.fromEntries(rows.map((row) => [String(row.key), row.n]));
+}
+
+function readMemoryMeta(store: MemoryIndexStore, key: string): number | null {
+	const row = store.db.prepare("SELECT v FROM memory_meta WHERE k = ?").get(key) as { v: string } | undefined;
+	return row ? Number(row.v) : null;
+}
+
+function fileSize(path: string): number {
+	return existsSync(path) ? statSync(path).size : 0;
+}
+
+function formatFinding(finding: DoctorFinding): string {
+	return `${finding.kind} ${finding.fixable ? "[fixable]" : "[manual]"}: ${finding.detail}`;
+}
+
+function printPlainStatus(status: MemoryStatus): void {
+	console.log("Memory status");
+	console.log(`LCM DB: ${status.paths.lcm.path} (${formatBytes(status.paths.lcm.sizeBytes)})`);
+	console.log(`Index DB: ${status.paths.index.path} (${formatBytes(status.paths.index.sizeBytes)})`);
+	console.log(`LCM records: ${status.counts.lcmRecords}`);
+	console.log(`LCM summaries by depth: ${JSON.stringify(status.counts.lcmSummariesByDepth)}`);
+	console.log(`LCM segments: active=${status.counts.lcmSegments.active} closed=${status.counts.lcmSegments.closed}`);
+	console.log(`LCM context items: ${status.counts.lcmContextItems}`);
+	console.log(`LCM session state: ${status.counts.lcmSessionState}`);
+	console.log(`Memory chunks by corpus: ${JSON.stringify(status.counts.memoryChunksByCorpus)}`);
+	console.log(`Memory index sources: ${status.counts.memoryIndexSources}`);
+	console.log(`Memory FTS rows: ${status.counts.memoryFtsRows}`);
+	console.log(`Embedding: ${status.embedding.provider}/${status.embedding.model} dim=${status.embedding.dimensions}`);
+	console.log(
+		`Schema versions: lcm=${status.schemaVersions.lcm ?? "unknown"} index=${status.schemaVersions.index ?? "unknown"}`,
+	);
+}
+
+function printProgress(chunks: number): void {
+	if (chunks > 0 && chunks % 100 === 0) console.log(`Reindexed ${chunks} chunk(s)`);
+}
+
+async function confirm(question: string): Promise<boolean> {
+	const rl = createInterface({ input, output });
+	try {
+		const answer = await rl.question(`${question} Type yes to continue: `);
+		return answer.trim().toLowerCase() === "yes";
+	} finally {
+		rl.close();
+	}
+}
+
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = ["KB", "MB", "GB", "TB"];
+	let value = bytes / 1024;
+	let unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit += 1;
+	}
+	return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
+interface MemoryStatus {
+	paths: {
+		lcm: { path: string; sizeBytes: number };
+		index: { path: string; sizeBytes: number };
+	};
+	counts: {
+		lcmRecords: number;
+		lcmSummariesByDepth: Record<string, number>;
+		lcmSegments: { active: number; closed: number };
+		lcmContextItems: number;
+		lcmSessionState: number;
+		memoryChunksByCorpus: Record<string, number>;
+		memoryIndexSources: number;
+		memoryFtsRows: number;
+	};
+	embedding: { provider: string; model: string; dimensions: number };
+	schemaVersions: { lcm: number | null; index: number | null };
+}
+
+export const __memoryOperatorTest = {
+	collectStatus,
+	reindex,
+	prune,
+	backup,
+	lcmRecordIndexSourceId,
+	lcmSummaryIndexSourceId,
+};

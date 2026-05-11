@@ -639,7 +639,7 @@ shipped. Fix before adding more surface area.
 - [x] Add deferred compaction debt and cache-aware compaction timing so
   prompt-mutating work can be delayed or retried safely. Compaction telemetry
   remains deferred.
-- Add LCM integrity/doctor/clean checks for dangling summary sources, stale
+- [x] Add LCM integrity/doctor/clean checks for dangling summary sources, stale
   shared-index rows, broken context ordering, missing source records, and
   orphan empty segments.
 - Add startup/backfill sweep over existing `data/chat` and `data/transcripts`,
@@ -652,7 +652,7 @@ shipped. Fix before adding more surface area.
 - Add an optional age-based LCM segment backstop
   (`memory.lcm.segment_max_age_days`) for segments that never cross another
   `/new` boundary.
-- Add operator memory commands or CLI equivalents: status, reindex, prune,
+- [x] Add operator memory commands or CLI equivalents: status, reindex, prune,
   backup, doctor/clean, and relevant diagnostics. Agent-facing
   `memory_recall` / `memory_open` exist; no operator surface does.
 - Add sqlite-vec dynamic loading and soft-fail behavior; keep the current

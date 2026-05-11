@@ -10,6 +10,7 @@ import { createFamiliarAgent } from "./agent.js";
 import { loadConfig } from "./config.js";
 import { startDiscordDaemon } from "./discord.js";
 import { cleanupGeneratedAttachments } from "./generated-media.js";
+import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
 import { loadSettingsStore } from "./settings.js";
 import { startWebDaemon } from "./web.js";
@@ -109,6 +110,7 @@ function usage(): string {
 		"Usage:",
 		"  familiar init <workspace>",
 		"  familiar run <workspace>",
+		"  familiar memory <workspace> <subcommand>",
 		"  familiar install-service",
 		"  familiar status",
 		"  familiar upgrade",
@@ -116,7 +118,7 @@ function usage(): string {
 }
 
 async function main(): Promise<void> {
-	const [, , command, workspace] = process.argv;
+	const [, , command, workspace, ...rest] = process.argv;
 	if (command === "init") {
 		if (!workspace) throw new Error(`Missing workspace\n${usage()}`);
 		await initWorkspace(workspace);
@@ -125,6 +127,18 @@ async function main(): Promise<void> {
 	if (command === "run") {
 		if (!workspace) throw new Error(`Missing workspace\n${usage()}`);
 		await runDaemon(workspace);
+		return;
+	}
+	if (command === "memory") {
+		if (!workspace) throw new Error(`Missing workspace\n${memoryHelp()}`);
+		const workspacePath = resolve(workspace);
+		const envPath = resolve(workspacePath, ".env");
+		if (existsSync(envPath)) {
+			loadDotenv({ path: envPath, override: false });
+		}
+		const config = await loadConfig(workspacePath);
+		await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
+		await runMemoryOperator(config, rest);
 		return;
 	}
 	if (command === "install-service" || command === "status" || command === "upgrade") {

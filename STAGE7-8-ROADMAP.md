@@ -569,6 +569,11 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
   ambient text must mutate only the current user turn, never the assistant
   tail that the upstream API caches up to. Add an explicit assertion or
   sentinel inside `AmbientDiaryInjector` so a future regression trips a test.
+- Add a doctor finding for `vector_capability = "sqlite-vec"` but
+  `COUNT(memory_vec) < COUNT(memory_chunks)`. The Pass 3 fix backfills on
+  capability transition, but if a future migration adds chunks while
+  sqlite-vec is unavailable and then re-enables, the doctor should surface
+  the gap (clean path: re-run the backfill).
 
 ## Open Questions
 

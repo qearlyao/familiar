@@ -548,180 +548,30 @@ High-value `pi-lcm-memory` files:
 - `/private/tmp/familiar-research/pi-lcm-memory/ROADMAP.md`
   - stabilization history and reranker postmortem.
 
-## TODOs From Recent Stage 7-8 Review
+## Remaining TODOs
 
-Recent thin-slice fixes handled FTS query sanitization, semantic-to-lexical
-fallback, LCM segment restart continuity (segment counter only —
-compressed-conversation continuity is still unwired), shared-index cleanup after
-LCM retention with startup reconciliation, runtime-summary LCM provenance,
-contentless FTS tables, many-to-one shared-index source mapping, and direct
-dependency declaration for `typebox`.
+All correctness bugs surfaced during the 9-commit review and the migration
+TODOs from the porting plan have landed except the four items below. Each is
+nice-to-have rather than blocking — Stage 9 work can start without them.
 
-### Correctness bugs surfaced during the 9-commit review
-
-These are not greenfield TODOs — they are invariant breaks in code that already
-shipped. Fix before adding more surface area.
-
-- [x] Persist runtime summary provenance for real: today
-  `service.ts` writes `summary_sources.record_id = NULL` and
-  `lcm_summaries.covers_from_record_id / covers_to_record_id = NULL` because
-  the summarizer hashes an in-memory `AgentMessage` fingerprint instead of
-  resolving back to the LCM record id. Expansion (summary → source) is
-  impossible until this is wired through `projectNormalizedLcmBatch`/
-  `insertRecord` and the summarizer call site.
-- [x] Wrap `/new` rotation in a single LCM transaction:
-  `closeSegment` → `nextSegmentId` → `ensureSegment` → `applyNewSessionRetention`
-  currently span four uncoordinated steps. Coordinate the shared-index delete
-  with the LCM transaction (collect index deletes, apply after both succeed)
-  or add a startup reconciliation sweep that drops `lcm_record:*` /
-  `lcm_summary:*` index rows with no backing row.
-- [x] Fix the FTS5 external-content desync in both index DBs: schemas declare
-  `content='memory_chunks'` / `content='lcm_records'` etc. but writes are
-  manual and text is double-stored inside the FTS table. Either install
-  `AFTER INSERT/UPDATE/DELETE` triggers on the base table or switch the FTS
-  tables to contentless (`content=''`). Today an UPDATE on `text_full` or any
-  cascade-delete from `lcm_segments` silently desyncs FTS.
-- [x] Sanitize FTS queries in `lcm/store.ts:searchRecordsLexical` the same way the
-  shared index does — currently apostrophes/colons/quotes in user queries
-  throw `fts5: syntax error`.
-- [x] Stop indexing boundary records into FTS: `kind='boundary'` rows insert the
-  literal text "Session boundary", polluting lexical recall over time. Either
-  skip the FTS write for boundary kind or filter it out in lexical search.
-- [x] Make `content_hash` content-identity, not row-identity:
-  `index/store.ts:normalizeInput` and `chunk-indexer.ts:prepare` currently
-  fold `sourceId` (and `chunkIndex`) into the hash, so the planned many-to-one
-  dedupe table can never fire and a real content collision silently drops the
-  second `source_id`. Either rename the column to `row_key` and document the
-  intent, or remove `sourceId` from the hash inputs and land the many-to-one
-  side table at the same time.
-- [x] Open `MemoryIndexStore` and `EmbeddingProvider` once on service startup,
-  not on every `memory_recall` / `memory_open` call. Inject them into
-  `createMemoryTools` instead of constructing per-execute.
-- [x] Stable `AgentMessage` fingerprint independent of array index: today
-  `context.ts:createAgentMessageFingerprint` hashes `index` into the id, so
-  any upstream reorder or truncation changes every downstream id and
-  invalidates `syncContextState`. Hash (role, timestamp, content) instead.
-- [x] Move `ensureSegment` inside the `insertRecord` transaction so a failed
-  record insert cannot leave an orphan empty segment.
-- [x] Cascade-delete `lcm_summary_sources` rows when their parent summary is
-  pruned, or enable `PRAGMA foreign_keys = ON` and add `ON DELETE CASCADE`.
-  Today retention leaves zombie rows pointing at vanished summary ids.
-- [x] Fix RRF rank assignment under corpus fan-out in `index/retrieval.ts:
-  mergeRankedHits` — current code concatenates per-corpus hit arrays and
-  assigns ranks sequentially across the concatenation, systematically biasing
-  RRF against later corpora. Rank per corpus, then merge.
-- [x] Add the roadmap-required `time filter` and `mode` parameters to
-  `memory_recall`'s tool schema (or document why they were dropped). The
-  retrieval layer already supports `useLexical`/`useSemantic` — surface as
-  `mode: lexical|semantic|hybrid`.
-
-### Remaining migration TODOs
-
-- [x] Add persisted ordered LCM context items with ordinals, then make live
-  compaction replace raw/summary ranges in that table instead of only in the
-  in-memory `transformContext` state.
-- [x] Rehydrate `transformContext` from persisted LCM context items and retained
-  summaries after daemon restart, so transcript replay is no longer the only
-  continuity source for compressed long conversations. The recent
-  segment-restart fix covers segment numbering only; compressed long
-  conversations still rebuild solely from transcript replay.
-- [x] Add a `summary_parents` table (or equivalent edge table) so condensed
-  summary passes can traverse the DAG. Today only `summary_sources` edges
-  exist; there is no explicit parent linkage between summaries.
-- [x] Add condensed summary passes and depth promotion, not just leaf summaries.
-  Today `persistRuntimeSummary` hardcodes `depth: 1`.
-- [x] Add structured message reconstruction/sanitization around tool calls, tool
-  results, and reasoning blocks before LCM summary generation and context
-  assembly. Today `normalize.ts` drops tool records entirely and
-  `lcmRecordToAgentMessage` only emits `user`/`assistant` text.
-- [x] Add prompt-aware eviction and budget selection from `lossless-claw` once the
-  ordered context model exists.
-- [x] Add deferred compaction debt and cache-aware compaction timing so
-  prompt-mutating work can be delayed or retried safely. Compaction telemetry
-  remains deferred.
-- [x] Add LCM integrity/doctor/clean checks for dangling summary sources, stale
-  shared-index rows, broken context ordering, missing source records, and
-  orphan empty segments.
-- [x] Add startup/backfill sweep over existing `data/chat` and `data/transcripts`,
-  plus a transcript source adapter for normalized LCM ingestion. Pair with
-  event-loop yielding (1024-row chunks) so backfill cannot starve Discord/HTTP
-  loops.
-- [x] Add config-driven retention/archive for `data/chat`, `data/transcripts`, and
-  `data/payloads`; keep transcript pruning conservative until LCM can fully
-  replace replay after restart.
 - Add an optional age-based LCM segment backstop
   (`memory.lcm.segment_max_age_days`) for segments that never cross another
   `/new` boundary.
-- [x] Add operator memory commands or CLI equivalents: status, reindex, prune,
-  backup, doctor/clean, and relevant diagnostics. Agent-facing
-  `memory_recall` / `memory_open` exist; no operator surface does.
-- [x] Add sqlite-vec dynamic loading and soft-fail behavior; keep the current
-  linear BLOB scan as fallback when sqlite-vec is unavailable. Expose a real
-  capability probe so `stats().vectorAvailable` and `meta.vector_capability`
-  stop lying.
-- [x] Add many-to-one source mappings for content-hash dedupe so identical
-  chunks can share one embedding while retaining every source id. Landed
-  together with the `content_hash` fix via `memory_index_sources` table.
-- [x] Add a reindex-from-source registry so embedding-model or dimension changes
-  can repopulate the index automatically instead of permanently wiping
-  content the operator must re-feed.
 - Cascade-delete shared-index rows when their LCM record or diary chunk is
-  deleted (today the wiring runs only inside the retention path; ad-hoc
-  deletes leak rows).
-- Add `memory_similar` or deeper `memory_open`/expand behavior once summary DAG
-  compression needs deterministic drill-down. `memory_open` today returns
+  deleted via an ad-hoc path (not retention). Today the wiring runs only
+  inside `applyNewSessionRetention`; one-off deletes leak rows that doctor's
+  startup sweep eventually cleans.
+- Add `memory_similar` or deeper `memory_open`/expand behavior once summary
+  DAG compression needs deterministic drill-down. `memory_open` today returns
   only the immediate chunk row; for summaries it should follow
-  `summary_sources` back to the underlying records.
-- [x] Generalize `memory.embedding.api` beyond the locked `"gemini"` enum (or
-  rename to `embedding.format`) and document the wire-protocol contract in
-  `config.example.toml`.
-- [x] Expose ambient diary recall tuning knobs (top-K, valence/recency/intensity
-  weights, throttle interval, minimum-query-length gate) rather than the
-  hardcoded `limit = 3` and unconditional fire on every non-empty user turn.
-- Document the cache-boundary contract for ambient injection: ambient text
-  mutates only the current user turn, never the assistant tail that
-  upstream caches up to. Add an explicit assertion or sentinel.
-- [x] Decompose `MemoryService` (511 lines) into `LcmSegmentManager`,
-  `LcmContextTransformer`, and `AmbientDiaryInjector`. Today the runtime
-  subscription, segment lifecycle, transformContext orchestration, and
-  ambient injection share one class and one ad-hoc projection queue.
-- [x] Either wire `assembleLcmContext` / `selectRetainedSummaries` /
-  `selectFreshTailRecords` (`lcm/context.ts`) into the real
-  `transformContext` path or delete them. Today the runtime ignores them and
-  operates directly over `state.items`; the dead code is a maintenance trap.
-  (done in prior phase for `assembleLcmContext`/`renderLcmSummaryContext`;
-  final pass deleted the remaining `detectLcmCompactionPressure` orphan.)
-- [x] Default `memory_recall.scope` should be `factual`, not `all`. Roadmap calls
-  for "context-sensitive but conservative" and the current default leaks
-  diary into provenance-style queries.
-- [x] Snapshot summary content into `lcm_summaries.snapshot_json` (column exists,
-  nothing populates it) at retention time so summaries remain meaningful
-  after raw records are pruned. Today `covers_from_record_id` /
-  `covers_to_record_id` are nulled by `ON DELETE SET NULL`, losing range
-  provenance permanently.
-- [x] Plumb the `vacuum` flag of `applyNewSessionRetention` to an opt-in operator
-  command; do not run on every `/new`. Index growth on prune is currently
-  unbounded because vacuum is always `false`.
-- [x] Add FTS prefix matching (`lantern*` form) for recall — current sanitizer
-  strips `*` so "lanterns" never matches "lantern".
-- [x] Add basic timing/structured-log hooks at indexer batch boundaries; the
-  current pipeline is silent and hard to debug for embedding throughput.
-- [x] Add diagnostic visibility for the projection-queue failure path (repeat
-  rejection counts, last error). Today failures are swallowed into a chained
-  `.catch` that only flush callers can observe.
-- [x] Cover positive-depth retention end-to-end in tests
-  (`newSessionRetainDepth >= 1` keeps `d>=N` and prunes lower); today only
-  `-1` and `0` paths are exercised. (done in prior phase; final pass kept the
-  coverage and added the requested validation bundle.)
-- [x] Handle empty/missing diary directories gracefully in `indexAllDiaryFiles`;
-  today `readdir` throws ENOENT on misconfigured workspaces.
-- [x] Document or fix the `agent.cacheRetention` camelCase TOML key — every other
-  key in `config.example.toml` is snake-case.
+  `summary_sources` and `lcm_summary_parents` back to the underlying records.
+- Document the cache-boundary contract for ambient injection in code:
+  ambient text must mutate only the current user turn, never the assistant
+  tail that the upstream API caches up to. Add an explicit assertion or
+  sentinel inside `AmbientDiaryInjector` so a future regression trips a test.
 
 ## Open Questions
 
-- Exact DB layout: one shared physical DB with corpus-scoped tables, or separate
-  LCM/diary tables sharing common helper code.
 - Whether to pin the default embedding model to official `gemini-embedding-2`
   or a preview alias if Google exposes one through the configured endpoint.
 - Whether primer ships in v0 or waits until ambient diary recall feels right.

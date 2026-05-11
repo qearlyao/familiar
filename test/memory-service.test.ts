@@ -363,6 +363,70 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("summary over span with tool_call record includes tool markers in rendered input", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 10,
+					leafTargetTokens: 8,
+					maxRounds: 1,
+				},
+			},
+		};
+		let renderedInput = "";
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf(input) {
+				renderedInput = input.text;
+				return "Files: none\nTool interaction was compacted.\nExpand for details about: tool call and result";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(
+					[
+						{
+							role: "assistant" as const,
+							content: [{ type: "toolCall" as const, id: "call-1", name: "read", arguments: { path: "PLAN.md" } }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "toolUse" as const,
+							timestamp: 1,
+						},
+						{
+							role: "toolResult" as const,
+							toolCallId: "call-1",
+							toolName: "read",
+							content: [{ type: "text" as const, text: "structured reconstruction TODO" }],
+							details: { text: "structured reconstruction TODO" },
+							isError: false,
+							timestamp: 2,
+						},
+						{ role: "user" as const, content: "fresh detail", timestamp: 3 },
+					],
+					undefined,
+					{ sessionKey: "room-tools", sessionId: "session-tools", model: { contextWindow: 10_000 } as any },
+				);
+
+				assert.match(renderedInput, /<tool_call name="read">/);
+				assert.match(renderedInput, /"path": "PLAN\.md"/);
+				assert.match(renderedInput, /<tool_result name="read">/);
+				assert.match(renderedInput, /structured reconstruction TODO/);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
 	it("reconciles shared-index rows left behind after LCM retention committed", async () => {
 		const baseConfig = await memoryConfig();
 		const config = {

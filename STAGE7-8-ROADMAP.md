@@ -630,7 +630,7 @@ shipped. Fix before adding more surface area.
   exist; there is no explicit parent linkage between summaries.
 - Add condensed summary passes and depth promotion, not just leaf summaries.
   Today `persistRuntimeSummary` hardcodes `depth: 1`.
-- Add structured message reconstruction/sanitization around tool calls, tool
+- [x] Add structured message reconstruction/sanitization around tool calls, tool
   results, and reasoning blocks before LCM summary generation and context
   assembly. Today `normalize.ts` drops tool records entirely and
   `lcmRecordToAgentMessage` only emits `user`/`assistant` text.

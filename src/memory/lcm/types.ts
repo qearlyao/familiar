@@ -22,6 +22,12 @@ export interface LcmAttachmentNote {
 	sourceRef?: string;
 }
 
+export type LcmRecordPart =
+	| { kind: "text"; text: string }
+	| { kind: "tool_call"; toolCallId: string; toolName: string; arguments: unknown }
+	| { kind: "tool_result"; toolCallId: string; toolName: string; output: unknown; isError?: boolean }
+	| { kind: "thinking"; text: string; signature?: string };
+
 export interface LcmSegmentInput {
 	id: string;
 	sessionId?: string | null;
@@ -49,6 +55,7 @@ export interface LcmRecordInput {
 	segmentId: string;
 	kind: LcmRecordKind;
 	text?: string;
+	parts?: LcmRecordPart[];
 	happenedAt?: string | null;
 	sessionId?: string | null;
 	channelKey?: string | null;
@@ -65,6 +72,7 @@ export interface StoredLcmRecord {
 	segmentId: string;
 	kind: LcmRecordKind;
 	text: string;
+	parts: LcmRecordPart[] | null;
 	happenedAt: string;
 	sessionId: string | null;
 	channelKey: string | null;

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Provider, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
-import type { LcmAttachmentNote, LcmRecordKind, StoredLcmRecord, StoredLcmSummary } from "./types.js";
+import type { LcmAttachmentNote, LcmRecordKind, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export interface FreshTailOptions {
 	messageCount: number;
@@ -121,6 +121,31 @@ export function createRawContextItems(messages: readonly AgentMessage[]): LcmCon
 		message,
 		tokens: estimateAgentMessageTokens(message),
 	}));
+}
+
+export function lcmRecordToAgentMessage(record: StoredLcmRecord): AgentMessage {
+	const timestamp = Date.parse(record.happenedAt);
+	const messageTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
+	if (record.parts?.length) return structuredLcmRecordToAgentMessage(record, messageTimestamp);
+	if (record.kind === "assistant") return fallbackAssistantMessage(record.text, messageTimestamp);
+	if (record.kind === "tool") return fallbackAssistantMessage(record.text, messageTimestamp);
+	return { role: "user", content: record.text, timestamp: messageTimestamp };
+}
+
+export function renderLcmRecordPartsForSummary(parts: readonly LcmRecordPart[]): string {
+	return parts
+		.map((part) => {
+			if (part.kind === "text") return part.text.trim();
+			if (part.kind === "thinking") return part.text.trim() ? `<thinking>${part.text.trim()}</thinking>` : "";
+			if (part.kind === "tool_call") {
+				return `<tool_call name="${escapeXmlAttribute(part.toolName)}">${formatJsonForSummary(part.arguments)}</tool_call>`;
+			}
+			return `<tool_result name="${escapeXmlAttribute(part.toolName)}">${truncateForSummary(
+				formatJsonForSummary(part.output),
+			)}</tool_result>`;
+		})
+		.filter(Boolean)
+		.join("\n");
 }
 
 export function selectLcmCompactionCandidate(
@@ -270,13 +295,31 @@ function resolveFreshTailStartIndex(
 function selectOldestLeafChunk(items: readonly LcmContextRawItem[], leafChunkTokens: number): LcmContextRawItem[] {
 	const chunk: LcmContextRawItem[] = [];
 	let tokens = 0;
-	for (const item of items) {
-		if (chunk.length > 0 && tokens + item.tokens > leafChunkTokens) break;
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index];
+		if (!item) continue;
+		if (chunk.length > 0 && tokens + item.tokens > leafChunkTokens && !continuesSelectedToolCall(chunk, item)) {
+			break;
+		}
 		chunk.push(item);
 		tokens += item.tokens;
-		if (tokens >= leafChunkTokens) break;
+		const next = items[index + 1];
+		if (tokens >= leafChunkTokens && (!next || !continuesSelectedToolCall(chunk, next))) break;
 	}
 	return chunk;
+}
+
+function continuesSelectedToolCall(chunk: readonly LcmContextRawItem[], item: LcmContextRawItem): boolean {
+	const toolCallId = (item.message as { role?: string; toolCallId?: string }).toolCallId;
+	if ((item.message as { role?: string }).role !== "toolResult" || !toolCallId) return false;
+	return chunk.some((chunkItem) => hasAssistantToolCall(chunkItem.message, toolCallId));
+}
+
+function hasAssistantToolCall(message: AgentMessage, toolCallId: string): boolean {
+	if ((message as { role?: string }).role !== "assistant" || !("content" in message)) return false;
+	const content = message.content;
+	if (!Array.isArray(content)) return false;
+	return content.some((item) => item.type === "toolCall" && item.id === toolCallId);
 }
 
 function estimateContentTokens(content: UserMessage["content"] | ToolResultMessage["content"]): number {
@@ -331,6 +374,122 @@ function nonNegativeInteger(value: number, name: string): number {
 function optionalNonNegativeInteger(value: number | undefined, name: string): number | null {
 	if (value === undefined) return null;
 	return nonNegativeInteger(value, name);
+}
+
+function structuredLcmRecordToAgentMessage(record: StoredLcmRecord, timestamp: number): AgentMessage {
+	if (record.kind === "tool") {
+		const result = record.parts?.find((part): part is Extract<LcmRecordPart, { kind: "tool_result" }> => {
+			return part.kind === "tool_result";
+		});
+		if (!result) return fallbackAssistantMessage(record.text, timestamp);
+		return {
+			role: "toolResult",
+			toolCallId: result.toolCallId,
+			toolName: result.toolName,
+			content: [{ type: "text", text: stringifyPartValue(result.output) }],
+			details: result.output,
+			isError: result.isError ?? false,
+			timestamp,
+		};
+	}
+	if (record.kind === "assistant") {
+		return {
+			...fallbackAssistantMessage("", timestamp),
+			content: structuredAssistantContent(record.parts ?? []),
+			stopReason: record.parts?.some((part) => part.kind === "tool_call") ? "toolUse" : "stop",
+		};
+	}
+	return {
+		role: "user",
+		content: structuredUserContent(record.parts ?? [], record.text),
+		timestamp,
+	};
+}
+
+function structuredAssistantContent(parts: readonly LcmRecordPart[]): AssistantMessage["content"] {
+	const content: AssistantMessage["content"] = [];
+	for (const part of parts) {
+		if (part.kind === "text" && part.text) content.push({ type: "text", text: part.text });
+		else if (part.kind === "thinking" && part.text) {
+			content.push({
+				type: "thinking",
+				thinking: part.text,
+				...(part.signature ? { thinkingSignature: part.signature } : {}),
+			});
+		} else if (part.kind === "tool_call") {
+			content.push({
+				type: "toolCall",
+				id: part.toolCallId,
+				name: part.toolName,
+				arguments: normalizeToolArguments(part.arguments),
+			});
+		}
+	}
+	return content.length ? content : [{ type: "text", text: "" }];
+}
+
+function structuredUserContent(parts: readonly LcmRecordPart[], fallback: string): UserMessage["content"] {
+	const text = parts
+		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
+		.map((part) => part.text)
+		.join("\n")
+		.trim();
+	return text || fallback;
+}
+
+function fallbackAssistantMessage(text: string, timestamp: number): AssistantMessage {
+	return {
+		role: "assistant",
+		content: [{ type: "text", text }],
+		api: "lcm" as Api,
+		provider: "familiar" as Provider,
+		model: "lcm-record",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop",
+		timestamp,
+	};
+}
+
+function normalizeToolArguments(value: unknown): Record<string, any> {
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : {};
+}
+
+function stringifyPartValue(value: unknown): string {
+	if (typeof value === "string") return value;
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+
+function formatJsonForSummary(value: unknown): string {
+	try {
+		return JSON.stringify(value, null, 2);
+	} catch {
+		return String(value);
+	}
+}
+
+function truncateForSummary(text: string, maxLength = 2_000): string {
+	const trimmed = text.trim();
+	if (trimmed.length <= maxLength) return trimmed;
+	return `${trimmed.slice(0, maxLength)}\n...[truncated]`;
+}
+
+function escapeXmlAttribute(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
 }
 
 function messageTextForFingerprint(message: AgentMessage): string {

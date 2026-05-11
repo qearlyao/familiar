@@ -6,13 +6,14 @@ import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
 	type LcmContextRawItem,
+	renderLcmRecordPartsForSummary,
 	selectLcmCompactionCandidate,
 } from "./context.js";
 import { indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
-import type { LcmRecordInput } from "./types.js";
+import type { LcmRecordInput, LcmRecordPart } from "./types.js";
 
 const LCM_SUMMARY_PREFIX = "[Familiar retained LCM summary]";
 
@@ -267,12 +268,14 @@ function rawItemToRecordInput(
 	sessionId: string | undefined,
 ): LcmRecordInput {
 	const role = (item.message as { role?: string }).role;
-	const text = extractTextFromMessage(item.message).trim() || `[${role ?? "message"}]`;
+	const parts = lcmRecordPartsFromAgentMessage(item.message);
+	const text = renderPartsAsPlainText(parts).trim() || `[${role ?? "message"}]`;
 	const timestamp = (item.message as { timestamp?: number }).timestamp;
 	return {
 		segmentId,
-		kind: role === "assistant" ? "assistant" : role === "user" ? "user" : "note",
+		kind: role === "assistant" ? "assistant" : role === "user" ? "user" : role === "toolResult" ? "tool" : "note",
 		text,
+		parts: parts.length ? parts : undefined,
 		happenedAt:
 			typeof timestamp === "number" && Number.isFinite(timestamp)
 				? new Date(timestamp).toISOString()
@@ -332,14 +335,88 @@ function extractTextFromMessage(message: AgentMessage): string {
 	const content = message.content;
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
-	return content
-		.map((item) => {
-			if (item.type === "text") return item.text;
-			if (item.type === "thinking") return item.thinking;
-			if (item.type === "toolCall") return `[tool call: ${item.name} ${JSON.stringify(item.arguments)}]`;
-			if (item.type === "image") return `[image: ${item.mimeType}]`;
-			return "";
+	const parts = lcmRecordPartsFromAgentMessage(message);
+	return parts.length ? renderLcmRecordPartsForSummary(parts) : renderUnknownContent(content);
+}
+
+function lcmRecordPartsFromAgentMessage(message: AgentMessage): LcmRecordPart[] {
+	if (!("content" in message)) return [];
+	if ((message as { role?: string }).role === "toolResult") {
+		const toolResult = message as {
+			toolCallId?: string;
+			toolName?: string;
+			content?: unknown;
+			details?: unknown;
+			isError?: boolean;
+		};
+		return [
+			{
+				kind: "tool_result",
+				toolCallId: toolResult.toolCallId ?? "",
+				toolName: toolResult.toolName ?? "tool",
+				output: toolResult.details ?? textFromContent(toolResult.content),
+				...(toolResult.isError ? { isError: true } : {}),
+			},
+		];
+	}
+	const content = message.content;
+	if (typeof content === "string") return content ? [{ kind: "text", text: content }] : [];
+	if (!Array.isArray(content)) return [];
+	const parts: LcmRecordPart[] = [];
+	for (const item of content) {
+		if (item.type === "text") parts.push({ kind: "text", text: item.text });
+		else if (item.type === "thinking") {
+			parts.push({
+				kind: "thinking",
+				text: item.thinking,
+				...(item.thinkingSignature ? { signature: item.thinkingSignature } : {}),
+			});
+		} else if (item.type === "toolCall") {
+			parts.push({ kind: "tool_call", toolCallId: item.id, toolName: item.name, arguments: item.arguments });
+		} else if (item.type === "image") {
+			parts.push({ kind: "text", text: `[image: ${item.mimeType}]` });
+		}
+	}
+	return parts;
+}
+
+function renderPartsAsPlainText(parts: readonly LcmRecordPart[]): string {
+	return parts
+		.map((part) => {
+			if (part.kind === "text") return part.text;
+			if (part.kind === "thinking") return part.text ? `[thinking] ${part.text}` : "";
+			if (part.kind === "tool_call") return `[tool_call: ${part.toolName}(${JSON.stringify(part.arguments)})]`;
+			return `[tool_result: ${part.toolName} -> ${stringifyUnknown(part.output)}]`;
 		})
 		.filter(Boolean)
 		.join("\n");
+}
+
+function renderUnknownContent(content: unknown[]): string {
+	return content
+		.map((item) => (item && typeof item === "object" && "type" in item ? `[${String(item.type)}]` : ""))
+		.filter(Boolean)
+		.join("\n");
+}
+
+function textFromContent(content: unknown): unknown {
+	if (!Array.isArray(content)) return content;
+	return content
+		.map((item) => {
+			if (item && typeof item === "object" && (item as { type?: unknown }).type === "text") {
+				return (item as { text?: unknown }).text;
+			}
+			return "";
+		})
+		.filter((item): item is string => typeof item === "string" && item.length > 0)
+		.join("\n");
+}
+
+function stringifyUnknown(value: unknown): string {
+	if (typeof value === "string") return value;
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
 }

@@ -10,6 +10,7 @@ import {
 	estimateAgentMessageTokens,
 	estimateLcmRecordTokens,
 	estimateTextTokens,
+	lcmRecordToAgentMessage,
 	selectFreshTailRecords,
 } from "../src/memory/lcm/context.js";
 import type {
@@ -143,6 +144,22 @@ describe("LCM context helpers", () => {
 			first,
 		);
 	});
+
+	it("lcmRecordToAgentMessage reconstructs structured content blocks from tool_call parts", () => {
+		const message = lcmRecordToAgentMessage({
+			...record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]"),
+			parts: [
+				{ kind: "thinking", text: "Need the current plan." },
+				{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+			],
+		});
+
+		assert.equal(message.role, "assistant");
+		assert.deepEqual(message.content, [
+			{ type: "thinking", thinking: "Need the current plan." },
+			{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
+		]);
+	});
 });
 
 function record(
@@ -157,6 +174,7 @@ function record(
 		segmentId: "seg-a",
 		kind,
 		text,
+		parts: null,
 		happenedAt,
 		sessionId: "session-a",
 		channelKey: "web-web-room",

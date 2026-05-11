@@ -31,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 2);
+			assert.equal(store.schemaVersion(), 3);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -77,6 +77,26 @@ describe("LcmStore", () => {
 			});
 			assert.equal(store.searchRecordsLexical("lantern").length, 1);
 			assert.equal(store.listSegments()[0]?.metadata?.reason, "initial");
+		} finally {
+			store.close();
+		}
+	});
+
+	it("round-trips parts_json through insert and getRecord", async () => {
+		const store = await openStore();
+		try {
+			const id = store.insertRecord({
+				segmentId: "seg-a",
+				kind: "assistant",
+				text: "[tool_call: read({\"path\":\"PLAN.md\"})]",
+				parts: [{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } }],
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+
+			assert.deepEqual(store.getRecord(id)?.parts, [
+				{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+			]);
 		} finally {
 			store.close();
 		}

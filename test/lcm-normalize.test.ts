@@ -115,4 +115,72 @@ describe("normalizeChatRecords", () => {
 			},
 		]);
 	});
+
+	it("normalizes assistant tool_call into record with tool_call part", () => {
+		const batch = normalizeChatRecords(
+			[
+				{
+					...base,
+					type: "agent_event",
+					recordId: 1,
+					jobId: "job-1",
+					messageId: "event-1",
+					event: {
+						type: "message_update",
+						assistantMessageEvent: {
+							type: "toolcall_end",
+							contentIndex: 0,
+							toolCall: { id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
+						},
+					},
+				},
+				{
+					...base,
+					type: "outbound",
+					recordId: 2,
+					messageIds: ["m2"],
+					text: "I will inspect the plan.",
+					jobId: "job-1",
+				},
+			],
+			{ segmentId: "seg-a" },
+		);
+
+		assert.equal(batch.records.length, 1);
+		assert.equal(batch.records[0]?.kind, "assistant");
+		assert.deepEqual(batch.records[0]?.parts, [
+			{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+			{ kind: "text", text: "I will inspect the plan." },
+		]);
+		assert.match(batch.records[0]?.text ?? "", /\[tool_call: read/);
+	});
+
+	it("normalizes tool_result chat record into tool_result part", () => {
+		const batch = normalizeChatRecords(
+			[
+				{
+					...base,
+					type: "agent_event",
+					recordId: 1,
+					jobId: "job-1",
+					messageId: "event-1",
+					event: {
+						type: "tool_execution_end",
+						toolCallId: "call-1",
+						toolName: "read",
+						result: { ok: true, text: "roadmap" },
+						isError: false,
+					},
+				},
+			],
+			{ segmentId: "seg-a" },
+		);
+
+		assert.equal(batch.records.length, 1);
+		assert.equal(batch.records[0]?.kind, "tool");
+		assert.deepEqual(batch.records[0]?.parts, [
+			{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: { ok: true, text: "roadmap" } },
+		]);
+		assert.match(batch.records[0]?.text ?? "", /\[tool_result: read ->/);
+	});
 });

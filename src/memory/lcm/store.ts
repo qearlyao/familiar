@@ -10,6 +10,7 @@ import { readMeta, runLcmMigrations } from "./schema.js";
 import type {
 	LcmRecordInput,
 	LcmRecordKind,
+	LcmRecordPart,
 	LcmRetentionOptions,
 	LcmRetentionReport,
 	LcmSegmentInput,
@@ -49,6 +50,7 @@ interface LcmRecordRow {
 	segment_id: string;
 	kind: string;
 	text_full: string;
+	parts_json: string | null;
 	happened_at: string;
 	session_id: string | null;
 	channel_key: string | null;
@@ -392,11 +394,13 @@ function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
 	if (!text && input.kind !== "boundary") throw new Error("LCM record text must not be empty");
 	const source = normalizeSource(input.source);
 	const happenedAt = input.happenedAt ?? new Date().toISOString();
+	const parts = input.parts?.length ? input.parts : null;
 	const normalizedText = text || "Session boundary";
 	return {
 		segmentId: input.segmentId,
 		kind: input.kind,
 		text: normalizedText,
+		parts,
 		happenedAt,
 		sessionId: input.sessionId ?? null,
 		channelKey: input.channelKey ?? null,
@@ -409,6 +413,7 @@ function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
 			segmentId: input.segmentId,
 			kind: input.kind,
 			text: normalizedText,
+			parts,
 			happenedAt,
 			source,
 		}),
@@ -421,8 +426,8 @@ function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecor
 			`INSERT INTO lcm_records (
 				record_key, segment_id, kind, text_full, happened_at, session_id, channel_key,
 				channel_id, job_id, source_type, source_path, source_line, source_record_id,
-				source_message_id, source_ref, attachments_json, metadata_json
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				source_message_id, source_ref, attachments_json, metadata_json, parts_json
+			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		)
 		.run(
 			normalized.recordKey,
@@ -442,6 +447,7 @@ function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecor
 			normalized.source.sourceRef ?? null,
 			jsonOrNull(normalized.attachments),
 			jsonOrNull(normalized.metadata),
+			jsonOrNull(normalized.parts),
 		);
 	const id = Number(inserted.lastInsertRowid);
 	if (normalized.kind !== "boundary") {
@@ -602,6 +608,7 @@ function recordFromRow(row: LcmRecordRow): StoredLcmRecord {
 		segmentId: row.segment_id,
 		kind: row.kind as LcmRecordKind,
 		text: row.text_full,
+		parts: parseJsonArray<LcmRecordPart>(row.parts_json),
 		happenedAt: row.happened_at,
 		sessionId: row.session_id,
 		channelKey: row.channel_key,
@@ -649,6 +656,7 @@ interface NormalizedRecordInput {
 	segmentId: string;
 	kind: LcmRecordKind;
 	text: string;
+	parts: LcmRecordPart[] | null;
 	happenedAt: string;
 	sessionId: string | null;
 	channelKey: string | null;

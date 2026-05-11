@@ -1,106 +1,112 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
 	db.pragma("foreign_keys = ON");
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS lcm_meta (
-			k TEXT PRIMARY KEY,
-			v TEXT NOT NULL
-		);
+	const run = () => {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS lcm_meta (
+				k TEXT PRIMARY KEY,
+				v TEXT NOT NULL
+			);
 
-		CREATE TABLE IF NOT EXISTS lcm_segments (
-			id TEXT PRIMARY KEY,
-			status TEXT NOT NULL DEFAULT 'active',
-			session_id TEXT,
-			channel_key TEXT,
-			started_at TEXT NOT NULL,
-			closed_at TEXT,
-			raw_pruned_at TEXT,
-			boundary_source_json TEXT,
-			metadata_json TEXT,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-			updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
+			CREATE TABLE IF NOT EXISTS lcm_segments (
+				id TEXT PRIMARY KEY,
+				status TEXT NOT NULL DEFAULT 'active',
+				session_id TEXT,
+				channel_key TEXT,
+				started_at TEXT NOT NULL,
+				closed_at TEXT,
+				raw_pruned_at TEXT,
+				boundary_source_json TEXT,
+				metadata_json TEXT,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
 
-		CREATE TABLE IF NOT EXISTS lcm_records (
-			id INTEGER PRIMARY KEY,
-			record_key TEXT NOT NULL UNIQUE,
-			segment_id TEXT NOT NULL REFERENCES lcm_segments(id) ON DELETE CASCADE,
-			kind TEXT NOT NULL,
-			text_full TEXT NOT NULL,
-			happened_at TEXT NOT NULL,
-			session_id TEXT,
-			channel_key TEXT,
-			channel_id TEXT,
-			job_id TEXT,
-			source_type TEXT NOT NULL,
-			source_path TEXT,
-			source_line INTEGER,
-			source_record_id TEXT,
-			source_message_id TEXT,
-			source_ref TEXT,
-			attachments_json TEXT,
-			metadata_json TEXT,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-			updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
+			CREATE TABLE IF NOT EXISTS lcm_records (
+				id INTEGER PRIMARY KEY,
+				record_key TEXT NOT NULL UNIQUE,
+				segment_id TEXT NOT NULL REFERENCES lcm_segments(id) ON DELETE CASCADE,
+				kind TEXT NOT NULL,
+				text_full TEXT NOT NULL,
+				parts_json TEXT,
+				happened_at TEXT NOT NULL,
+				session_id TEXT,
+				channel_key TEXT,
+				channel_id TEXT,
+				job_id TEXT,
+				source_type TEXT NOT NULL,
+				source_path TEXT,
+				source_line INTEGER,
+				source_record_id TEXT,
+				source_message_id TEXT,
+				source_ref TEXT,
+				attachments_json TEXT,
+				metadata_json TEXT,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
 
-		CREATE INDEX IF NOT EXISTS idx_lcm_records_segment ON lcm_records(segment_id, happened_at, id);
-		CREATE INDEX IF NOT EXISTS idx_lcm_records_source ON lcm_records(source_type, source_path, source_record_id);
-		CREATE INDEX IF NOT EXISTS idx_lcm_records_session ON lcm_records(session_id, channel_key, happened_at);
+			CREATE INDEX IF NOT EXISTS idx_lcm_records_segment ON lcm_records(segment_id, happened_at, id);
+			CREATE INDEX IF NOT EXISTS idx_lcm_records_source ON lcm_records(source_type, source_path, source_record_id);
+			CREATE INDEX IF NOT EXISTS idx_lcm_records_session ON lcm_records(session_id, channel_key, happened_at);
 
-		CREATE VIRTUAL TABLE IF NOT EXISTS lcm_records_fts USING fts5(
-			text_full,
-			content='',
-			contentless_delete=1
-		);
+			CREATE VIRTUAL TABLE IF NOT EXISTS lcm_records_fts USING fts5(
+				text_full,
+				content='',
+				contentless_delete=1
+			);
 
-		CREATE TABLE IF NOT EXISTS lcm_summaries (
-			id INTEGER PRIMARY KEY,
-			summary_key TEXT NOT NULL UNIQUE,
-			segment_id TEXT NOT NULL REFERENCES lcm_segments(id) ON DELETE CASCADE,
-			depth INTEGER NOT NULL,
-			status TEXT NOT NULL DEFAULT 'placeholder',
-			text_full TEXT NOT NULL,
-			pinned INTEGER NOT NULL DEFAULT 0,
-			covers_from_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
-			covers_to_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
-			source_type TEXT NOT NULL,
-			source_path TEXT,
-			source_line INTEGER,
-			source_record_id TEXT,
-			source_message_id TEXT,
-			source_ref TEXT,
-			metadata_json TEXT,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-			updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
+			CREATE TABLE IF NOT EXISTS lcm_summaries (
+				id INTEGER PRIMARY KEY,
+				summary_key TEXT NOT NULL UNIQUE,
+				segment_id TEXT NOT NULL REFERENCES lcm_segments(id) ON DELETE CASCADE,
+				depth INTEGER NOT NULL,
+				status TEXT NOT NULL DEFAULT 'placeholder',
+				text_full TEXT NOT NULL,
+				pinned INTEGER NOT NULL DEFAULT 0,
+				covers_from_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
+				covers_to_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
+				source_type TEXT NOT NULL,
+				source_path TEXT,
+				source_line INTEGER,
+				source_record_id TEXT,
+				source_message_id TEXT,
+				source_ref TEXT,
+				metadata_json TEXT,
+				created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+			);
 
-		CREATE INDEX IF NOT EXISTS idx_lcm_summaries_segment ON lcm_summaries(segment_id, depth, id);
-		CREATE INDEX IF NOT EXISTS idx_lcm_summaries_status ON lcm_summaries(status, pinned);
+			CREATE INDEX IF NOT EXISTS idx_lcm_summaries_segment ON lcm_summaries(segment_id, depth, id);
+			CREATE INDEX IF NOT EXISTS idx_lcm_summaries_status ON lcm_summaries(status, pinned);
 
-		CREATE VIRTUAL TABLE IF NOT EXISTS lcm_summaries_fts USING fts5(
-			text_full,
-			content='',
-			contentless_delete=1
-		);
+			CREATE VIRTUAL TABLE IF NOT EXISTS lcm_summaries_fts USING fts5(
+				text_full,
+				content='',
+				contentless_delete=1
+			);
 
-		CREATE TABLE IF NOT EXISTS lcm_summary_sources (
-			summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
-			ord INTEGER NOT NULL,
-			record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
-			source_summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE SET NULL,
-			source_ref TEXT,
-			snapshot_json TEXT,
-			PRIMARY KEY(summary_id, ord)
-		);
-	`);
+			CREATE TABLE IF NOT EXISTS lcm_summary_sources (
+				summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+				ord INTEGER NOT NULL,
+				record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
+				source_summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE SET NULL,
+				source_ref TEXT,
+				snapshot_json TEXT,
+				PRIMARY KEY(summary_id, ord)
+			);
+		`);
 
-	migrateContentlessFts(db);
-	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
+		migrateRecordPartsColumn(db);
+		migrateContentlessFts(db);
+		writeMeta(db, "schema_version", String(SCHEMA_VERSION));
+	};
+	if (db.inTransaction) run();
+	else db.transaction(run).immediate();
 }
 
 export function readMeta(db: Database.Database, key: string): string | null {
@@ -120,12 +126,18 @@ function migrateContentlessFts(db: Database.Database): void {
 	migrateOneFts(db, "lcm_summaries_fts", "lcm_summaries", "text_full");
 }
 
+function migrateRecordPartsColumn(db: Database.Database): void {
+	const columns = db.prepare("PRAGMA table_info(lcm_records)").all() as Array<{ name: string }>;
+	if (columns.some((column) => column.name === "parts_json")) return;
+	db.prepare("ALTER TABLE lcm_records ADD COLUMN parts_json TEXT").run();
+}
+
 function migrateOneFts(db: Database.Database, ftsTable: string, sourceTable: string, textColumn: string): void {
 	const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(ftsTable) as
 		| { sql: string }
 		| undefined;
 	if (row?.sql.includes("contentless_delete=1")) return;
-	db.transaction(() => {
+	const run = () => {
 		db.prepare(`DROP TABLE ${ftsTable}`).run();
 		db.prepare(`CREATE VIRTUAL TABLE ${ftsTable} USING fts5(${textColumn}, content='', contentless_delete=1)`).run();
 		const rows = db.prepare(`SELECT id, ${textColumn} FROM ${sourceTable}`).all() as {
@@ -134,5 +146,7 @@ function migrateOneFts(db: Database.Database, ftsTable: string, sourceTable: str
 		}[];
 		const insert = db.prepare(`INSERT INTO ${ftsTable}(rowid, ${textColumn}) VALUES (?, ?)`);
 		for (const source of rows) insert.run(source.id, source[textColumn]);
-	}).immediate();
+	};
+	if (db.inTransaction) run();
+	else db.transaction(run).immediate();
 }

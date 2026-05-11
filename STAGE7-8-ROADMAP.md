@@ -636,8 +636,9 @@ shipped. Fix before adding more surface area.
   `lcmRecordToAgentMessage` only emits `user`/`assistant` text.
 - Add prompt-aware eviction and budget selection from `lossless-claw` once the
   ordered context model exists.
-- Add deferred compaction debt, cache-aware compaction timing, and compaction
-  telemetry so prompt-mutating work can be delayed or retried safely.
+- [x] Add deferred compaction debt and cache-aware compaction timing so
+  prompt-mutating work can be delayed or retried safely. Compaction telemetry
+  remains deferred.
 - Add LCM integrity/doctor/clean checks for dangling summary sources, stale
   shared-index rows, broken context ordering, missing source records, and
   orphan empty segments.

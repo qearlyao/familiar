@@ -23,6 +23,7 @@ export interface MemoryService {
 		signal?: AbortSignal,
 		options?: MemoryTransformOptions,
 	): Promise<AgentMessage[]>;
+	serviceCompactionDebt(sessionKey: string): Promise<void>;
 	flush(): Promise<void>;
 	close(): void;
 }
@@ -35,6 +36,7 @@ export interface MemoryTransformOptions {
 
 export interface MemoryServiceOptions {
 	summarizer?: LcmSummarizer;
+	now?: () => number;
 }
 
 export function createMemoryService(config: Config, options: MemoryServiceOptions = {}): MemoryService {
@@ -71,6 +73,7 @@ class DefaultMemoryService implements MemoryService {
 			indexer: this.indexer,
 			summarizer: options.summarizer ?? new DefaultLcmSummarizer(config),
 			segmentManager: this.segmentManager,
+			now: options.now,
 		});
 		this.ambientInjector = new AmbientDiaryInjector({
 			store: this.memoryStore,
@@ -97,6 +100,10 @@ class DefaultMemoryService implements MemoryService {
 	): Promise<AgentMessage[]> {
 		const compacted = await this.contextTransformer.transformLcmContext(messages, signal, options);
 		return this.ambientInjector.inject(compacted, signal);
+	}
+
+	async serviceCompactionDebt(sessionKey: string): Promise<void> {
+		await this.contextTransformer.serviceCompactionDebt(sessionKey);
 	}
 
 	close(): void {

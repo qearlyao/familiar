@@ -177,6 +177,9 @@ retention_days = 7
 			condenseGroupSize: 4,
 			maxSummaryDepth: 4,
 			maxRounds: 10,
+			cacheTtlMs: 300000,
+			cacheTouchSlackMs: 30000,
+			criticalOverflowTokens: 8000,
 			timeoutMs: 60000,
 		});
 	});
@@ -242,6 +245,9 @@ system_prompt_path = "prompts/lcm-system.md"
 			condenseGroupSize: 3,
 			maxSummaryDepth: 5,
 			maxRounds: 4,
+			cacheTtlMs: 300000,
+			cacheTouchSlackMs: 30000,
+			criticalOverflowTokens: 8000,
 			timeoutMs: 45000,
 			prompt: "Summarize this branch.",
 			systemPromptPath: resolve(workspacePath, "prompts/lcm-system.md"),

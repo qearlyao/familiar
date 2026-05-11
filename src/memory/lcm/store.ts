@@ -25,6 +25,7 @@ import type {
 	StoredLcmRecord,
 	StoredLcmSegment,
 	StoredLcmContextItem,
+	StoredLcmSessionState,
 	StoredLcmSummary,
 	StoredLcmSummarySource,
 } from "./types.js";
@@ -112,6 +113,13 @@ interface LcmContextItemRow {
 	fingerprint: string;
 	happened_at: string | null;
 	updated_at: number;
+}
+
+interface LcmSessionStateRow {
+	session_key: string;
+	compaction_debt: number;
+	cache_touched_at: number | null;
+	updated_at: number | null;
 }
 
 export class LcmStore {
@@ -351,6 +359,36 @@ export class LcmStore {
 
 	clearContextItems(sessionKey: string): void {
 		this.db.prepare("DELETE FROM lcm_context_items WHERE session_key = ?").run(sessionKey);
+	}
+
+	getSessionState(sessionKey: string): StoredLcmSessionState | null {
+		const row = this.db
+			.prepare("SELECT session_key, compaction_debt, cache_touched_at, updated_at FROM lcm_session_state WHERE session_key = ?")
+			.get(sessionKey) as LcmSessionStateRow | undefined;
+		return row ? sessionStateFromRow(row) : null;
+	}
+
+	upsertSessionState(input: {
+		sessionKey: string;
+		compactionDebt: number;
+		cacheTouchedAt: number | null;
+		updatedAt?: number | null;
+	}): void {
+		const compactionDebt = Math.max(0, Math.floor(input.compactionDebt));
+		this.db
+			.prepare(
+				`INSERT INTO lcm_session_state (session_key, compaction_debt, cache_touched_at, updated_at)
+				 VALUES (?, ?, ?, ?)
+				 ON CONFLICT(session_key) DO UPDATE SET
+					compaction_debt = excluded.compaction_debt,
+					cache_touched_at = excluded.cache_touched_at,
+					updated_at = excluded.updated_at`,
+			)
+			.run(input.sessionKey, compactionDebt, input.cacheTouchedAt, input.updatedAt ?? input.cacheTouchedAt ?? Date.now());
+	}
+
+	clearSessionState(sessionKey: string): void {
+		this.db.prepare("DELETE FROM lcm_session_state WHERE session_key = ?").run(sessionKey);
 	}
 
 	applyNewSessionRetention(options: LcmRetentionOptions): LcmRetentionReport {
@@ -853,6 +891,15 @@ function contextItemFromRow(row: LcmContextItemRow): StoredLcmContextItem {
 		};
 	}
 	throw new Error(`Unknown LCM context item type: ${row.item_type}`);
+}
+
+function sessionStateFromRow(row: LcmSessionStateRow): StoredLcmSessionState {
+	return {
+		sessionKey: row.session_key,
+		compactionDebt: row.compaction_debt,
+		cacheTouchedAt: row.cache_touched_at,
+		updatedAt: row.updated_at,
+	};
 }
 
 const SUMMARY_SNAPSHOT_TEXT_LIMIT = 4 * 1024;

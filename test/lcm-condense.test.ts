@@ -187,6 +187,7 @@ describe("LCM condense", () => {
 				return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;
 			},
 		};
+		let now = 100_000;
 		const transformer = new LcmContextTransformer({
 			settings: {
 				enabled: true,
@@ -197,15 +198,20 @@ describe("LCM condense", () => {
 				condenseGroupSize: 4,
 				maxSummaryDepth: 4,
 				maxRounds: 1,
+				cacheTtlMs: 300_000,
+				cacheTouchSlackMs: 30_000,
+				criticalOverflowTokens: 8000,
 			},
 			lcmStore: store,
 			indexer: nullIndexer(),
 			summarizer,
 			segmentManager,
+			now: () => now,
 		});
 		try {
 			const messages: AgentMessage[] = [];
 			for (let index = 0; index < 5; index += 1) {
+				now += 300_000;
 				messages.push({ role: "user", content: `old detail ${index} ${"x".repeat(40)}`, timestamp: index + 1 });
 				await transformer.transformLcmContext([...messages], undefined, {
 					sessionKey: "room-runtime",

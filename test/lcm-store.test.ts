@@ -31,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 6);
+			assert.equal(store.schemaVersion(), 7);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",

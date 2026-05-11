@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -130,6 +130,13 @@ export function runLcmMigrations(db: Database.Database): void {
 			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_session ON lcm_context_items(session_key);
 			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_record ON lcm_context_items(record_id);
 			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_summary ON lcm_context_items(summary_id);
+
+			CREATE TABLE IF NOT EXISTS lcm_session_state (
+				session_key TEXT PRIMARY KEY,
+				compaction_debt INTEGER NOT NULL DEFAULT 0,
+				cache_touched_at INTEGER,
+				updated_at INTEGER
+			);
 		`);
 
 		migrateRecordPartsColumn(db);

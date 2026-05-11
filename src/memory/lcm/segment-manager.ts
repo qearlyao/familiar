@@ -109,6 +109,7 @@ export class LcmSegmentManager {
 					},
 				});
 				this.lcmStore.clearContextItems(runtime.channelKey);
+				this.lcmStore.clearSessionState(runtime.channelKey);
 				const retention = this.lcmStore.applyNewSessionRetention({
 					newSessionRetainDepth: this.newSessionRetainDepth,
 					activeSegmentId: nextSegmentId,

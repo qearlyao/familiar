@@ -179,6 +179,13 @@ export type StoredLcmContextItem =
 			updatedAt: number;
 	  };
 
+export interface StoredLcmSessionState {
+	sessionKey: string;
+	compactionDebt: number;
+	cacheTouchedAt: number | null;
+	updatedAt: number | null;
+}
+
 export interface LcmRetentionOptions {
 	newSessionRetainDepth: number;
 	activeSegmentId?: string | null;

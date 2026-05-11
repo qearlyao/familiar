@@ -130,6 +130,9 @@ export interface Config {
 			maxSummaryDepth: number;
 			newSessionRetainDepth: number;
 			maxRounds: number;
+			cacheTtlMs: number;
+			cacheTouchSlackMs: number;
+			criticalOverflowTokens: number;
 			timeoutMs: number;
 			prompt?: string;
 			promptPath?: string;
@@ -589,6 +592,19 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					-1,
 				),
 				maxRounds: readInteger(memoryLcm.max_rounds, 10, "memory.lcm.max_rounds", 1),
+				cacheTtlMs: readInteger(memoryLcm.cache_ttl_ms, 300_000, "memory.lcm.cache_ttl_ms", 1),
+				cacheTouchSlackMs: readInteger(
+					memoryLcm.cache_touch_slack_ms,
+					30_000,
+					"memory.lcm.cache_touch_slack_ms",
+					0,
+				),
+				criticalOverflowTokens: readInteger(
+					memoryLcm.critical_overflow_tokens,
+					8000,
+					"memory.lcm.critical_overflow_tokens",
+					1,
+				),
 				timeoutMs: readInteger(memoryLcm.timeout_ms, 60_000, "memory.lcm.timeout_ms", 1),
 				...memoryLcmPromptOverrides,
 			},

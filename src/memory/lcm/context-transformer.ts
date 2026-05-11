@@ -36,11 +36,15 @@ export interface LcmContextTransformerOptions {
 		condenseGroupSize: number;
 		maxSummaryDepth: number;
 		maxRounds: number;
+		cacheTtlMs: number;
+		cacheTouchSlackMs: number;
+		criticalOverflowTokens: number;
 	};
 	lcmStore: LcmStore;
 	indexer: ChunkIndexer;
 	summarizer: LcmSummarizer;
 	segmentManager: LcmSegmentManager;
+	now?: () => number;
 }
 
 interface CompactedLcmItem {
@@ -62,6 +66,8 @@ type LcmContextItem = RawLcmItem | CompactedLcmItem;
 interface LcmContextState {
 	items: LcmContextItem[];
 	summaryCounter: number;
+	compactionDebt: number;
+	cacheTouchedAt: number | null;
 	compactionQueue: Promise<void>;
 	rehydrated: boolean;
 }
@@ -72,6 +78,7 @@ export class LcmContextTransformer {
 	private readonly indexer: ChunkIndexer;
 	private readonly summarizer: LcmSummarizer;
 	private readonly segmentManager: LcmSegmentManager;
+	private readonly now: () => number;
 	private readonly contextStates = new Map<string, LcmContextState>();
 
 	constructor(options: LcmContextTransformerOptions) {
@@ -80,6 +87,7 @@ export class LcmContextTransformer {
 		this.indexer = options.indexer;
 		this.summarizer = options.summarizer;
 		this.segmentManager = options.segmentManager;
+		this.now = options.now ?? Date.now;
 	}
 
 	async transformLcmContext(
@@ -91,38 +99,108 @@ export class LcmContextTransformer {
 		if (!settings.enabled) return messages;
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
 		const state = this.contextState(sessionKey);
+		const now = this.now();
+		const previousCacheTouchedAt = state.cacheTouchedAt;
+		state.cacheTouchedAt = now;
+		if (state.compactionDebt > 0) {
+			const pressure = this.evaluateCompactionPressure(state, options.model);
+			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
+				await this.serviceCompactionDebtForState({
+					state,
+					sessionKey,
+					sessionId: options.sessionId,
+					signal,
+					model: options.model,
+				});
+			}
+		}
 		syncContextState(state, messages);
 		this.projectContextState(sessionKey, options.sessionId, state);
 
 		try {
-			for (let round = 0; round < settings.maxRounds; round += 1) {
-				const rawItems = state.items.filter((item): item is RawLcmItem => item.type === "raw");
-				const summaryTokens = state.items
-					.filter((item): item is CompactedLcmItem => item.type === "summary")
-					.reduce((total, item) => total + item.tokens, 0);
-				const candidate = selectLcmCompactionCandidate(
-					rawItems,
-					{
-						contextThreshold: settings.contextThreshold,
-						freshTailCount: settings.freshTailCount,
-						freshTailMaxTokens: settings.freshTailMaxTokens,
-						leafChunkTokens: settings.leafChunkTokens,
-					},
-					options.model?.contextWindow ?? 200_000,
-					summaryTokens,
-				);
-				if (!candidate.shouldCompact) break;
-				await this.compactLcmCandidate({ state, candidate, sessionKey, sessionId: options.sessionId, signal });
+			const pressure = this.evaluateCompactionPressure(state, options.model);
+			state.compactionDebt += pressure.pressureScore;
+			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
+				await this.serviceCompactionDebtForState({
+					state,
+					sessionKey,
+					sessionId: options.sessionId,
+					signal,
+					model: options.model,
+				});
 			}
 		} catch (error) {
 			console.error("memory LCM summarization failed", error);
 			syncContextState(state, messages);
 			this.persistContextState(sessionKey, state);
+			this.persistSessionState(sessionKey, state);
 			return messages;
 		}
 
 		this.persistContextState(sessionKey, state);
+		this.persistSessionState(sessionKey, state);
 		return state.items.map((item) => item.message);
+	}
+
+	async serviceCompactionDebt(sessionKey: string, signal?: AbortSignal, options: LcmContextTransformOptions = {}): Promise<void> {
+		const state = this.contextState(sessionKey);
+		await this.serviceCompactionDebtForState({
+			state,
+			sessionKey,
+			sessionId: options.sessionId,
+			signal,
+			model: options.model,
+		});
+		this.persistContextState(sessionKey, state);
+		this.persistSessionState(sessionKey, state);
+	}
+
+	private async serviceCompactionDebtForState(input: {
+		state: LcmContextState;
+		sessionKey: string;
+		sessionId?: string;
+		signal?: AbortSignal;
+		model?: Model<any>;
+	}): Promise<void> {
+		for (let round = 0; input.state.compactionDebt > 0 && round < this.settings.maxRounds; round += 1) {
+			const pressure = this.evaluateCompactionPressure(input.state, input.model);
+			if (!pressure.candidate.shouldCompact) {
+				input.state.compactionDebt = 0;
+				break;
+			}
+			await this.compactLcmCandidate({
+				state: input.state,
+				candidate: pressure.candidate,
+				sessionKey: input.sessionKey,
+				sessionId: input.sessionId,
+				signal: input.signal,
+			});
+			const nextPressure = this.evaluateCompactionPressure(input.state, input.model);
+			input.state.compactionDebt = nextPressure.candidate.shouldCompact ? nextPressure.pressureScore : 0;
+		}
+	}
+
+	private evaluateCompactionPressure(state: LcmContextState, model: Model<any> | undefined): {
+		candidate: ReturnType<typeof selectLcmCompactionCandidate>;
+		pressureScore: number;
+	} {
+		const rawItems = state.items.filter((item): item is RawLcmItem => item.type === "raw");
+		const summaryTokens = state.items
+			.filter((item): item is CompactedLcmItem => item.type === "summary")
+			.reduce((total, item) => total + item.tokens, 0);
+		const candidate = selectLcmCompactionCandidate(
+			rawItems,
+			{
+				contextThreshold: this.settings.contextThreshold,
+				freshTailCount: this.settings.freshTailCount,
+				freshTailMaxTokens: this.settings.freshTailMaxTokens,
+				leafChunkTokens: this.settings.leafChunkTokens,
+			},
+			model?.contextWindow ?? 200_000,
+			summaryTokens,
+		);
+		const evictableTokens = candidate.shouldCompact ? candidate.rawTokensOutsideTail : 0;
+		return { candidate, pressureScore: Math.max(0, evictableTokens - this.settings.leafTargetTokens) };
 	}
 
 	private async compactLcmCandidate(input: {
@@ -155,7 +233,7 @@ export class LcmContextTransformer {
 				input.signal,
 			);
 			const summaryId = `${input.sessionKey}:summary-${++state.summaryCounter}`;
-			const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(summaryText), Date.now());
+			const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(summaryText), this.now());
 			const summaryItem: CompactedLcmItem = {
 				type: "summary",
 				id: summaryId,
@@ -236,10 +314,20 @@ export class LcmContextTransformer {
 	private contextState(sessionKey: string): LcmContextState {
 		let state = this.contextStates.get(sessionKey);
 		if (!state) {
-			state = { items: [], summaryCounter: 0, compactionQueue: Promise.resolve(), rehydrated: false };
+			state = {
+				items: [],
+				summaryCounter: 0,
+				compactionDebt: 0,
+				cacheTouchedAt: null,
+				compactionQueue: Promise.resolve(),
+				rehydrated: false,
+			};
 			this.contextStates.set(sessionKey, state);
 		}
-		if (!state.rehydrated && state.items.length === 0) this.rehydrateContextState(sessionKey, state);
+		if (!state.rehydrated) {
+			if (state.items.length === 0) this.rehydrateContextState(sessionKey, state);
+			this.rehydrateSessionState(sessionKey, state);
+		}
 		state.rehydrated = true;
 		return state;
 	}
@@ -291,6 +379,22 @@ export class LcmContextTransformer {
 	private persistContextState(sessionKey: string, state: LcmContextState): void {
 		const items = contextItemsForStorage(state.items);
 		this.lcmStore.replaceContextItems(sessionKey, items);
+	}
+
+	private rehydrateSessionState(sessionKey: string, state: LcmContextState): void {
+		const persisted = this.lcmStore.getSessionState(sessionKey);
+		if (!persisted) return;
+		state.compactionDebt = persisted.compactionDebt;
+		state.cacheTouchedAt = persisted.cacheTouchedAt;
+	}
+
+	private persistSessionState(sessionKey: string, state: LcmContextState): void {
+		this.lcmStore.upsertSessionState({
+			sessionKey,
+			compactionDebt: state.compactionDebt,
+			cacheTouchedAt: state.cacheTouchedAt,
+			updatedAt: this.now(),
+		});
 	}
 
 	private summaryCoveredSourceIds(summaryId: number, seen = new Set<number>()): string[] {
@@ -450,6 +554,20 @@ function summaryToContextItem(
 		message,
 		tokens: estimateAgentMessageTokens(message),
 	};
+}
+
+function shouldServiceCompactionDebt(input: {
+	settings: LcmContextTransformerOptions["settings"];
+	now: number;
+	previousCacheTouchedAt: number | null;
+	pressureScore: number;
+}): boolean {
+	if (input.previousCacheTouchedAt === null) return true;
+	if (input.pressureScore >= input.settings.criticalOverflowTokens) return true;
+	const coldBoundaryMs = Math.max(0, input.settings.cacheTtlMs - input.settings.cacheTouchSlackMs);
+	const cacheAgeMs = input.now - input.previousCacheTouchedAt;
+	if (cacheAgeMs >= coldBoundaryMs) return true;
+	return false;
 }
 
 function renderLcmSummaryInput(items: readonly RawLcmItem[]): string {

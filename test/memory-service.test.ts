@@ -45,6 +45,9 @@ async function memoryConfig() {
 				condenseGroupSize: 4,
 				maxSummaryDepth: 4,
 				maxRounds: 10,
+				cacheTtlMs: 300000,
+				cacheTouchSlackMs: 30000,
+				criticalOverflowTokens: 8000,
 				timeoutMs: 60000,
 			},
 		},
@@ -422,6 +425,301 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("defers LCM compaction debt while cache is hot", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmDebtConfig(baseConfig);
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nDeferred hot-cache pressure was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-hot-defer",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-hot-defer",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 0);
+
+				const store = LcmStore.open(config);
+				try {
+					assert.equal(store.listSummaries().length, 0);
+					assert.ok((store.getSessionState("room-hot-defer")?.compactionDebt ?? 0) > 0);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("services LCM compaction debt once cache is cold", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmDebtConfig(baseConfig);
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nCold-cache pressure was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-cold-service",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-cold-service",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 0);
+
+				now = 105_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-cold-service",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 1);
+
+				const store = LcmStore.open(config);
+				try {
+					assert.equal(store.listSummaries().length, 1);
+					assert.equal(store.getSessionState("room-cold-service")?.compactionDebt, 0);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("forces LCM compaction during critical overflow even when cache is hot", async () => {
+		const baseConfig = await memoryConfig();
+		const debtConfig = lcmDebtConfig(baseConfig);
+		const config = {
+			...debtConfig,
+			memory: {
+				...debtConfig.memory,
+				lcm: {
+					...debtConfig.memory.lcm,
+					leafChunkTokens: 200_000,
+				},
+			},
+		};
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nCritical overflow was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-critical-overflow",
+					sessionId: "session-a",
+					model: { contextWindow: 50_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(criticalDebtMessages(), undefined, {
+					sessionKey: "room-critical-overflow",
+					sessionId: "session-a",
+					model: { contextWindow: 50_000 } as any,
+				});
+				assert.equal(calls, 1);
+
+				const store = LcmStore.open(config);
+				try {
+					assert.equal(store.listSummaries().length, 1);
+					assert.ok((store.getSessionState("room-critical-overflow")?.compactionDebt ?? 0) < config.memory.lcm.criticalOverflowTokens);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("persists deferred LCM compaction debt across restart", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmDebtConfig(baseConfig);
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nRestarted cold-cache debt was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-debt-restart",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-debt-restart",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+			} finally {
+				service.close();
+			}
+
+			let store = LcmStore.open(config);
+			try {
+				assert.ok((store.getSessionState("room-debt-restart")?.compactionDebt ?? 0) > 0);
+			} finally {
+				store.close();
+			}
+
+			now = 105_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
+			service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([debtMessages().at(-1)!], undefined, {
+					sessionKey: "room-debt-restart",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 1);
+			} finally {
+				service.close();
+			}
+
+			store = LcmStore.open(config);
+			try {
+				assert.equal(store.getSessionState("room-debt-restart")?.compactionDebt, 0);
+				assert.equal(store.listSummaries().length, 1);
+			} finally {
+				store.close();
+			}
+		});
+	});
+
+	it("clears deferred LCM compaction debt when runtime segment rotates on reset", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmDebtConfig(baseConfig);
+		let now = 100_000;
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer: fixedSummary("unused"), now: () => now });
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "room-new-clears-debt",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-new-clears-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-new-clears-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+
+				let store = LcmStore.open(config);
+				try {
+					assert.ok((store.getSessionState("room-new-clears-debt")?.compactionDebt ?? 0) > 0);
+				} finally {
+					store.close();
+				}
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				store = LcmStore.open(config);
+				try {
+					assert.equal(store.getSessionState("room-new-clears-debt"), null);
+				} finally {
+					store.close();
+				}
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("serviceCompactionDebt forces LCM compaction while cache is hot", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmDebtConfig(baseConfig);
+		let now = 100_000;
+		let calls = 0;
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf() {
+				calls += 1;
+				return "Files: none\nForced deferred debt was compacted.\nExpand for details about: old chat wording";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer, now: () => now });
+			try {
+				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
+					sessionKey: "room-force-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				now += 5_000;
+				await service.transformContext(debtMessages(), undefined, {
+					sessionKey: "room-force-debt",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+				assert.equal(calls, 0);
+
+				await service.serviceCompactionDebt("room-force-debt");
+				assert.equal(calls, 1);
+
+				const store = LcmStore.open(config);
+				try {
+					assert.equal(store.listSummaries().length, 1);
+					assert.equal(store.getSessionState("room-force-debt")?.compactionDebt, 0);
+				} finally {
+					store.close();
+				}
+			} finally {
+				service.close();
+			}
+		});
+	});
+
 	it("rehydrates persisted LCM summary after restart when runtime sends only the fresh tail", async () => {
 		const baseConfig = await memoryConfig();
 		const config = lcmCompactionConfig(baseConfig);
@@ -778,6 +1076,57 @@ function lcmCompactionConfig(baseConfig: Awaited<ReturnType<typeof memoryConfig>
 			},
 		},
 	};
+}
+
+function lcmDebtConfig(baseConfig: Awaited<ReturnType<typeof memoryConfig>>) {
+	return {
+		...baseConfig,
+		memory: {
+			...baseConfig.memory,
+			lcm: {
+				...baseConfig.memory.lcm,
+				enabled: true,
+				freshTailCount: 1,
+				leafChunkTokens: 2_000,
+				leafTargetTokens: 1_000,
+				maxRounds: 1,
+			},
+		},
+	};
+}
+
+function debtMessages() {
+	return [
+		{ role: "user" as const, content: "old detail alpha ".repeat(300), timestamp: 10 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "old detail beta ".repeat(300) }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 11,
+		},
+		{ role: "user" as const, content: "fresh detail gamma", timestamp: 12 },
+	];
+}
+
+function criticalDebtMessages() {
+	return [
+		{ role: "user" as const, content: "critical overflow alpha ".repeat(9000), timestamp: 20 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "critical overflow beta ".repeat(9000) }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 21,
+		},
+		{ role: "user" as const, content: "fresh critical tail", timestamp: 22 },
+	];
 }
 
 function fixedSummary(text: string): LcmSummarizer {

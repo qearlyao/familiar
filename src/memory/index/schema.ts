@@ -59,8 +59,8 @@ export function runMemoryIndexMigrations(db: Database.Database, options: MemoryI
 	`);
 
 	migrateMemoryIndexSources(db);
-	const vectorCapability = reconcileVectorTable(db, options, vec.available);
 	reconcileEmbeddingConfig(db, options);
+	const vectorCapability = reconcileVectorTable(db, options, vec.available);
 	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
 	writeMeta(db, "embedding_provider", options.embeddingProvider);
 	writeMeta(db, "embedding_model", options.embeddingModel);
@@ -89,7 +89,7 @@ function reconcileEmbeddingConfig(db: Database.Database, options: MemoryIndexMig
 	) {
 		db.transaction(() => {
 			db.prepare("DELETE FROM memory_fts").run();
-			if (tableExists(db, "memory_vec")) db.prepare("DELETE FROM memory_vec").run();
+			db.prepare("DROP TABLE IF EXISTS memory_vec").run();
 			db.prepare("DELETE FROM memory_index_sources").run();
 			db.prepare("DELETE FROM memory_chunks").run();
 			writeMeta(db, "requires_reindex", "1");
@@ -102,27 +102,35 @@ function reconcileVectorTable(
 	options: MemoryIndexMigrationOptions,
 	sqliteVecAvailable: boolean,
 ): VectorCapability {
+	const previousCapability = readMeta(db, "vector_capability");
 	if (!sqliteVecAvailable) {
 		db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
 		return "blob-js";
 	}
 	try {
-		if (!tableExists(db, "memory_vec")) {
+		db.transaction(() => {
+			const hadVectorTable = tableExists(db, "memory_vec");
+			if (!hadVectorTable) {
+				db.prepare(
+					`CREATE VIRTUAL TABLE memory_vec USING vec0(
+						embedding float[${options.embeddingDimensions}]
+					)`,
+				).run();
+			}
+			if (previousCapability === "blob-js") {
+				db.prepare("DELETE FROM memory_vec").run();
+				db.prepare("INSERT INTO memory_vec(rowid, embedding) SELECT id, embedding FROM memory_chunks").run();
+			}
+			// Virtual tables cannot own FK constraints, so this mirrors ON DELETE
+			// CASCADE for direct memory_chunks deletes while sqlite-vec is loaded.
 			db.prepare(
-				`CREATE VIRTUAL TABLE memory_vec USING vec0(
-					embedding float[${options.embeddingDimensions}]
-				)`,
+				`CREATE TRIGGER IF NOT EXISTS trg_memory_chunks_delete_vec
+				 AFTER DELETE ON memory_chunks
+				 BEGIN
+					DELETE FROM memory_vec WHERE rowid = old.id;
+				 END`,
 			).run();
-		}
-		// Virtual tables cannot own FK constraints, so this mirrors ON DELETE
-		// CASCADE for direct memory_chunks deletes while sqlite-vec is loaded.
-		db.prepare(
-			`CREATE TRIGGER IF NOT EXISTS trg_memory_chunks_delete_vec
-			 AFTER DELETE ON memory_chunks
-			 BEGIN
-				DELETE FROM memory_vec WHERE rowid = old.id;
-			 END`,
-		).run();
+		}).immediate();
 		return "sqlite-vec";
 	} catch {
 		db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();

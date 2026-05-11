@@ -145,7 +145,6 @@ function peelMetadataLines(lines: string[]): { metadata: DiaryChunkMetadata; lin
 
 	for (const line of lines) {
 		if (isMarkdownHeading(line)) {
-			body.push(line);
 			continue;
 		}
 		const parsed = parseMetadataLine(line);
@@ -226,11 +225,19 @@ function splitLongText(text: string, maxChars: number): string[] {
 function splitOversizedParagraph(text: string, maxChars: number): string[] {
 	if (text.length <= maxChars) return [text];
 	const chunks: string[] = [];
-	for (let index = 0; index < text.length; index += maxChars) {
-		const chunk = text.slice(index, index + maxChars).trim();
+	for (let index = 0; index < text.length; ) {
+		let end = Math.min(index + maxChars, text.length);
+		if (end < text.length && isHighSurrogate(text.charCodeAt(end - 1))) end -= 1;
+		if (end <= index) end = Math.min(index + maxChars, text.length);
+		const chunk = text.slice(index, end).trim();
 		if (chunk) chunks.push(chunk);
+		index = end;
 	}
 	return chunks;
+}
+
+function isHighSurrogate(value: number): boolean {
+	return value >= 0xd800 && value <= 0xdbff;
 }
 
 function buildSnippet(text: string, metadata: DiaryChunkMetadata): string {

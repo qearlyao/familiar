@@ -105,6 +105,47 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
+	it("dedupes identical text across different metadata roles", async () => {
+		const store = openStore(await tempDbPath());
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			const result = await indexer.indexChunks([
+				{ corpus: "diary_chunk", sourceId: "a.md", chunkIndex: 0, text: "role-neutral memory", metadata: { role: "user" } },
+				{
+					corpus: "diary_chunk",
+					sourceId: "b.md",
+					chunkIndex: 0,
+					text: "role-neutral memory",
+					metadata: { role: "assistant" },
+				},
+			]);
+
+			assert.equal(result.ids[0], result.ids[1]);
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("removes FTS rows when chunks are deleted", async () => {
+		const store = openStore(await tempDbPath());
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			await indexer.indexChunks([
+				{ corpus: "diary_chunk", sourceId: "a.md", chunkIndex: 0, text: "delete fts one" },
+				{ corpus: "diary_chunk", sourceId: "b.md", chunkIndex: 0, text: "delete fts two" },
+			]);
+
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_fts").get() as { n: number }).n, 2);
+			store.deleteBySource("diary_chunk", "a.md");
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_fts").get() as { n: number }).n, 1);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("replaces source chunks while preserving unchanged rows without re-embedding", async () => {
 		const store = openStore(await tempDbPath());
 		const provider = new FakeEmbeddingProvider();

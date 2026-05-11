@@ -203,6 +203,26 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
+	it("keeps distinct records with matching source coordinates but different text", async () => {
+		const harness = await createHarness();
+		try {
+			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [
+				inbound(1, "first distinct text", "2026-05-01T01:00:01.000Z"),
+				inbound(1, "second distinct text", "2026-05-01T01:00:01.000Z"),
+			]);
+
+			const first = await runBackfill(harness);
+			const second = await runBackfill(harness);
+
+			assert.equal(first.recordsInserted, 2);
+			assert.equal(second.recordsInserted, 0);
+			assert.equal(second.recordsSkippedDuplicate, 2);
+			assert.equal(harness.lcmStore.listRecords().length, 2);
+		} finally {
+			await harness.close();
+		}
+	});
+
 	it("splits segments on control new boundaries", async () => {
 		const harness = await createHarness();
 		try {

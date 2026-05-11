@@ -580,6 +580,20 @@ export function lcmSummaryIndexSourceId(id: number): string {
 	return `lcm_summary:${id}`;
 }
 
+export function computeLcmRecordKey(input: LcmRecordInput): string {
+	const text = (input.text ?? "").trim();
+	if (!text && input.kind !== "boundary") throw new Error("LCM record text must not be empty");
+	const parts = input.parts?.length ? input.parts : null;
+	return stableHash({
+		segmentId: input.segmentId,
+		kind: input.kind,
+		text: text || "Session boundary",
+		parts,
+		happenedAt: input.happenedAt ?? new Date().toISOString(),
+		source: normalizeSource(input.source),
+	});
+}
+
 function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
 	const text = (input.text ?? "").trim();
 	if (!text && input.kind !== "boundary") throw new Error("LCM record text must not be empty");
@@ -600,14 +614,7 @@ function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
 		source,
 		attachments: input.attachments?.length ? input.attachments : null,
 		metadata: input.metadata ?? null,
-		recordKey: stableHash({
-			segmentId: input.segmentId,
-			kind: input.kind,
-			text: normalizedText,
-			parts,
-			happenedAt,
-			source,
-		}),
+		recordKey: computeLcmRecordKey({ ...input, happenedAt }),
 	};
 }
 

@@ -8,7 +8,7 @@ import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { indexLcmRecords } from "./indexer.js";
 import { normalizeChatRecords } from "./normalize.js";
-import type { LcmStore } from "./store.js";
+import { computeLcmRecordKey, type LcmStore } from "./store.js";
 import type { LcmRecordInput, StoredLcmRecord } from "./types.js";
 
 export interface BackfillDeps {
@@ -290,26 +290,8 @@ function countExistingRecords(lcmStore: LcmStore, records: readonly LcmRecordInp
 
 function recordExists(lcmStore: LcmStore, record: LcmRecordInput): boolean {
 	return !!lcmStore.db
-		.prepare(
-			`SELECT 1 FROM lcm_records
-			 WHERE segment_id = ?
-			   AND kind = ?
-			   AND happened_at = ?
-			   AND source_type = ?
-			   AND source_path IS ?
-			   AND source_record_id IS ?
-			 LIMIT 1`,
-		)
-		.get(
-			record.segmentId,
-			record.kind,
-			record.happenedAt ?? null,
-			record.source.sourceType,
-			record.source.sourcePath ?? null,
-			record.source.sourceRecordId === null || record.source.sourceRecordId === undefined
-				? null
-				: String(record.source.sourceRecordId),
-		);
+		.prepare("SELECT 1 FROM lcm_records WHERE record_key = ? LIMIT 1")
+		.get(computeLcmRecordKey(record));
 }
 
 function errorCode(error: unknown): string | undefined {

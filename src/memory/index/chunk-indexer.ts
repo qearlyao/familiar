@@ -72,17 +72,18 @@ export class ChunkIndexer {
 			if (!text) continue;
 			const chunkIndex = input.chunkIndex ?? 0;
 			const sourceId = input.sourceId ?? null;
+			const contentHash = createMemoryContentHash({
+				corpus: input.corpus,
+				text,
+				embeddingModel: embeddingConfig.model,
+				embeddingDimensions: embeddingConfig.dimensions,
+			});
 			prepared.push({
 				input,
 				text,
 				chunkIndex,
 				sourceId,
-				contentHash: createMemoryContentHash({
-					corpus: input.corpus,
-					text,
-					embeddingModel: embeddingConfig.model,
-					embeddingDimensions: embeddingConfig.dimensions,
-				}),
+				contentHash,
 				existingId: null,
 				embedding: input.embedding,
 			});

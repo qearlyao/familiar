@@ -452,7 +452,6 @@ export class MemoryIndexStore {
 			embedding: input.embedding,
 			contentHash: createMemoryContentHash({
 				corpus: input.corpus,
-				role: typeof input.metadata?.role === "string" ? input.metadata.role : null,
 				text,
 				embeddingModel: this.embeddingModel,
 				embeddingDimensions: this.embeddingDimensions,
@@ -528,10 +527,6 @@ export class MemoryIndexStore {
 	}
 
 	private deleteFtsRow(id: number): void {
-		const row = this.db.prepare("SELECT text_full, snippet FROM memory_chunks WHERE id = ?").get(id) as
-			| { text_full: string; snippet: string }
-			| undefined;
-		if (!row) return;
 		this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(id);
 	}
 
@@ -557,13 +552,11 @@ export function createMemoryContentHash(input: {
 	text: string;
 	embeddingModel: string;
 	embeddingDimensions: number;
-	role?: string | null;
 }): string {
 	return createHash("sha256")
 		.update(
 			JSON.stringify({
 				corpus: input.corpus,
-				role: input.role ?? null,
 				text: input.text,
 				embeddingModel: input.embeddingModel,
 				embeddingDimensions: input.embeddingDimensions,

@@ -125,10 +125,11 @@ A quieter thought arrived after midnight.
 
 			assert.equal(result.ids.length, 2);
 			assert.equal(result.embedded, 2);
-			assert.deepEqual(provider.batches[0], ["# One\nFirst remembered thing.", "# Two\nSecond remembered thing."]);
+			assert.deepEqual(provider.batches[0], ["First remembered thing.", "Second remembered thing."]);
 			assert.equal(store.stats().indexed, 2);
 
 			const first = store.getChunk(result.ids[0] as number);
+			assert.equal(first?.text, "First remembered thing.");
 			assert.equal(first?.corpus, DIARY_CHUNK_CORPUS);
 			assert.equal(first?.sourceId, "2026-05-10.md");
 			assert.equal(first?.sourceRef, "/workspace/memories/diaries/2026-05-10.md");
@@ -146,5 +147,16 @@ A quieter thought arrived after midnight.
 		} finally {
 			store.close();
 		}
+	});
+
+	it("splits oversized paragraphs without producing replacement characters", () => {
+		const markdown = `${"a".repeat(9)}😀${"b".repeat(20)}`;
+		const chunks = chunkDiaryMarkdown(markdown, {
+			sourceId: "2026-05-10.md",
+			maxChars: 10,
+		});
+
+		assert.ok(chunks.length > 1);
+		assert.equal(chunks.some((chunk) => chunk.text.includes("\uFFFD")), false);
 	});
 });

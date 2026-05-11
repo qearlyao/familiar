@@ -160,6 +160,41 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
+	it("backfills sqlite-vec rows when upgrading an existing blob-js database", async (t) => {
+		__memoryVecTest.setLoader(() => {
+			throw new Error("sqlite-vec unavailable during initial create");
+		});
+		const path = await tempDbPath();
+		const firstStore = openStore(path);
+		try {
+			firstStore.insertChunks([
+				{ corpus: "diary_chunk", sourceId: "a", text: "near upgrade vector", embedding: vector([1, 0, 0]) },
+				{ corpus: "diary_chunk", sourceId: "b", text: "middle upgrade vector", embedding: vector([0, 1, 0]) },
+				{ corpus: "diary_chunk", sourceId: "c", text: "far upgrade vector", embedding: vector([0, 0, 1]) },
+			]);
+			assert.equal(firstStore.stats().vectorCapability, "blob-js");
+		} finally {
+			firstStore.close();
+		}
+
+		if (!__memoryVecTest.probePackage()) {
+			t.skip("sqlite-vec is not installed in this environment");
+			return;
+		}
+		__memoryVecTest.setLoader(null);
+		const secondStore = openStore(path);
+		try {
+			if (!secondStore.stats().vectorAvailable) {
+				t.skip("sqlite-vec is not loadable in this environment");
+				return;
+			}
+			assert.equal((secondStore.db.prepare("SELECT COUNT(*) AS n FROM memory_vec").get() as { n: number }).n, 3);
+			assert.equal(secondStore.searchSemantic(vector([0.9, 0.1, 0]), 2)[0]?.chunk.sourceId, "a");
+		} finally {
+			secondStore.close();
+		}
+	});
+
 	it("dedupes identical content across sources and preserves mappings until the last source is deleted", async () => {
 		const store = openStore(await tempDbPath());
 		try {
@@ -396,6 +431,38 @@ describe("MemoryIndexStore", () => {
 				"1",
 			);
 			assert.equal(secondStore.stats().requiresReindex, true);
+		} finally {
+			secondStore.close();
+		}
+	});
+
+	it("drops stale memory_vec rows when embedding dimensions change without sqlite-vec loaded", async () => {
+		const path = await tempDbPath();
+		const firstStore = openStore(path);
+		try {
+			firstStore.insertChunk({
+				corpus: "lcm_summary",
+				sourceId: "sum1",
+				text: "summary gets stale vector table",
+				embedding: vector([1, 0, 0]),
+			});
+			firstStore.db.prepare("CREATE TABLE IF NOT EXISTS memory_vec(rowid INTEGER PRIMARY KEY, embedding BLOB)").run();
+			firstStore.db.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)").run(1, Buffer.from([1, 2, 3]));
+			assert.equal((firstStore.db.prepare("SELECT COUNT(*) AS n FROM memory_vec").get() as { n: number }).n, 1);
+		} finally {
+			firstStore.close();
+		}
+
+		__memoryVecTest.setLoader(() => {
+			throw new Error("sqlite-vec unavailable during dimension change");
+		});
+		const secondStore = openStoreWithModel(path, "gemini-embedding-2", 4);
+		try {
+			assert.equal(secondStore.stats().indexed, 0);
+			const row = secondStore.db
+				.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'memory_vec'")
+				.get() as { ok: number } | undefined;
+			assert.equal(row, undefined);
 		} finally {
 			secondStore.close();
 		}

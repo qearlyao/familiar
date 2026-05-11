@@ -78,7 +78,7 @@ describe("diary file indexer", () => {
 				["2026-05-09.md", "2026-05-10.md"],
 			);
 			assert.equal(store.stats().indexed, 2);
-			assert.deepEqual(provider.batches, [["# Morning\nTea mattered."], ["Quiet ordinary entry."]]);
+			assert.deepEqual(provider.batches, [["Tea mattered."], ["Quiet ordinary entry."]]);
 		} finally {
 			store.close();
 		}

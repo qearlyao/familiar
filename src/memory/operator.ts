@@ -30,7 +30,14 @@ export async function runMemoryOperator(config: FamiliarConfig, argv: string[]):
 			await withOperatorService(config, async (service) => runDoctorCommand(service, args));
 			return;
 		case "reindex":
-			await withOperatorService(config, async (service) => reindex(config, service, parseReindexArgs(args)));
+			await withOperatorService(config, async (service) => {
+				const { controller, dispose } = installMemoryAbortHandler("aborting reindex — finishing current corpus…");
+				try {
+					await reindex(config, service, parseReindexArgs(args), undefined, controller.signal);
+				} finally {
+					dispose();
+				}
+			});
 			return;
 		case "backfill":
 			await withOperatorService(config, async (service) =>
@@ -155,6 +162,7 @@ async function reindex(
 	service: MemoryOperatorService,
 	options: { corpus?: string; force: boolean },
 	embeddingProvider?: EmbeddingProvider,
+	signal?: AbortSignal,
 ): Promise<void> {
 	if (options.force) {
 		service.memoryStore.db
@@ -178,18 +186,31 @@ async function reindex(
 			: service.indexer;
 	let chunks = 0;
 	if (corpora.includes("lcm_record")) {
-		const result = await indexLcmRecords({ indexer, records: service.lcmStore.listRecords() });
+		if (signal?.aborted) {
+			console.log(`Reindexed ${chunks} chunk(s)`);
+			return;
+		}
+		const result = await indexLcmRecords({ indexer, records: service.lcmStore.listRecords(), signal });
 		chunks += result.ids.length;
 		printProgress(chunks);
 	}
 	if (corpora.includes("lcm_summary")) {
-		const result = await indexLcmSummaries({ indexer, summaries: service.lcmStore.listSummaries() });
+		if (signal?.aborted) {
+			console.log(`Reindexed ${chunks} chunk(s)`);
+			return;
+		}
+		const result = await indexLcmSummaries({ indexer, summaries: service.lcmStore.listSummaries(), signal });
 		chunks += result.ids.length;
 		printProgress(chunks);
 	}
 	if (corpora.includes("diary_chunk")) {
-		const result = await indexAllDiaryFiles({ config, indexer });
+		if (signal?.aborted) {
+			console.log(`Reindexed ${chunks} chunk(s)`);
+			return;
+		}
+		const result = await indexAllDiaryFiles({ config, indexer, signal });
 		for (const file of result.files) {
+			if (signal?.aborted) break;
 			chunks += file.result.ids.length;
 			printProgress(chunks);
 		}
@@ -203,18 +224,23 @@ async function backfill(
 	options: { dataDir: string; channels?: string[]; dryRun: boolean },
 ): Promise<void> {
 	const embeddingProvider = createEmbeddingProvider(config);
-	const report = await backfillFromChatLogs(
-		{
-			lcmStore: service.lcmStore,
-			memoryStore: service.memoryStore,
-			indexer: service.indexer,
-			embeddingProvider,
-			config,
-		},
-		options,
-	);
-	printBackfillReport(report);
-	if (report.errors.length > 0) process.exitCode = 1;
+	const { controller, dispose } = installMemoryAbortHandler("aborting backfill — finishing current batch…");
+	try {
+		const report = await backfillFromChatLogs(
+			{
+				lcmStore: service.lcmStore,
+				memoryStore: service.memoryStore,
+				indexer: service.indexer,
+				embeddingProvider,
+				config,
+			},
+			{ ...options, signal: controller.signal },
+		);
+		printBackfillReport(report);
+		if (report.errors.length > 0) process.exitCode = 1;
+	} finally {
+		dispose();
+	}
 }
 
 async function prune(
@@ -375,6 +401,19 @@ function deleteCorpus(store: MemoryIndexStore, corpus: string): void {
 		store.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);
 		store.db.prepare("DELETE FROM memory_chunks WHERE id = ?").run(row.id);
 	}
+}
+
+function installMemoryAbortHandler(message: string): { controller: AbortController; dispose: () => void } {
+	const controller = new AbortController();
+	const onSigint = () => {
+		if (!controller.signal.aborted) console.log(message);
+		controller.abort();
+	};
+	process.once("SIGINT", onSigint);
+	return {
+		controller,
+		dispose: () => process.off("SIGINT", onSigint),
+	};
 }
 
 function countRows(store: { db: LcmStore["db"] }, table: string): number {

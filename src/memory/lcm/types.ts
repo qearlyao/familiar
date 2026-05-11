@@ -85,6 +85,16 @@ export interface StoredLcmRecord {
 	updatedAt: number;
 }
 
+export type LcmSummarySnapshot = Array<{
+	id: number;
+	kind: LcmRecordKind;
+	happened_at: string;
+	role: string | null;
+	text: string;
+	parts: LcmRecordPart[] | null;
+	attachments: LcmAttachmentNote[] | null;
+}>;
+
 export interface LcmSummarySourceInput {
 	recordId?: number | null;
 	summaryId?: number | null;
@@ -117,6 +127,7 @@ export interface StoredLcmSummary {
 	coversToRecordId: number | null;
 	source: LcmSourceProvenance;
 	metadata: Record<string, unknown> | null;
+	snapshot: LcmSummarySnapshot | null;
 	createdAt: number;
 	updatedAt: number;
 }

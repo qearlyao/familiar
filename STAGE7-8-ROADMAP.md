@@ -696,7 +696,7 @@ shipped. Fix before adding more surface area.
 - [x] Default `memory_recall.scope` should be `factual`, not `all`. Roadmap calls
   for "context-sensitive but conservative" and the current default leaks
   diary into provenance-style queries.
-- Snapshot summary content into `lcm_summaries.snapshot_json` (column exists,
+- [x] Snapshot summary content into `lcm_summaries.snapshot_json` (column exists,
   nothing populates it) at retention time so summaries remain meaningful
   after raw records are pruned. Today `covers_from_record_id` /
   `covers_to_record_id` are nulled by `ON DELETE SET NULL`, losing range

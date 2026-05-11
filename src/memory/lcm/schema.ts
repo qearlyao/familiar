@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -70,6 +70,7 @@ export function runLcmMigrations(db: Database.Database): void {
 				pinned INTEGER NOT NULL DEFAULT 0,
 				covers_from_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
 				covers_to_record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
+				snapshot_json TEXT,
 				source_type TEXT NOT NULL,
 				source_path TEXT,
 				source_line INTEGER,
@@ -102,6 +103,7 @@ export function runLcmMigrations(db: Database.Database): void {
 		`);
 
 		migrateRecordPartsColumn(db);
+		migrateSummarySnapshotColumn(db);
 		migrateContentlessFts(db);
 		writeMeta(db, "schema_version", String(SCHEMA_VERSION));
 	};
@@ -130,6 +132,12 @@ function migrateRecordPartsColumn(db: Database.Database): void {
 	const columns = db.prepare("PRAGMA table_info(lcm_records)").all() as Array<{ name: string }>;
 	if (columns.some((column) => column.name === "parts_json")) return;
 	db.prepare("ALTER TABLE lcm_records ADD COLUMN parts_json TEXT").run();
+}
+
+function migrateSummarySnapshotColumn(db: Database.Database): void {
+	const columns = db.prepare("PRAGMA table_info(lcm_summaries)").all() as Array<{ name: string }>;
+	if (columns.some((column) => column.name === "snapshot_json")) return;
+	db.prepare("ALTER TABLE lcm_summaries ADD COLUMN snapshot_json TEXT").run();
 }
 
 function migrateOneFts(db: Database.Database, ftsTable: string, sourceTable: string, textColumn: string): void {

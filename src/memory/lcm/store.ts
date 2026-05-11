@@ -17,6 +17,7 @@ import type {
 	LcmSegmentStatus,
 	LcmSourceProvenance,
 	LcmSummaryInput,
+	LcmSummarySnapshot,
 	LcmSummarySourceInput,
 	LcmSummaryStatus,
 	StoredLcmRecord,
@@ -78,6 +79,7 @@ interface LcmSummaryRow {
 	pinned: number;
 	covers_from_record_id: number | null;
 	covers_to_record_id: number | null;
+	snapshot_json: string | null;
 	source_type: string;
 	source_path: string | null;
 	source_line: number | null;
@@ -186,9 +188,9 @@ export class LcmStore {
 				channelKey: normalized.channelKey,
 				startedAt: normalized.happenedAt,
 			});
-			const existing = this.db.prepare("SELECT id FROM lcm_records WHERE record_key = ?").get(normalized.recordKey) as
-				| { id: number }
-				| undefined;
+			const existing = this.db
+				.prepare("SELECT id FROM lcm_records WHERE record_key = ?")
+				.get(normalized.recordKey) as { id: number } | undefined;
 			if (existing) return existing.id;
 			return insertRecordPrepared(this.db, normalized);
 		};
@@ -322,6 +324,8 @@ export class LcmStore {
 						.run(segmentId, retainDepth).changes;
 				}
 
+				this.snapshotSummariesForPrunedRecords(segmentId);
+
 				const records = this.db.prepare("SELECT id FROM lcm_records WHERE segment_id = ?").all(segmentId) as {
 					id: number;
 				}[];
@@ -378,6 +382,29 @@ export class LcmStore {
 		if (!row) return 0;
 		this.db.prepare("DELETE FROM lcm_summaries_fts WHERE rowid = ?").run(id);
 		return 1;
+	}
+
+	private snapshotSummariesForPrunedRecords(segmentId: string): void {
+		const summaries = this.db
+			.prepare(
+				`SELECT * FROM lcm_summaries
+				 WHERE segment_id = ?
+				   AND covers_from_record_id IS NOT NULL
+				   AND covers_to_record_id IS NOT NULL
+				   AND EXISTS (
+				    SELECT 1 FROM lcm_records r
+				    WHERE r.segment_id = lcm_summaries.segment_id
+				      AND r.id BETWEEN lcm_summaries.covers_from_record_id AND lcm_summaries.covers_to_record_id
+				   )
+				 ORDER BY depth, id`,
+			)
+			.all(segmentId) as LcmSummaryRow[];
+		const update = this.db.prepare(
+			"UPDATE lcm_summaries SET snapshot_json = ?, updated_at = unixepoch() WHERE id = ?",
+		);
+		for (const summary of summaries) {
+			update.run(jsonOrNull(buildSummarySnapshot(this.db, summary)), summary.id);
+		}
 	}
 }
 
@@ -493,9 +520,9 @@ function insertSummaryPrepared(
 		.prepare(
 			`INSERT INTO lcm_summaries (
 				summary_key, segment_id, depth, status, text_full, pinned,
-				covers_from_record_id, covers_to_record_id, source_type, source_path,
+				covers_from_record_id, covers_to_record_id, snapshot_json, source_type, source_path,
 				source_line, source_record_id, source_message_id, source_ref, metadata_json
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		)
 		.run(
 			normalized.summaryKey,
@@ -506,6 +533,7 @@ function insertSummaryPrepared(
 			normalized.pinned ? 1 : 0,
 			normalized.coversFromRecordId,
 			normalized.coversToRecordId,
+			null,
 			normalized.source.sourceType,
 			normalized.source.sourcePath ?? null,
 			normalized.source.sourceLine ?? null,
@@ -635,6 +663,7 @@ function summaryFromRow(row: LcmSummaryRow): StoredLcmSummary {
 		coversToRecordId: row.covers_to_record_id,
 		source: sourceFromRow(row),
 		metadata: parseJsonObject(row.metadata_json),
+		snapshot: parseJsonArray(row.snapshot_json) as LcmSummarySnapshot | null,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -649,6 +678,47 @@ function summarySourceFromRow(row: LcmSummarySourceRow): StoredLcmSummarySource 
 		sourceRef: row.source_ref,
 		snapshot: parseJsonObject(row.snapshot_json),
 	};
+}
+
+const SUMMARY_SNAPSHOT_TEXT_LIMIT = 4 * 1024;
+const SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX = "…[truncated]";
+
+function buildSummarySnapshot(db: Database.Database, summary: LcmSummaryRow): LcmSummarySnapshot {
+	const rows = db
+		.prepare(
+			`SELECT * FROM lcm_records
+			 WHERE segment_id = ?
+			   AND id BETWEEN ? AND ?
+			 ORDER BY happened_at, id`,
+		)
+		.all(summary.segment_id, summary.covers_from_record_id, summary.covers_to_record_id) as LcmRecordRow[];
+	return rows.map(snapshotRecordFromRow);
+}
+
+function snapshotRecordFromRow(row: LcmRecordRow): LcmSummarySnapshot[number] {
+	const metadata = parseJsonObject(row.metadata_json);
+	return {
+		id: row.id,
+		kind: row.kind as LcmRecordKind,
+		happened_at: row.happened_at,
+		role: snapshotRole(row.kind as LcmRecordKind, metadata),
+		text: truncateSummarySnapshotText(row.text_full),
+		parts: parseJsonArray<LcmRecordPart>(row.parts_json),
+		attachments: parseJsonArray(row.attachments_json),
+	};
+}
+
+function snapshotRole(kind: LcmRecordKind, metadata: Record<string, unknown> | null): string | null {
+	if (typeof metadata?.role === "string" && metadata.role.trim()) return metadata.role;
+	if (kind === "user" || kind === "assistant") return kind;
+	if (kind === "tool") return "tool";
+	return null;
+}
+
+function truncateSummarySnapshotText(text: string): string {
+	if (text.length <= SUMMARY_SNAPSHOT_TEXT_LIMIT) return text;
+	const retainedLength = Math.max(0, SUMMARY_SNAPSHOT_TEXT_LIMIT - SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX.length);
+	return `${text.slice(0, retainedLength)}${SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX}`;
 }
 
 interface NormalizedRecordInput {

@@ -31,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 3);
+			assert.equal(store.schemaVersion(), 4);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -339,6 +339,184 @@ describe("LcmStore", () => {
 			assert.equal(store.listSummaries().length, 4);
 			assert.equal(store.getSummarySources(1)[0]?.recordId, null);
 			assert.equal(report.indexDeletes.filter((item) => item.corpus === "lcm_record").length, 2);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("snapshot_json populated on retainDepth 0", async () => {
+		const store = await openStore();
+		try {
+			const first = store.insertRecord({
+				segmentId: "seg-snapshot",
+				kind: "user",
+				text: "please inspect the plan",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+				metadata: { role: "user" },
+			});
+			const longText = `${"a".repeat(4096)}tail`;
+			const second = store.insertRecord({
+				segmentId: "seg-snapshot",
+				kind: "assistant",
+				text: longText,
+				parts: [
+					{ kind: "thinking", text: "Need the current plan." },
+					{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+					{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: { ok: true } },
+				],
+				happenedAt: "2026-05-10T01:01:00.000Z",
+				source: source(2),
+				attachments: [{ id: "att-1", name: "plan.txt", kind: "text", note: "plan excerpt" }],
+			});
+			const summaryId = store.insertSummary({
+				segmentId: "seg-snapshot",
+				depth: 1,
+				status: "ready",
+				text: "summary over raw records",
+				coversFromRecordId: first,
+				coversToRecordId: second,
+				source: { sourceType: "manual", sourceRef: "sum:snapshot" },
+			});
+			store.closeSegment("seg-snapshot", "2026-05-10T02:00:00.000Z");
+
+			store.applyNewSessionRetention({ newSessionRetainDepth: 0 });
+
+			assert.deepEqual(store.listRecords("seg-snapshot"), []);
+			const summary = store.getSummary(summaryId);
+			assert.ok(summary);
+			assert.equal(summary.coversFromRecordId, null);
+			assert.equal(summary.coversToRecordId, null);
+			assert.deepEqual(
+				summary.snapshot?.map((item) => ({
+					id: item.id,
+					kind: item.kind,
+					happened_at: item.happened_at,
+					role: item.role,
+					parts: item.parts,
+					attachments: item.attachments,
+				})),
+				[
+					{
+						id: first,
+						kind: "user",
+						happened_at: "2026-05-10T01:00:00.000Z",
+						role: "user",
+						parts: null,
+						attachments: null,
+					},
+					{
+						id: second,
+						kind: "assistant",
+						happened_at: "2026-05-10T01:01:00.000Z",
+						role: "assistant",
+						parts: [
+							{ kind: "thinking", text: "Need the current plan." },
+							{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+							{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: { ok: true } },
+						],
+						attachments: [{ id: "att-1", name: "plan.txt", kind: "text", note: "plan excerpt" }],
+					},
+				],
+			);
+			assert.equal(summary.snapshot?.[0]?.text, "please inspect the plan");
+			assert.equal(summary.snapshot?.[1]?.text.length, 4096);
+			assert.ok(summary.snapshot?.[1]?.text.endsWith("…[truncated]"));
+		} finally {
+			store.close();
+		}
+	});
+
+	it("only surviving summaries snapshotted on retainDepth 2", async () => {
+		const store = await openStore();
+		try {
+			const first = store.insertRecord({
+				segmentId: "seg-depth",
+				kind: "user",
+				text: "depth retention source",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			const second = store.insertRecord({
+				segmentId: "seg-depth",
+				kind: "assistant",
+				text: "depth retention reply",
+				happenedAt: "2026-05-10T01:01:00.000Z",
+				source: source(2),
+			});
+			store.insertSummary({
+				segmentId: "seg-depth",
+				depth: 1,
+				status: "ready",
+				text: "depth one summary",
+				coversFromRecordId: first,
+				coversToRecordId: second,
+				source: { sourceType: "manual", sourceRef: "sum:d1" },
+			});
+			const retainedId = store.insertSummary({
+				segmentId: "seg-depth",
+				depth: 2,
+				status: "ready",
+				text: "depth two summary",
+				coversFromRecordId: first,
+				coversToRecordId: second,
+				source: { sourceType: "manual", sourceRef: "sum:d2" },
+			});
+			store.closeSegment("seg-depth", "2026-05-10T02:00:00.000Z");
+
+			store.applyNewSessionRetention({ newSessionRetainDepth: 2 });
+
+			const summaries = store.listSummaries("seg-depth");
+			assert.deepEqual(
+				summaries.map((summary) => ({ id: summary.id, depth: summary.depth, text: summary.text })),
+				[{ id: retainedId, depth: 2, text: "depth two summary" }],
+			);
+			assert.deepEqual(
+				summaries[0]?.snapshot?.map((item) => ({ id: item.id, kind: item.kind, text: item.text })),
+				[
+					{ id: first, kind: "user", text: "depth retention source" },
+					{ id: second, kind: "assistant", text: "depth retention reply" },
+				],
+			);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("no snapshot written on retainDepth -1", async () => {
+		const store = await openStore();
+		try {
+			const first = store.insertRecord({
+				segmentId: "seg-keep",
+				kind: "user",
+				text: "kept raw",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			const summaryId = store.insertSummary({
+				segmentId: "seg-keep",
+				depth: 1,
+				status: "ready",
+				text: "kept summary",
+				coversFromRecordId: first,
+				coversToRecordId: first,
+				source: { sourceType: "manual", sourceRef: "sum:keep" },
+			});
+			store.closeSegment("seg-keep", "2026-05-10T02:00:00.000Z");
+
+			store.applyNewSessionRetention({ newSessionRetainDepth: -1 });
+
+			assert.equal(store.listRecords("seg-keep").length, 1);
+			assert.equal(store.listSummaries("seg-keep").length, 1);
+			assert.equal(store.getSummary(summaryId)?.snapshot, null);
+			assert.equal(
+				(
+					store.db.prepare("SELECT snapshot_json FROM lcm_summaries WHERE id = ?").get(summaryId) as {
+						snapshot_json: string | null;
+					}
+				).snapshot_json,
+				null,
+			);
 		} finally {
 			store.close();
 		}

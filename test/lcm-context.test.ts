@@ -208,6 +208,7 @@ function summary(
 		coversToRecordId: id,
 		source,
 		metadata: null,
+		snapshot: null,
 		createdAt: id,
 		updatedAt: id,
 	};

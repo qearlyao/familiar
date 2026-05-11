@@ -12,6 +12,7 @@ import {
 	lcmRecordToAgentMessage,
 	selectLcmCompactionCandidatePromptAware,
 } from "../src/memory/lcm/context.js";
+import { buildCondensedSummaryPrompt, buildLeafSummaryPrompt, capSummaryText } from "../src/memory/lcm/summarizer.js";
 import type {
 	LcmRecordKind,
 	LcmSourceProvenance,
@@ -24,6 +25,38 @@ const source: LcmSourceProvenance = {
 };
 
 describe("LCM context helpers", () => {
+	it("uses companion-oriented prompts and depth-aware condensed prompts", () => {
+		const leaf = buildLeafSummaryPrompt({
+			text: "The user felt overwhelmed but wanted help planning tomorrow.",
+			mode: "normal",
+			targetTokens: 120,
+		});
+		assert.match(leaf, /Familiar companion conversation/);
+		assert.match(leaf, /preferences, feelings, relationship context/);
+		assert.doesNotMatch(leaf, /Files: none/);
+
+		const d2 = buildCondensedSummaryPrompt({
+			text: "leaf one\nleaf two",
+			targetTokens: 120,
+			depth: 2,
+			childSummaryCount: 2,
+		});
+		assert.match(d2, /session-level continuity memory/);
+		const d3 = buildCondensedSummaryPrompt({
+			text: "session one\nsession two",
+			targetTokens: 120,
+			depth: 3,
+			childSummaryCount: 2,
+		});
+		assert.match(d3, /trajectory-level continuity memory/);
+	});
+
+	it("caps oversized summaries with a deterministic fallback marker", () => {
+		const capped = capSummaryText("important detail ".repeat(200), 20);
+		assert.ok(capped.length < "important detail ".repeat(200).length);
+		assert.match(capped, /Compressed away: overflow beyond summary cap/);
+	});
+
 	it("estimates text and AgentMessage tokens conservatively", () => {
 		assert.equal(estimateTextTokens("abcdefghijkl"), 4);
 		assert.equal(estimateTextTokens("你好"), 2);
@@ -144,6 +177,35 @@ describe("LCM context helpers", () => {
 		assert.deepEqual(
 			candidate.chunk.map((item) => item.record?.id),
 			[1, 2],
+		);
+	});
+
+	it("fresh_tail_max_tokens narrows protected tail instead of expanding it", () => {
+		const items = [
+			rawItem(record(1, "user", "old alpha"), { role: "user", content: "old alpha ".repeat(20), timestamp: 1 }),
+			rawItem(record(2, "user", "old beta"), { role: "user", content: "old beta ".repeat(20), timestamp: 2 }),
+			rawItem(record(3, "user", "old gamma"), { role: "user", content: "old gamma ".repeat(20), timestamp: 3 }),
+			rawItem(record(4, "user", "fresh delta"), { role: "user", content: "fresh delta", timestamp: 4 }),
+		];
+
+		const candidate = selectLcmCompactionCandidatePromptAware(
+			items,
+			{
+				contextThreshold: 0.75,
+				freshTailCount: 4,
+				freshTailMaxTokens: 20,
+				leafChunkTokens: 1,
+				promptAwareEvictionEnabled: false,
+			},
+			10_000,
+			"",
+		);
+
+		assert.equal(candidate.freshTailStartIndex, 3);
+		assert.equal(candidate.shouldCompact, true);
+		assert.deepEqual(
+			candidate.chunk.map((item) => item.record?.id),
+			[1],
 		);
 	});
 });

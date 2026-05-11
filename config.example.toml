@@ -122,7 +122,9 @@ enabled = true
 # model = "anthropic/claude-opus-4-7"
 # Connection settings inherit from [models.base_urls] and [models.api_key_envs].
 context_threshold = 0.75
+# Protect up to this many newest messages before LCM compacts older context.
 fresh_tail_count = 64
+# Optional stricter token cap for the protected fresh tail; the smaller tail wins.
 # fresh_tail_max_tokens = 4000
 leaf_chunk_tokens = 20000
 leaf_target_tokens = 2400

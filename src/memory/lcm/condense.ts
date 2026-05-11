@@ -2,7 +2,7 @@ import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { estimateTextTokens, selectRetainedSummaries } from "./context.js";
 import { indexLcmSummaries } from "./indexer.js";
 import type { LcmStore } from "./store.js";
-import type { LcmSummarizer } from "./summarizer.js";
+import { capSummaryText, type LcmSummarizer } from "./summarizer.js";
 import type { StoredLcmSummary } from "./types.js";
 
 export interface LcmCondenseConfig {
@@ -17,6 +17,7 @@ export interface LcmCondenseOptions {
 	store: LcmStore;
 	summarizer: LcmSummarizer;
 	config: LcmCondenseConfig;
+	candidateIds?: readonly number[];
 	indexer?: ChunkIndexer;
 	signal?: AbortSignal;
 }
@@ -28,7 +29,13 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 
 	const children = input.store
 		.listSummaries(input.segmentId)
-		.filter((summary) => summary.depth === input.depth && summary.status === "ready" && summary.parents.length === 0)
+		.filter(
+			(summary) =>
+				summary.depth === input.depth &&
+				summary.status === "ready" &&
+				(input.candidateIds === undefined || input.candidateIds.includes(summary.id)) &&
+				input.store.getSummaryChildren(summary.id).length === 0,
+		)
 		.sort(compareCoverage);
 
 	const created: StoredLcmSummary[] = [];
@@ -36,13 +43,16 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 		const group = children.slice(index, index + groupSize);
 		const coversFromRecordId = minNullable(group.map((summary) => summary.coversFromRecordId));
 		const coversToRecordId = maxNullable(group.map((summary) => summary.coversToRecordId));
-		const text = await summarizeCondensedGroup({
-			group,
-			targetTokens: input.config.leafTargetTokens,
-			depth: input.depth + 1,
-			summarizer: input.summarizer,
-			signal: input.signal,
-		});
+		const text = capSummaryText(
+			await summarizeCondensedGroup({
+				group,
+				targetTokens: input.config.leafTargetTokens,
+				depth: input.depth + 1,
+				summarizer: input.summarizer,
+				signal: input.signal,
+			}),
+			input.config.leafTargetTokens,
+		);
 		const id = input.store.insertSummary({
 			segmentId: input.segmentId,
 			depth: input.depth + 1,
@@ -79,6 +89,7 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 			...(await condense({
 				...input,
 				depth: input.depth + 1,
+				candidateIds: created.map((summary) => summary.id),
 			})),
 		);
 	}
@@ -133,11 +144,25 @@ function renderCondensedSummaryInput(group: readonly StoredLcmSummary[]): string
 				`<summary id="${summary.id}" depth="${summary.depth}" from="${summary.coversFromRecordId ?? ""}" to="${
 					summary.coversToRecordId ?? ""
 				}" tokens="${estimateTextTokens(summary.text)}">`,
+				formatSummaryTimeRange(summary),
 				summary.text,
 				"</summary>",
-			].join("\n"),
+			]
+				.filter(Boolean)
+				.join("\n"),
 		)
 		.join("\n\n");
+}
+
+function formatSummaryTimeRange(summary: StoredLcmSummary): string {
+	const from = metadataString(summary.metadata?.coverageFromHappenedAt ?? summary.metadata?.timestamp);
+	const to = metadataString(summary.metadata?.coverageToHappenedAt ?? summary.metadata?.timestamp);
+	if (!from && !to) return "";
+	return `[time_range ${from ?? "unknown"} - ${to ?? "unknown"}]`;
+}
+
+function metadataString(value: unknown): string | null {
+	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function minNullable(values: Array<number | null>): number | null {

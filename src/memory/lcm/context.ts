@@ -181,8 +181,8 @@ function estimateFallbackMessageTokens(message: AgentMessage): number {
 	return text ? MESSAGE_OVERHEAD_TOKENS + estimateTextTokens(text) : 0;
 }
 
-function resolveFreshTailStartIndex(
-	items: readonly LcmContextRawItem[],
+export function resolveFreshTailStartIndex(
+	items: readonly { tokens: number }[],
 	config: Pick<LcmContextCompactionConfig, "freshTailCount" | "freshTailMaxTokens">,
 ): number {
 	const protectedByCountStart = Math.max(0, items.length - Math.max(0, config.freshTailCount));
@@ -197,7 +197,7 @@ function resolveFreshTailStartIndex(
 		tokens += item.tokens;
 		tokenStart = index;
 	}
-	return Math.min(protectedByCountStart, tokenStart);
+	return Math.max(protectedByCountStart, tokenStart);
 }
 
 function selectLeafChunk(

@@ -82,6 +82,99 @@ describe("LCM condense", () => {
 		}
 	});
 
+	it("continues condensing parented summaries into deeper DAG levels", async () => {
+		const store = new LcmStore({ path: await tempDbPath() });
+		try {
+			const segmentId = "seg-deep-condense";
+			for (let index = 0; index < 16; index += 1) {
+				const recordId = store.insertRecord({
+					segmentId,
+					kind: "user",
+					text: `deep source ${index}`,
+					happenedAt: `2026-05-10T01:${String(index).padStart(2, "0")}:00.000Z`,
+					source,
+				});
+				store.insertSummary({
+					segmentId,
+					depth: 1,
+					status: "ready",
+					text: `leaf summary ${index}`,
+					coversFromRecordId: recordId,
+					coversToRecordId: recordId,
+					source,
+				});
+			}
+			const summarizer: LcmSummarizer = {
+				async summarizeLeaf() {
+					throw new Error("expected summarizeCondensed");
+				},
+				async summarizeCondensed(input) {
+					return `depth ${input.depth} from ${input.childSummaryCount} children`;
+				},
+			};
+
+			const created = await condense({
+				segmentId,
+				depth: 1,
+				store,
+				summarizer,
+				config: { condenseGroupSize: 4, maxSummaryDepth: 3, leafTargetTokens: 100 },
+			});
+
+			assert.equal(created.filter((summary) => summary.depth === 2).length, 4);
+			const depthThree = created.filter((summary) => summary.depth === 3);
+			assert.equal(depthThree.length, 1);
+			assert.equal(depthThree[0]?.parents.length, 4);
+			assert.match(depthThree[0]?.text ?? "", /depth 3/);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("passes human-readable time ranges into condensed summary prompts", async () => {
+		const store = new LcmStore({ path: await tempDbPath() });
+		try {
+			const segmentId = "seg-condense-time-range";
+			for (let index = 0; index < 4; index += 1) {
+				const happenedAt = `2026-05-10T01:${String(index).padStart(2, "0")}:00.000Z`;
+				const recordId = store.insertRecord({
+					segmentId,
+					kind: "user",
+					text: `timed source ${index}`,
+					happenedAt,
+					source,
+				});
+				store.insertSummary({
+					segmentId,
+					depth: 1,
+					status: "ready",
+					text: `timed summary ${index}`,
+					coversFromRecordId: recordId,
+					coversToRecordId: recordId,
+					source,
+					metadata: { coverageFromHappenedAt: happenedAt, coverageToHappenedAt: happenedAt },
+				});
+			}
+			let condensedInput = "";
+			await condense({
+				segmentId,
+				depth: 1,
+				store,
+				summarizer: {
+					async summarizeLeaf(input) {
+						condensedInput = input.text;
+						return "condensed timed summaries";
+					},
+				},
+				config: { condenseGroupSize: 4, maxSummaryDepth: 2, leafTargetTokens: 100 },
+			});
+
+			assert.match(condensedInput, /\[time_range 2026-05-10T01:00:00\.000Z - 2026-05-10T01:00:00\.000Z\]/);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("rendered context shows depth-2 summary instead of four depth-1 children (no double-count)", async () => {
 		const store = new LcmStore({ path: await tempDbPath() });
 		try {
@@ -231,6 +324,89 @@ describe("LCM condense", () => {
 			assert.match(text, /runtime depth two summary/);
 			assert.doesNotMatch(text, /leaf summary for old detail 0[\s\S]*leaf summary for old detail 3/);
 			assert.equal(store.listSummaries("room-runtime:seg-1").filter((summary) => summary.depth === 2).length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("does not persist runtime condensed summaries when live parents are not contiguous", async () => {
+		const store = new LcmStore({ path: await tempDbPath() });
+		const segmentManager = new LcmSegmentManager({
+			lcmStore: store,
+			memoryStore: nullMemoryStore(),
+			indexer: nullIndexer(),
+			newSessionRetainDepth: 2,
+		});
+		let condensedCalls = 0;
+		let now = 100_000;
+		const transformer = new LcmContextTransformer({
+			settings: {
+				enabled: true,
+				contextThreshold: 0.75,
+				freshTailCount: 1,
+				leafChunkTokens: 6,
+				leafTargetTokens: 8,
+				condenseGroupSize: 4,
+				maxSummaryDepth: 4,
+				maxRounds: 1,
+				cacheTtlMs: 300_000,
+				cacheTouchSlackMs: 30_000,
+				criticalOverflowTokens: 8000,
+				promptAwareEvictionEnabled: true,
+			},
+			lcmStore: store,
+			indexer: nullIndexer(),
+			summarizer: {
+				async summarizeLeaf(input) {
+					if (input.text.includes("<summary")) {
+						condensedCalls += 1;
+						return "should not condense non-contiguous runtime parents";
+					}
+					return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;
+				},
+			},
+			segmentManager,
+			now: () => now,
+		});
+		try {
+			const history: AgentMessage[] = [];
+			for (let index = 0; index < 2; index += 1) {
+				now += 300_000;
+				history.push({ role: "user", content: `old detail ${index} ${"x".repeat(40)}`, timestamp: index + 1 });
+				await transformer.transformLcmContext([...history], undefined, {
+					sessionKey: "room-noncontiguous",
+					sessionId: "session-runtime",
+					model: { contextWindow: 10_000 } as any,
+				});
+			}
+
+			const strayRecord = store.insertRecord({
+				segmentId: "room-noncontiguous:seg-1",
+				kind: "user",
+				text: "stray source",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source,
+			});
+			store.insertSummary({
+				segmentId: "room-noncontiguous:seg-1",
+				depth: 1,
+				status: "ready",
+				text: "stray stored summary",
+				coversFromRecordId: strayRecord,
+				coversToRecordId: strayRecord,
+				source,
+			});
+
+			now += 300_000;
+			history.push({ role: "user", content: `old detail 2 ${"x".repeat(40)}`, timestamp: 3 });
+			await transformer.transformLcmContext(history, undefined, {
+				sessionKey: "room-noncontiguous",
+				sessionId: "session-runtime",
+				model: { contextWindow: 10_000 } as any,
+			});
+
+			assert.equal(condensedCalls, 0);
+			assert.equal(store.listSummaries("room-noncontiguous:seg-1").filter((summary) => summary.depth === 2).length, 0);
 		} finally {
 			store.close();
 		}

@@ -1,5 +1,5 @@
-import { readdir, readFile, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
 import type { Config } from "../../config.js";

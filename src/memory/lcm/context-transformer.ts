@@ -2,16 +2,16 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
+import { condense } from "./condense.js";
 import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
-	lcmRecordToAgentMessage,
 	type LcmContextRawItem,
+	lcmRecordToAgentMessage,
 	renderLcmRecordPartsForSummary,
-	selectLcmCompactionCandidate,
+	type selectLcmCompactionCandidate,
 	selectLcmCompactionCandidatePromptAware,
 } from "./context.js";
-import { condense } from "./condense.js";
 import { indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
@@ -111,12 +111,14 @@ export class LcmContextTransformer {
 		try {
 			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
 			state.compactionDebt += pressure.pressureScore;
-			if (shouldServiceCompactionDebt({
-				settings,
-				now,
-				previousCacheTouchedAt,
-				pressureScore: state.compactionDebt,
-			})) {
+			if (
+				shouldServiceCompactionDebt({
+					settings,
+					now,
+					previousCacheTouchedAt,
+					pressureScore: state.compactionDebt,
+				})
+			) {
 				await this.serviceCompactionDebtForState({
 					state,
 					sessionKey,
@@ -139,7 +141,11 @@ export class LcmContextTransformer {
 		return state.items.map((item) => item.message);
 	}
 
-	async serviceCompactionDebt(sessionKey: string, signal?: AbortSignal, options: LcmContextTransformOptions = {}): Promise<void> {
+	async serviceCompactionDebt(
+		sessionKey: string,
+		signal?: AbortSignal,
+		options: LcmContextTransformOptions = {},
+	): Promise<void> {
 		const state = this.contextState(sessionKey);
 		await this.serviceCompactionDebtForState({
 			state,
@@ -178,7 +184,11 @@ export class LcmContextTransformer {
 		}
 	}
 
-	private evaluateCompactionPressure(state: LcmContextState, model: Model<any> | undefined, promptText = ""): {
+	private evaluateCompactionPressure(
+		state: LcmContextState,
+		model: Model<any> | undefined,
+		promptText = "",
+	): {
 		candidate: ReturnType<typeof selectLcmCompactionCandidate>;
 		pressureScore: number;
 	} {
@@ -289,6 +299,7 @@ export class LcmContextTransformer {
 				sessionKey: input.sessionKey,
 				sessionId: input.sessionId ?? null,
 				source: "transformContext",
+				...coverageMetadataFromRawItems(input.sourceItems),
 			},
 		});
 		const summary = this.lcmStore.getSummary(summaryId);
@@ -379,7 +390,9 @@ export class LcmContextTransformer {
 				console.error(`memory LCM context item dropped because summary ${row.summaryId} is missing`);
 				continue;
 			}
-			items.push(summaryToContextItem(summary, row.fingerprint, sessionKey, this.summaryCoveredSourceIds(summary.id)));
+			items.push(
+				summaryToContextItem(summary, row.fingerprint, sessionKey, this.summaryCoveredSourceIds(summary.id)),
+			);
 		}
 		state.items = items;
 	}
@@ -408,6 +421,12 @@ export class LcmContextTransformer {
 	private summaryCoveredSourceIds(summaryId: number, seen = new Set<number>()): string[] {
 		if (seen.has(summaryId)) return [];
 		seen.add(summaryId);
+		const parents = this.lcmStore.getSummaryParents(summaryId);
+		if (parents.length > 0) {
+			// Condensed summaries use canonical parent edges; source rows are legacy advisory lineage.
+			return parents.flatMap((parentId) => this.summaryCoveredSourceIds(parentId, seen));
+		}
+
 		const ids: string[] = [];
 		for (const source of this.lcmStore.getSummarySources(summaryId)) {
 			if (source.sourceSummaryId !== null) {
@@ -424,12 +443,10 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 	const existingRecords = new Map(
 		state.items.filter((item): item is RawLcmItem => item.type === "raw").map((item) => [item.id, item]),
 	);
-	const rawItems = createRawContextItems(messages).map(
-		(item): RawLcmItem => {
-			const existing = existingRecords.get(item.id);
-			return { ...item, type: "raw", recordId: existing?.recordId ?? null, record: existing?.record ?? null };
-		},
-	);
+	const rawItems = createRawContextItems(messages).map((item): RawLcmItem => {
+		const existing = existingRecords.get(item.id);
+		return { ...item, type: "raw", recordId: existing?.recordId ?? null, record: existing?.record ?? null };
+	});
 	const rawById = new Map(rawItems.map((item) => [item.id, item]));
 	const next: LcmContextItem[] = [];
 	const covered = new Set<string>();
@@ -475,7 +492,8 @@ function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextIte
 		const happenedAt =
 			typeof timestamp === "number" && Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 		if (item.type === "raw") {
-			if (item.recordId !== null) stored.push({ type: "raw", recordId: item.recordId, fingerprint: item.id, happenedAt });
+			if (item.recordId !== null)
+				stored.push({ type: "raw", recordId: item.recordId, fingerprint: item.id, happenedAt });
 			continue;
 		}
 		if (item.persistedSummaryId !== undefined) {
@@ -508,6 +526,18 @@ function rawItemToRecordInput(
 		channelKey: sessionKey,
 		source: { sourceType: "manual", sourceRef: `runtime:${item.id}` },
 		metadata: { source: "transformContext", fingerprint: item.id },
+	};
+}
+
+function coverageMetadataFromRawItems(items: readonly RawLcmItem[]): Record<string, string> {
+	const happenedAts = items
+		.map((item) => item.record?.happenedAt)
+		.filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)));
+	const from = happenedAts[0];
+	const to = happenedAts.at(-1);
+	return {
+		...(from ? { coverageFromHappenedAt: from } : {}),
+		...(to ? { coverageToHappenedAt: to, timestamp: to } : {}),
 	};
 }
 

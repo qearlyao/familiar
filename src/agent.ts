@@ -243,7 +243,11 @@ function logUsage(event: AgentEvent): void {
 	);
 }
 
-function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink, memoryService?: MemoryService): AgentTool<any>[] {
+function createFamiliarTools(
+	config: Config,
+	mediaSink: GeneratedMediaSink,
+	memoryService?: MemoryService,
+): AgentTool<any>[] {
 	return [
 		createBashTool(config.workspacePath),
 		createReadTool(config.workspacePath),

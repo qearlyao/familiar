@@ -1,6 +1,6 @@
+import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { estimateTextTokens, selectRetainedSummaries } from "./context.js";
 import { indexLcmSummaries } from "./indexer.js";
-import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import type { LcmStore } from "./store.js";
 import type { LcmSummarizer } from "./summarizer.js";
 import type { StoredLcmSummary } from "./types.js";
@@ -60,14 +60,15 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 				source: "condense",
 				childDepth: input.depth,
 				childSummaryIds: group.map((summary) => summary.id),
+				...coverageMetadataFromSummaries(group),
 			},
 		});
 		const summary = input.store.getSummary(id);
 		if (summary) {
 			created.push(summary);
 			if (input.indexer) {
-				await indexLcmSummaries({ indexer: input.indexer, summaries: [summary], signal: input.signal }).catch((error) =>
-					console.error("memory LCM condensed summary indexing failed", error),
+				await indexLcmSummaries({ indexer: input.indexer, summaries: [summary], signal: input.signal }).catch(
+					(error) => console.error("memory LCM condensed summary indexing failed", error),
 				);
 			}
 		}
@@ -147,6 +148,34 @@ function minNullable(values: Array<number | null>): number | null {
 function maxNullable(values: Array<number | null>): number | null {
 	const present = values.filter((value): value is number => value !== null);
 	return present.length === 0 ? null : Math.max(...present);
+}
+
+function coverageMetadataFromSummaries(group: readonly StoredLcmSummary[]): Record<string, string> {
+	const from = firstValidTime(
+		group.map((summary) => summary.metadata?.coverageFromHappenedAt ?? summary.metadata?.timestamp),
+	);
+	const to = lastValidTime(
+		group.map((summary) => summary.metadata?.coverageToHappenedAt ?? summary.metadata?.timestamp),
+	);
+	return {
+		...(from ? { coverageFromHappenedAt: from } : {}),
+		...(to ? { coverageToHappenedAt: to, timestamp: to } : {}),
+	};
+}
+
+function firstValidTime(values: readonly unknown[]): string | null {
+	for (const value of values) {
+		if (typeof value === "string" && Number.isFinite(Date.parse(value))) return value;
+	}
+	return null;
+}
+
+function lastValidTime(values: readonly unknown[]): string | null {
+	for (let index = values.length - 1; index >= 0; index -= 1) {
+		const value = values[index];
+		if (typeof value === "string" && Number.isFinite(Date.parse(value))) return value;
+	}
+	return null;
 }
 
 function positiveInteger(value: number, name: string): number {

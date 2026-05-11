@@ -178,6 +178,47 @@ describe("retrieveMemory", () => {
 		);
 	});
 
+	it("filters LCM hits by happenedAt and summary coverage metadata before createdAt", async () => {
+		const record = hit(
+			1,
+			"lcm_record",
+			"record",
+			"timeline marker",
+			0.1,
+			{ happenedAt: "2026-05-10T02:00:00.000Z" },
+			Date.parse("2026-05-12T00:00:00.000Z"),
+		);
+		const summary = hit(
+			2,
+			"lcm_summary",
+			"summary",
+			"timeline marker",
+			0.1,
+			{ coverageToHappenedAt: "2026-05-10T02:05:00.000Z" },
+			Date.parse("2026-05-12T00:00:00.000Z"),
+		);
+		const createdAtOnly = hit(3, "lcm_record", "created", "timeline marker", 0.1, null, Date.parse("2026-05-12T00:00:00.000Z"));
+		const store = new FakeStore([record, summary, createdAtOnly], new Map());
+
+		const results = await retrieveMemory({
+			query: "timeline",
+			store,
+			embeddingProvider: null,
+			useSemantic: false,
+			scope: {
+				corpora: ["lcm_record", "lcm_summary"],
+				after: "2026-05-10T01:30:00.000Z",
+				before: "2026-05-10T02:30:00.000Z",
+			},
+			limit: 5,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1, 2],
+		);
+	});
+
 	it("can run lexical-only without embedding a query", async () => {
 		const lexical = hit(1, "lcm_summary", "summary-1", "migration summary", -1.2);
 		const store = new FakeStore([lexical], new Map([[undefined, [hit(2, "lcm_summary", "summary-2", "semantic", 0.1)]]]));

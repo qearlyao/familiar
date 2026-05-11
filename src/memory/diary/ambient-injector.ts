@@ -51,7 +51,8 @@ export class AmbientDiaryInjector {
 			if (!query || query.length < this.minQueryLength) return messages;
 			const now = this.now();
 			const lastInjectedAt = this.lastInjectedAtBySession.get(sessionKey);
-			if (lastInjectedAt !== undefined && this.throttleMs > 0 && now - lastInjectedAt < this.throttleMs) return messages;
+			if (lastInjectedAt !== undefined && this.throttleMs > 0 && now - lastInjectedAt < this.throttleMs)
+				return messages;
 			const hits = await retrieveAmbientDiary({
 				query,
 				store: this.store,

@@ -1,5 +1,5 @@
-import { lstat, readdir, rm } from "node:fs/promises";
 import type { Dirent } from "node:fs";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import type { Config } from "./config.js";
@@ -23,7 +23,11 @@ export async function runDataRetention(config: Config, now = Date.now()): Promis
 			config.data.transcripts.retentionDays,
 			now,
 		),
-		payloads: await removeOldFiles(resolve(config.workspace.dataDir, "payloads"), config.data.payloads.retentionDays, now),
+		payloads: await removeOldFiles(
+			resolve(config.workspace.dataDir, "payloads"),
+			config.data.payloads.retentionDays,
+			now,
+		),
 	};
 }
 

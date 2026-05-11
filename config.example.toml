@@ -23,6 +23,7 @@ thinking_level = "medium"
 
 [models]
 allow = [
+	"anthropic/claude-sonnet-4-5",
 	"anthropic/claude-opus-4-7",
 	"google/gemini-3.1-pro-preview",
 	"google/gemini-3-flash-preview",

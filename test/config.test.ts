@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { loadConfig } from "../src/config.js";
@@ -200,6 +201,17 @@ retention_days = 7
 		});
 	});
 
+	it("loads the shipped example config", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(await readFile(resolve("config.example.toml"), "utf8"));
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.agent.model, "anthropic/claude-sonnet-4-5");
+		assert.equal(config.memory.lcm.model, "anthropic/claude-sonnet-4-5");
+		assert.ok(config.models.allow.includes(config.memory.lcm.model));
+	});
+
 	it("loads memory overrides", async () => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
@@ -362,6 +374,33 @@ model = "google/gemini-3-flash-preview"
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.model is not in models\.allow/);
+	});
+
+	it("skips memory lcm model validation when lcm is disabled", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[models]
+allow = ["anthropic/claude-sonnet-4-5"]
+
+[memory.lcm]
+enabled = false
+model = "local-summary"
+leaf_chunk_tokens = 0
+leaf_target_tokens = 999999
+prompt = 42
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.lcm.enabled, false);
+		assert.equal(config.memory.lcm.model, "local-summary");
+		assert.equal(config.memory.lcm.provider, "");
+		assert.equal(config.memory.lcm.modelId, "");
+		assert.equal(config.memory.lcm.leafChunkTokens, 20000);
+		assert.equal(config.memory.lcm.leafTargetTokens, 2400);
+		assert.equal(config.memory.lcm.prompt, undefined);
 	});
 
 	it("allows custom memory embedding providers with explicit connection settings", async () => {

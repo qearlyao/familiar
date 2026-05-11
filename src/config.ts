@@ -95,7 +95,7 @@ export interface Config {
 		user: string;
 		memory: string;
 	};
-		media: {
+	media: {
 		generatedRetentionDays: number;
 	};
 	data: {
@@ -346,14 +346,18 @@ function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 }
 
 function parseProviderModelRef(value: string, path: string): { provider: string; modelId: string; key: string } {
+	const parsed = maybeParseProviderModelRef(value);
+	if (parsed) return parsed;
+	throw new Error(`Config value ${path} must be a provider/model id`);
+}
+
+function maybeParseProviderModelRef(value: string): { provider: string; modelId: string; key: string } | undefined {
 	const trimmed = value.trim();
 	const separator = trimmed.indexOf("/");
-	if (separator <= 0 || separator === trimmed.length - 1) {
-		throw new Error(`Config value ${path} must be a provider/model id`);
-	}
+	if (separator <= 0 || separator === trimmed.length - 1) return undefined;
 	const provider = trimmed.slice(0, separator).trim();
 	const modelId = trimmed.slice(separator + 1).trim();
-	if (!provider || !modelId) throw new Error(`Config value ${path} must be a provider/model id`);
+	if (!provider || !modelId) return undefined;
 	return { provider, modelId, key: `${provider}/${modelId}` };
 }
 
@@ -429,7 +433,10 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const usingLegacyAgentModel = !model;
 	let agentCacheRetentionRaw: unknown = agent.cache_retention;
 	if (agentCacheRetentionRaw === undefined && agent.cacheRetention !== undefined) {
-		warnOnce("agent.cacheRetention", "Config value agent.cacheRetention is deprecated; use agent.cache_retention instead.");
+		warnOnce(
+			"agent.cacheRetention",
+			"Config value agent.cacheRetention is deprecated; use agent.cache_retention instead.",
+		);
 		agentCacheRetentionRaw = agent.cacheRetention;
 	}
 	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
@@ -495,36 +502,45 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		"system_prompt",
 		"system_prompt_path",
 	]);
-	const memoryLcmModel = readConfigString(memoryLcm.model, agentModel, "memory.lcm.model");
-	const memoryLcmRef = parseProviderModelRef(memoryLcmModel, "memory.lcm.model");
-	if (modelAllow.length > 0 && !modelAllow.includes(memoryLcmRef.key)) {
-		throw new Error(`Config value memory.lcm.model is not in models.allow: ${memoryLcmRef.key}`);
+	const memoryLcmEnabled = readBoolean(memoryLcm.enabled, true, "memory.lcm.enabled");
+	let memoryLcmRef: { provider: string; modelId: string; key: string };
+	let memoryLcmBaseUrl: string | undefined;
+	let memoryLcmApiKeyEnv: string | undefined;
+	let memoryLcmFreshTailMaxTokens: number | undefined;
+	let memoryLcmLeafChunkTokens = 20_000;
+	let memoryLcmLeafTargetTokens = 2400;
+	let memoryLcmPromptOverrides: ReturnType<typeof readPromptOverrides> = {};
+	if (memoryLcmEnabled) {
+		const memoryLcmModel = readConfigString(memoryLcm.model, agentModel, "memory.lcm.model");
+		memoryLcmRef = parseProviderModelRef(memoryLcmModel, "memory.lcm.model");
+		if (modelAllow.length > 0 && !modelAllow.includes(memoryLcmRef.key)) {
+			throw new Error(`Config value memory.lcm.model is not in models.allow: ${memoryLcmRef.key}`);
+		}
+		memoryLcmBaseUrl =
+			resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId) ??
+			(usingLegacyAgentModel && memoryLcmRef.key === legacyModel ? baseUrl : undefined);
+		memoryLcmApiKeyEnv =
+			resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId) ??
+			(usingLegacyAgentModel && memoryLcmRef.provider === provider ? apiKeyEnv : undefined);
+		memoryLcmFreshTailMaxTokens = readOptionalInteger(
+			memoryLcm.fresh_tail_max_tokens,
+			"memory.lcm.fresh_tail_max_tokens",
+			1,
+		);
+		memoryLcmLeafChunkTokens = readInteger(memoryLcm.leaf_chunk_tokens, 20_000, "memory.lcm.leaf_chunk_tokens", 1);
+		memoryLcmLeafTargetTokens = readInteger(memoryLcm.leaf_target_tokens, 2400, "memory.lcm.leaf_target_tokens", 1);
+		if (memoryLcmLeafTargetTokens > memoryLcmLeafChunkTokens) {
+			throw new Error("Config value memory.lcm.leaf_target_tokens must be <= leaf_chunk_tokens");
+		}
+		if (memoryLcmFreshTailMaxTokens !== undefined && memoryLcmFreshTailMaxTokens > memoryLcmLeafChunkTokens) {
+			throw new Error("Config value memory.lcm.fresh_tail_max_tokens must be <= leaf_chunk_tokens");
+		}
+		memoryLcmPromptOverrides = readPromptOverrides(memoryLcm, workspacePath, "memory.lcm");
+	} else {
+		// Disabled LCM configs may keep stale summarizer-only fields; runtime checks enabled before using them.
+		const rawModel = typeof memoryLcm.model === "string" && memoryLcm.model.trim() ? memoryLcm.model : agentModel;
+		memoryLcmRef = maybeParseProviderModelRef(rawModel) ?? { provider: "", modelId: "", key: rawModel };
 	}
-	const memoryLcmBaseUrl =
-		resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId) ??
-		(usingLegacyAgentModel && memoryLcmRef.key === legacyModel ? baseUrl : undefined);
-	const memoryLcmApiKeyEnv =
-		resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId) ??
-		(usingLegacyAgentModel && memoryLcmRef.provider === provider ? apiKeyEnv : undefined);
-	const memoryLcmFreshTailMaxTokens = readOptionalInteger(
-		memoryLcm.fresh_tail_max_tokens,
-		"memory.lcm.fresh_tail_max_tokens",
-		1,
-	);
-	const memoryLcmLeafChunkTokens = readInteger(memoryLcm.leaf_chunk_tokens, 20_000, "memory.lcm.leaf_chunk_tokens", 1);
-	const memoryLcmLeafTargetTokens = readInteger(
-		memoryLcm.leaf_target_tokens,
-		2400,
-		"memory.lcm.leaf_target_tokens",
-		1,
-	);
-	if (memoryLcmLeafTargetTokens > memoryLcmLeafChunkTokens) {
-		throw new Error("Config value memory.lcm.leaf_target_tokens must be <= leaf_chunk_tokens");
-	}
-	if (memoryLcmFreshTailMaxTokens !== undefined && memoryLcmFreshTailMaxTokens > memoryLcmLeafChunkTokens) {
-		throw new Error("Config value memory.lcm.fresh_tail_max_tokens must be <= leaf_chunk_tokens");
-	}
-	const memoryLcmPromptOverrides = readPromptOverrides(memoryLcm, workspacePath, "memory.lcm");
 
 	return {
 		workspacePath,
@@ -654,8 +670,20 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					1.0,
 					"memory.ambient.weight_similarity",
 				),
-				weightValence: readNumberInRange(memoryAmbient.weight_valence, 0.08, "memory.ambient.weight_valence", 0, 10),
-				weightRecency: readNumberInRange(memoryAmbient.weight_recency, 0.08, "memory.ambient.weight_recency", 0, 10),
+				weightValence: readNumberInRange(
+					memoryAmbient.weight_valence,
+					0.08,
+					"memory.ambient.weight_valence",
+					0,
+					10,
+				),
+				weightRecency: readNumberInRange(
+					memoryAmbient.weight_recency,
+					0.08,
+					"memory.ambient.weight_recency",
+					0,
+					10,
+				),
 				weightIntensity: readNumberInRange(
 					memoryAmbient.weight_intensity,
 					0.1,
@@ -665,45 +693,46 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				),
 			},
 			lcm: {
-				enabled: readBoolean(memoryLcm.enabled, true, "memory.lcm.enabled"),
+				enabled: memoryLcmEnabled,
 				model: memoryLcmRef.key,
 				provider: memoryLcmRef.provider,
 				modelId: memoryLcmRef.modelId,
 				...(memoryLcmBaseUrl !== undefined ? { baseUrl: memoryLcmBaseUrl } : {}),
 				...(memoryLcmApiKeyEnv !== undefined ? { apiKeyEnv: memoryLcmApiKeyEnv } : {}),
-				contextThreshold: readFraction(memoryLcm.context_threshold, 0.75, "memory.lcm.context_threshold"),
-				freshTailCount: readInteger(memoryLcm.fresh_tail_count, 64, "memory.lcm.fresh_tail_count"),
+				contextThreshold: memoryLcmEnabled
+					? readFraction(memoryLcm.context_threshold, 0.75, "memory.lcm.context_threshold")
+					: 0.75,
+				freshTailCount: memoryLcmEnabled
+					? readInteger(memoryLcm.fresh_tail_count, 64, "memory.lcm.fresh_tail_count")
+					: 64,
 				...(memoryLcmFreshTailMaxTokens !== undefined ? { freshTailMaxTokens: memoryLcmFreshTailMaxTokens } : {}),
 				leafChunkTokens: memoryLcmLeafChunkTokens,
 				leafTargetTokens: memoryLcmLeafTargetTokens,
-				promptAwareEvictionEnabled: readBoolean(
-					memoryLcm.prompt_aware_eviction_enabled,
-					true,
-					"memory.lcm.prompt_aware_eviction_enabled",
-				),
-				condenseGroupSize: readInteger(memoryLcm.condense_group_size, 4, "memory.lcm.condense_group_size", 1),
-				maxSummaryDepth: readInteger(memoryLcm.max_summary_depth, 4, "memory.lcm.max_summary_depth", 1),
-				newSessionRetainDepth: readInteger(
-					memoryLcm.new_session_retain_depth,
-					2,
-					"memory.lcm.new_session_retain_depth",
-					-1,
-				),
-				maxRounds: readInteger(memoryLcm.max_rounds, 10, "memory.lcm.max_rounds", 1),
-				cacheTtlMs: readInteger(memoryLcm.cache_ttl_ms, 300_000, "memory.lcm.cache_ttl_ms", 1),
-				cacheTouchSlackMs: readInteger(
-					memoryLcm.cache_touch_slack_ms,
-					30_000,
-					"memory.lcm.cache_touch_slack_ms",
-					0,
-				),
-				criticalOverflowTokens: readInteger(
-					memoryLcm.critical_overflow_tokens,
-					8000,
-					"memory.lcm.critical_overflow_tokens",
-					1,
-				),
-				timeoutMs: readInteger(memoryLcm.timeout_ms, 60_000, "memory.lcm.timeout_ms", 1),
+				promptAwareEvictionEnabled: memoryLcmEnabled
+					? readBoolean(memoryLcm.prompt_aware_eviction_enabled, true, "memory.lcm.prompt_aware_eviction_enabled")
+					: true,
+				condenseGroupSize: memoryLcmEnabled
+					? readInteger(memoryLcm.condense_group_size, 4, "memory.lcm.condense_group_size", 1)
+					: 4,
+				maxSummaryDepth: memoryLcmEnabled
+					? readInteger(memoryLcm.max_summary_depth, 4, "memory.lcm.max_summary_depth", 1)
+					: 4,
+				newSessionRetainDepth: memoryLcmEnabled
+					? readInteger(memoryLcm.new_session_retain_depth, 2, "memory.lcm.new_session_retain_depth", -1)
+					: 2,
+				maxRounds: memoryLcmEnabled ? readInteger(memoryLcm.max_rounds, 10, "memory.lcm.max_rounds", 1) : 10,
+				cacheTtlMs: memoryLcmEnabled
+					? readInteger(memoryLcm.cache_ttl_ms, 300_000, "memory.lcm.cache_ttl_ms", 1)
+					: 300_000,
+				cacheTouchSlackMs: memoryLcmEnabled
+					? readInteger(memoryLcm.cache_touch_slack_ms, 30_000, "memory.lcm.cache_touch_slack_ms", 0)
+					: 30_000,
+				criticalOverflowTokens: memoryLcmEnabled
+					? readInteger(memoryLcm.critical_overflow_tokens, 8000, "memory.lcm.critical_overflow_tokens", 1)
+					: 8000,
+				timeoutMs: memoryLcmEnabled
+					? readInteger(memoryLcm.timeout_ms, 60_000, "memory.lcm.timeout_ms", 1)
+					: 60_000,
 				...memoryLcmPromptOverrides,
 			},
 		},

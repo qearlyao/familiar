@@ -16,15 +16,15 @@ import type {
 	LcmRetentionReport,
 	LcmSegmentInput,
 	LcmSegmentStatus,
-	LcmSummaryParentSnapshot,
 	LcmSourceProvenance,
 	LcmSummaryInput,
+	LcmSummaryParentSnapshot,
 	LcmSummarySnapshot,
 	LcmSummarySourceInput,
 	LcmSummaryStatus,
+	StoredLcmContextItem,
 	StoredLcmRecord,
 	StoredLcmSegment,
-	StoredLcmContextItem,
 	StoredLcmSessionState,
 	StoredLcmSummary,
 	StoredLcmSummarySource,
@@ -303,7 +303,9 @@ export class LcmStore {
 
 	getSummaryParents(summaryId: number): number[] {
 		const rows = this.db
-			.prepare("SELECT parent_summary_id FROM lcm_summary_parents WHERE summary_id = ? ORDER BY ord, parent_summary_id")
+			.prepare(
+				"SELECT parent_summary_id FROM lcm_summary_parents WHERE summary_id = ? ORDER BY ord, parent_summary_id",
+			)
 			.all(summaryId) as { parent_summary_id: number }[];
 		return rows.map((row) => row.parent_summary_id);
 	}
@@ -357,7 +359,9 @@ export class LcmStore {
 
 	getSessionState(sessionKey: string): StoredLcmSessionState | null {
 		const row = this.db
-			.prepare("SELECT session_key, compaction_debt, cache_touched_at, updated_at FROM lcm_session_state WHERE session_key = ?")
+			.prepare(
+				"SELECT session_key, compaction_debt, cache_touched_at, updated_at FROM lcm_session_state WHERE session_key = ?",
+			)
 			.get(sessionKey) as LcmSessionStateRow | undefined;
 		return row ? sessionStateFromRow(row) : null;
 	}
@@ -378,7 +382,12 @@ export class LcmStore {
 					cache_touched_at = excluded.cache_touched_at,
 					updated_at = excluded.updated_at`,
 			)
-			.run(input.sessionKey, compactionDebt, input.cacheTouchedAt, input.updatedAt ?? input.cacheTouchedAt ?? Date.now());
+			.run(
+				input.sessionKey,
+				compactionDebt,
+				input.cacheTouchedAt,
+				input.updatedAt ?? input.cacheTouchedAt ?? Date.now(),
+			);
 	}
 
 	clearSessionState(sessionKey: string): void {
@@ -727,9 +736,9 @@ function runSummaryInsertTransaction(
 	insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
 ): number {
 	store.ensureSegment({ id: normalized.segmentId });
-	const existing = store.db
-		.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?")
-		.get(normalized.summaryKey) as { id: number } | undefined;
+	const existing = store.db.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?").get(normalized.summaryKey) as
+		| { id: number }
+		| undefined;
 	if (existing) return existing.id;
 	return insertSummaryPrepared(store.db, normalized, insertEdges);
 }
@@ -947,7 +956,8 @@ function buildSummaryParentSnapshot(
 		!snapshot &&
 		row.covers_from_record_id !== null &&
 		row.covers_to_record_id !== null &&
-		db.prepare("SELECT 1 FROM lcm_records WHERE segment_id = ? AND id BETWEEN ? AND ? LIMIT 1")
+		db
+			.prepare("SELECT 1 FROM lcm_records WHERE segment_id = ? AND id BETWEEN ? AND ? LIMIT 1")
 			.get(row.segment_id, row.covers_from_record_id, row.covers_to_record_id)
 	) {
 		snapshot = buildSummarySnapshot(db, row);

@@ -3,7 +3,7 @@ import { type Static, Type } from "typebox";
 
 import type { EmbeddingProvider } from "./index/embedding-provider.js";
 import { type MemoryRetrievalHit, retrieveMemory } from "./index/retrieval.js";
-import { MemoryIndexStore, type StoredMemoryChunk } from "./index/store.js";
+import type { MemoryIndexStore, StoredMemoryChunk } from "./index/store.js";
 
 const DEFAULT_RECALL_LIMIT = 8;
 const MAX_TEXT_PREVIEW_CHARS = 700;

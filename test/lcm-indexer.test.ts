@@ -9,6 +9,7 @@ import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import {
+	indexLcmRecords,
 	indexLcmSummaries,
 	LCM_RECORD_CORPUS,
 	LCM_SUMMARY_CORPUS,
@@ -190,6 +191,62 @@ describe("LCM indexer", () => {
 			assert.equal(hits[0]?.chunk.metadata?.depth, 1);
 			assert.equal(memoryStore.searchLexical("placeholder", { corpus: LCM_SUMMARY_CORPUS, limit: 10 }).length, 0);
 			assert.ok(lcmStore.getSummary(placeholderId));
+		} finally {
+			lcmStore.close();
+			memoryStore.close();
+		}
+	});
+
+	it("indexes LCM record and summary event-time metadata for recall filters", async () => {
+		const lcmStore = new LcmStore({ path: await tempDbPath("familiar-lcm-time-indexer-", "lcm.sqlite") });
+		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-time-indexer-memory-", "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
+		try {
+			const first = lcmStore.insertRecord({
+				segmentId: "seg-time",
+				kind: "user",
+				text: "first timed record",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: { sourceType: "manual", sourceRef: "record:first" },
+			});
+			const second = lcmStore.insertRecord({
+				segmentId: "seg-time",
+				kind: "assistant",
+				text: "second timed record",
+				happenedAt: "2026-05-10T01:05:00.000Z",
+				source: { sourceType: "manual", sourceRef: "record:second" },
+			});
+			const summaryId = lcmStore.insertSummary({
+				segmentId: "seg-time",
+				depth: 1,
+				status: "ready",
+				text: "timed coverage summary",
+				coversFromRecordId: first,
+				coversToRecordId: second,
+				source: { sourceType: "manual", sourceRef: "summary:timed" },
+				metadata: {
+					coverageFromHappenedAt: "2026-05-10T01:00:00.000Z",
+					coverageToHappenedAt: "2026-05-10T01:05:00.000Z",
+					timestamp: "2026-05-10T01:05:00.000Z",
+				},
+			});
+
+			const firstRecord = lcmStore.getRecord(first);
+			assert.ok(firstRecord);
+			await indexLcmRecords({ indexer, records: [firstRecord] });
+			const summary = lcmStore.getSummary(summaryId);
+			assert.ok(summary);
+			await indexLcmSummaries({ indexer, summaries: [summary] });
+
+			const summaryHit = memoryStore.searchLexical("coverage", { corpus: LCM_SUMMARY_CORPUS, limit: 10 })[0];
+			assert.equal(summaryHit?.chunk.metadata?.coverageFromHappenedAt, "2026-05-10T01:00:00.000Z");
+			assert.equal(summaryHit?.chunk.metadata?.coverageToHappenedAt, "2026-05-10T01:05:00.000Z");
+			assert.equal(summaryHit?.chunk.metadata?.timestamp, "2026-05-10T01:05:00.000Z");
+			const recordHit = memoryStore.searchLexical("first", { corpus: LCM_RECORD_CORPUS, limit: 10 })[0];
+			assert.equal(recordHit?.chunk.sourceId, lcmRecordIndexSourceId(first));
+			assert.equal(recordHit?.chunk.metadata?.timestamp, "2026-05-10T01:00:00.000Z");
+			assert.equal(recordHit?.chunk.metadata?.happenedAt, "2026-05-10T01:00:00.000Z");
 		} finally {
 			lcmStore.close();
 			memoryStore.close();

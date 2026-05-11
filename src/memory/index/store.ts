@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import type { Config } from "../../config.js";
 import { normalizeFtsMatchQuery } from "./fts-query.js";
 import { readMeta, runMemoryIndexMigrations } from "./schema.js";
-import { type VectorCapability } from "./vec.js";
+import type { VectorCapability } from "./vec.js";
 import { cosineDistance, decodeVector, encodeVector } from "./vector-codec.js";
 
 export interface MemoryChunkInput {
@@ -243,14 +243,14 @@ export class MemoryIndexStore {
 		if (query.length !== this.embeddingDimensions) {
 			throw new Error(`Query vector dimension mismatch: expected ${this.embeddingDimensions}, got ${query.length}`);
 		}
-		if (this.vectorCapability() === "sqlite-vec") return this.searchSemanticVec(query, normalized);
+		// memory_vec does not carry corpus metadata, so sqlite-vec cannot prefilter
+		// corpus-scoped KNN. Use the linear path to keep scoped nearest neighbors exact.
+		if (this.vectorCapability() === "sqlite-vec" && !normalized.corpus)
+			return this.searchSemanticVec(query, normalized);
 		return this.searchSemanticLinear(query, normalized);
 	}
 
-	private searchSemanticVec(
-		query: Float32Array,
-		normalized: { limit: number; corpus?: string },
-	): MemorySearchHit[] {
+	private searchSemanticVec(query: Float32Array, normalized: { limit: number; corpus?: string }): MemorySearchHit[] {
 		const params: unknown[] = [encodeVector(query), normalized.limit];
 		if (normalized.corpus) params.push(normalized.corpus);
 		const corpusFilter = normalized.corpus ? "WHERE c.corpus = ?" : "";
@@ -271,7 +271,10 @@ export class MemoryIndexStore {
 		return rows.map((row) => ({ id: row.id, score: row.score, chunk: rowToChunk(row) }));
 	}
 
-	private searchSemanticLinear(query: Float32Array, normalized: { limit: number; corpus?: string }): MemorySearchHit[] {
+	private searchSemanticLinear(
+		query: Float32Array,
+		normalized: { limit: number; corpus?: string },
+	): MemorySearchHit[] {
 		const rows = this.db
 			.prepare(
 				normalized.corpus
@@ -491,7 +494,9 @@ export class MemoryIndexStore {
 			.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)")
 			.run(id, item.text, item.snippet);
 		if (this.vectorCapability() === "sqlite-vec") {
-			this.db.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)").run(id, encodeVector(item.embedding));
+			this.db
+				.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)")
+				.run(id, encodeVector(item.embedding));
 		}
 		this.insertSourceMapping(id, item);
 		return id;
@@ -529,7 +534,6 @@ export class MemoryIndexStore {
 	private deleteFtsRow(id: number): void {
 		this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(id);
 	}
-
 }
 
 interface NormalizedChunkInput {

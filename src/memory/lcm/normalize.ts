@@ -1,5 +1,11 @@
 import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../../chat-log.js";
-import type { LcmAttachmentNote, LcmRecordInput, LcmRecordPart, LcmSegmentInput, LcmSourceProvenance } from "./types.js";
+import type {
+	LcmAttachmentNote,
+	LcmRecordInput,
+	LcmRecordPart,
+	LcmSegmentInput,
+	LcmSourceProvenance,
+} from "./types.js";
 
 export interface NormalizeChatRecordsOptions {
 	segmentId: string;

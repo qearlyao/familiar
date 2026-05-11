@@ -235,6 +235,76 @@ describe("LCM condense", () => {
 			store.close();
 		}
 	});
+
+	it("rehydrated condensed summary covers parent raw sources after restart", async () => {
+		const store = new LcmStore({ path: await tempDbPath() });
+		let now = 100_000;
+		const createTransformer = () =>
+			new LcmContextTransformer({
+				settings: {
+					enabled: true,
+					contextThreshold: 0.75,
+					freshTailCount: 1,
+					leafChunkTokens: 6,
+					leafTargetTokens: 8,
+					condenseGroupSize: 4,
+					maxSummaryDepth: 4,
+					maxRounds: 1,
+					cacheTtlMs: 300_000,
+					cacheTouchSlackMs: 30_000,
+					criticalOverflowTokens: 8000,
+					promptAwareEvictionEnabled: true,
+				},
+				lcmStore: store,
+				indexer: nullIndexer(),
+				summarizer: {
+					async summarizeLeaf(input) {
+						if (input.text.includes("<summary")) return "condensed coverage survives restart";
+						return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;
+					},
+				},
+				segmentManager: new LcmSegmentManager({
+					lcmStore: store,
+					memoryStore: nullMemoryStore(),
+					indexer: nullIndexer(),
+					newSessionRetainDepth: 2,
+				}),
+				now: () => now,
+			});
+		try {
+			let transformer = createTransformer();
+			const history: AgentMessage[] = [];
+			for (let index = 0; index < 5; index += 1) {
+				now += 300_000;
+				history.push({ role: "user", content: `old detail ${index} ${"x".repeat(40)}`, timestamp: index + 1 });
+				await transformer.transformLcmContext([...history], undefined, {
+					sessionKey: "room-runtime-restart",
+					sessionId: "session-runtime",
+					model: { contextWindow: 10_000 } as any,
+				});
+			}
+			assert.equal(store.listSummaries("room-runtime-restart:seg-1").filter((summary) => summary.depth === 2).length, 1);
+
+			transformer = createTransformer();
+			const afterRestart = await transformer.transformLcmContext(
+				[...history, { role: "user", content: "fresh detail after restart", timestamp: 6 }],
+				undefined,
+				{
+					sessionKey: "room-runtime-restart",
+					sessionId: "session-runtime",
+					model: { contextWindow: 10_000 } as any,
+				},
+			);
+			const text = afterRestart.map(contentText).join("\n");
+
+			assert.match(text, /condensed coverage survives restart/);
+			for (let index = 0; index < 4; index += 1) assert.doesNotMatch(text, new RegExp(`old detail ${index}`));
+			assert.match(text, /old detail 4/);
+			assert.match(text, /fresh detail after restart/);
+		} finally {
+			store.close();
+		}
+	});
 });
 
 function nullIndexer() {

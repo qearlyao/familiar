@@ -84,6 +84,7 @@ export function lcmRecordToIndexInput(record: StoredLcmRecord): MemoryChunkIndex
 			id: record.id,
 			kind: record.kind,
 			segmentId: record.segmentId,
+			timestamp: record.happenedAt,
 			happenedAt: record.happenedAt,
 			sessionId: record.sessionId,
 			channelKey: record.channelKey,
@@ -112,6 +113,7 @@ export function lcmSummaryToIndexInput(summary: StoredLcmSummary): MemoryChunkIn
 			pinned: summary.pinned,
 			coversFromRecordId: summary.coversFromRecordId,
 			coversToRecordId: summary.coversToRecordId,
+			...summaryCoverageMetadata(summary),
 			source: summary.source,
 		},
 	};
@@ -123,4 +125,53 @@ function lcmRecordSnippet(record: StoredLcmRecord): string {
 
 function lcmSummarySnippet(summary: StoredLcmSummary): string {
 	return `[d${summary.depth}] ${summary.text}`.slice(0, 280);
+}
+
+function summaryCoverageMetadata(summary: StoredLcmSummary): Record<string, string> {
+	const existingFrom = metadataString(summary.metadata?.coverageFromHappenedAt);
+	const existingTo =
+		metadataString(summary.metadata?.coverageToHappenedAt) ?? metadataString(summary.metadata?.timestamp);
+	const from = existingFrom ?? firstSnapshotHappenedAt(summary.snapshot);
+	const to = existingTo ?? lastSnapshotHappenedAt(summary.snapshot);
+	return {
+		...(from ? { coverageFromHappenedAt: from } : {}),
+		...(to ? { coverageToHappenedAt: to, timestamp: to } : {}),
+	};
+}
+
+function metadataString(value: unknown): string | null {
+	return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function firstSnapshotHappenedAt(snapshot: StoredLcmSummary["snapshot"]): string | null {
+	if (!Array.isArray(snapshot)) return null;
+	for (const item of snapshot) {
+		if (isSnapshotRecord(item) && isIsoTimeString(item.happened_at)) return item.happened_at;
+		const nested = isParentSnapshot(item) ? firstSnapshotHappenedAt(item.snapshot) : null;
+		if (nested) return nested;
+	}
+	return null;
+}
+
+function lastSnapshotHappenedAt(snapshot: StoredLcmSummary["snapshot"]): string | null {
+	if (!Array.isArray(snapshot)) return null;
+	for (let index = snapshot.length - 1; index >= 0; index -= 1) {
+		const item = snapshot[index];
+		if (isSnapshotRecord(item) && isIsoTimeString(item.happened_at)) return item.happened_at;
+		const nested = isParentSnapshot(item) ? lastSnapshotHappenedAt(item.snapshot) : null;
+		if (nested) return nested;
+	}
+	return null;
+}
+
+function isSnapshotRecord(item: unknown): item is { happened_at: string } {
+	return typeof item === "object" && item !== null && "happened_at" in item;
+}
+
+function isParentSnapshot(item: unknown): item is { snapshot: StoredLcmSummary["snapshot"] } {
+	return typeof item === "object" && item !== null && "snapshot" in item;
+}
+
+function isIsoTimeString(value: unknown): value is string {
+	return typeof value === "string" && Number.isFinite(Date.parse(value));
 }

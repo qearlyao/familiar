@@ -208,13 +208,30 @@ function matchesTimeScope(chunk: StoredMemoryChunk, scope: MemoryRetrievalScope 
 }
 
 function chunkTimestamp(chunk: StoredMemoryChunk): number | null {
-	const raw = chunk.metadata?.timestamp;
+	const raw = firstMetadataValue(chunk.metadata, [
+		"timestamp",
+		"happenedAt",
+		"coverageToHappenedAt",
+		"coverageFromHappenedAt",
+	]);
 	if (typeof raw === "string") {
 		const parsed = Date.parse(raw);
 		if (Number.isFinite(parsed)) return parsed;
 	}
 	if (typeof raw === "number" && Number.isFinite(raw)) return raw < 10_000_000_000 ? raw * 1000 : raw;
 	return chunk.createdAt < 10_000_000_000 ? chunk.createdAt * 1000 : chunk.createdAt;
+}
+
+function firstMetadataValue(
+	metadata: StoredMemoryChunk["metadata"],
+	keys: readonly string[],
+): string | number | null | undefined {
+	if (!metadata) return null;
+	for (const key of keys) {
+		const value = metadata[key];
+		if (typeof value === "string" || typeof value === "number") return value;
+	}
+	return null;
 }
 
 function parseIsoTime(value: string | undefined): number | null {

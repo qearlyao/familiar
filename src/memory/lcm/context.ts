@@ -80,9 +80,7 @@ export function createAgentMessageFingerprint(message: AgentMessage, _index: num
 			: typeof id === "string" && id.trim()
 				? { role: (message as { role?: string }).role ?? null, id, text }
 				: { text };
-	return createHash("sha256")
-		.update(JSON.stringify(payload))
-		.digest("hex");
+	return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
 export function createRawContextItems(messages: readonly AgentMessage[]): LcmContextRawItem[] {
@@ -219,7 +217,10 @@ function selectLeafChunk(
 	if (records.length === 0) return selectOldestLeafChunk(items, leafChunkTokens);
 	const scored = targetRanges.map((range) => ({
 		...range,
-		score: range.items.reduce((total, item) => total + (item.record ? scoreEvictable(item.record, promptText, records) : 0), 0),
+		score: range.items.reduce(
+			(total, item) => total + (item.record ? scoreEvictable(item.record, promptText, records) : 0),
+			0,
+		),
 	}));
 	scored.sort((a, b) => a.score - b.score || a.startIndex - b.startIndex);
 	return scored[0]?.items ?? [];
@@ -326,17 +327,17 @@ export function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]):
 	return selected;
 }
 
-function coverSummaryParents(summary: StoredLcmSummary, summaries: readonly StoredLcmSummary[], covered: Set<number>): void {
+function coverSummaryParents(
+	summary: StoredLcmSummary,
+	summaries: readonly StoredLcmSummary[],
+	covered: Set<number>,
+): void {
 	for (const parentId of summary.parents) {
 		if (covered.has(parentId)) continue;
 		covered.add(parentId);
 		const parent = summaries.find((candidate) => candidate.id === parentId);
 		if (parent) coverSummaryParents(parent, summaries, covered);
 	}
-}
-
-function compareRecords(a: StoredLcmRecord, b: StoredLcmRecord): number {
-	return Date.parse(a.happenedAt) - Date.parse(b.happenedAt) || a.id - b.id;
 }
 
 function compareSummaries(a: StoredLcmSummary, b: StoredLcmSummary): number {
@@ -458,11 +459,7 @@ function truncateForSummary(text: string, maxLength = 2_000): string {
 }
 
 function escapeXmlAttribute(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/"/g, "&quot;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;");
+	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function messageTextForFingerprint(message: AgentMessage): string {

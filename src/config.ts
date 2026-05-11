@@ -119,7 +119,7 @@ export interface Config {
 		diariesDir: string;
 		archiveDir: string;
 		embedding: {
-			format: MemoryEmbeddingFormat;
+			format?: MemoryEmbeddingFormat;
 			api: MemoryEmbeddingFormat;
 			provider: string;
 			model: string;
@@ -486,6 +486,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		"max_summary_depth",
 		"new_session_retain_depth",
 		"max_rounds",
+		"cache_ttl_ms",
+		"cache_touch_slack_ms",
+		"critical_overflow_tokens",
 		"timeout_ms",
 		"prompt",
 		"prompt_path",

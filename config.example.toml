@@ -130,6 +130,12 @@ leaf_target_tokens = 2400
 # and positive values keep summaries at that depth or higher; 2 keeps d2+.
 new_session_retain_depth = 2
 max_rounds = 10
+# Milliseconds before cached LCM summaries expire.
+cache_ttl_ms = 300000
+# Minimum remaining TTL before touching cached LCM summaries.
+cache_touch_slack_ms = 30000
+# Token overflow above which LCM runs even when context_threshold has not been reached.
+critical_overflow_tokens = 8000
 timeout_ms = 60000
 # prompt = "Inline summarization prompt override."
 # prompt_path = "prompts/lcm-summary.md"

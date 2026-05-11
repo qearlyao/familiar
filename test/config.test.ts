@@ -431,6 +431,24 @@ surprise = "nope"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.surprise/);
 	});
 
+	it("loads memory lcm cache and overflow settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[memory.lcm]
+cache_ttl_ms = 123456
+cache_touch_slack_ms = 23456
+critical_overflow_tokens = 3456
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.memory.lcm.cacheTtlMs, 123456);
+		assert.equal(config.memory.lcm.cacheTouchSlackMs, 23456);
+		assert.equal(config.memory.lcm.criticalOverflowTokens, 3456);
+	});
+
 	it("rejects conflicting memory lcm prompts", async () => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(

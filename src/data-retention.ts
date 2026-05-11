@@ -1,4 +1,5 @@
 import { lstat, readdir, rm } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join, resolve } from "node:path";
 
 import type { Config } from "./config.js";
@@ -45,7 +46,7 @@ async function removeOldFiles(root: string, retentionDays: number, now: number):
 }
 
 async function listFiles(root: string): Promise<string[]> {
-	let entries: Awaited<ReturnType<typeof readdir>>;
+	let entries: Dirent<string>[];
 	try {
 		entries = await readdir(root, { withFileTypes: true });
 	} catch (error) {

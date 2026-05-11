@@ -5,8 +5,18 @@ import { resolve } from "node:path";
 import { type Config, loadConfig } from "../src/config.js";
 
 type ConfigOverrides = Partial<{
-	[K in keyof Config]: Partial<Config[K]>;
-}>;
+	[K in Exclude<keyof Config, "data" | "memory">]: Partial<Config[K]>;
+}> & {
+	data?: {
+		chat?: Partial<Config["data"]["chat"]>;
+		transcripts?: Partial<Config["data"]["transcripts"]>;
+		payloads?: Partial<Config["data"]["payloads"]>;
+	};
+	memory?: Omit<Partial<Config["memory"]>, "embedding" | "lcm"> & {
+		embedding?: Partial<Config["memory"]["embedding"]>;
+		lcm?: Partial<Config["memory"]["lcm"]>;
+	};
+};
 
 export async function createWorkspace(configToml: string): Promise<string> {
 	const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-test-"));
@@ -61,6 +71,11 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			},
 			persona: { ...config.persona, ...overrides.persona },
 			media: { ...config.media, ...overrides.media },
+			data: {
+				chat: { ...config.data.chat, ...overrides.data?.chat },
+				transcripts: { ...config.data.transcripts, ...overrides.data?.transcripts },
+				payloads: { ...config.data.payloads, ...overrides.data?.payloads },
+			},
 			workspace: { ...config.workspace, ...overrides.workspace, dataDir },
 			memory: {
 				...config.memory,

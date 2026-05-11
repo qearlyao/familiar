@@ -240,7 +240,7 @@ describe("memory doctor and operator", () => {
 			service.lcmStore.closeSegment("seg-closed");
 			insertRecord(service, "seg-active", "active raw");
 
-			await __memoryOperatorTest.prune(service, { retainDepth: 0, yes: true });
+			await __memoryOperatorTest.prune(service, { retainDepth: 0, yes: true, vacuum: false });
 
 			assert.deepEqual(
 				service.lcmStore.listRecords().map((record) => record.text),

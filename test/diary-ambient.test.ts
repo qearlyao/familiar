@@ -128,7 +128,7 @@ describe("ambient diary retrieval", () => {
 			minQueryLength: 8,
 			throttleSeconds: 0,
 		});
-		const messages: AgentMessage[] = [{ role: "user", content: " short " }];
+		const messages: AgentMessage[] = [{ role: "user", content: " short ", timestamp: 0 }];
 
 		const next = await injector.inject(messages, undefined, "session-a");
 
@@ -148,7 +148,7 @@ describe("ambient diary retrieval", () => {
 			throttleSeconds: 30,
 			now: () => now,
 		});
-		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please" }];
+		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];
 
 		const first = await injector.inject(messages, undefined, "session-a");
 		now += 10_000;

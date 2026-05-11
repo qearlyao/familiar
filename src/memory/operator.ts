@@ -10,6 +10,7 @@ import { applyDoctorFixes, type DoctorFinding, runDoctor } from "./doctor.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
 import { createEmbeddingProvider, type EmbeddingProvider } from "./index/embedding-provider.js";
 import type { MemoryIndexStore } from "./index/store.js";
+import { type BackfillReport, backfillFromChatLogs } from "./lcm/backfill.js";
 import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
 import { type MemoryOperatorService, MemoryService } from "./service.js";
@@ -31,6 +32,11 @@ export async function runMemoryOperator(config: FamiliarConfig, argv: string[]):
 		case "reindex":
 			await withOperatorService(config, async (service) => reindex(config, service, parseReindexArgs(args)));
 			return;
+		case "backfill":
+			await withOperatorService(config, async (service) =>
+				backfill(config, service, parseBackfillArgs(config, args)),
+			);
+			return;
 		case "prune":
 			await withOperatorService(config, async (service) => prune(service, await parsePruneArgs(args)));
 			return;
@@ -48,6 +54,7 @@ export function memoryHelp(): string {
 		"  familiar memory <workspace> status [--json]",
 		"  familiar memory <workspace> doctor [--clean]",
 		"  familiar memory <workspace> reindex [--corpus <name>] [--force]",
+		"  familiar memory <workspace> backfill [--channels <ch1,ch2>] [--data-dir <path>] [--dry-run]",
 		"  familiar memory <workspace> prune --new-session-retain-depth <N> [--yes]",
 		"  familiar memory <workspace> backup <out-dir>",
 	].join("\n");
@@ -174,6 +181,26 @@ async function reindex(
 	console.log(`Reindexed ${chunks} chunk(s)`);
 }
 
+async function backfill(
+	config: FamiliarConfig,
+	service: MemoryOperatorService,
+	options: { dataDir: string; channels?: string[]; dryRun: boolean },
+): Promise<void> {
+	const embeddingProvider = createEmbeddingProvider(config);
+	const report = await backfillFromChatLogs(
+		{
+			lcmStore: service.lcmStore,
+			memoryStore: service.memoryStore,
+			indexer: service.indexer,
+			embeddingProvider,
+			config,
+		},
+		options,
+	);
+	printBackfillReport(report);
+	if (report.errors.length > 0) process.exitCode = 1;
+}
+
 async function prune(service: MemoryOperatorService, options: { retainDepth: number; yes: boolean }): Promise<void> {
 	if (!options.yes && !(await confirm(`Prune closed LCM raw records with retain depth ${options.retainDepth}?`))) {
 		console.log("Prune cancelled");
@@ -242,6 +269,39 @@ function parseReindexArgs(args: string[]): { corpus?: string; force: boolean } {
 		throw new Error(`Unknown reindex argument: ${arg}`);
 	}
 	return { corpus, force };
+}
+
+function parseBackfillArgs(
+	config: FamiliarConfig,
+	args: string[],
+): { dataDir: string; channels?: string[]; dryRun: boolean } {
+	let dataDir = config.workspace.dataDir;
+	let channels: string[] | undefined;
+	let dryRun = false;
+	for (let index = 0; index < args.length; index++) {
+		const arg = args[index];
+		if (arg === "--dry-run") {
+			dryRun = true;
+			continue;
+		}
+		if (arg === "--data-dir") {
+			const raw = args[++index];
+			if (!raw) throw new Error("Missing value for --data-dir");
+			dataDir = resolve(raw);
+			continue;
+		}
+		if (arg === "--channels") {
+			const raw = args[++index];
+			if (!raw) throw new Error("Missing value for --channels");
+			channels = raw
+				.split(",")
+				.map((channel) => channel.trim())
+				.filter(Boolean);
+			continue;
+		}
+		throw new Error(`Unknown backfill argument: ${arg}`);
+	}
+	return { dataDir, channels, dryRun };
 }
 
 async function parsePruneArgs(args: string[]): Promise<{ retainDepth: number; yes: boolean }> {
@@ -342,6 +402,23 @@ function printProgress(chunks: number): void {
 	if (chunks > 0 && chunks % 100 === 0) console.log(`Reindexed ${chunks} chunk(s)`);
 }
 
+function printBackfillReport(report: BackfillReport): void {
+	const rows = [
+		["chatFilesProcessed", report.chatFilesProcessed],
+		["transcriptFilesProcessed", report.transcriptFilesProcessed],
+		["recordsInserted", report.recordsInserted],
+		["recordsSkippedDuplicate", report.recordsSkippedDuplicate],
+		["segmentsCreated", report.segmentsCreated],
+		["summariesInserted", report.summariesInserted],
+		["indexedChunks", report.indexedChunks],
+		["errors", report.errors.length],
+	] as const;
+	const width = Math.max(...rows.map(([field]) => field.length));
+	console.log("Memory backfill summary");
+	for (const [field, value] of rows) console.log(`${field.padEnd(width)}  ${value}`);
+	for (const error of report.errors) console.log(`error  ${error}`);
+}
+
 async function confirm(question: string): Promise<boolean> {
 	const rl = createInterface({ input, output });
 	try {
@@ -388,6 +465,7 @@ export const __memoryOperatorTest = {
 	reindex,
 	prune,
 	backup,
+	backfill,
 	lcmRecordIndexSourceId,
 	lcmSummaryIndexSourceId,
 };

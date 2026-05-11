@@ -642,7 +642,7 @@ shipped. Fix before adding more surface area.
 - [x] Add LCM integrity/doctor/clean checks for dangling summary sources, stale
   shared-index rows, broken context ordering, missing source records, and
   orphan empty segments.
-- Add startup/backfill sweep over existing `data/chat` and `data/transcripts`,
+- [x] Add startup/backfill sweep over existing `data/chat` and `data/transcripts`,
   plus a transcript source adapter for normalized LCM ingestion. Pair with
   event-loop yielding (1024-row chunks) so backfill cannot starve Discord/HTTP
   loops.

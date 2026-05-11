@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import Database from "better-sqlite3";
 
 import { LcmStore } from "../src/memory/lcm/store.js";
-import type { LcmSourceProvenance } from "../src/memory/lcm/types.js";
+import type { LcmSourceProvenance, LcmSummarySnapshot } from "../src/memory/lcm/types.js";
 
 async function tempDbPath(): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-lcm-"));
@@ -31,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 4);
+			assert.equal(store.schemaVersion(), 5);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -268,6 +268,81 @@ describe("LcmStore", () => {
 		}
 	});
 
+	it("insertSummary with parents populates lcm_summary_parents and getSummaryParents returns them", async () => {
+		const store = await openStore();
+		try {
+			const first = store.insertSummary({
+				segmentId: "seg-parents",
+				depth: 1,
+				status: "ready",
+				text: "first child summary",
+				source: { sourceType: "manual", sourceRef: "sum:first" },
+			});
+			const second = store.insertSummary({
+				segmentId: "seg-parents",
+				depth: 1,
+				status: "ready",
+				text: "second child summary",
+				source: { sourceType: "manual", sourceRef: "sum:second" },
+			});
+			const parent = store.insertSummary({
+				segmentId: "seg-parents",
+				depth: 2,
+				status: "ready",
+				text: "condensed parent",
+				source: { sourceType: "manual", sourceRef: "sum:parent" },
+				parents: [first, second],
+			});
+
+			assert.deepEqual(store.getSummaryParents(parent), [first, second]);
+			assert.deepEqual(store.getSummary(parent)?.parents, [first, second]);
+			assert.deepEqual(store.getSummaryChildren(first), [parent]);
+			assert.throws(
+				() =>
+					store.insertSummary({
+						segmentId: "seg-parents",
+						depth: 2,
+						status: "ready",
+						text: "bad parent",
+						source: { sourceType: "manual", sourceRef: "sum:bad" },
+						parents: [9999],
+					}),
+				/parent does not exist/,
+			);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("deleting a parent summary cascades through lcm_summary_parents", async () => {
+		const store = await openStore();
+		try {
+			const child = store.insertSummary({
+				segmentId: "seg-cascade-parents",
+				depth: 1,
+				status: "ready",
+				text: "child summary",
+				source: { sourceType: "manual", sourceRef: "sum:child" },
+			});
+			const parent = store.insertSummary({
+				segmentId: "seg-cascade-parents",
+				depth: 2,
+				status: "ready",
+				text: "parent summary",
+				source: { sourceType: "manual", sourceRef: "sum:parent" },
+				parents: [child],
+			});
+			assert.deepEqual(store.getSummaryParents(parent), [child]);
+
+			store.db.prepare("DELETE FROM lcm_summaries WHERE id = ?").run(child);
+
+			assert.deepEqual(store.getSummaryParents(parent), []);
+			assert.deepEqual(store.getSummaryChildren(child), []);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("does not index boundary records into lexical FTS", async () => {
 		const store = await openStore();
 		try {
@@ -387,8 +462,9 @@ describe("LcmStore", () => {
 			assert.ok(summary);
 			assert.equal(summary.coversFromRecordId, null);
 			assert.equal(summary.coversToRecordId, null);
+			const snapshot = summary.snapshot as LcmSummarySnapshot | null;
 			assert.deepEqual(
-				summary.snapshot?.map((item) => ({
+				snapshot?.map((item) => ({
 					id: item.id,
 					kind: item.kind,
 					happened_at: item.happened_at,
@@ -419,9 +495,9 @@ describe("LcmStore", () => {
 					},
 				],
 			);
-			assert.equal(summary.snapshot?.[0]?.text, "please inspect the plan");
-			assert.equal(summary.snapshot?.[1]?.text.length, 4096);
-			assert.ok(summary.snapshot?.[1]?.text.endsWith("…[truncated]"));
+			assert.equal(snapshot?.[0]?.text, "please inspect the plan");
+			assert.equal(snapshot?.[1]?.text.length, 4096);
+			assert.ok(snapshot?.[1]?.text.endsWith("…[truncated]"));
 		} finally {
 			store.close();
 		}
@@ -471,8 +547,9 @@ describe("LcmStore", () => {
 				summaries.map((summary) => ({ id: summary.id, depth: summary.depth, text: summary.text })),
 				[{ id: retainedId, depth: 2, text: "depth two summary" }],
 			);
+			const snapshot = summaries[0]?.snapshot as LcmSummarySnapshot | null | undefined;
 			assert.deepEqual(
-				summaries[0]?.snapshot?.map((item) => ({ id: item.id, kind: item.kind, text: item.text })),
+				snapshot?.map((item) => ({ id: item.id, kind: item.kind, text: item.text })),
 				[
 					{ id: first, kind: "user", text: "depth retention source" },
 					{ id: second, kind: "assistant", text: "depth retention reply" },

@@ -1,0 +1,155 @@
+import { estimateTextTokens, selectRetainedSummaries } from "./context.js";
+import { indexLcmSummaries } from "./indexer.js";
+import type { ChunkIndexer } from "../index/chunk-indexer.js";
+import type { LcmStore } from "./store.js";
+import type { LcmSummarizer } from "./summarizer.js";
+import type { StoredLcmSummary } from "./types.js";
+
+export interface LcmCondenseConfig {
+	condenseGroupSize: number;
+	maxSummaryDepth: number;
+	leafTargetTokens: number;
+}
+
+export interface LcmCondenseOptions {
+	segmentId: string;
+	depth: number;
+	store: LcmStore;
+	summarizer: LcmSummarizer;
+	config: LcmCondenseConfig;
+	indexer?: ChunkIndexer;
+	signal?: AbortSignal;
+}
+
+export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSummary[]> {
+	const groupSize = positiveInteger(input.config.condenseGroupSize, "condenseGroupSize");
+	const maxDepth = positiveInteger(input.config.maxSummaryDepth, "maxSummaryDepth");
+	if (input.depth >= maxDepth) return [];
+
+	const children = input.store
+		.listSummaries(input.segmentId)
+		.filter((summary) => summary.depth === input.depth && summary.status === "ready" && summary.parents.length === 0)
+		.sort(compareCoverage);
+
+	const created: StoredLcmSummary[] = [];
+	for (let index = 0; index + groupSize <= children.length; index += groupSize) {
+		const group = children.slice(index, index + groupSize);
+		const coversFromRecordId = minNullable(group.map((summary) => summary.coversFromRecordId));
+		const coversToRecordId = maxNullable(group.map((summary) => summary.coversToRecordId));
+		const text = await summarizeCondensedGroup({
+			group,
+			targetTokens: input.config.leafTargetTokens,
+			depth: input.depth + 1,
+			summarizer: input.summarizer,
+			signal: input.signal,
+		});
+		const id = input.store.insertSummary({
+			segmentId: input.segmentId,
+			depth: input.depth + 1,
+			status: "ready",
+			text,
+			coversFromRecordId,
+			coversToRecordId,
+			source: {
+				sourceType: "manual",
+				sourceRef: `lcm_condense:d${input.depth + 1}:${group.map((summary) => summary.id).join("-")}`,
+			},
+			sourceItems: group.map((summary) => ({ summaryId: summary.id, sourceRef: `lcm_summary:${summary.id}` })),
+			parents: group.map((summary) => summary.id),
+			metadata: {
+				source: "condense",
+				childDepth: input.depth,
+				childSummaryIds: group.map((summary) => summary.id),
+			},
+		});
+		const summary = input.store.getSummary(id);
+		if (summary) {
+			created.push(summary);
+			if (input.indexer) {
+				await indexLcmSummaries({ indexer: input.indexer, summaries: [summary], signal: input.signal }).catch((error) =>
+					console.error("memory LCM condensed summary indexing failed", error),
+				);
+			}
+		}
+	}
+
+	if (created.length > 0 && input.depth + 1 < maxDepth) {
+		created.push(
+			...(await condense({
+				...input,
+				depth: input.depth + 1,
+			})),
+		);
+	}
+	return created;
+}
+
+export function renderCondensedSummariesForContext(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
+	return selectRetainedSummaries(summaries);
+}
+
+function compareCoverage(a: StoredLcmSummary, b: StoredLcmSummary): number {
+	return (
+		(a.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) - (b.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) ||
+		(a.coversToRecordId ?? Number.MAX_SAFE_INTEGER) - (b.coversToRecordId ?? Number.MAX_SAFE_INTEGER) ||
+		a.id - b.id
+	);
+}
+
+async function summarizeCondensedGroup(input: {
+	group: StoredLcmSummary[];
+	targetTokens: number;
+	depth: number;
+	summarizer: LcmSummarizer;
+	signal?: AbortSignal;
+}): Promise<string> {
+	const text = renderCondensedSummaryInput(input.group);
+	if (input.summarizer.summarizeCondensed) {
+		return input.summarizer.summarizeCondensed(
+			{
+				text,
+				targetTokens: input.targetTokens,
+				depth: input.depth,
+				childSummaryCount: input.group.length,
+			},
+			input.signal,
+		);
+	}
+	return input.summarizer.summarizeLeaf(
+		{
+			text,
+			targetTokens: input.targetTokens,
+			mode: "normal",
+		},
+		input.signal,
+	);
+}
+
+function renderCondensedSummaryInput(group: readonly StoredLcmSummary[]): string {
+	return group
+		.map((summary) =>
+			[
+				`<summary id="${summary.id}" depth="${summary.depth}" from="${summary.coversFromRecordId ?? ""}" to="${
+					summary.coversToRecordId ?? ""
+				}" tokens="${estimateTextTokens(summary.text)}">`,
+				summary.text,
+				"</summary>",
+			].join("\n"),
+		)
+		.join("\n\n");
+}
+
+function minNullable(values: Array<number | null>): number | null {
+	const present = values.filter((value): value is number => value !== null);
+	return present.length === 0 ? null : Math.min(...present);
+}
+
+function maxNullable(values: Array<number | null>): number | null {
+	const present = values.filter((value): value is number => value !== null);
+	return present.length === 0 ? null : Math.max(...present);
+}
+
+function positiveInteger(value: number, name: string): number {
+	if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be an integer >= 1`);
+	return value;
+}

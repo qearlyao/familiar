@@ -16,6 +16,7 @@ export type LcmSummaryMode = "normal" | "aggressive";
 
 export interface LcmSummarizer {
 	summarizeLeaf(input: LcmLeafSummaryInput, signal?: AbortSignal): Promise<string>;
+	summarizeCondensed?(input: LcmCondensedSummaryInput, signal?: AbortSignal): Promise<string>;
 }
 
 export interface LcmLeafSummaryInput {
@@ -23,6 +24,13 @@ export interface LcmLeafSummaryInput {
 	targetTokens: number;
 	mode?: LcmSummaryMode;
 	previousSummary?: string;
+}
+
+export interface LcmCondensedSummaryInput {
+	text: string;
+	targetTokens: number;
+	depth: number;
+	childSummaryCount: number;
 }
 
 export type LcmCompleteFn = (
@@ -79,6 +87,17 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		const text = extractAssistantText(response).trim();
 		if (!text) throw new Error("LCM summarizer returned an empty summary");
 		return text;
+	}
+
+	async summarizeCondensed(input: LcmCondensedSummaryInput, signal?: AbortSignal): Promise<string> {
+		return this.summarizeLeaf(
+			{
+				text: input.text,
+				targetTokens: input.targetTokens,
+				mode: "normal",
+			},
+			signal,
+		);
 	}
 
 	private resolveModel(): Model<Api> {

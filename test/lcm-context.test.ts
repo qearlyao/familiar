@@ -209,6 +209,7 @@ function summary(
 		source,
 		metadata: null,
 		snapshot: null,
+		parents: [],
 		createdAt: id,
 		updatedAt: id,
 	};

@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -95,11 +95,23 @@ export function runLcmMigrations(db: Database.Database): void {
 				summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
 				ord INTEGER NOT NULL,
 				record_id INTEGER REFERENCES lcm_records(id) ON DELETE SET NULL,
+				-- Advisory legacy edge only. New condensation code must write summary-to-summary
+				-- lineage to lcm_summary_parents so parent coverage survives source-row drift.
 				source_summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE SET NULL,
 				source_ref TEXT,
 				snapshot_json TEXT,
 				PRIMARY KEY(summary_id, ord)
 			);
+
+			CREATE TABLE IF NOT EXISTS lcm_summary_parents (
+				summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+				parent_summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+				ord INTEGER NOT NULL,
+				PRIMARY KEY(summary_id, parent_summary_id)
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_summary_parents_parent ON lcm_summary_parents(parent_summary_id);
+			CREATE INDEX IF NOT EXISTS idx_summary_parents_child ON lcm_summary_parents(summary_id);
 		`);
 
 		migrateRecordPartsColumn(db);

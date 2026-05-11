@@ -346,10 +346,27 @@ function isConversationRecord(record: StoredLcmRecord): boolean {
 	return record.kind === "user" || record.kind === "assistant";
 }
 
-function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
-	return summaries
+export function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
+	const ready = summaries
 		.filter((summary) => summary.status === "ready" && summary.text.trim().length > 0)
 		.sort(compareSummaries);
+	const covered = new Set<number>();
+	const selected: StoredLcmSummary[] = [];
+	for (const summary of ready) {
+		if (covered.has(summary.id)) continue;
+		selected.push(summary);
+		coverSummaryParents(summary, ready, covered);
+	}
+	return selected;
+}
+
+function coverSummaryParents(summary: StoredLcmSummary, summaries: readonly StoredLcmSummary[], covered: Set<number>): void {
+	for (const parentId of summary.parents) {
+		if (covered.has(parentId)) continue;
+		covered.add(parentId);
+		const parent = summaries.find((candidate) => candidate.id === parentId);
+		if (parent) coverSummaryParents(parent, summaries, covered);
+	}
 }
 
 function compareRecords(a: StoredLcmRecord, b: StoredLcmRecord): number {

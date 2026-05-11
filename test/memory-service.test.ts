@@ -42,6 +42,8 @@ async function memoryConfig() {
 				freshTailCount: 64,
 				leafChunkTokens: 20000,
 				leafTargetTokens: 2400,
+				condenseGroupSize: 4,
+				maxSummaryDepth: 4,
 				maxRounds: 10,
 				timeoutMs: 60000,
 			},

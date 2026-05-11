@@ -15,6 +15,7 @@ import type {
 	LcmRetentionReport,
 	LcmSegmentInput,
 	LcmSegmentStatus,
+	LcmSummaryParentSnapshot,
 	LcmSourceProvenance,
 	LcmSummaryInput,
 	LcmSummarySnapshot,
@@ -240,7 +241,7 @@ export class LcmStore {
 				 LIMIT ?`,
 			)
 			.all(matchQuery, limit) as LcmSummaryRow[];
-		return rows.map(summaryFromRow);
+		return rows.map((row) => summaryFromRow(row));
 	}
 
 	insertSummary(input: LcmSummaryInput): number {
@@ -255,14 +256,17 @@ export class LcmStore {
 		if (existing) return existing.id;
 
 		const runInsert = () =>
-			insertSummaryPrepared(this.db, normalized, (id, sources) => this.insertSummarySources(id, sources));
+			insertSummaryPrepared(this.db, normalized, (id, sources, parents) => {
+				this.insertSummarySources(id, sources);
+				this.insertSummaryParents(id, parents);
+			});
 		const result = this.db.inTransaction ? runInsert() : this.db.transaction(runInsert).immediate();
 		return result;
 	}
 
 	getSummary(id: number): StoredLcmSummary | null {
 		const row = this.db.prepare("SELECT * FROM lcm_summaries WHERE id = ?").get(id) as LcmSummaryRow | undefined;
-		return row ? summaryFromRow(row) : null;
+		return row ? summaryFromRow(row, this.getSummaryParents(row.id)) : null;
 	}
 
 	listSummaries(segmentId?: string): StoredLcmSummary[] {
@@ -271,7 +275,8 @@ export class LcmStore {
 				? this.db.prepare("SELECT * FROM lcm_summaries WHERE segment_id = ? ORDER BY depth, id").all(segmentId)
 				: this.db.prepare("SELECT * FROM lcm_summaries ORDER BY segment_id, depth, id").all()
 		) as LcmSummaryRow[];
-		return rows.map(summaryFromRow);
+		const parentMap = this.summaryParentMap(rows.map((row) => row.id));
+		return rows.map((row) => summaryFromRow(row, parentMap.get(row.id) ?? []));
 	}
 
 	getSummarySources(summaryId: number): StoredLcmSummarySource[] {
@@ -279,6 +284,20 @@ export class LcmStore {
 			.prepare("SELECT * FROM lcm_summary_sources WHERE summary_id = ? ORDER BY ord")
 			.all(summaryId) as LcmSummarySourceRow[];
 		return rows.map(summarySourceFromRow);
+	}
+
+	getSummaryParents(summaryId: number): number[] {
+		const rows = this.db
+			.prepare("SELECT parent_summary_id FROM lcm_summary_parents WHERE summary_id = ? ORDER BY ord, parent_summary_id")
+			.all(summaryId) as { parent_summary_id: number }[];
+		return rows.map((row) => row.parent_summary_id);
+	}
+
+	getSummaryChildren(summaryId: number): number[] {
+		const rows = this.db
+			.prepare("SELECT summary_id FROM lcm_summary_parents WHERE parent_summary_id = ? ORDER BY ord, summary_id")
+			.all(summaryId) as { summary_id: number }[];
+		return rows.map((row) => row.summary_id);
 	}
 
 	applyNewSessionRetention(options: LcmRetentionOptions): LcmRetentionReport {
@@ -312,6 +331,7 @@ export class LcmStore {
 
 			for (const segmentId of segmentIds) {
 				if (retainDepth > 0) {
+					this.snapshotSummariesForPrunedChildren(segmentId, retainDepth);
 					const summaries = this.db
 						.prepare("SELECT id FROM lcm_summaries WHERE segment_id = ? AND pinned = 0 AND depth < ?")
 						.all(segmentId, retainDepth) as { id: number }[];
@@ -322,6 +342,7 @@ export class LcmStore {
 					report.summariesDeleted += this.db
 						.prepare("DELETE FROM lcm_summaries WHERE segment_id = ? AND pinned = 0 AND depth < ?")
 						.run(segmentId, retainDepth).changes;
+					// lcm_summary_parents rows for pruned summaries are removed by ON DELETE CASCADE.
 				}
 
 				this.snapshotSummariesForPrunedRecords(segmentId);
@@ -366,6 +387,41 @@ export class LcmStore {
 		}
 	}
 
+	private insertSummaryParents(summaryId: number, parents: number[]): void {
+		if (parents.length === 0) return;
+		const uniqueParents = dedupeNumbers(parents);
+		const existingRows = this.db
+			.prepare(`SELECT id FROM lcm_summaries WHERE id IN (${uniqueParents.map(() => "?").join(",")})`)
+			.all(...uniqueParents) as { id: number }[];
+		const existing = new Set(existingRows.map((row) => row.id));
+		const missing = uniqueParents.filter((id) => !existing.has(id));
+		if (missing.length > 0) throw new Error(`LCM summary parent does not exist: ${missing.join(", ")}`);
+		const insert = this.db.prepare(
+			`INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, ord)
+			 VALUES (?, ?, ?)`,
+		);
+		for (const [index, parentId] of uniqueParents.entries()) insert.run(summaryId, parentId, index);
+	}
+
+	private summaryParentMap(summaryIds: number[]): Map<number, number[]> {
+		const map = new Map<number, number[]>();
+		if (summaryIds.length === 0) return map;
+		const rows = this.db
+			.prepare(
+				`SELECT summary_id, parent_summary_id
+				 FROM lcm_summary_parents
+				 WHERE summary_id IN (${summaryIds.map(() => "?").join(",")})
+				 ORDER BY summary_id, ord, parent_summary_id`,
+			)
+			.all(...summaryIds) as { summary_id: number; parent_summary_id: number }[];
+		for (const row of rows) {
+			const parents = map.get(row.summary_id) ?? [];
+			parents.push(row.parent_summary_id);
+			map.set(row.summary_id, parents);
+		}
+		return map;
+	}
+
 	private deleteRecordFtsRow(id: number): number {
 		const row = this.db.prepare("SELECT text_full FROM lcm_records WHERE id = ?").get(id) as
 			| { text_full: string }
@@ -391,6 +447,7 @@ export class LcmStore {
 				 WHERE segment_id = ?
 				   AND covers_from_record_id IS NOT NULL
 				   AND covers_to_record_id IS NOT NULL
+				   AND snapshot_json IS NULL
 				   AND EXISTS (
 				    SELECT 1 FROM lcm_records r
 				    WHERE r.segment_id = lcm_summaries.segment_id
@@ -404,6 +461,26 @@ export class LcmStore {
 		);
 		for (const summary of summaries) {
 			update.run(jsonOrNull(buildSummarySnapshot(this.db, summary)), summary.id);
+		}
+	}
+
+	private snapshotSummariesForPrunedChildren(segmentId: string, retainDepth: number): void {
+		const rows = this.db
+			.prepare(
+				`SELECT * FROM lcm_summaries
+				 WHERE segment_id = ?
+				   AND pinned = 0
+				   AND depth >= ?
+				 ORDER BY depth DESC, id`,
+			)
+			.all(segmentId, retainDepth) as LcmSummaryRow[];
+		const update = this.db.prepare(
+			"UPDATE lcm_summaries SET snapshot_json = ?, updated_at = unixepoch() WHERE id = ?",
+		);
+		for (const row of rows) {
+			const snapshot = buildSummaryParentSnapshot(this.db, row.id, new Set<number>());
+			if (snapshot.parents.length === 0) continue;
+			update.run(jsonOrNull(snapshot.parents), row.id);
 		}
 	}
 }
@@ -498,6 +575,7 @@ function normalizeSummaryInput(input: LcmSummaryInput): NormalizedSummaryInput {
 		coversToRecordId: input.coversToRecordId ?? null,
 		source,
 		sourceItems: input.sourceItems ?? [],
+		parents: input.parents ?? [],
 		metadata: input.metadata ?? null,
 		summaryKey: stableHash({
 			segmentId: input.segmentId,
@@ -507,6 +585,7 @@ function normalizeSummaryInput(input: LcmSummaryInput): NormalizedSummaryInput {
 			coversFromRecordId: input.coversFromRecordId ?? null,
 			coversToRecordId: input.coversToRecordId ?? null,
 			source,
+			parents: input.parents ?? [],
 		}),
 	};
 }
@@ -514,7 +593,7 @@ function normalizeSummaryInput(input: LcmSummaryInput): NormalizedSummaryInput {
 function insertSummaryPrepared(
 	db: Database.Database,
 	normalized: NormalizedSummaryInput,
-	insertSources: (summaryId: number, sources: LcmSummarySourceInput[]) => void,
+	insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
 ): number {
 	const inserted = db
 		.prepare(
@@ -544,8 +623,20 @@ function insertSummaryPrepared(
 		);
 	const id = Number(inserted.lastInsertRowid);
 	db.prepare("INSERT INTO lcm_summaries_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
-	insertSources(id, normalized.sourceItems);
+	insertEdges(id, normalized.sourceItems, normalized.parents);
 	return id;
+}
+
+function dedupeNumbers(values: readonly number[]): number[] {
+	const seen = new Set<number>();
+	const result: number[] = [];
+	for (const value of values) {
+		if (!Number.isInteger(value) || value <= 0) throw new Error("LCM summary parents must be positive integer ids");
+		if (seen.has(value)) continue;
+		seen.add(value);
+		result.push(value);
+	}
+	return result;
 }
 
 function normalizeSource(source: LcmSourceProvenance): LcmSourceProvenance {
@@ -650,7 +741,7 @@ function recordFromRow(row: LcmRecordRow): StoredLcmRecord {
 	};
 }
 
-function summaryFromRow(row: LcmSummaryRow): StoredLcmSummary {
+function summaryFromRow(row: LcmSummaryRow, parents: number[] = []): StoredLcmSummary {
 	return {
 		id: row.id,
 		summaryKey: row.summary_key,
@@ -664,6 +755,7 @@ function summaryFromRow(row: LcmSummaryRow): StoredLcmSummary {
 		source: sourceFromRow(row),
 		metadata: parseJsonObject(row.metadata_json),
 		snapshot: parseJsonArray(row.snapshot_json) as LcmSummarySnapshot | null,
+		parents,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -693,6 +785,46 @@ function buildSummarySnapshot(db: Database.Database, summary: LcmSummaryRow): Lc
 		)
 		.all(summary.segment_id, summary.covers_from_record_id, summary.covers_to_record_id) as LcmRecordRow[];
 	return rows.map(snapshotRecordFromRow);
+}
+
+function buildSummaryParentSnapshot(
+	db: Database.Database,
+	summaryId: number,
+	visiting: Set<number>,
+): LcmSummaryParentSnapshot {
+	if (visiting.has(summaryId)) throw new Error(`Cycle detected in LCM summary parents at ${summaryId}`);
+	visiting.add(summaryId);
+	const row = db.prepare("SELECT * FROM lcm_summaries WHERE id = ?").get(summaryId) as LcmSummaryRow | undefined;
+	if (!row) throw new Error(`LCM summary does not exist: ${summaryId}`);
+	let snapshot = parseJsonArray<LcmSummarySnapshot[number]>(row.snapshot_json) as LcmSummarySnapshot | null;
+	if (
+		!snapshot &&
+		row.covers_from_record_id !== null &&
+		row.covers_to_record_id !== null &&
+		db.prepare("SELECT 1 FROM lcm_records WHERE segment_id = ? AND id BETWEEN ? AND ? LIMIT 1")
+			.get(row.segment_id, row.covers_from_record_id, row.covers_to_record_id)
+	) {
+		snapshot = buildSummarySnapshot(db, row);
+	}
+	const parentRows = db
+		.prepare(
+			`SELECT parent_summary_id
+			 FROM lcm_summary_parents
+			 WHERE summary_id = ?
+			 ORDER BY ord, parent_summary_id`,
+		)
+		.all(summaryId) as { parent_summary_id: number }[];
+	const parents = parentRows.map((parent) => buildSummaryParentSnapshot(db, parent.parent_summary_id, visiting));
+	visiting.delete(summaryId);
+	return {
+		summaryId: row.id,
+		depth: row.depth,
+		text: row.text_full,
+		coversFromRecordId: row.covers_from_record_id,
+		coversToRecordId: row.covers_to_record_id,
+		snapshot,
+		parents,
+	};
 }
 
 function snapshotRecordFromRow(row: LcmRecordRow): LcmSummarySnapshot[number] {
@@ -748,5 +880,6 @@ interface NormalizedSummaryInput {
 	coversToRecordId: number | null;
 	source: LcmSourceProvenance;
 	sourceItems: LcmSummarySourceInput[];
+	parents: number[];
 	metadata: Record<string, unknown> | null;
 }

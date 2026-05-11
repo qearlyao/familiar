@@ -625,10 +625,10 @@ shipped. Fix before adding more surface area.
   continuity source for compressed long conversations. The recent
   segment-restart fix covers segment numbering only; compressed long
   conversations still rebuild solely from transcript replay.
-- Add a `summary_parents` table (or equivalent edge table) so condensed
+- [x] Add a `summary_parents` table (or equivalent edge table) so condensed
   summary passes can traverse the DAG. Today only `summary_sources` edges
   exist; there is no explicit parent linkage between summaries.
-- Add condensed summary passes and depth promotion, not just leaf summaries.
+- [x] Add condensed summary passes and depth promotion, not just leaf summaries.
   Today `persistRuntimeSummary` hardcodes `depth: 1`.
 - [x] Add structured message reconstruction/sanitization around tool calls, tool
   results, and reasoning blocks before LCM summary generation and context

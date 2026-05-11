@@ -95,6 +95,16 @@ export type LcmSummarySnapshot = Array<{
 	attachments: LcmAttachmentNote[] | null;
 }>;
 
+export interface LcmSummaryParentSnapshot {
+	summaryId: number;
+	depth: number;
+	text: string;
+	coversFromRecordId: number | null;
+	coversToRecordId: number | null;
+	snapshot: LcmSummarySnapshot | LcmSummaryParentSnapshot[] | null;
+	parents: LcmSummaryParentSnapshot[];
+}
+
 export interface LcmSummarySourceInput {
 	recordId?: number | null;
 	summaryId?: number | null;
@@ -112,6 +122,7 @@ export interface LcmSummaryInput {
 	coversToRecordId?: number | null;
 	source: LcmSourceProvenance;
 	sourceItems?: LcmSummarySourceInput[];
+	parents?: number[];
 	metadata?: Record<string, unknown> | null;
 }
 
@@ -127,7 +138,8 @@ export interface StoredLcmSummary {
 	coversToRecordId: number | null;
 	source: LcmSourceProvenance;
 	metadata: Record<string, unknown> | null;
-	snapshot: LcmSummarySnapshot | null;
+	snapshot: LcmSummarySnapshot | LcmSummaryParentSnapshot[] | null;
+	parents: number[];
 	createdAt: number;
 	updatedAt: number;
 }

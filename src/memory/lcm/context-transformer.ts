@@ -9,6 +9,7 @@ import {
 	renderLcmRecordPartsForSummary,
 	selectLcmCompactionCandidate,
 } from "./context.js";
+import { condense } from "./condense.js";
 import { indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
@@ -31,6 +32,8 @@ export interface LcmContextTransformerOptions {
 		freshTailMaxTokens?: number;
 		leafChunkTokens: number;
 		leafTargetTokens: number;
+		condenseGroupSize: number;
+		maxSummaryDepth: number;
 		maxRounds: number;
 	};
 	lcmStore: LcmStore;
@@ -43,6 +46,7 @@ interface CompactedLcmItem {
 	type: "summary";
 	id: string;
 	sourceIds: string[];
+	persistedSummaryId?: number;
 	message: AssistantMessage;
 	tokens: number;
 }
@@ -156,12 +160,17 @@ export class LcmContextTransformer {
 				tokens: estimateAgentMessageTokens(message),
 			};
 			state.items.splice(startIndex, removeCount, summaryItem);
-			await this.persistRuntimeSummary({
+			const persisted = await this.persistRuntimeSummary({
 				text: summaryText,
 				sourceItems: chunkItems,
 				sessionKey: input.sessionKey,
 				sessionId: input.sessionId,
+				signal: input.signal,
 			});
+			if (persisted?.summaryId !== undefined) summaryItem.persistedSummaryId = persisted.summaryId;
+			if (persisted?.condensed) {
+				replaceCondensedRuntimeSummary(state, persisted.condensed, input.sessionKey);
+			}
 		};
 
 		input.state.compactionQueue = input.state.compactionQueue.then(run, run);
@@ -173,10 +182,11 @@ export class LcmContextTransformer {
 		sourceItems: RawLcmItem[];
 		sessionKey: string;
 		sessionId?: string;
-	}): Promise<void> {
+		signal?: AbortSignal;
+	}): Promise<{ summaryId: number; condensed?: { summaryId: number; text: string; parentIds: number[] } } | null> {
 		const segmentId = this.segmentManager.activeSegmentId(input.sessionKey);
 		const recordIds = input.sourceItems.map((item) => item.recordId).filter((id): id is number => id !== null);
-		if (recordIds.length === 0) return;
+		if (recordIds.length === 0) return null;
 		const summaryId = this.lcmStore.insertSummary({
 			segmentId,
 			depth: 1,
@@ -200,10 +210,23 @@ export class LcmContextTransformer {
 			},
 		});
 		const summary = this.lcmStore.getSummary(summaryId);
-		if (!summary) return;
+		if (!summary) return null;
 		await indexLcmSummaries({ indexer: this.indexer, summaries: [summary] }).catch((error) =>
 			console.error("memory LCM summary indexing failed", error),
 		);
+		const created = await condense({
+			segmentId,
+			depth: 1,
+			store: this.lcmStore,
+			summarizer: this.summarizer,
+			config: this.settings,
+			indexer: this.indexer,
+			signal: input.signal,
+		});
+		const condensed = created.find((item) => item.parents.includes(summaryId));
+		return condensed
+			? { summaryId, condensed: { summaryId: condensed.id, text: condensed.text, parentIds: condensed.parents } }
+			: { summaryId };
 	}
 
 	private contextState(sessionKey: string): LcmContextState {
@@ -308,6 +331,37 @@ function findPreviousSummaryText(items: readonly LcmContextItem[], beforeIndex: 
 		return extractTextFromMessage(item.message);
 	}
 	return undefined;
+}
+
+function replaceCondensedRuntimeSummary(
+	state: LcmContextState,
+	condensed: { summaryId: number; text: string; parentIds: number[] },
+	sessionKey: string,
+): void {
+	const parentIndexes = state.items
+		.map((item, index) => ({ item, index }))
+		.filter(
+			(entry): entry is { item: CompactedLcmItem; index: number } =>
+				entry.item.type === "summary" &&
+				entry.item.persistedSummaryId !== undefined &&
+				condensed.parentIds.includes(entry.item.persistedSummaryId),
+		);
+	if (parentIndexes.length !== condensed.parentIds.length) return;
+	const indexes = parentIndexes.map((entry) => entry.index).sort((a, b) => a - b);
+	if (!indexes.every((index, offset) => offset === 0 || index === indexes[offset - 1]! + 1)) return;
+	const first = indexes[0];
+	if (first === undefined) return;
+	const sourceIds = parentIndexes.flatMap((entry) => entry.item.sourceIds);
+	const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(condensed.text), Date.now());
+	const item: CompactedLcmItem = {
+		type: "summary",
+		id: `${sessionKey}:summary-${condensed.summaryId}`,
+		persistedSummaryId: condensed.summaryId,
+		sourceIds,
+		message,
+		tokens: estimateAgentMessageTokens(message),
+	};
+	state.items.splice(first, indexes.length, item);
 }
 
 function renderLcmSummaryInput(items: readonly RawLcmItem[]): string {

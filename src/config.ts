@@ -126,6 +126,8 @@ export interface Config {
 			freshTailMaxTokens?: number;
 			leafChunkTokens: number;
 			leafTargetTokens: number;
+			condenseGroupSize: number;
+			maxSummaryDepth: number;
 			newSessionRetainDepth: number;
 			maxRounds: number;
 			timeoutMs: number;
@@ -423,6 +425,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		"fresh_tail_max_tokens",
 		"leaf_chunk_tokens",
 		"leaf_target_tokens",
+		"condense_group_size",
+		"max_summary_depth",
 		"new_session_retain_depth",
 		"max_rounds",
 		"timeout_ms",
@@ -576,6 +580,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				...(memoryLcmFreshTailMaxTokens !== undefined ? { freshTailMaxTokens: memoryLcmFreshTailMaxTokens } : {}),
 				leafChunkTokens: memoryLcmLeafChunkTokens,
 				leafTargetTokens: memoryLcmLeafTargetTokens,
+				condenseGroupSize: readInteger(memoryLcm.condense_group_size, 4, "memory.lcm.condense_group_size", 1),
+				maxSummaryDepth: readInteger(memoryLcm.max_summary_depth, 4, "memory.lcm.max_summary_depth", 1),
 				newSessionRetainDepth: readInteger(
 					memoryLcm.new_session_retain_depth,
 					2,

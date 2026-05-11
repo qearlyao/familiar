@@ -192,7 +192,7 @@ retention_days = 7
 			leafTargetTokens: 2400,
 			promptAwareEvictionEnabled: true,
 			condenseGroupSize: 4,
-			maxSummaryDepth: 4,
+			maxSummaryDepth: 2,
 			maxRounds: 10,
 			cacheTtlMs: 300000,
 			cacheTouchSlackMs: 30000,
@@ -207,8 +207,8 @@ retention_days = 7
 
 		const config = await loadConfig(workspacePath);
 
-		assert.equal(config.agent.model, "anthropic/claude-sonnet-4-5");
-		assert.equal(config.memory.lcm.model, "anthropic/claude-sonnet-4-5");
+		assert.equal(config.agent.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-7");
 		assert.ok(config.models.allow.includes(config.memory.lcm.model));
 	});
 

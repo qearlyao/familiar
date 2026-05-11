@@ -715,8 +715,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					? readInteger(memoryLcm.condense_group_size, 4, "memory.lcm.condense_group_size", 1)
 					: 4,
 				maxSummaryDepth: memoryLcmEnabled
-					? readInteger(memoryLcm.max_summary_depth, 4, "memory.lcm.max_summary_depth", 1)
-					: 4,
+					? readInteger(memoryLcm.max_summary_depth, 2, "memory.lcm.max_summary_depth", 1)
+					: 2,
 				newSessionRetainDepth: memoryLcmEnabled
 					? readInteger(memoryLcm.new_session_retain_depth, 2, "memory.lcm.new_session_retain_depth", -1)
 					: 2,

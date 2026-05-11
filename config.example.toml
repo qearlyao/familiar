@@ -17,13 +17,12 @@ totp_secret = "${FAMILIAR_WEB_TOTP_SECRET:-}"
 bind_address = "127.0.0.1"
 
 [agent]
-model = "anthropic/claude-sonnet-4-5"
+model = "anthropic/claude-opus-4-7"
 cache_retention = "long"
 thinking_level = "medium"
 
 [models]
 allow = [
-	"anthropic/claude-sonnet-4-5",
 	"anthropic/claude-opus-4-7",
 	"google/gemini-3.1-pro-preview",
 	"google/gemini-3-flash-preview",
@@ -120,13 +119,16 @@ weight_intensity = 0.1
 # Lossless-claw style LCM. Set enabled = false to disable the LCM context engine.
 enabled = true
 # Omit model to inherit [agent].model, or set an explicit provider/model ref.
-# model = "anthropic/claude-sonnet-4-5"
+# model = "anthropic/claude-opus-4-7"
 # Connection settings inherit from [models.base_urls] and [models.api_key_envs].
 context_threshold = 0.75
 fresh_tail_count = 64
 # fresh_tail_max_tokens = 4000
 leaf_chunk_tokens = 20000
 leaf_target_tokens = 2400
+prompt_aware_eviction_enabled = true
+condense_group_size = 4
+max_summary_depth = 2
 # Context retained after /new. -1 keeps all context, 0 keeps all summaries,
 # and positive values keep summaries at that depth or higher; 2 keeps d2+.
 new_session_retain_depth = 2

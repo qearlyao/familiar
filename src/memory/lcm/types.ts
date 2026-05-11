@@ -153,6 +153,32 @@ export interface StoredLcmSummarySource {
 	snapshot: Record<string, unknown> | null;
 }
 
+export type LcmContextItemInput =
+	| { type: "raw"; recordId: number; fingerprint: string; happenedAt: string | null }
+	| { type: "summary"; summaryId: number; fingerprint: string; happenedAt: string | null };
+
+export type StoredLcmContextItem =
+	| {
+			sessionKey: string;
+			ordinal: number;
+			type: "raw";
+			recordId: number;
+			summaryId: null;
+			fingerprint: string;
+			happenedAt: string | null;
+			updatedAt: number;
+	  }
+	| {
+			sessionKey: string;
+			ordinal: number;
+			type: "summary";
+			recordId: null;
+			summaryId: number;
+			fingerprint: string;
+			happenedAt: string | null;
+			updatedAt: number;
+	  };
+
 export interface LcmRetentionOptions {
 	newSessionRetainDepth: number;
 	activeSegmentId?: string | null;

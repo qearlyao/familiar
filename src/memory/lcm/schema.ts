@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -112,6 +112,24 @@ export function runLcmMigrations(db: Database.Database): void {
 
 			CREATE INDEX IF NOT EXISTS idx_summary_parents_parent ON lcm_summary_parents(parent_summary_id);
 			CREATE INDEX IF NOT EXISTS idx_summary_parents_child ON lcm_summary_parents(summary_id);
+
+			CREATE TABLE IF NOT EXISTS lcm_context_items (
+				session_key TEXT NOT NULL,
+				ordinal INTEGER NOT NULL,
+				item_type TEXT NOT NULL CHECK(item_type IN ('raw', 'summary')),
+				record_id INTEGER REFERENCES lcm_records(id) ON DELETE CASCADE,
+				summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+				fingerprint TEXT NOT NULL,
+				happened_at TEXT,
+				updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+				PRIMARY KEY(session_key, ordinal),
+				CHECK ((item_type = 'raw' AND record_id IS NOT NULL AND summary_id IS NULL)
+					OR (item_type = 'summary' AND summary_id IS NOT NULL AND record_id IS NULL))
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_session ON lcm_context_items(session_key);
+			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_record ON lcm_context_items(record_id);
+			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_summary ON lcm_context_items(summary_id);
 		`);
 
 		migrateRecordPartsColumn(db);

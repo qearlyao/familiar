@@ -5,6 +5,7 @@ import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
+	lcmRecordToAgentMessage,
 	type LcmContextRawItem,
 	renderLcmRecordPartsForSummary,
 	selectLcmCompactionCandidate,
@@ -14,7 +15,7 @@ import { indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
-import type { LcmRecordInput, LcmRecordPart } from "./types.js";
+import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmSummary } from "./types.js";
 
 const LCM_SUMMARY_PREFIX = "[Familiar retained LCM summary]";
 
@@ -62,6 +63,7 @@ interface LcmContextState {
 	items: LcmContextItem[];
 	summaryCounter: number;
 	compactionQueue: Promise<void>;
+	rehydrated: boolean;
 }
 
 export class LcmContextTransformer {
@@ -115,9 +117,11 @@ export class LcmContextTransformer {
 		} catch (error) {
 			console.error("memory LCM summarization failed", error);
 			syncContextState(state, messages);
+			this.persistContextState(sessionKey, state);
 			return messages;
 		}
 
+		this.persistContextState(sessionKey, state);
 		return state.items.map((item) => item.message);
 	}
 
@@ -232,9 +236,11 @@ export class LcmContextTransformer {
 	private contextState(sessionKey: string): LcmContextState {
 		let state = this.contextStates.get(sessionKey);
 		if (!state) {
-			state = { items: [], summaryCounter: 0, compactionQueue: Promise.resolve() };
+			state = { items: [], summaryCounter: 0, compactionQueue: Promise.resolve(), rehydrated: false };
 			this.contextStates.set(sessionKey, state);
 		}
+		if (!state.rehydrated && state.items.length === 0) this.rehydrateContextState(sessionKey, state);
+		state.rehydrated = true;
 		return state;
 	}
 
@@ -249,6 +255,56 @@ export class LcmContextTransformer {
 				for (const insert of inserts) insert.item.recordId = this.lcmStore.insertRecord(insert.input);
 			})
 			.immediate();
+	}
+
+	private rehydrateContextState(sessionKey: string, state: LcmContextState): void {
+		const rows = this.lcmStore.listContextItems(sessionKey);
+		if (rows.length === 0) return;
+		const items: LcmContextItem[] = [];
+		for (const row of rows) {
+			if (row.type === "raw") {
+				const record = this.lcmStore.getRecord(row.recordId);
+				if (!record) {
+					console.error(`memory LCM context item dropped because record ${row.recordId} is missing`);
+					continue;
+				}
+				const message = lcmRecordToAgentMessage(record);
+				items.push({
+					type: "raw",
+					id: row.fingerprint,
+					recordId: record.id,
+					message,
+					tokens: estimateAgentMessageTokens(message),
+				});
+				continue;
+			}
+			const summary = this.lcmStore.getSummary(row.summaryId);
+			if (!summary) {
+				console.error(`memory LCM context item dropped because summary ${row.summaryId} is missing`);
+				continue;
+			}
+			items.push(summaryToContextItem(summary, row.fingerprint, sessionKey, this.summaryCoveredSourceIds(summary.id)));
+		}
+		state.items = items;
+	}
+
+	private persistContextState(sessionKey: string, state: LcmContextState): void {
+		const items = contextItemsForStorage(state.items);
+		this.lcmStore.replaceContextItems(sessionKey, items);
+	}
+
+	private summaryCoveredSourceIds(summaryId: number, seen = new Set<number>()): string[] {
+		if (seen.has(summaryId)) return [];
+		seen.add(summaryId);
+		const ids: string[] = [];
+		for (const source of this.lcmStore.getSummarySources(summaryId)) {
+			if (source.sourceSummaryId !== null) {
+				ids.push(...this.summaryCoveredSourceIds(source.sourceSummaryId, seen));
+			} else if (source.sourceRef) {
+				ids.push(source.sourceRef);
+			}
+		}
+		return ids;
 	}
 }
 
@@ -265,8 +321,6 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 
 	for (const item of state.items) {
 		if (item.type === "summary") {
-			const stillCovered = item.sourceIds.every((id) => rawById.has(id));
-			if (!stillCovered) continue;
 			next.push(item);
 			for (const id of item.sourceIds) covered.add(id);
 			continue;
@@ -282,6 +336,23 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 	}
 
 	state.items = next;
+}
+
+function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextItemInput[] {
+	const stored: LcmContextItemInput[] = [];
+	for (const item of items) {
+		const timestamp = (item.message as { timestamp?: number }).timestamp;
+		const happenedAt =
+			typeof timestamp === "number" && Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+		if (item.type === "raw") {
+			if (item.recordId !== null) stored.push({ type: "raw", recordId: item.recordId, fingerprint: item.id, happenedAt });
+			continue;
+		}
+		if (item.persistedSummaryId !== undefined) {
+			stored.push({ type: "summary", summaryId: item.persistedSummaryId, fingerprint: item.id, happenedAt });
+		}
+	}
+	return stored;
 }
 
 function rawItemToRecordInput(
@@ -362,6 +433,23 @@ function replaceCondensedRuntimeSummary(
 		tokens: estimateAgentMessageTokens(message),
 	};
 	state.items.splice(first, indexes.length, item);
+}
+
+function summaryToContextItem(
+	summary: StoredLcmSummary,
+	fingerprint: string,
+	sessionKey: string,
+	sourceIds: string[],
+): CompactedLcmItem {
+	const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(summary.text), summary.createdAt * 1000);
+	return {
+		type: "summary",
+		id: fingerprint || `${sessionKey}:summary-${summary.id}`,
+		persistedSummaryId: summary.id,
+		sourceIds,
+		message,
+		tokens: estimateAgentMessageTokens(message),
+	};
 }
 
 function renderLcmSummaryInput(items: readonly RawLcmItem[]): string {

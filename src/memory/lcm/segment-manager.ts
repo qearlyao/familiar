@@ -108,6 +108,7 @@ export class LcmSegmentManager {
 						sourceRef: `chat:${record.recordId}`,
 					},
 				});
+				this.lcmStore.clearContextItems(runtime.channelKey);
 				const retention = this.lcmStore.applyNewSessionRetention({
 					newSessionRetainDepth: this.newSessionRetainDepth,
 					activeSegmentId: nextSegmentId,

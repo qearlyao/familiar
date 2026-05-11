@@ -144,7 +144,7 @@ describe("MemoryService", () => {
 					authorId: "owner",
 					text: "Remember the compact toolbar.",
 				});
-				await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
+					await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
 
@@ -156,8 +156,65 @@ describe("MemoryService", () => {
 						["user", "assistant", "boundary"],
 					);
 					assert.equal(lcmStore.listSegments().some((segment) => segment.status === "closed"), true);
-				} finally {
+					} finally {
 					lcmStore.close();
+				}
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("clears persisted LCM context items when runtime segment rotates on reset", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config);
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				await runtime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "Remember the compact toolbar.",
+				});
+				await service.flush();
+
+				const lcmStoreBeforeReset = LcmStore.open(config);
+				try {
+					const recordId = lcmStoreBeforeReset.listRecords()[0]?.id;
+					assert.ok(recordId);
+					lcmStoreBeforeReset.replaceContextItems("web-web-room", [
+						{
+							type: "raw",
+							recordId,
+							fingerprint: "runtime:compact-toolbar",
+							happenedAt: "2026-05-10T01:00:00.000Z",
+						},
+					]);
+					assert.equal(lcmStoreBeforeReset.listContextItems("web-web-room").length, 1);
+				} finally {
+					lcmStoreBeforeReset.close();
+				}
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				const lcmStoreAfterReset = LcmStore.open(config);
+				try {
+					assert.equal(lcmStoreAfterReset.listContextItems("web-web-room").length, 0);
+				} finally {
+					lcmStoreAfterReset.close();
 				}
 			} finally {
 				unsubscribe();
@@ -365,6 +422,110 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("rehydrates persisted LCM summary after restart when runtime sends only the fresh tail", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmCompactionConfig(baseConfig);
+		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer });
+			const freshTail = { role: "user" as const, content: "fresh detail gamma", timestamp: 3 };
+			try {
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta" }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 2,
+						},
+						freshTail,
+					],
+					undefined,
+					{ sessionKey: "room-rehydrate-tail", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+			} finally {
+				service.close();
+			}
+
+			service = createMemoryService(config, { summarizer });
+			try {
+				const afterRestart = await service.transformContext([freshTail], undefined, {
+					sessionKey: "room-rehydrate-tail",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+
+				assert.equal(afterRestart.length, 2);
+				assert.match(contentText(afterRestart[0]), /Familiar retained LCM summary/);
+				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
+				assert.doesNotMatch(renderMessages(afterRestart), /old detail alpha/);
+				assert.doesNotMatch(renderMessages(afterRestart), /old detail beta/);
+				assert.match(contentText(afterRestart[1]), /fresh detail gamma/);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("preserves rehydrated LCM summary before a different fresh tail after restart", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmCompactionConfig(baseConfig);
+		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			let service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(
+					[
+						{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
+						{
+							role: "assistant" as const,
+							content: [{ type: "text" as const, text: "old detail beta" }],
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "stop" as const,
+							timestamp: 2,
+						},
+						{ role: "user" as const, content: "fresh detail gamma", timestamp: 3 },
+					],
+					undefined,
+					{ sessionKey: "room-rehydrate-new-tail", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+			} finally {
+				service.close();
+			}
+
+			service = createMemoryService(config, { summarizer });
+			try {
+				const afterRestart = await service.transformContext(
+					[{ role: "user" as const, content: "brand new tail delta", timestamp: 4 }],
+					undefined,
+					{
+						sessionKey: "room-rehydrate-new-tail",
+						sessionId: "session-a",
+						model: { contextWindow: 10_000 } as any,
+					},
+				);
+
+				assert.equal(afterRestart.length, 2);
+				assert.match(contentText(afterRestart[0]), /Familiar retained LCM summary/);
+				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
+				assert.match(contentText(afterRestart[1]), /brand new tail delta/);
+				assert.doesNotMatch(renderMessages(afterRestart), /fresh detail gamma/);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
 	it("summary over span with tool_call record includes tool markers in rendered input", async () => {
 		const baseConfig = await memoryConfig();
 		const config = {
@@ -500,6 +661,63 @@ describe("MemoryService", () => {
 			}
 		});
 	});
+
+	it("drops persisted LCM raw context item with missing record during rehydrate", async () => {
+		const baseConfig = await memoryConfig();
+		const config = lcmCompactionConfig(baseConfig);
+		const store = LcmStore.open(config);
+		try {
+			const recordId = store.insertRecord({
+				segmentId: "room-missing-record:seg-1",
+				kind: "user",
+				text: "orphaned raw context",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				channelKey: "room-missing-record",
+				source: { sourceType: "manual", sourceRef: "runtime:orphan" },
+			});
+			store.replaceContextItems("room-missing-record", [
+				{
+					type: "raw",
+					recordId,
+					fingerprint: "runtime:orphan",
+					happenedAt: "2026-05-10T01:00:00.000Z",
+				},
+			]);
+			store.db.pragma("foreign_keys = OFF");
+			store.db.prepare("DELETE FROM lcm_records WHERE id = ?").run(recordId);
+			store.db.pragma("foreign_keys = ON");
+		} finally {
+			store.close();
+		}
+
+		const originalConsoleError = console.error;
+		const errors: unknown[][] = [];
+		console.error = (...args: unknown[]) => {
+			errors.push(args);
+		};
+		try {
+			await withEmbeddingFetch([1, 0, 0], async () => {
+				const service = createMemoryService(config, { summarizer: fixedSummary("unused") });
+				try {
+					const rendered = await service.transformContext(
+						[{ role: "user" as const, content: "fresh after orphan", timestamp: 2 }],
+						undefined,
+						{ sessionKey: "room-missing-record", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+					);
+					assert.equal(rendered.length, 1);
+					assert.match(contentText(rendered[0]), /fresh after orphan/);
+				} finally {
+					service.close();
+				}
+			});
+		} finally {
+			console.error = originalConsoleError;
+		}
+		assert.equal(
+			errors.some((args) => String(args[0]).includes("record") && String(args[0]).includes("missing")),
+			true,
+		);
+	});
 });
 
 function memoryLog() {
@@ -530,15 +748,44 @@ function zeroUsage() {
 	};
 }
 
-function contentText(message: { content?: unknown } | undefined): string {
+function contentText(message: unknown): string {
 	if (!message) return "";
-	const content = message.content;
+	const content = (message as { content?: unknown }).content;
 	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
 		.filter((item): item is { type: "text"; text: string } => item?.type === "text")
 		.map((item) => item.text)
 		.join("\n");
+}
+
+function renderMessages(messages: unknown[]): string {
+	return messages.map(contentText).join("\n");
+}
+
+function lcmCompactionConfig(baseConfig: Awaited<ReturnType<typeof memoryConfig>>) {
+	return {
+		...baseConfig,
+		memory: {
+			...baseConfig.memory,
+			lcm: {
+				...baseConfig.memory.lcm,
+				enabled: true,
+				freshTailCount: 1,
+				leafChunkTokens: 23,
+				leafTargetTokens: 8,
+				maxRounds: 1,
+			},
+		},
+	};
+}
+
+function fixedSummary(text: string): LcmSummarizer {
+	return {
+		async summarizeLeaf() {
+			return `Files: none\n${text}\nExpand for details about: old chat wording`;
+		},
+	};
 }
 
 function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore & {

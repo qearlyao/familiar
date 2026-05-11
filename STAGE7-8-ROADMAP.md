@@ -617,10 +617,10 @@ shipped. Fix before adding more surface area.
 
 ### Remaining migration TODOs
 
-- Add persisted ordered LCM context items with ordinals, then make live
+- [x] Add persisted ordered LCM context items with ordinals, then make live
   compaction replace raw/summary ranges in that table instead of only in the
   in-memory `transformContext` state.
-- Rehydrate `transformContext` from persisted LCM context items and retained
+- [x] Rehydrate `transformContext` from persisted LCM context items and retained
   summaries after daemon restart, so transcript replay is no longer the only
   continuity source for compressed long conversations. The recent
   segment-restart fix covers segment numbering only; compressed long

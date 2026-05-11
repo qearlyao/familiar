@@ -31,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 5);
+			assert.equal(store.schemaVersion(), 6);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -619,6 +619,68 @@ describe("LcmStore", () => {
 				],
 			);
 			assert.equal(report.indexDeletes.filter((item) => item.corpus === "lcm_summary").length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("replaceContextItems atomically replaces rows with sequential ordinals", async () => {
+		const store = await openStore();
+		try {
+			const first = store.insertRecord({
+				segmentId: "seg-context",
+				kind: "user",
+				text: "first context raw",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			const second = store.insertRecord({
+				segmentId: "seg-context",
+				kind: "assistant",
+				text: "second context raw",
+				happenedAt: "2026-05-10T01:01:00.000Z",
+				source: source(2),
+			});
+			const third = store.insertRecord({
+				segmentId: "seg-context",
+				kind: "user",
+				text: "third context raw",
+				happenedAt: "2026-05-10T01:02:00.000Z",
+				source: source(3),
+			});
+			const summaryId = store.insertSummary({
+				segmentId: "seg-context",
+				depth: 1,
+				status: "ready",
+				text: "context summary",
+				coversFromRecordId: first,
+				coversToRecordId: second,
+				source: { sourceType: "manual", sourceRef: "sum:context" },
+			});
+
+			store.replaceContextItems("room-context", [
+				{ type: "raw", recordId: first, fingerprint: "raw:first", happenedAt: "2026-05-10T01:00:00.000Z" },
+				{ type: "raw", recordId: second, fingerprint: "raw:second", happenedAt: "2026-05-10T01:01:00.000Z" },
+				{ type: "raw", recordId: third, fingerprint: "raw:third", happenedAt: "2026-05-10T01:02:00.000Z" },
+			]);
+			store.replaceContextItems("room-context", [
+				{ type: "summary", summaryId, fingerprint: "summary:first-second", happenedAt: null },
+				{ type: "raw", recordId: third, fingerprint: "raw:third", happenedAt: "2026-05-10T01:02:00.000Z" },
+			]);
+
+			assert.deepEqual(
+				store.listContextItems("room-context").map((item) => ({
+					ordinal: item.ordinal,
+					type: item.type,
+					recordId: item.recordId,
+					summaryId: item.summaryId,
+					fingerprint: item.fingerprint,
+				})),
+				[
+					{ ordinal: 0, type: "summary", recordId: null, summaryId, fingerprint: "summary:first-second" },
+					{ ordinal: 1, type: "raw", recordId: third, summaryId: null, fingerprint: "raw:third" },
+				],
+			);
 		} finally {
 			store.close();
 		}

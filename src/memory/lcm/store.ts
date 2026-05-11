@@ -8,6 +8,7 @@ import type { Config } from "../../config.js";
 import { normalizeFtsMatchQuery } from "../index/fts-query.js";
 import { readMeta, runLcmMigrations } from "./schema.js";
 import type {
+	LcmContextItemInput,
 	LcmRecordInput,
 	LcmRecordKind,
 	LcmRecordPart,
@@ -23,6 +24,7 @@ import type {
 	LcmSummaryStatus,
 	StoredLcmRecord,
 	StoredLcmSegment,
+	StoredLcmContextItem,
 	StoredLcmSummary,
 	StoredLcmSummarySource,
 } from "./types.js";
@@ -99,6 +101,17 @@ interface LcmSummarySourceRow {
 	source_summary_id: number | null;
 	source_ref: string | null;
 	snapshot_json: string | null;
+}
+
+interface LcmContextItemRow {
+	session_key: string;
+	ordinal: number;
+	item_type: string;
+	record_id: number | null;
+	summary_id: number | null;
+	fingerprint: string;
+	happened_at: string | null;
+	updated_at: number;
 }
 
 export class LcmStore {
@@ -298,6 +311,46 @@ export class LcmStore {
 			.prepare("SELECT summary_id FROM lcm_summary_parents WHERE parent_summary_id = ? ORDER BY ord, summary_id")
 			.all(summaryId) as { summary_id: number }[];
 		return rows.map((row) => row.summary_id);
+	}
+
+	replaceContextItems(sessionKey: string, items: LcmContextItemInput[]): void {
+		const run = () => {
+			this.db.prepare("DELETE FROM lcm_context_items WHERE session_key = ?").run(sessionKey);
+			const insert = this.db.prepare(
+				`INSERT INTO lcm_context_items (
+					session_key, ordinal, item_type, record_id, summary_id, fingerprint, happened_at
+				 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			);
+			for (const [ordinal, item] of items.entries()) {
+				insert.run(
+					sessionKey,
+					ordinal,
+					item.type,
+					item.type === "raw" ? item.recordId : null,
+					item.type === "summary" ? item.summaryId : null,
+					item.fingerprint,
+					item.happenedAt,
+				);
+			}
+		};
+		if (this.db.inTransaction) run();
+		else this.db.transaction(run).immediate();
+	}
+
+	listContextItems(sessionKey: string): StoredLcmContextItem[] {
+		const rows = this.db
+			.prepare(
+				`SELECT session_key, ordinal, item_type, record_id, summary_id, fingerprint, happened_at, updated_at
+				 FROM lcm_context_items
+				 WHERE session_key = ?
+				 ORDER BY ordinal ASC`,
+			)
+			.all(sessionKey) as LcmContextItemRow[];
+		return rows.map(contextItemFromRow);
+	}
+
+	clearContextItems(sessionKey: string): void {
+		this.db.prepare("DELETE FROM lcm_context_items WHERE session_key = ?").run(sessionKey);
 	}
 
 	applyNewSessionRetention(options: LcmRetentionOptions): LcmRetentionReport {
@@ -770,6 +823,36 @@ function summarySourceFromRow(row: LcmSummarySourceRow): StoredLcmSummarySource 
 		sourceRef: row.source_ref,
 		snapshot: parseJsonObject(row.snapshot_json),
 	};
+}
+
+function contextItemFromRow(row: LcmContextItemRow): StoredLcmContextItem {
+	if (row.item_type === "raw") {
+		if (row.record_id === null) throw new Error(`Invalid raw LCM context item at ordinal ${row.ordinal}`);
+		return {
+			sessionKey: row.session_key,
+			ordinal: row.ordinal,
+			type: "raw",
+			recordId: row.record_id,
+			summaryId: null,
+			fingerprint: row.fingerprint,
+			happenedAt: row.happened_at,
+			updatedAt: row.updated_at,
+		};
+	}
+	if (row.item_type === "summary") {
+		if (row.summary_id === null) throw new Error(`Invalid summary LCM context item at ordinal ${row.ordinal}`);
+		return {
+			sessionKey: row.session_key,
+			ordinal: row.ordinal,
+			type: "summary",
+			recordId: null,
+			summaryId: row.summary_id,
+			fingerprint: row.fingerprint,
+			happenedAt: row.happened_at,
+			updatedAt: row.updated_at,
+		};
+	}
+	throw new Error(`Unknown LCM context item type: ${row.item_type}`);
 }
 
 const SUMMARY_SNAPSHOT_TEXT_LIMIT = 4 * 1024;

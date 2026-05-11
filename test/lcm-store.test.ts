@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
+
+import Database from "better-sqlite3";
 
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSourceProvenance } from "../src/memory/lcm/types.js";
@@ -29,7 +31,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async () => {
 		const store = await openStore();
 		try {
-			assert.equal(store.schemaVersion(), 1);
+			assert.equal(store.schemaVersion(), 2);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -123,6 +125,169 @@ describe("LcmStore", () => {
 					{ recordId: second, sourceRef: "chat:2", snapshot: { kind: "assistant" } },
 				],
 			);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("sanitizes lexical FTS queries and returns empty operator-only searches", async () => {
+		const store = await openStore();
+		try {
+			const id = store.insertRecord({
+				segmentId: "seg-a",
+				kind: "user",
+				text: "I won't / can't forget this.",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			store.insertSummary({
+				segmentId: "seg-a",
+				depth: 1,
+				status: "ready",
+				text: "The summary says we won't forget this.",
+				source: { sourceType: "manual", sourceRef: "summary:1" },
+				sourceItems: [{ recordId: id }],
+			});
+
+			assert.equal(store.searchRecordsLexical("won't").map((record) => record.id)[0], id);
+			assert.equal(store.searchSummariesLexical("won't").length, 1);
+			assert.deepEqual(store.searchRecordsLexical(":"), []);
+			assert.deepEqual(store.searchRecordsLexical("OR"), []);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("removes contentless FTS rows when segment cascade deletes records", async () => {
+		const store = await openStore();
+		try {
+			store.insertRecord({
+				segmentId: "seg-a",
+				kind: "user",
+				text: "cascade-only lexical marker",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			assert.equal(store.searchRecordsLexical("cascade-only").length, 1);
+
+			store.db.transaction(() => {
+				const records = store.listRecords("seg-a");
+				for (const record of records) {
+					store.db.prepare("DELETE FROM lcm_records_fts WHERE rowid = ?").run(record.id);
+				}
+				store.db.prepare("DELETE FROM lcm_segments WHERE id = ?").run("seg-a");
+			}).immediate();
+
+			assert.equal(store.searchRecordsLexical("cascade-only").length, 0);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("keeps contentless FTS rows stable when reopening the store", async () => {
+		const path = await tempDbPath();
+		let store = new LcmStore({ path });
+		try {
+			store.insertRecord({
+				segmentId: "seg-a",
+				kind: "user",
+				text: "stable reopen marker",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			assert.equal(store.searchRecordsLexical("stable").length, 1);
+		} finally {
+			store.close();
+		}
+
+		store = new LcmStore({ path });
+		try {
+			assert.equal(store.searchRecordsLexical("stable").length, 1);
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM lcm_records_fts").get() as { n: number }).n, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("rolls back implicit segment creation when record insert fails", async () => {
+		const store = await openStore();
+		const originalPrepare = store.db.prepare.bind(store.db);
+		store.db.prepare = ((sourceSql: string) => {
+			if (sourceSql.includes("INSERT INTO lcm_records (")) throw new Error("simulated insert failure");
+			return originalPrepare(sourceSql);
+		}) as typeof store.db.prepare;
+		try {
+			assert.throws(
+				() =>
+					store.insertRecord({
+						segmentId: "seg-fail",
+						kind: "user",
+						text: "this insert fails",
+						happenedAt: "2026-05-10T01:00:00.000Z",
+						source: source(1),
+					}),
+				/simulated insert failure/,
+			);
+			assert.equal(store.getSegment("seg-fail"), null);
+		} finally {
+			store.db.prepare = originalPrepare as typeof store.db.prepare;
+			store.close();
+		}
+	});
+
+	it("deletes summary source rows when retained summaries are pruned", async () => {
+		const store = await storeWithClosedSegments();
+		try {
+			assert.ok(store.getSummarySources(1).length > 0);
+
+			store.applyNewSessionRetention({ newSessionRetainDepth: 2, activeSegmentId: "seg-c" });
+
+			assert.equal(store.getSummarySources(1).length, 0);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("does not index boundary records into lexical FTS", async () => {
+		const store = await openStore();
+		try {
+			store.insertRecord({
+				segmentId: "seg-a",
+				kind: "boundary",
+				text: "",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source("boundary"),
+			});
+			const normal = store.insertRecord({
+				segmentId: "seg-a",
+				kind: "user",
+				text: "Session planning note",
+				happenedAt: "2026-05-10T01:01:00.000Z",
+				source: source(1),
+			});
+
+			assert.deepEqual(
+				store.searchRecordsLexical("Session").map((record) => record.id),
+				[normal],
+			);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("enables foreign key enforcement on opened store connections", async () => {
+		const path = await tempDbPath();
+		await mkdir(resolve(path, ".."), { recursive: true });
+		const raw = new Database(path);
+		try {
+			raw.pragma("foreign_keys = OFF");
+		} finally {
+			raw.close();
+		}
+
+		const store = new LcmStore({ path });
+		try {
+			assert.equal((store.db.pragma("foreign_keys", { simple: true }) as number), 1);
 		} finally {
 			store.close();
 		}

@@ -5,8 +5,9 @@ import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 
 import type { Config } from "../../config.js";
+import { normalizeFtsMatchQuery } from "./fts-query.js";
 import { readMeta, runMemoryIndexMigrations } from "./schema.js";
-import { cosineDistance, decodeVector, encodeVector } from "./vector.js";
+import { cosineDistance, decodeVector, encodeVector } from "./vector-codec.js";
 
 export interface MemoryChunkInput {
 	corpus: string;
@@ -27,6 +28,7 @@ export interface StoredMemoryChunk {
 	sourceId: string | null;
 	sourceRef: string | null;
 	chunkIndex: number;
+	sources: MemoryChunkSourceRef[];
 	text: string;
 	snippet: string;
 	tokenCount: number | null;
@@ -41,6 +43,13 @@ export interface MemorySearchHit {
 	id: number;
 	score: number;
 	chunk: StoredMemoryChunk;
+}
+
+export interface MemoryChunkSourceRef {
+	corpus: string;
+	sourceId: string;
+	sourceRef: string | null;
+	chunkIndex: number;
 }
 
 export interface MemorySearchOptions {
@@ -69,9 +78,9 @@ interface MemoryChunkRow {
 	id: number;
 	content_hash: string;
 	corpus: string;
-	source_id: string | null;
-	source_ref: string | null;
-	chunk_index: number;
+	source_id?: string | null;
+	source_ref?: string | null;
+	chunk_index?: number;
 	text_full: string;
 	snippet: string;
 	token_count: number | null;
@@ -81,6 +90,7 @@ interface MemoryChunkRow {
 	embedding: Buffer;
 	created_at: number;
 	updated_at: number;
+	sources_json?: string | null;
 }
 
 interface StoreOptions {
@@ -155,6 +165,21 @@ export class MemoryIndexStore {
 		return out;
 	}
 
+	recordSourceMappings(inputs: MemoryChunkInput[]): void {
+		if (inputs.length === 0) return;
+		const rows = inputs.map((input) => this.normalizeInput(input));
+		this.db
+			.transaction((items: NormalizedChunkInput[]) => {
+				for (const item of items) {
+					const existing = this.db
+						.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?")
+						.get(item.contentHash) as { id: number } | undefined;
+					if (existing) this.insertSourceMapping(existing.id, item);
+				}
+			})
+			.immediate(rows);
+	}
+
 	replaceSource(corpus: string, sourceId: string, inputs: MemoryChunkInput[]): number[] {
 		const rows = inputs.map((input) => this.normalizeInput({ ...input, corpus, sourceId }));
 		const out: number[] = [];
@@ -182,7 +207,9 @@ export class MemoryIndexStore {
 	}
 
 	getChunk(id: number): StoredMemoryChunk | null {
-		const row = this.db.prepare("SELECT * FROM memory_chunks WHERE id = ?").get(id) as MemoryChunkRow | undefined;
+		const row = this.db
+			.prepare(`SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c WHERE c.id = ?`)
+			.get(id) as MemoryChunkRow | undefined;
 		return row ? rowToChunk(row) : null;
 	}
 
@@ -196,7 +223,7 @@ export class MemoryIndexStore {
 		params.push(normalized.limit);
 		const rows = this.db
 			.prepare(
-				`SELECT c.*, f.rank AS score
+				`SELECT c.*, f.rank AS score, ${sourcesJsonSelect("c.id")}
 				 FROM memory_fts f
 				 JOIN memory_chunks c ON c.id = f.rowid
 				 WHERE memory_fts MATCH ?
@@ -214,7 +241,11 @@ export class MemoryIndexStore {
 			throw new Error(`Query vector dimension mismatch: expected ${this.embeddingDimensions}, got ${query.length}`);
 		}
 		const rows = this.db
-			.prepare(normalized.corpus ? "SELECT * FROM memory_chunks WHERE corpus = ?" : "SELECT * FROM memory_chunks")
+			.prepare(
+				normalized.corpus
+					? `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c WHERE c.corpus = ?`
+					: `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c`,
+			)
 			.all(...(normalized.corpus ? [normalized.corpus] : [])) as MemoryChunkRow[];
 		return rows
 			.map((row) => ({
@@ -228,7 +259,7 @@ export class MemoryIndexStore {
 
 	deleteChunk(id: number): void {
 		const remove = this.db.transaction(() => {
-			this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(id);
+			this.deleteFtsRow(id);
 			this.db.prepare("DELETE FROM memory_chunks WHERE id = ?").run(id);
 		});
 		remove.immediate();
@@ -238,29 +269,54 @@ export class MemoryIndexStore {
 		this.db.transaction(() => this.deleteBySourceInternal(corpus, sourceId)).immediate();
 	}
 
+	/** Caller already owns the index DB write transaction. */
+	deleteBySourceUnsafe(corpus: string, sourceId: string): void {
+		this.deleteBySourceInternal(corpus, sourceId);
+	}
+
 	deleteBySourceExceptHashes(corpus: string, sourceId: string, contentHashes: readonly string[]): void {
-		const uniqueHashes = [...new Set(contentHashes)];
-		if (uniqueHashes.length === 0) {
+		this.deleteBySourceExceptMappings(
+			corpus,
+			sourceId,
+			[...new Set(contentHashes)].map((contentHash) => ({ contentHash, chunkIndex: null })),
+		);
+	}
+
+	deleteBySourceExceptMappings(
+		corpus: string,
+		sourceId: string,
+		kept: readonly { contentHash: string; chunkIndex: number | null }[],
+	): void {
+		if (kept.length === 0) {
 			this.deleteBySource(corpus, sourceId);
 			return;
 		}
 
-		const placeholders = uniqueHashes.map(() => "?").join(",");
 		this.db
 			.transaction(() => {
 				const rows = this.db
 					.prepare(
-						`SELECT id FROM memory_chunks
-						 WHERE corpus = ? AND source_id = ? AND content_hash NOT IN (${placeholders})`,
+						`SELECT s.chunk_id AS id, c.content_hash, s.chunk_index
+						 FROM memory_index_sources s
+						 JOIN memory_chunks c ON c.id = s.chunk_id
+						 WHERE s.corpus = ? AND s.source_id = ?`,
 					)
-					.all(corpus, sourceId, ...uniqueHashes) as { id: number }[];
-				for (const row of rows) this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);
-				this.db
-					.prepare(
-						`DELETE FROM memory_chunks
-						 WHERE corpus = ? AND source_id = ? AND content_hash NOT IN (${placeholders})`,
-					)
-					.run(corpus, sourceId, ...uniqueHashes);
+					.all(corpus, sourceId) as { id: number; content_hash: string; chunk_index: number }[];
+				for (const row of rows) {
+					if (
+						kept.some(
+							(item) =>
+								item.contentHash === row.content_hash &&
+								(item.chunkIndex === null || item.chunkIndex === row.chunk_index),
+						)
+					) {
+						continue;
+					}
+					this.db
+						.prepare("DELETE FROM memory_index_sources WHERE corpus = ? AND source_id = ? AND chunk_index = ?")
+						.run(corpus, sourceId, row.chunk_index);
+					this.deleteOrphanChunk(row.id);
+				}
 			})
 			.immediate();
 	}
@@ -268,8 +324,39 @@ export class MemoryIndexStore {
 	clearAll(): void {
 		this.db
 			.transaction(() => {
-				this.db.prepare("DELETE FROM memory_fts").run();
+				this.db.prepare("INSERT INTO memory_fts(memory_fts) VALUES ('delete-all')").run();
+				this.db.prepare("DELETE FROM memory_index_sources").run();
 				this.db.prepare("DELETE FROM memory_chunks").run();
+			})
+			.immediate();
+	}
+
+	reconcileSources(exists: (source: MemoryChunkSourceRef) => boolean): void {
+		const sources = this.db
+			.prepare("SELECT chunk_id, corpus, source_id, source_ref, chunk_index FROM memory_index_sources")
+			.all() as Array<{
+			chunk_id: number;
+			corpus: string;
+			source_id: string;
+			source_ref: string | null;
+			chunk_index: number;
+		}>;
+		if (sources.length === 0) return;
+		this.db
+			.transaction(() => {
+				for (const row of sources) {
+					const source = {
+						corpus: row.corpus,
+						sourceId: row.source_id,
+						sourceRef: row.source_ref,
+						chunkIndex: row.chunk_index,
+					};
+					if (exists(source)) continue;
+					this.db
+						.prepare("DELETE FROM memory_index_sources WHERE corpus = ? AND source_id = ? AND chunk_index = ?")
+						.run(source.corpus, source.sourceId, source.chunkIndex);
+					this.deleteOrphanChunk(row.chunk_id);
+				}
 			})
 			.immediate();
 	}
@@ -315,8 +402,7 @@ export class MemoryIndexStore {
 			embedding: input.embedding,
 			contentHash: createMemoryContentHash({
 				corpus: input.corpus,
-				sourceId: input.sourceId ?? null,
-				chunkIndex,
+				role: typeof input.metadata?.role === "string" ? input.metadata.role : null,
 				text,
 				embeddingModel: this.embeddingModel,
 				embeddingDimensions: this.embeddingDimensions,
@@ -328,22 +414,21 @@ export class MemoryIndexStore {
 		const existing = this.db.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?").get(item.contentHash) as
 			| { id: number }
 			| undefined;
-		if (existing) return existing.id;
+		if (existing) {
+			this.insertSourceMapping(existing.id, item);
+			return existing.id;
+		}
 
 		const result = this.db
 			.prepare(
 				`INSERT INTO memory_chunks (
-					content_hash, corpus, source_id, source_ref, chunk_index, text_full,
-					snippet, token_count, metadata_json, embedding_model,
+					content_hash, corpus, text_full, snippet, token_count, metadata_json, embedding_model,
 					embedding_dimensions, embedding
-				 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				item.contentHash,
 				item.corpus,
-				item.sourceId,
-				item.sourceRef,
-				item.chunkIndex,
 				item.text,
 				item.snippet,
 				item.tokenCount,
@@ -356,17 +441,45 @@ export class MemoryIndexStore {
 		this.db
 			.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)")
 			.run(id, item.text, item.snippet);
+		this.insertSourceMapping(id, item);
 		return id;
 	}
 
 	private deleteBySourceInternal(corpus: string, sourceId: string): void {
 		const rows = this.db
-			.prepare("SELECT id FROM memory_chunks WHERE corpus = ? AND source_id = ?")
+			.prepare("SELECT chunk_id AS id FROM memory_index_sources WHERE corpus = ? AND source_id = ?")
 			.all(corpus, sourceId) as {
 			id: number;
 		}[];
-		for (const row of rows) this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);
-		this.db.prepare("DELETE FROM memory_chunks WHERE corpus = ? AND source_id = ?").run(corpus, sourceId);
+		this.db.prepare("DELETE FROM memory_index_sources WHERE corpus = ? AND source_id = ?").run(corpus, sourceId);
+		for (const row of rows) this.deleteOrphanChunk(row.id);
+	}
+
+	private insertSourceMapping(chunkId: number, item: NormalizedChunkInput): void {
+		if (!item.sourceId) return;
+		this.db
+			.prepare(
+				`INSERT OR REPLACE INTO memory_index_sources(chunk_id, corpus, source_id, source_ref, chunk_index)
+				 VALUES (?, ?, ?, ?, ?)`,
+			)
+			.run(chunkId, item.corpus, item.sourceId, item.sourceRef, item.chunkIndex);
+	}
+
+	private deleteOrphanChunk(id: number): void {
+		const remaining = this.db
+			.prepare("SELECT 1 AS ok FROM memory_index_sources WHERE chunk_id = ? LIMIT 1")
+			.get(id) as { ok: number } | undefined;
+		if (remaining) return;
+		this.deleteFtsRow(id);
+		this.db.prepare("DELETE FROM memory_chunks WHERE id = ?").run(id);
+	}
+
+	private deleteFtsRow(id: number): void {
+		const row = this.db.prepare("SELECT text_full, snippet FROM memory_chunks WHERE id = ?").get(id) as
+			| { text_full: string; snippet: string }
+			| undefined;
+		if (!row) return;
+		this.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(id);
 	}
 }
 
@@ -385,18 +498,18 @@ interface NormalizedChunkInput {
 
 export function createMemoryContentHash(input: {
 	corpus: string;
-	sourceId: string | null;
-	chunkIndex: number;
+	sourceId?: string | null;
+	chunkIndex?: number;
 	text: string;
 	embeddingModel: string;
 	embeddingDimensions: number;
+	role?: string | null;
 }): string {
 	return createHash("sha256")
 		.update(
 			JSON.stringify({
 				corpus: input.corpus,
-				sourceId: input.sourceId,
-				chunkIndex: input.chunkIndex,
+				role: input.role ?? null,
 				text: input.text,
 				embeddingModel: input.embeddingModel,
 				embeddingDimensions: input.embeddingDimensions,
@@ -413,22 +526,31 @@ function normalizeSearchOptions(options: number | MemorySearchOptions): { limit:
 	};
 }
 
-function normalizeFtsMatchQuery(query: string): string | null {
-	const tokens = query
-		.normalize("NFKC")
-		.match(/[\p{L}\p{N}_]+/gu)
-		?.map((token) => `"${token.replaceAll('"', '""')}"`);
-	return tokens && tokens.length > 0 ? tokens.join(" ") : null;
+function sourcesJsonSelect(chunkIdExpr: string): string {
+	return `(SELECT json_group_array(json_object(
+		'corpus', s.corpus,
+		'sourceId', s.source_id,
+		'sourceRef', s.source_ref,
+		'chunkIndex', s.chunk_index
+	)) FROM memory_index_sources s WHERE s.chunk_id = ${chunkIdExpr}) AS sources_json`;
 }
 
 function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {
+	const sources = sourceRefsFromRow(row);
+	const primary = sources[0] ?? {
+		corpus: row.corpus,
+		sourceId: row.source_id ?? null,
+		sourceRef: row.source_ref ?? null,
+		chunkIndex: row.chunk_index ?? 0,
+	};
 	return {
 		id: row.id,
 		contentHash: row.content_hash,
 		corpus: row.corpus,
-		sourceId: row.source_id,
-		sourceRef: row.source_ref,
-		chunkIndex: row.chunk_index,
+		sourceId: primary.sourceId,
+		sourceRef: primary.sourceRef,
+		chunkIndex: primary.chunkIndex,
+		sources,
 		text: row.text_full,
 		snippet: row.snippet,
 		tokenCount: row.token_count,
@@ -438,6 +560,36 @@ function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
+}
+
+function sourceRefsFromRow(row: MemoryChunkRow): MemoryChunkSourceRef[] {
+	if ("sources_json" in row && typeof row.sources_json === "string" && row.sources_json) {
+		try {
+			const parsed = JSON.parse(row.sources_json) as unknown;
+			if (Array.isArray(parsed)) {
+				return parsed.filter(isSourceRef);
+			}
+		} catch {
+			return [];
+		}
+	}
+	const sourceId = row.source_id ?? null;
+	return sourceId
+		? [
+				{
+					corpus: row.corpus,
+					sourceId,
+					sourceRef: row.source_ref ?? null,
+					chunkIndex: row.chunk_index ?? 0,
+				},
+			]
+		: [];
+}
+
+function isSourceRef(value: unknown): value is MemoryChunkSourceRef {
+	if (!value || typeof value !== "object") return false;
+	const item = value as Record<string, unknown>;
+	return typeof item.corpus === "string" && typeof item.sourceId === "string";
 }
 
 function parseMetadata(value: string | null): Record<string, unknown> | null {

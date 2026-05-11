@@ -1,5 +1,5 @@
 import type { EmbeddingProvider } from "./embedding-provider.js";
-import type { MemorySearchHit, StoredMemoryChunk } from "./store.js";
+import type { MemoryChunkSourceRef, MemorySearchHit, StoredMemoryChunk } from "./store.js";
 
 export interface MemoryRetrievalStore {
 	searchLexical(query: string, options?: number | MemoryRetrievalSearchOptions): MemorySearchHit[];
@@ -15,6 +15,8 @@ export interface MemoryRetrievalScope {
 	corpora?: readonly string[];
 	sourceIds?: readonly string[];
 	sourceRefs?: readonly string[];
+	before?: string;
+	after?: string;
 }
 
 export interface RetrieveMemoryOptions {
@@ -119,10 +121,15 @@ function addHits(
 	channel: "lexical" | "semantic",
 	scope: MemoryRetrievalScope | undefined,
 ): void {
-	let rank = 0;
+	const ranksByCorpus = new Map<string, number>();
+	const rankByCorpus = uniqueStrings(scope?.corpora).length > 0;
 	for (const hit of hits) {
 		if (!matchesScope(hit.chunk, scope)) continue;
-		rank += 1;
+		const corpus = rankByCorpus ? hit.chunk.corpus : "";
+		// Corpus-scoped searches are independent retriever lists; each corpus starts
+		// RRF rank at 1 so fan-out order does not penalize later corpora.
+		const rank = (ranksByCorpus.get(corpus) ?? 0) + 1;
+		ranksByCorpus.set(corpus, rank);
 		const existing = merged.get(hit.id);
 		if (!existing) {
 			merged.set(hit.id, {
@@ -168,14 +175,58 @@ function reciprocalRank(rank: number): number {
 function matchesScope(chunk: StoredMemoryChunk, scope: MemoryRetrievalScope | undefined): boolean {
 	const corpora = uniqueStrings(scope?.corpora);
 	if (corpora.length > 0 && !corpora.includes(chunk.corpus)) return false;
+	if (!matchesTimeScope(chunk, scope)) return false;
 
 	const sourceIds = uniqueStrings(scope?.sourceIds);
-	if (sourceIds.length > 0 && (!chunk.sourceId || !sourceIds.includes(chunk.sourceId))) return false;
+	if (
+		sourceIds.length > 0 &&
+		!chunkSources(chunk).some((source) => source.sourceId && sourceIds.includes(source.sourceId))
+	) {
+		return false;
+	}
 
 	const sourceRefs = uniqueStrings(scope?.sourceRefs);
-	if (sourceRefs.length > 0 && (!chunk.sourceRef || !sourceRefs.includes(chunk.sourceRef))) return false;
+	if (
+		sourceRefs.length > 0 &&
+		!chunkSources(chunk).some((source) => source.sourceRef && sourceRefs.includes(source.sourceRef))
+	) {
+		return false;
+	}
 
 	return true;
+}
+
+function matchesTimeScope(chunk: StoredMemoryChunk, scope: MemoryRetrievalScope | undefined): boolean {
+	const after = parseIsoTime(scope?.after);
+	const before = parseIsoTime(scope?.before);
+	if (after === null && before === null) return true;
+	const timestamp = chunkTimestamp(chunk);
+	if (timestamp === null) return false;
+	if (after !== null && timestamp < after) return false;
+	if (before !== null && timestamp > before) return false;
+	return true;
+}
+
+function chunkTimestamp(chunk: StoredMemoryChunk): number | null {
+	const raw = chunk.metadata?.timestamp;
+	if (typeof raw === "string") {
+		const parsed = Date.parse(raw);
+		if (Number.isFinite(parsed)) return parsed;
+	}
+	if (typeof raw === "number" && Number.isFinite(raw)) return raw < 10_000_000_000 ? raw * 1000 : raw;
+	return chunk.createdAt < 10_000_000_000 ? chunk.createdAt * 1000 : chunk.createdAt;
+}
+
+function parseIsoTime(value: string | undefined): number | null {
+	if (!value) return null;
+	const parsed = Date.parse(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function chunkSources(chunk: StoredMemoryChunk): MemoryChunkSourceRef[] {
+	return chunk.sources.length > 0 || !chunk.sourceId
+		? chunk.sources
+		: [{ corpus: chunk.corpus, sourceId: chunk.sourceId, sourceRef: chunk.sourceRef, chunkIndex: chunk.chunkIndex }];
 }
 
 function uniqueStrings(values: readonly string[] | undefined): string[] {

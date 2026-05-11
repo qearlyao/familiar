@@ -6,7 +6,9 @@ import { describe, it } from "node:test";
 
 import { createMemoryTools } from "../src/memory/tools.js";
 import { __memoryToolsTest } from "../src/memory/tools.js";
+import type { EmbeddingProvider, EmbeddingInput } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
+import { createMemoryService } from "../src/memory/service.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function memoryConfig() {
@@ -36,32 +38,43 @@ function vector(values: number[]): Float32Array {
 	return new Float32Array(values);
 }
 
-async function withEmbeddingFetch<T>(values: number[], run: () => Promise<T>): Promise<T> {
-	const previousFetch = globalThis.fetch;
-	globalThis.fetch = (async () =>
-		new Response(
-			JSON.stringify({
-				embeddings: [{ values }],
-			}),
-			{ status: 200, headers: { "content-type": "application/json" } },
-		)) as typeof fetch;
-	try {
-		return await run();
-	} finally {
-		globalThis.fetch = previousFetch;
+class FakeEmbeddingProvider implements EmbeddingProvider {
+	readonly api = "fake";
+	readonly provider = "fake";
+	readonly model = "fake";
+	readonly dimensions = 3;
+	readonly inputs: EmbeddingInput[] = [];
+	constructor(private readonly values: number[]) {}
+	async embed(inputs: EmbeddingInput[], _signal?: AbortSignal): Promise<Float32Array[]> {
+		this.inputs.push(...inputs);
+		return inputs.map(() => vector(this.values));
 	}
+	async embedOne(input: EmbeddingInput, signal?: AbortSignal): Promise<Float32Array> {
+		const [embedding] = await this.embed([input], signal);
+		return embedding as Float32Array;
+	}
+}
+
+function createTools(store: MemoryIndexStore, values = [1, 0, 0]) {
+	return createMemoryTools({ store, embeddingProvider: new FakeEmbeddingProvider(values) });
 }
 
 describe("memory tools", () => {
 	it("creates memory-prefixed recall and open tools", async () => {
-		const tools = createMemoryTools(await memoryConfig());
+		const config = await memoryConfig();
+		const store = MemoryIndexStore.open(config);
+		try {
+			const tools = createTools(store);
 
-		assert.deepEqual(
-			tools.map((tool) => tool.name),
-			["memory_recall", "memory_open"],
-		);
-		assert.equal(tools[0]?.parameters.type, "object");
-		assert.equal(tools[1]?.parameters.type, "object");
+			assert.deepEqual(
+				tools.map((tool) => tool.name),
+				["memory_recall", "memory_open"],
+			);
+			assert.equal(tools[0]?.parameters.type, "object");
+			assert.equal(tools[1]?.parameters.type, "object");
+		} finally {
+			store.close();
+		}
 	});
 
 	it("recalls scoped memory chunks through the shared index", async () => {
@@ -93,14 +106,10 @@ describe("memory tools", () => {
 					embedding: vector([0, 0, 1]),
 				},
 			]);
-		} finally {
-			store.close();
-		}
 
-		const recall = createMemoryTools(config).find((tool) => tool.name === "memory_recall");
-		assert.ok(recall);
+			const recall = createTools(store, [1, 0, 0]).find((tool) => tool.name === "memory_recall");
+			assert.ok(recall);
 
-		await withEmbeddingFetch([1, 0, 0], async () => {
 			const diaryResult = await recall.execute("call-1", {
 				query: "blue lantern",
 				scope: "diary",
@@ -115,10 +124,10 @@ describe("memory tools", () => {
 			);
 			assert.deepEqual(diaryResult.details.scope, "diary");
 			assert.deepEqual(diaryResult.details.ids.length, 1);
-		});
 
-		await withEmbeddingFetch([0, 1, 0], async () => {
-			const factualResult = await recall.execute("call-2", {
+			const factualRecall = createTools(store, [0, 1, 0]).find((tool) => tool.name === "memory_recall");
+			assert.ok(factualRecall);
+			const factualResult = await factualRecall.execute("call-2", {
 				query: "database migrations",
 				scope: "factual",
 				limit: 5,
@@ -128,7 +137,58 @@ describe("memory tools", () => {
 			assert.match(text, /corpus=lcm_record/);
 			assert.doesNotMatch(text, /corpus=diary_chunk/);
 			assert.deepEqual(factualResult.details.scope, "factual");
-		});
+			assert.equal(factualResult.details.mode, "hybrid");
+		} finally {
+			store.close();
+		}
+	});
+
+	it("defaults memory_recall scope to factual and supports mode plus time filters", async () => {
+		const config = await memoryConfig();
+		const store = MemoryIndexStore.open(config);
+		try {
+			store.insertChunks([
+				{
+					corpus: "diary_chunk",
+					sourceId: "2026-05-10.md",
+					text: "timeline marker from private diary",
+					metadata: { timestamp: "2026-05-10T01:00:00.000Z" },
+					embedding: vector([1, 0, 0]),
+				},
+				{
+					corpus: "lcm_record",
+					sourceId: "lcm_record:1",
+					text: "timeline marker from early chat",
+					metadata: { timestamp: "2026-05-10T01:00:00.000Z" },
+					embedding: vector([1, 0, 0]),
+				},
+				{
+					corpus: "atomic_fact",
+					sourceId: "fact:2",
+					text: "timeline marker from later fact",
+					metadata: { timestamp: "2026-05-10T03:00:00.000Z" },
+					embedding: vector([1, 0, 0]),
+				},
+			]);
+
+			const recall = createTools(store).find((tool) => tool.name === "memory_recall");
+			assert.ok(recall);
+			const result = await recall.execute("call-time", {
+				query: "timeline marker",
+				mode: "lexical",
+				after: "2026-05-10T02:00:00.000Z",
+				limit: 5,
+			});
+			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+			assert.equal(result.details.scope, "factual");
+			assert.equal(result.details.mode, "lexical");
+			assert.match(text, /corpus=atomic_fact/);
+			assert.doesNotMatch(text, /corpus=diary_chunk/);
+			assert.doesNotMatch(text, /early chat/);
+		} finally {
+			store.close();
+		}
 	});
 
 	it("opens a chunk with full text and metadata", async () => {
@@ -146,37 +206,68 @@ describe("memory tools", () => {
 				metadata: { depth: 1, segmentId: "seg-1" },
 				embedding: vector([0, 1, 0]),
 			});
+
+			const open = createTools(store).find((tool) => tool.name === "memory_open");
+			assert.ok(open);
+
+			const result = await open.execute("call-3", { id });
+			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+			assert.match(text, new RegExp(`id=${id} corpus=lcm_summary`));
+			assert.match(text, /Full summary text with enough detail/);
+			assert.match(text, /metadata: {"depth":1,"segmentId":"seg-1"}/);
+			assert.doesNotMatch(text, /1970-/);
+			assert.deepEqual(result.details, {
+				id,
+				found: true,
+				corpus: "lcm_summary",
+				sourceId: "lcm_summary:3",
+				sourceRef: "summary-ref",
+				chunkIndex: 2,
+				sources: [{ corpus: "lcm_summary", sourceId: "lcm_summary:3", sourceRef: "summary-ref", chunkIndex: 2 }],
+			});
 		} finally {
 			store.close();
 		}
-
-		const open = createMemoryTools(config).find((tool) => tool.name === "memory_open");
-		assert.ok(open);
-
-		const result = await open.execute("call-3", { id });
-		const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-		assert.match(text, new RegExp(`id=${id} corpus=lcm_summary`));
-		assert.match(text, /Full summary text with enough detail/);
-		assert.match(text, /metadata: {"depth":1,"segmentId":"seg-1"}/);
-		assert.doesNotMatch(text, /1970-/);
-		assert.deepEqual(result.details, {
-			id,
-			found: true,
-			corpus: "lcm_summary",
-			sourceId: "lcm_summary:3",
-			sourceRef: "summary-ref",
-			chunkIndex: 2,
-		});
 	});
 
 	it("reports missing chunks without throwing", async () => {
-		const open = createMemoryTools(await memoryConfig()).find((tool) => tool.name === "memory_open");
-		assert.ok(open);
+		const config = await memoryConfig();
+		const store = MemoryIndexStore.open(config);
+		try {
+			const open = createTools(store).find((tool) => tool.name === "memory_open");
+			assert.ok(open);
 
-		const result = await open.execute("call-4", { id: 404 });
+			const result = await open.execute("call-4", { id: 404 });
 
-		assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /No memory chunk found/);
-		assert.deepEqual(result.details, { id: 404, found: false });
+			assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /No memory chunk found/);
+			assert.deepEqual(result.details, { id: 404, found: false });
+		} finally {
+			store.close();
+		}
+	});
+
+	it("MemoryService reuses one memory store across repeated recall tool calls", async () => {
+		const config = await memoryConfig();
+		const service = createMemoryService(config);
+		try {
+			const store = serviceMemoryStore(service);
+			store.insertChunk({
+				corpus: "lcm_record",
+				sourceId: "lcm_record:1",
+				text: "shared store marker",
+				embedding: vector([1, 0, 0]),
+			});
+			const recall = service.memoryTools().find((tool) => tool.name === "memory_recall");
+			assert.ok(recall);
+
+			await recall.execute("call-a", { query: "shared", mode: "lexical" });
+			await recall.execute("call-b", { query: "shared", mode: "lexical" });
+			await recall.execute("call-c", { query: "shared", mode: "lexical" });
+
+			assert.equal(serviceMemoryStore(service), store);
+		} finally {
+			service.close();
+		}
 	});
 
 	it("formats sqlite unixepoch timestamps as real ISO timestamps", () => {
@@ -184,3 +275,7 @@ describe("memory tools", () => {
 		assert.equal(__memoryToolsTest.formatUnixTimestamp(seconds), "2026-05-20T00:00:00.000Z");
 	});
 });
+
+function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore {
+	return (service as unknown as { memoryStore: MemoryIndexStore }).memoryStore;
+}

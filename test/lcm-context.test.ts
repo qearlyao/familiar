@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import {
-	assembleLcmContext,
+	createAgentMessageFingerprint,
+	createRawContextItems,
 	detectLcmCompactionPressure,
 	estimateAgentMessageTokens,
 	estimateLcmRecordTokens,
@@ -102,36 +103,6 @@ describe("LCM context helpers", () => {
 		);
 	});
 
-	it("assembles retained summaries plus fresh user and assistant tail messages", () => {
-		const assembly = assembleLcmContext({
-			summaries: [
-				summary(1, "seg-a", 1, "ready", "Shallow duplicate."),
-				summary(2, "seg-a", 2, "ready", "The user likes compact toolbar controls."),
-				summary(3, "seg-b", 1, "placeholder", ""),
-				summary(4, "seg-c", 1, "ready", "Pinned relationship note.", true),
-			],
-			records: [
-				record(1, "tool", "debug detail"),
-				record(2, "user", "Can you remember the toolbar?", "2026-05-10T01:00:00.000Z"),
-				record(3, "assistant", "Yes, I will keep it fresh.", "2026-05-10T01:01:00.000Z"),
-			],
-			freshTail: { messageCount: 2 },
-			now: 123,
-		});
-
-		assert.equal(assembly.messages.length, 3);
-		assert.equal(assembly.messages[0]?.role, "user");
-		assert.match(contentText(assembly.messages[0]), /Familiar retained LCM summaries/);
-		assert.match(contentText(assembly.messages[0]), /Pinned relationship note/);
-		assert.equal(assembly.messages[1]?.role, "user");
-		assert.equal(assembly.messages[2]?.role, "assistant");
-		assert.deepEqual(
-			assembly.summaries.map((item) => item.id),
-			[4, 2, 1],
-		);
-		assert.ok(assembly.totalTokenCount >= assembly.freshTail.tokenCount);
-	});
-
 	it("detects compaction pressure from evictable tokens outside the fresh tail", () => {
 		const records = [
 			record(1, "user", "old " + "a".repeat(120)),
@@ -155,6 +126,22 @@ describe("LCM context helpers", () => {
 		assert.equal(pressure.freshTailRecordCount, 2);
 		assert.ok(pressure.evictableTokens > pressure.freshTailTokens);
 		assert.ok(pressure.summaryTokens > 0);
+	});
+
+	it("creates stable AgentMessage fingerprints independent of starting index", () => {
+		const messages: AgentMessage[] = [
+			{ role: "user", content: "first stable detail", timestamp: 1 },
+			{ role: "assistant", content: [{ type: "text", text: "second stable detail" }], api: "test", provider: "test", model: "test", usage: zeroUsage(), stopReason: "stop", timestamp: 2 },
+			{ role: "user", id: "msg-3", content: "third stable detail" } as unknown as AgentMessage,
+		];
+		const first = messages.map((message, index) => createAgentMessageFingerprint(message, index));
+		const second = messages.map((message, index) => createAgentMessageFingerprint(message, index + 42));
+
+		assert.deepEqual(first, second);
+		assert.deepEqual(
+			createRawContextItems(messages).map((item) => item.id),
+			first,
+		);
 	});
 });
 
@@ -223,17 +210,4 @@ function zeroUsage() {
 			total: 0,
 		},
 	};
-}
-
-function contentText(message: AgentMessage | undefined): string {
-	if (!message || !("content" in message)) return "";
-	const content = message.content;
-	if (typeof content === "string") return content;
-	if (Array.isArray(content)) {
-		return content
-			.filter((item): item is { type: "text"; text: string } => item.type === "text")
-			.map((item) => item.text)
-			.join("\n");
-	}
-	return "";
 }

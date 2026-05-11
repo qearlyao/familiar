@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -54,8 +54,8 @@ export function runLcmMigrations(db: Database.Database): void {
 
 		CREATE VIRTUAL TABLE IF NOT EXISTS lcm_records_fts USING fts5(
 			text_full,
-			content='lcm_records',
-			content_rowid='id'
+			content='',
+			contentless_delete=1
 		);
 
 		CREATE TABLE IF NOT EXISTS lcm_summaries (
@@ -84,8 +84,8 @@ export function runLcmMigrations(db: Database.Database): void {
 
 		CREATE VIRTUAL TABLE IF NOT EXISTS lcm_summaries_fts USING fts5(
 			text_full,
-			content='lcm_summaries',
-			content_rowid='id'
+			content='',
+			contentless_delete=1
 		);
 
 		CREATE TABLE IF NOT EXISTS lcm_summary_sources (
@@ -99,6 +99,7 @@ export function runLcmMigrations(db: Database.Database): void {
 		);
 	`);
 
+	migrateContentlessFts(db);
 	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
 }
 
@@ -112,4 +113,26 @@ export function writeMeta(db: Database.Database, key: string, value: string): vo
 		`INSERT INTO lcm_meta(k, v) VALUES (?, ?)
 		 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
 	).run(key, value);
+}
+
+function migrateContentlessFts(db: Database.Database): void {
+	migrateOneFts(db, "lcm_records_fts", "lcm_records", "text_full");
+	migrateOneFts(db, "lcm_summaries_fts", "lcm_summaries", "text_full");
+}
+
+function migrateOneFts(db: Database.Database, ftsTable: string, sourceTable: string, textColumn: string): void {
+	const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(ftsTable) as
+		| { sql: string }
+		| undefined;
+	if (row?.sql.includes("contentless_delete=1")) return;
+	db.transaction(() => {
+		db.prepare(`DROP TABLE ${ftsTable}`).run();
+		db.prepare(`CREATE VIRTUAL TABLE ${ftsTable} USING fts5(${textColumn}, content='', contentless_delete=1)`).run();
+		const rows = db.prepare(`SELECT id, ${textColumn} FROM ${sourceTable}`).all() as {
+			id: number;
+			[key: string]: unknown;
+		}[];
+		const insert = db.prepare(`INSERT INTO ${ftsTable}(rowid, ${textColumn}) VALUES (?, ?)`);
+		for (const source of rows) insert.run(source.id, source[textColumn]);
+	}).immediate();
 }

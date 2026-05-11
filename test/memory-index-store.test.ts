@@ -90,6 +90,55 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
+	it("dedupes identical content across sources and preserves mappings until the last source is deleted", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			const ids = store.insertChunks([
+				{ corpus: "diary_chunk", sourceId: "source-a", chunkIndex: 0, text: "X", embedding: vector([1, 0, 0]) },
+				{ corpus: "diary_chunk", sourceId: "source-b", chunkIndex: 0, text: "X", embedding: vector([0, 1, 0]) },
+			]);
+
+			assert.equal(ids[0], ids[1]);
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 1);
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_index_sources").get() as { n: number }).n, 2);
+			assert.deepEqual(
+				store.searchLexical("X", 5)[0]?.chunk.sources.map((source) => source.sourceId).sort(),
+				["source-a", "source-b"],
+			);
+
+			store.deleteBySource("diary_chunk", "source-a");
+			assert.equal(store.searchLexical("X", 5).length, 1);
+			assert.deepEqual(
+				store.searchLexical("X", 5)[0]?.chunk.sources.map((source) => source.sourceId),
+				["source-b"],
+			);
+
+			store.deleteBySource("diary_chunk", "source-b");
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 0);
+			assert.equal(store.searchLexical("X", 5).length, 0);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("replaces a source mapping when the same source chunk index changes content", async () => {
+		const store = openStore(await tempDbPath());
+		try {
+			store.replaceSource("diary_chunk", "day.md", [
+				{ corpus: "ignored", sourceId: "ignored", chunkIndex: 0, text: "old indexed text", embedding: vector([1, 0, 0]) },
+			]);
+			store.replaceSource("diary_chunk", "day.md", [
+				{ corpus: "ignored", sourceId: "ignored", chunkIndex: 0, text: "new indexed text", embedding: vector([0, 1, 0]) },
+			]);
+
+			assert.equal(store.searchLexical("old", 5).length, 0);
+			assert.equal(store.searchLexical("new", 5).length, 1);
+			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM memory_index_sources").get() as { n: number }).n, 1);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("quotes natural-language FTS queries with punctuation", async () => {
 		const store = openStore(await tempDbPath());
 		try {

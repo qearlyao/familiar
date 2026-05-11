@@ -9,7 +9,6 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool } from 
 import type { Config, ThinkingLevel } from "./config.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import type { MemoryService } from "./memory/service.js";
-import { createMemoryTools } from "./memory/tools.js";
 import {
 	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
@@ -244,7 +243,7 @@ function logUsage(event: AgentEvent): void {
 	);
 }
 
-function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): AgentTool<any>[] {
+function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink, memoryService?: MemoryService): AgentTool<any>[] {
 	return [
 		createBashTool(config.workspacePath),
 		createReadTool(config.workspacePath),
@@ -252,7 +251,7 @@ function createFamiliarTools(config: Config, mediaSink: GeneratedMediaSink): Age
 		createEditTool(config.workspacePath),
 		createTtsTool(config, mediaSink),
 		...createWebTools(config),
-		...createMemoryTools(config),
+		...(memoryService?.memoryTools() ?? []),
 	];
 }
 
@@ -302,7 +301,7 @@ export async function createFamiliarAgent(
 				systemPrompt,
 				model,
 				messages,
-				tools: createFamiliarTools(config, mediaSink),
+				tools: createFamiliarTools(config, mediaSink, memoryService),
 				thinkingLevel,
 			},
 			sessionId,
@@ -387,7 +386,7 @@ export async function createFamiliarAgent(
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
 		session.mediaSink.drain();
-		session.agent.state.tools = createFamiliarTools(config, session.mediaSink);
+		session.agent.state.tools = createFamiliarTools(config, session.mediaSink, memoryService);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 

@@ -346,11 +346,91 @@ describe("MemoryService", () => {
 					const summaries = lcmStore.listSummaries();
 					assert.equal(summaries.length, 1);
 					assert.match(summaries[0]?.text ?? "", /old alpha and beta/);
+					assert.ok(summaries[0]?.coversFromRecordId);
+					assert.ok(summaries[0]?.coversToRecordId);
+					assert.ok(lcmStore.getRecord(summaries[0]?.coversFromRecordId as number));
+					assert.ok(lcmStore.getRecord(summaries[0]?.coversToRecordId as number));
+					const sources = lcmStore.getSummarySources(summaries[0]?.id as number);
+					assert.equal(sources.length, 2);
+					assert.equal(sources.every((source) => source.recordId !== null), true);
+					for (const source of sources) assert.ok(lcmStore.getRecord(source.recordId as number));
 				} finally {
 					lcmStore.close();
 				}
 			} finally {
 				service.close();
+			}
+		});
+	});
+
+	it("reconciles shared-index rows left behind after LCM retention committed", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
+		};
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config);
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "web-web-room",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			const originalDelete = serviceMemoryStore(service).deleteBySourceUnsafe.bind(serviceMemoryStore(service));
+			const originalConsoleError = console.error;
+			serviceMemoryStore(service).deleteBySourceUnsafe = () => {
+				throw new Error("simulated index delete failure");
+			};
+			console.error = () => {};
+			try {
+				await runtime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "Dangling toolbar marker after retention.",
+				});
+				await service.flush();
+
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+			} finally {
+				serviceMemoryStore(service).deleteBySourceUnsafe = originalDelete;
+				console.error = originalConsoleError;
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+
+			let lcmStore = LcmStore.open(config);
+			try {
+				assert.equal(lcmStore.listRecords().length, 0);
+			} finally {
+				lcmStore.close();
+			}
+			let memoryStore = MemoryIndexStore.open(config);
+			try {
+				assert.equal(memoryStore.searchLexical("toolbar", { corpus: LCM_RECORD_CORPUS }).length, 1);
+			} finally {
+				memoryStore.close();
+			}
+
+			const restarted = createMemoryService(config);
+			try {
+				memoryStore = MemoryIndexStore.open(config);
+				try {
+					assert.equal(memoryStore.searchLexical("toolbar", { corpus: LCM_RECORD_CORPUS }).length, 0);
+				} finally {
+					memoryStore.close();
+				}
+			} finally {
+				restarted.close();
+			}
+			lcmStore = LcmStore.open(config);
+			try {
+				assert.equal(lcmStore.listSegments().filter((segment) => segment.status === "active").length, 1);
+			} finally {
+				lcmStore.close();
 			}
 		});
 	});
@@ -393,4 +473,11 @@ function contentText(message: { content?: unknown } | undefined): string {
 		.filter((item): item is { type: "text"; text: string } => item?.type === "text")
 		.map((item) => item.text)
 		.join("\n");
+}
+
+function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore & {
+	deleteBySourceUnsafe(corpus: string, sourceId: string): void;
+} {
+	return (service as unknown as { memoryStore: MemoryIndexStore & { deleteBySourceUnsafe(corpus: string, sourceId: string): void } })
+		.memoryStore;
 }

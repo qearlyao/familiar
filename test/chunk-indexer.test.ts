@@ -83,6 +83,28 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
+	it("maps identical content from different sources to one stored chunk", async () => {
+		const store = openStore(await tempDbPath());
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			const result = await indexer.indexChunks([
+				{ corpus: "diary_chunk", sourceId: "a.md", chunkIndex: 0, text: "shared memory" },
+				{ corpus: "diary_chunk", sourceId: "b.md", chunkIndex: 0, text: "shared memory" },
+			]);
+
+			assert.equal(result.ids[0], result.ids[1]);
+			assert.equal(result.embedded, 1);
+			assert.equal(store.stats().indexed, 1);
+			assert.deepEqual(
+				store.getChunk(result.ids[0] as number)?.sources.map((source) => source.sourceId).sort(),
+				["a.md", "b.md"],
+			);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("replaces source chunks while preserving unchanged rows without re-embedding", async () => {
 		const store = openStore(await tempDbPath());
 		const provider = new FakeEmbeddingProvider();

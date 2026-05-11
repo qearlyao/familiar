@@ -109,6 +109,75 @@ describe("retrieveMemory", () => {
 		assert.deepEqual(store.semanticCorpora, ["diary_chunk", "atomic_fact"]);
 	});
 
+	it("ranks RRF hits per corpus so corpus fan-out order does not change ranking", async () => {
+		const a = hit(1, "corpus_a", "a", "same quality a", 0.1);
+		const b = hit(2, "corpus_b", "b", "same quality b", 0.1);
+		const firstStore = new FakeStore(
+			[a, b],
+			new Map([
+				["corpus_a", [a]],
+				["corpus_b", [b]],
+			]),
+		);
+		const secondStore = new FakeStore(
+			[b, a],
+			new Map([
+				["corpus_a", [a]],
+				["corpus_b", [b]],
+			]),
+		);
+
+		const first = await retrieveMemory({
+			query: "same quality",
+			store: firstStore,
+			embeddingProvider: new FakeEmbeddingProvider(),
+			scope: { corpora: ["corpus_a", "corpus_b"] },
+			limit: 2,
+		});
+		const second = await retrieveMemory({
+			query: "same quality",
+			store: secondStore,
+			embeddingProvider: new FakeEmbeddingProvider(),
+			scope: { corpora: ["corpus_b", "corpus_a"] },
+			limit: 2,
+		});
+
+		assert.deepEqual(first.map((result) => result.id), second.map((result) => result.id));
+		assert.deepEqual(
+			first.map((result) => result.lexicalRank),
+			[1, 1],
+		);
+	});
+
+	it("filters hits by metadata timestamp or chunk creation time", async () => {
+		const early = hit(1, "lcm_record", "early", "timeline marker", 0.1, {
+			timestamp: "2026-05-10T01:00:00.000Z",
+		});
+		const middle = hit(2, "lcm_record", "middle", "timeline marker", 0.1, {
+			timestamp: "2026-05-10T02:00:00.000Z",
+		});
+		const late = hit(3, "lcm_record", "late", "timeline marker", 0.1, null, Date.parse("2026-05-10T03:00:00.000Z"));
+		const store = new FakeStore([early, middle, late], new Map());
+
+		const results = await retrieveMemory({
+			query: "timeline",
+			store,
+			embeddingProvider: null,
+			useSemantic: false,
+			scope: {
+				corpora: ["lcm_record"],
+				after: "2026-05-10T01:30:00.000Z",
+				before: "2026-05-10T02:30:00.000Z",
+			},
+			limit: 5,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[2],
+		);
+	});
+
 	it("can run lexical-only without embedding a query", async () => {
 		const lexical = hit(1, "lcm_summary", "summary-1", "migration summary", -1.2);
 		const store = new FakeStore([lexical], new Map([[undefined, [hit(2, "lcm_summary", "summary-2", "semantic", 0.1)]]]));
@@ -159,15 +228,30 @@ describe("retrieveMemory", () => {
 	});
 });
 
-function hit(id: number, corpus: string, sourceId: string, text: string, score: number): MemorySearchHit {
+function hit(
+	id: number,
+	corpus: string,
+	sourceId: string,
+	text: string,
+	score: number,
+	metadata: Record<string, unknown> | null = null,
+	createdAt = id,
+): MemorySearchHit {
 	return {
 		id,
 		score,
-		chunk: chunk(id, corpus, sourceId, text),
+		chunk: chunk(id, corpus, sourceId, text, metadata, createdAt),
 	};
 }
 
-function chunk(id: number, corpus: string, sourceId: string, text: string): StoredMemoryChunk {
+function chunk(
+	id: number,
+	corpus: string,
+	sourceId: string,
+	text: string,
+	metadata: Record<string, unknown> | null,
+	createdAt: number,
+): StoredMemoryChunk {
 	return {
 		id,
 		contentHash: `hash-${id}`,
@@ -175,13 +259,14 @@ function chunk(id: number, corpus: string, sourceId: string, text: string): Stor
 		sourceId,
 		sourceRef: `ref-${sourceId}`,
 		chunkIndex: 0,
+		sources: [{ corpus, sourceId, sourceRef: `ref-${sourceId}`, chunkIndex: 0 }],
 		text,
 		snippet: text,
 		tokenCount: null,
-		metadata: null,
+		metadata,
 		embeddingModel: "fake",
 		embeddingDimensions: 3,
-		createdAt: id,
+		createdAt,
 		updatedAt: id,
 	};
 }

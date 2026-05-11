@@ -1,8 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 
-import type { Config } from "../config.js";
-import { createEmbeddingProvider } from "./index/embedding-provider.js";
+import type { EmbeddingProvider } from "./index/embedding-provider.js";
 import { type MemoryRetrievalHit, retrieveMemory } from "./index/retrieval.js";
 import { MemoryIndexStore, type StoredMemoryChunk } from "./index/store.js";
 
@@ -19,8 +18,24 @@ const memoryRecallSchema = Type.Object(
 		query: Type.String({ description: "Natural-language memory search query." }),
 		scope: Type.Optional(
 			Type.Union([Type.Literal("diary"), Type.Literal("factual"), Type.Literal("all")], {
-				default: "all",
+				default: "factual",
 				description: "diary searches long-term diary memory; factual searches facts and conversation memory.",
+			}),
+		),
+		mode: Type.Optional(
+			Type.Union([Type.Literal("lexical"), Type.Literal("semantic"), Type.Literal("hybrid")], {
+				default: "hybrid",
+				description: "hybrid uses lexical and semantic recall; lexical and semantic restrict to one mode.",
+			}),
+		),
+		before: Type.Optional(
+			Type.String({
+				description: "Only recall chunks whose metadata.timestamp or createdAt is at or before this ISO 8601 time.",
+			}),
+		),
+		after: Type.Optional(
+			Type.String({
+				description: "Only recall chunks whose metadata.timestamp or createdAt is at or after this ISO 8601 time.",
 			}),
 		),
 		limit: Type.Optional(
@@ -47,10 +62,17 @@ const memoryOpenSchema = Type.Object(
 type MemoryRecallInput = Static<typeof memoryRecallSchema>;
 type MemoryOpenInput = Static<typeof memoryOpenSchema>;
 type MemoryRecallScope = keyof typeof MEMORY_SCOPE_CORPORA;
+type MemoryRecallMode = "lexical" | "semantic" | "hybrid";
+
+export interface MemoryToolDeps {
+	store: MemoryIndexStore;
+	embeddingProvider: EmbeddingProvider;
+}
 
 interface MemoryRecallDetails {
 	query: string;
 	scope: MemoryRecallScope;
+	mode: MemoryRecallMode;
 	limit: number;
 	resultCount: number;
 	ids: number[];
@@ -63,13 +85,14 @@ interface MemoryOpenDetails {
 	sourceId?: string | null;
 	sourceRef?: string | null;
 	chunkIndex?: number;
+	sources?: StoredMemoryChunk["sources"];
 }
 
-export function createMemoryTools(config: Config): AgentTool<any>[] {
-	return [makeMemoryRecallTool(config), makeMemoryOpenTool(config)];
+export function createMemoryTools(deps: MemoryToolDeps): AgentTool<any>[] {
+	return [makeMemoryRecallTool(deps), makeMemoryOpenTool(deps)];
 }
 
-function makeMemoryRecallTool(config: Config): AgentTool<typeof memoryRecallSchema, MemoryRecallDetails> {
+function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryRecallSchema, MemoryRecallDetails> {
 	return {
 		name: "memory_recall",
 		label: "Memory Recall",
@@ -79,37 +102,37 @@ function makeMemoryRecallTool(config: Config): AgentTool<typeof memoryRecallSche
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();
 			if (!query) throw new Error("memory_recall query is required.");
-			const scope = input.scope ?? "all";
+			const scope = input.scope ?? "factual";
+			const mode = input.mode ?? "hybrid";
 			const limit = clampLimit(input.limit);
-			const store = MemoryIndexStore.open(config);
-			try {
-				const embeddingProvider = createEmbeddingProvider(config);
-				const hits = await retrieveMemory({
+			assertIsoTime(input.before, "before");
+			assertIsoTime(input.after, "after");
+			const hits = await retrieveMemory({
+				query,
+				store: deps.store,
+				embeddingProvider: deps.embeddingProvider,
+				scope: { corpora: MEMORY_SCOPE_CORPORA[scope], before: input.before, after: input.after },
+				limit,
+				useLexical: mode !== "semantic",
+				useSemantic: mode !== "lexical",
+				signal,
+			});
+			return {
+				content: [{ type: "text", text: formatRecallResults(hits) }],
+				details: {
 					query,
-					store,
-					embeddingProvider,
-					scope: { corpora: MEMORY_SCOPE_CORPORA[scope] },
+					scope,
+					mode,
 					limit,
-					signal,
-				});
-				return {
-					content: [{ type: "text", text: formatRecallResults(hits) }],
-					details: {
-						query,
-						scope,
-						limit,
-						resultCount: hits.length,
-						ids: hits.map((hit) => hit.id),
-					},
-				};
-			} finally {
-				store.close();
-			}
+					resultCount: hits.length,
+					ids: hits.map((hit) => hit.id),
+				},
+			};
 		},
 	};
 }
 
-function makeMemoryOpenTool(config: Config): AgentTool<typeof memoryOpenSchema, MemoryOpenDetails> {
+function makeMemoryOpenTool(deps: MemoryToolDeps): AgentTool<typeof memoryOpenSchema, MemoryOpenDetails> {
 	return {
 		name: "memory_open",
 		label: "Memory Open",
@@ -118,29 +141,25 @@ function makeMemoryOpenTool(config: Config): AgentTool<typeof memoryOpenSchema, 
 		async execute(_toolCallId, input: MemoryOpenInput) {
 			const id = Math.trunc(input.id);
 			if (!Number.isInteger(input.id) || id < 1) throw new Error("memory_open id must be a positive integer.");
-			const store = MemoryIndexStore.open(config);
-			try {
-				const chunk = store.getChunk(id);
-				if (!chunk) {
-					return {
-						content: [{ type: "text", text: `No memory chunk found for id ${id}.` }],
-						details: { id, found: false },
-					};
-				}
+			const chunk = deps.store.getChunk(id);
+			if (!chunk) {
 				return {
-					content: [{ type: "text", text: formatOpenChunk(chunk) }],
-					details: {
-						id,
-						found: true,
-						corpus: chunk.corpus,
-						sourceId: chunk.sourceId,
-						sourceRef: chunk.sourceRef,
-						chunkIndex: chunk.chunkIndex,
-					},
+					content: [{ type: "text", text: `No memory chunk found for id ${id}.` }],
+					details: { id, found: false },
 				};
-			} finally {
-				store.close();
 			}
+			return {
+				content: [{ type: "text", text: formatOpenChunk(chunk) }],
+				details: {
+					id,
+					found: true,
+					corpus: chunk.corpus,
+					sourceId: chunk.sourceId,
+					sourceRef: chunk.sourceRef,
+					chunkIndex: chunk.chunkIndex,
+					sources: chunk.sources,
+				},
+			};
 		},
 	};
 }
@@ -149,6 +168,11 @@ function clampLimit(value: number | undefined): number {
 	if (value === undefined) return DEFAULT_RECALL_LIMIT;
 	if (!Number.isInteger(value) || value < 1) throw new Error("memory_recall limit must be a positive integer.");
 	return Math.min(value, 20);
+}
+
+function assertIsoTime(value: string | undefined, name: "before" | "after"): void {
+	if (value === undefined) return;
+	if (!Number.isFinite(Date.parse(value))) throw new Error(`memory_recall ${name} must be an ISO 8601 timestamp.`);
 }
 
 function formatRecallResults(hits: MemoryRetrievalHit[]): string {
@@ -182,11 +206,20 @@ function formatOpenChunk(chunk: StoredMemoryChunk): string {
 }
 
 function formatSource(chunk: StoredMemoryChunk): string {
-	const parts = [
-		chunk.sourceId ? `id:${chunk.sourceId}` : undefined,
-		chunk.sourceRef ? `ref:${chunk.sourceRef}` : undefined,
-	];
-	return parts.filter(Boolean).join(" ") || "unknown";
+	const sources =
+		chunk.sources.length > 0
+			? chunk.sources
+			: [{ sourceId: chunk.sourceId, sourceRef: chunk.sourceRef, chunkIndex: chunk.chunkIndex }];
+	const rendered = sources.map((source) =>
+		[
+			source.sourceId ? `id:${source.sourceId}` : undefined,
+			source.sourceRef ? `ref:${source.sourceRef}` : undefined,
+			`chunk:${source.chunkIndex}`,
+		]
+			.filter(Boolean)
+			.join(" "),
+	);
+	return rendered.filter(Boolean).join("; ") || "unknown";
 }
 
 function formatMetadata(metadata: Record<string, unknown> | null): string {

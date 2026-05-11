@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ToolResultMessage, Usage, UserMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type { LcmAttachmentNote, LcmRecordKind, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
@@ -13,21 +13,6 @@ export interface FreshTailSelection {
 	records: StoredLcmRecord[];
 	tokenCount: number;
 	overflowTokens: number;
-}
-
-export interface LcmContextAssemblyInput {
-	summaries?: readonly StoredLcmSummary[];
-	records: readonly StoredLcmRecord[];
-	freshTail: FreshTailOptions;
-	now?: number;
-}
-
-export interface LcmContextAssembly {
-	messages: AgentMessage[];
-	summaries: StoredLcmSummary[];
-	freshTail: FreshTailSelection;
-	summaryTokenCount: number;
-	totalTokenCount: number;
 }
 
 export interface LcmCompactionPressureInput {
@@ -81,22 +66,6 @@ type LcmRecordTokenInput = string | Pick<StoredLcmRecord, "kind" | "text" | "att
 const MESSAGE_OVERHEAD_TOKENS = 6;
 const RECORD_OVERHEAD_TOKENS = 4;
 const IMAGE_TOKEN_ESTIMATE = 1200;
-const SUMMARY_CONTEXT_PREFIX = "[Familiar retained LCM summaries]";
-const ZERO_USAGE: Usage = {
-	input: 0,
-	output: 0,
-	cacheRead: 0,
-	cacheWrite: 0,
-	totalTokens: 0,
-	cost: {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		total: 0,
-	},
-};
-
 export function estimateTextTokens(text: string): number {
 	if (!text) return 0;
 	let ascii = 0;
@@ -131,19 +100,18 @@ export function estimateAgentMessageTokens(message: AgentMessage): number {
 	}
 }
 
-export function createAgentMessageFingerprint(message: AgentMessage, index: number): string {
+export function createAgentMessageFingerprint(message: AgentMessage, _index: number): string {
+	const timestamp = (message as { timestamp?: number }).timestamp;
+	const id = (message as { id?: string }).id;
+	const text = messageTextForFingerprint(message);
+	const payload =
+		typeof timestamp === "number" && Number.isFinite(timestamp)
+			? { role: (message as { role?: string }).role ?? null, timestamp, text }
+			: typeof id === "string" && id.trim()
+				? { role: (message as { role?: string }).role ?? null, id, text }
+				: { text };
 	return createHash("sha256")
-		.update(
-			JSON.stringify({
-				index,
-				role: (message as { role?: string }).role,
-				timestamp: (message as { timestamp?: number }).timestamp ?? null,
-				content: (message as { content?: unknown }).content ?? null,
-				toolCallId: (message as { toolCallId?: string }).toolCallId ?? null,
-				toolName: (message as { toolName?: string }).toolName ?? null,
-				stopReason: (message as { stopReason?: string }).stopReason ?? null,
-			}),
-		)
+		.update(JSON.stringify(payload))
 		.digest("hex");
 }
 
@@ -215,31 +183,6 @@ export function selectFreshTailRecords(
 	};
 }
 
-export function assembleLcmContext(input: LcmContextAssemblyInput): LcmContextAssembly {
-	const retainedSummaries = selectRetainedSummaries(input.summaries ?? []);
-	const summaryText = renderLcmSummaryContext(retainedSummaries);
-	const summaryTokenCount = summaryText ? estimateTextTokens(summaryText) + MESSAGE_OVERHEAD_TOKENS : 0;
-	const freshTail = selectFreshTailRecords(input.records, input.freshTail);
-	const now = input.now ?? Date.now();
-	const messages: AgentMessage[] = [];
-
-	if (summaryText) {
-		messages.push({ role: "user", content: summaryText, timestamp: now });
-	}
-	for (const record of freshTail.records) {
-		const message = lcmRecordToAgentMessage(record, now);
-		if (message) messages.push(message);
-	}
-
-	return {
-		messages,
-		summaries: retainedSummaries,
-		freshTail,
-		summaryTokenCount,
-		totalTokenCount: summaryTokenCount + freshTail.tokenCount,
-	};
-}
-
 export function detectLcmCompactionPressure(input: LcmCompactionPressureInput): LcmCompactionPressure {
 	const freshTail = selectFreshTailRecords(input.records, input.freshTail);
 	const freshTailIds = new Set(freshTail.records.map((record) => record.id));
@@ -277,17 +220,6 @@ export function detectLcmCompactionPressure(input: LcmCompactionPressureInput): 
 		evictableTokenThreshold: threshold,
 		evictableTokenBudget: budget,
 	};
-}
-
-export function renderLcmSummaryContext(summaries: readonly StoredLcmSummary[]): string {
-	const retained = selectRetainedSummaries(summaries);
-	if (retained.length === 0) return "";
-	const lines = [SUMMARY_CONTEXT_PREFIX];
-	for (const [index, summary] of retained.entries()) {
-		const label = [`d${summary.depth}`, summary.pinned ? "pinned" : "", summary.segmentId].filter(Boolean).join(" ");
-		lines.push(`${index + 1}. ${label}: ${summary.text.trim()}`);
-	}
-	return lines.join("\n");
 }
 
 function estimateUserMessageTokens(message: UserMessage): number {
@@ -377,26 +309,6 @@ function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]): Stored
 		.sort(compareSummaries);
 }
 
-function lcmRecordToAgentMessage(record: StoredLcmRecord, fallbackTimestamp: number): AgentMessage | null {
-	const timestamp = timestampFromIso(record.happenedAt, fallbackTimestamp);
-	if (record.kind === "user") {
-		return { role: "user", content: record.text, timestamp };
-	}
-	if (record.kind === "assistant") {
-		return {
-			role: "assistant",
-			content: [{ type: "text", text: record.text }],
-			api: "lcm-context",
-			provider: "familiar",
-			model: "lcm-context",
-			usage: ZERO_USAGE,
-			stopReason: "stop",
-			timestamp,
-		} satisfies AssistantMessage;
-	}
-	return null;
-}
-
 function compareRecords(a: StoredLcmRecord, b: StoredLcmRecord): number {
 	return Date.parse(a.happenedAt) - Date.parse(b.happenedAt) || a.id - b.id;
 }
@@ -411,11 +323,6 @@ function compareSummaries(a: StoredLcmSummary, b: StoredLcmSummary): number {
 	);
 }
 
-function timestampFromIso(value: string, fallback: number): number {
-	const timestamp = Date.parse(value);
-	return Number.isFinite(timestamp) ? timestamp : fallback;
-}
-
 function nonNegativeInteger(value: number, name: string): number {
 	if (!Number.isInteger(value) || value < 0) throw new Error(`${name} must be a non-negative integer`);
 	return value;
@@ -424,4 +331,21 @@ function nonNegativeInteger(value: number, name: string): number {
 function optionalNonNegativeInteger(value: number | undefined, name: string): number | null {
 	if (value === undefined) return null;
 	return nonNegativeInteger(value, name);
+}
+
+function messageTextForFingerprint(message: AgentMessage): string {
+	if (!("content" in message)) return "";
+	const content = message.content;
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((item) => {
+			if (item.type === "text") return item.text;
+			if (item.type === "thinking") return item.thinking;
+			if (item.type === "toolCall") return `${item.name}\n${JSON.stringify(item.arguments)}`;
+			if (item.type === "image") return item.mimeType;
+			return "";
+		})
+		.filter(Boolean)
+		.join("\n");
 }

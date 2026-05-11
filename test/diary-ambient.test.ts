@@ -123,6 +123,7 @@ function hit(
 			sourceId,
 			sourceRef: `ref-${sourceId}`,
 			chunkIndex: 0,
+			sources: [{ corpus, sourceId, sourceRef: `ref-${sourceId}`, chunkIndex: 0 }],
 			text,
 			snippet: text,
 			tokenCount: null,

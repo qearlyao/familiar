@@ -57,9 +57,9 @@ export class ChunkIndexer {
 		signal?: AbortSignal,
 	): Promise<ChunkIndexResult> {
 		const prepared = this.prepare(inputs.map((input) => ({ ...input, corpus, sourceId })));
-		const keepHashes = prepared.map((item) => item.contentHash);
+		const keepMappings = prepared.map((item) => ({ contentHash: item.contentHash, chunkIndex: item.chunkIndex }));
+		this.store.deleteBySourceExceptMappings(corpus, sourceId, keepMappings);
 		const result = await this.insertPrepared(prepared, inputs.length - prepared.length, signal);
-		this.store.deleteBySourceExceptHashes(corpus, sourceId, keepHashes);
 		return result;
 	}
 
@@ -79,8 +79,6 @@ export class ChunkIndexer {
 				sourceId,
 				contentHash: createMemoryContentHash({
 					corpus: input.corpus,
-					sourceId,
-					chunkIndex,
 					text,
 					embeddingModel: embeddingConfig.model,
 					embeddingDimensions: embeddingConfig.dimensions,
@@ -143,10 +141,22 @@ export class ChunkIndexer {
 		const ids: number[] = new Array(prepared.length);
 		const toInsert: MemoryChunkInput[] = [];
 		const insertPositions: number[] = [];
+		const existingMappings: MemoryChunkInput[] = [];
 		for (let resultIndex = 0; resultIndex < prepared.length; resultIndex++) {
 			const item = prepared[resultIndex] as PreparedChunk;
 			if (item.existingId !== null) {
 				ids[resultIndex] = item.existingId;
+				existingMappings.push({
+					corpus: item.input.corpus,
+					sourceId: item.sourceId,
+					sourceRef: item.input.sourceRef ?? null,
+					chunkIndex: item.chunkIndex,
+					text: item.text,
+					snippet: item.input.snippet,
+					tokenCount: item.input.tokenCount ?? null,
+					metadata: item.input.metadata ?? null,
+					embedding: item.embedding ?? new Float32Array(this.store.embeddingConfig().dimensions),
+				});
 				continue;
 			}
 			const embedding = item.embedding ?? embeddedByHash.get(item.contentHash);
@@ -165,6 +175,7 @@ export class ChunkIndexer {
 			});
 		}
 
+		this.store.recordSourceMappings(existingMappings);
 		const insertedIds = this.store.insertChunks(toInsert);
 		for (let index = 0; index < insertPositions.length; index++) {
 			ids[insertPositions[index] as number] = insertedIds[index] as number;

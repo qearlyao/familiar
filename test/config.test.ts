@@ -174,6 +174,7 @@ retention_days = 7
 			freshTailCount: 64,
 			leafChunkTokens: 20000,
 			leafTargetTokens: 2400,
+			promptAwareEvictionEnabled: true,
 			condenseGroupSize: 4,
 			maxSummaryDepth: 4,
 			maxRounds: 10,
@@ -208,6 +209,7 @@ fresh_tail_count = 5
 fresh_tail_max_tokens = 1200
 leaf_chunk_tokens = 16000
 leaf_target_tokens = 700
+prompt_aware_eviction_enabled = false
 condense_group_size = 3
 max_summary_depth = 5
 new_session_retain_depth = -1
@@ -242,6 +244,7 @@ system_prompt_path = "prompts/lcm-system.md"
 			freshTailMaxTokens: 1200,
 			leafChunkTokens: 16000,
 			leafTargetTokens: 700,
+			promptAwareEvictionEnabled: false,
 			condenseGroupSize: 3,
 			maxSummaryDepth: 5,
 			maxRounds: 4,

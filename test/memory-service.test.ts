@@ -888,6 +888,92 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("prompt-aware LCM compaction skips records relevant to the last user message", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 32,
+					leafTargetTokens: 8,
+					maxRounds: 1,
+					promptAwareEvictionEnabled: true,
+				},
+			},
+		};
+		let summarizedInput = "";
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf(input) {
+				summarizedInput = input.text;
+				return "Files: none\nPrompt-aware unrelated details were compacted.\nExpand for details about: evicted range";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(promptAwareMessages(), undefined, {
+					sessionKey: "room-prompt-aware",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+
+				assert.match(summarizedInput, /weather|kanban/);
+				assert.equal(summarizedInput.includes("rebar lattice beam"), false);
+				assert.equal(summarizedInput.includes("rebar lattice footing"), false);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("falls back to oldest-first LCM compaction when prompt-aware eviction is disabled", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 32,
+					leafTargetTokens: 8,
+					maxRounds: 1,
+					promptAwareEvictionEnabled: false,
+				},
+			},
+		};
+		let summarizedInput = "";
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf(input) {
+				summarizedInput = input.text;
+				return "Files: none\nOldest-first details were compacted.\nExpand for details about: evicted range";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(promptAwareMessages(), undefined, {
+					sessionKey: "room-prompt-aware-disabled",
+					sessionId: "session-a",
+					model: { contextWindow: 10_000 } as any,
+				});
+
+				assert.equal(summarizedInput.includes("rebar lattice beam"), true);
+				assert.equal(summarizedInput.includes("weather front"), false);
+				assert.equal(summarizedInput.includes("kanban schedule owner"), false);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
 	it("reconciles shared-index rows left behind after LCM retention committed", async () => {
 		const baseConfig = await memoryConfig();
 		const config = {
@@ -1126,6 +1212,45 @@ function criticalDebtMessages() {
 			timestamp: 21,
 		},
 		{ role: "user" as const, content: "fresh critical tail", timestamp: 22 },
+	];
+}
+
+function promptAwareMessages() {
+	return [
+		{ role: "user" as const, content: "rebar lattice beam splice detail ".repeat(8), timestamp: 30 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "rebar lattice footing cage detail ".repeat(8) }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 31,
+		},
+		{ role: "user" as const, content: "weather front barometer pressure ".repeat(8), timestamp: 32 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "weather rainfall humidity forecast ".repeat(8) }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 33,
+		},
+		{ role: "user" as const, content: "kanban schedule owner swimlane ".repeat(8), timestamp: 34 },
+		{
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "kanban schedule milestone review ".repeat(8) }],
+			api: "test",
+			provider: "test",
+			model: "test",
+			usage: zeroUsage(),
+			stopReason: "stop" as const,
+			timestamp: 35,
+		},
+		{ role: "user" as const, content: "What are the rebar lattice details?", timestamp: 36 },
 	];
 }
 

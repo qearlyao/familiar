@@ -201,6 +201,7 @@ describe("LCM condense", () => {
 				cacheTtlMs: 300_000,
 				cacheTouchSlackMs: 30_000,
 				criticalOverflowTokens: 8000,
+				promptAwareEvictionEnabled: true,
 			},
 			lcmStore: store,
 			indexer: nullIndexer(),

@@ -11,6 +11,7 @@ import {
 	estimateLcmRecordTokens,
 	estimateTextTokens,
 	lcmRecordToAgentMessage,
+	selectLcmCompactionCandidatePromptAware,
 	selectFreshTailRecords,
 } from "../src/memory/lcm/context.js";
 import type {
@@ -160,6 +161,55 @@ describe("LCM context helpers", () => {
 			{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
 		]);
 	});
+
+	it("prompt-aware candidate selection preserves tool_call and tool_result pair integrity", () => {
+		const toolCall = record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]");
+		const toolResult = record(2, "tool", "[tool_result: read -> unrelated weather output]");
+		const rebar = record(3, "user", "rebar lattice anchor bolts and sleeve details");
+		const other = record(4, "user", "kanban schedule board cleanup");
+		const fresh = record(5, "user", "fresh rebar lattice question");
+		const items = [
+			rawItem(toolCall, {
+				role: "assistant",
+				content: [{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } }],
+				api: "test",
+				provider: "test",
+				model: "test",
+				usage: zeroUsage(),
+				stopReason: "toolUse",
+				timestamp: 1,
+			}),
+			rawItem(toolResult, {
+				role: "toolResult",
+				toolCallId: "call-1",
+				toolName: "read",
+				content: [{ type: "text", text: "unrelated weather output" }],
+				details: { text: "unrelated weather output" },
+				isError: false,
+				timestamp: 2,
+			}),
+			rawItem(rebar, { role: "user", content: rebar.text, timestamp: 3 }),
+			rawItem(other, { role: "user", content: other.text, timestamp: 4 }),
+			rawItem(fresh, { role: "user", content: fresh.text, timestamp: 5 }),
+		];
+
+		const candidate = selectLcmCompactionCandidatePromptAware(
+			items,
+			{
+				contextThreshold: 0.75,
+				freshTailCount: 1,
+				leafChunkTokens: 12,
+				promptAwareEvictionEnabled: true,
+			},
+			10_000,
+			"rebar lattice details",
+		);
+
+		assert.deepEqual(
+			candidate.chunk.map((item) => item.record?.id),
+			[1, 2],
+		);
+	});
 });
 
 function record(
@@ -212,6 +262,15 @@ function summary(
 		parents: [],
 		createdAt: id,
 		updatedAt: id,
+	};
+}
+
+function rawItem(record: StoredLcmRecord, message: AgentMessage) {
+	return {
+		id: `item-${record.id}`,
+		message,
+		record,
+		tokens: estimateAgentMessageTokens(message),
 	};
 }
 

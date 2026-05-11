@@ -634,7 +634,7 @@ shipped. Fix before adding more surface area.
   results, and reasoning blocks before LCM summary generation and context
   assembly. Today `normalize.ts` drops tool records entirely and
   `lcmRecordToAgentMessage` only emits `user`/`assistant` text.
-- Add prompt-aware eviction and budget selection from `lossless-claw` once the
+- [x] Add prompt-aware eviction and budget selection from `lossless-claw` once the
   ordered context model exists.
 - [x] Add deferred compaction debt and cache-aware compaction timing so
   prompt-mutating work can be delayed or retried safely. Compaction telemetry

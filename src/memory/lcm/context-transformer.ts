@@ -9,6 +9,7 @@ import {
 	type LcmContextRawItem,
 	renderLcmRecordPartsForSummary,
 	selectLcmCompactionCandidate,
+	selectLcmCompactionCandidatePromptAware,
 } from "./context.js";
 import { condense } from "./condense.js";
 import { indexLcmSummaries } from "./indexer.js";
@@ -39,6 +40,7 @@ export interface LcmContextTransformerOptions {
 		cacheTtlMs: number;
 		cacheTouchSlackMs: number;
 		criticalOverflowTokens: number;
+		promptAwareEvictionEnabled: boolean;
 	};
 	lcmStore: LcmStore;
 	indexer: ChunkIndexer;
@@ -97,13 +99,16 @@ export class LcmContextTransformer {
 	): Promise<AgentMessage[]> {
 		const settings = this.settings;
 		if (!settings.enabled) return messages;
+		const promptText = lastUserText(messages);
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
 		const state = this.contextState(sessionKey);
 		const now = this.now();
 		const previousCacheTouchedAt = state.cacheTouchedAt;
 		state.cacheTouchedAt = now;
 		if (state.compactionDebt > 0) {
-			const pressure = this.evaluateCompactionPressure(state, options.model);
+			// Drain persisted debt before syncing incoming messages so a restart with only fresh-tail replay
+			// can still compact the rehydrated context items that created the debt.
+			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
 			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
 				await this.serviceCompactionDebtForState({
 					state,
@@ -111,6 +116,7 @@ export class LcmContextTransformer {
 					sessionId: options.sessionId,
 					signal,
 					model: options.model,
+					promptText,
 				});
 			}
 		}
@@ -118,7 +124,7 @@ export class LcmContextTransformer {
 		this.projectContextState(sessionKey, options.sessionId, state);
 
 		try {
-			const pressure = this.evaluateCompactionPressure(state, options.model);
+			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
 			state.compactionDebt += pressure.pressureScore;
 			if (shouldServiceCompactionDebt({ settings, now, previousCacheTouchedAt, pressureScore: pressure.pressureScore })) {
 				await this.serviceCompactionDebtForState({
@@ -127,6 +133,7 @@ export class LcmContextTransformer {
 					sessionId: options.sessionId,
 					signal,
 					model: options.model,
+					promptText,
 				});
 			}
 		} catch (error) {
@@ -161,9 +168,10 @@ export class LcmContextTransformer {
 		sessionId?: string;
 		signal?: AbortSignal;
 		model?: Model<any>;
+		promptText?: string;
 	}): Promise<void> {
 		for (let round = 0; input.state.compactionDebt > 0 && round < this.settings.maxRounds; round += 1) {
-			const pressure = this.evaluateCompactionPressure(input.state, input.model);
+			const pressure = this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
 			if (!pressure.candidate.shouldCompact) {
 				input.state.compactionDebt = 0;
 				break;
@@ -175,12 +183,12 @@ export class LcmContextTransformer {
 				sessionId: input.sessionId,
 				signal: input.signal,
 			});
-			const nextPressure = this.evaluateCompactionPressure(input.state, input.model);
+			const nextPressure = this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
 			input.state.compactionDebt = nextPressure.candidate.shouldCompact ? nextPressure.pressureScore : 0;
 		}
 	}
 
-	private evaluateCompactionPressure(state: LcmContextState, model: Model<any> | undefined): {
+	private evaluateCompactionPressure(state: LcmContextState, model: Model<any> | undefined, promptText = ""): {
 		candidate: ReturnType<typeof selectLcmCompactionCandidate>;
 		pressureScore: number;
 	} {
@@ -188,15 +196,17 @@ export class LcmContextTransformer {
 		const summaryTokens = state.items
 			.filter((item): item is CompactedLcmItem => item.type === "summary")
 			.reduce((total, item) => total + item.tokens, 0);
-		const candidate = selectLcmCompactionCandidate(
+		const candidate = selectLcmCompactionCandidatePromptAware(
 			rawItems,
 			{
 				contextThreshold: this.settings.contextThreshold,
 				freshTailCount: this.settings.freshTailCount,
 				freshTailMaxTokens: this.settings.freshTailMaxTokens,
 				leafChunkTokens: this.settings.leafChunkTokens,
+				promptAwareEvictionEnabled: this.settings.promptAwareEvictionEnabled,
 			},
 			model?.contextWindow ?? 200_000,
+			promptText,
 			summaryTokens,
 		);
 		const evictableTokens = candidate.shouldCompact ? candidate.rawTokensOutsideTail : 0;
@@ -340,7 +350,10 @@ export class LcmContextTransformer {
 		if (inserts.length === 0) return;
 		this.lcmStore.db
 			.transaction(() => {
-				for (const insert of inserts) insert.item.recordId = this.lcmStore.insertRecord(insert.input);
+				for (const insert of inserts) {
+					insert.item.recordId = this.lcmStore.insertRecord(insert.input);
+					insert.item.record = this.lcmStore.getRecord(insert.item.recordId);
+				}
 			})
 			.immediate();
 	}
@@ -361,6 +374,7 @@ export class LcmContextTransformer {
 					type: "raw",
 					id: row.fingerprint,
 					recordId: record.id,
+					record,
 					message,
 					tokens: estimateAgentMessageTokens(message),
 				});
@@ -414,10 +428,13 @@ export class LcmContextTransformer {
 
 function syncContextState(state: LcmContextState, messages: AgentMessage[]): void {
 	const existingRecords = new Map(
-		state.items.filter((item): item is RawLcmItem => item.type === "raw").map((item) => [item.id, item.recordId]),
+		state.items.filter((item): item is RawLcmItem => item.type === "raw").map((item) => [item.id, item]),
 	);
 	const rawItems = createRawContextItems(messages).map(
-		(item): RawLcmItem => ({ ...item, type: "raw", recordId: existingRecords.get(item.id) ?? null }),
+		(item): RawLcmItem => {
+			const existing = existingRecords.get(item.id);
+			return { ...item, type: "raw", recordId: existing?.recordId ?? null, record: existing?.record ?? null };
+		},
 	);
 	const rawById = new Map(rawItems.map((item) => [item.id, item]));
 	const next: LcmContextItem[] = [];
@@ -440,6 +457,20 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 	}
 
 	state.items = next;
+}
+
+function lastUserText(messages: readonly AgentMessage[]): string {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		if (!message || message.role !== "user") continue;
+		if (typeof message.content === "string") return message.content.trim();
+		return message.content
+			.filter((item): item is { type: "text"; text: string } => item.type === "text")
+			.map((item) => item.text)
+			.join("\n")
+			.trim();
+	}
+	return "";
 }
 
 function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextItemInput[] {

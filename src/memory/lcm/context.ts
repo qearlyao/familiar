@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Provider, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
+import { scoreEvictable, tokenBag } from "./eviction-score.js";
 import type { LcmAttachmentNote, LcmRecordKind, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export interface FreshTailOptions {
@@ -42,6 +43,7 @@ export interface LcmContextCompactionConfig {
 	freshTailCount: number;
 	freshTailMaxTokens?: number;
 	leafChunkTokens: number;
+	promptAwareEvictionEnabled?: boolean;
 }
 
 export interface LcmCompactionCandidate {
@@ -59,6 +61,7 @@ export interface LcmContextRawItem {
 	id: string;
 	message: AgentMessage;
 	tokens: number;
+	record?: StoredLcmRecord | null;
 }
 
 type LcmRecordTokenInput = string | Pick<StoredLcmRecord, "kind" | "text" | "attachments">;
@@ -154,6 +157,16 @@ export function selectLcmCompactionCandidate(
 	tokenBudget: number,
 	additionalContextTokens = 0,
 ): LcmCompactionCandidate {
+	return selectLcmCompactionCandidatePromptAware(items, config, tokenBudget, "", additionalContextTokens);
+}
+
+export function selectLcmCompactionCandidatePromptAware(
+	items: readonly LcmContextRawItem[],
+	config: LcmContextCompactionConfig,
+	tokenBudget: number,
+	promptText: string,
+	additionalContextTokens = 0,
+): LcmCompactionCandidate {
 	const freshTailStartIndex = resolveFreshTailStartIndex(items, config);
 	const compactable = items.slice(0, freshTailStartIndex);
 	const rawTokensOutsideTail = compactable.reduce((total, item) => total + item.tokens, 0);
@@ -162,7 +175,7 @@ export function selectLcmCompactionCandidate(
 	const reasons: LcmCompactionCandidate["reasons"] = [];
 	if (rawTokensOutsideTail >= config.leafChunkTokens) reasons.push("leaf_chunk");
 	if (totalTokens > contextThresholdTokens && compactable.length > 0) reasons.push("context_threshold");
-	const chunk = reasons.length > 0 ? selectOldestLeafChunk(compactable, config.leafChunkTokens) : [];
+	const chunk = reasons.length > 0 ? selectLeafChunk(compactable, config.leafChunkTokens, promptText, config) : [];
 	const chunkTokens = chunk.reduce((total, item) => total + item.tokens, 0);
 
 	return {
@@ -292,6 +305,48 @@ function resolveFreshTailStartIndex(
 	return Math.min(protectedByCountStart, tokenStart);
 }
 
+function selectLeafChunk(
+	items: readonly LcmContextRawItem[],
+	leafChunkTokens: number,
+	promptText: string,
+	config: Pick<LcmContextCompactionConfig, "promptAwareEvictionEnabled">,
+): LcmContextRawItem[] {
+	if (config.promptAwareEvictionEnabled === false || tokenBag(promptText).length === 0) {
+		return selectOldestLeafChunk(items, leafChunkTokens);
+	}
+	const ranges = createValidLeafRanges(items, leafChunkTokens);
+	if (ranges.length === 0) return [];
+	if (!ranges.some((range) => range.tokens >= leafChunkTokens)) return selectOldestLeafChunk(items, leafChunkTokens);
+	const targetRanges = ranges.filter((range) => range.tokens >= leafChunkTokens);
+	const records = items.map((item) => item.record).filter((record): record is StoredLcmRecord => !!record);
+	if (records.length === 0) return selectOldestLeafChunk(items, leafChunkTokens);
+	const scored = targetRanges.map((range) => ({
+		...range,
+		score: range.items.reduce((total, item) => total + (item.record ? scoreEvictable(item.record, promptText, records) : 0), 0),
+	}));
+	scored.sort((a, b) => a.score - b.score || a.startIndex - b.startIndex);
+	return scored[0]?.items ?? [];
+}
+
+function createValidLeafRanges(
+	items: readonly LcmContextRawItem[],
+	leafChunkTokens: number,
+): Array<{ startIndex: number; items: LcmContextRawItem[]; tokens: number }> {
+	const ranges: Array<{ startIndex: number; items: LcmContextRawItem[]; tokens: number }> = [];
+	for (let startIndex = 0; startIndex < items.length; startIndex += 1) {
+		if (isToolResultContinuingPreviousToolCall(items, startIndex)) continue;
+		const chunk = selectOldestLeafChunk(items.slice(startIndex), leafChunkTokens);
+		if (chunk.length === 0) continue;
+		const chunkTokens = chunk.reduce((total, item) => total + item.tokens, 0);
+		const endIndex = startIndex + chunk.length - 1;
+		const next = items[endIndex + 1];
+		if (chunkTokens < leafChunkTokens && next && chunkTokens + next.tokens <= leafChunkTokens) continue;
+		if (splitsFollowingToolResult(items, chunk, endIndex)) continue;
+		ranges.push({ startIndex, items: chunk, tokens: chunkTokens });
+	}
+	return ranges;
+}
+
 function selectOldestLeafChunk(items: readonly LcmContextRawItem[], leafChunkTokens: number): LcmContextRawItem[] {
 	const chunk: LcmContextRawItem[] = [];
 	let tokens = 0;
@@ -307,6 +362,24 @@ function selectOldestLeafChunk(items: readonly LcmContextRawItem[], leafChunkTok
 		if (tokens >= leafChunkTokens && (!next || !continuesSelectedToolCall(chunk, next))) break;
 	}
 	return chunk;
+}
+
+function isToolResultContinuingPreviousToolCall(items: readonly LcmContextRawItem[], index: number): boolean {
+	const item = items[index];
+	if (!item) return false;
+	const toolCallId = (item.message as { role?: string; toolCallId?: string }).toolCallId;
+	if ((item.message as { role?: string }).role !== "toolResult" || !toolCallId) return false;
+	return items.slice(0, index).some((previous) => hasAssistantToolCall(previous.message, toolCallId));
+}
+
+function splitsFollowingToolResult(
+	items: readonly LcmContextRawItem[],
+	chunk: readonly LcmContextRawItem[],
+	endIndex: number,
+): boolean {
+	const next = items[endIndex + 1];
+	if (!next) return false;
+	return continuesSelectedToolCall(chunk, next);
 }
 
 function continuesSelectedToolCall(chunk: readonly LcmContextRawItem[], item: LcmContextRawItem): boolean {

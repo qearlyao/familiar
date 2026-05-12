@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +19,8 @@ import { startWebDaemon } from "./web.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
+const DEFAULT_WORKSPACE_PATH = resolve(homedir(), ".familiar");
+const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "backfill", "prune", "backup", "help", "--help"]);
 
 interface WorkspaceDirs {
 	dataDir: string;
@@ -58,8 +61,30 @@ async function ensureWorkspaceDirs(dirs: WorkspaceDirs): Promise<void> {
 	]);
 }
 
-async function initWorkspace(workspaceInput: string): Promise<void> {
-	const workspacePath = resolve(workspaceInput);
+function resolveWorkspaceInput(workspaceInput?: string): string {
+	return workspaceInput ? resolve(workspaceInput) : DEFAULT_WORKSPACE_PATH;
+}
+
+function parseMemoryArgs(
+	workspaceOrCommand: string | undefined,
+	rest: string[],
+): {
+	workspacePath: string;
+	args: string[];
+} {
+	if (workspaceOrCommand && !MEMORY_SUBCOMMANDS.has(workspaceOrCommand)) {
+		return { workspacePath: resolveWorkspaceInput(workspaceOrCommand), args: rest };
+	}
+	return { workspacePath: DEFAULT_WORKSPACE_PATH, args: workspaceOrCommand ? [workspaceOrCommand, ...rest] : rest };
+}
+
+function isMemoryHelp(args: string[]): boolean {
+	const command = args[0];
+	return !command || command === "help" || command === "--help";
+}
+
+async function initWorkspace(workspaceInput?: string): Promise<void> {
+	const workspacePath = resolveWorkspaceInput(workspaceInput);
 	await mkdir(workspacePath, { recursive: true });
 	const envPath = resolve(workspacePath, ".env");
 	if (!existsSync(envPath)) {
@@ -73,8 +98,8 @@ async function initWorkspace(workspaceInput: string): Promise<void> {
 	console.log(`Initialized familiar workspace at ${workspacePath}`);
 }
 
-async function runDaemon(workspaceInput: string): Promise<void> {
-	const workspacePath = resolve(workspaceInput);
+async function runDaemon(workspaceInput?: string): Promise<void> {
+	const workspacePath = resolveWorkspaceInput(workspaceInput);
 	const envPath = resolve(workspacePath, ".env");
 	if (existsSync(envPath)) {
 		loadDotenv({ path: envPath, override: false });
@@ -114,37 +139,40 @@ async function runDaemon(workspaceInput: string): Promise<void> {
 function usage(): string {
 	return [
 		"Usage:",
-		"  familiar init <workspace>",
-		"  familiar run <workspace>",
-		"  familiar memory <workspace> <subcommand>",
+		"  familiar init [workspace]",
+		"  familiar run [workspace]",
+		"  familiar memory [workspace] <subcommand>",
 		"  familiar install-service",
 		"  familiar status",
 		"  familiar upgrade",
+		"",
+		`Default workspace: ${DEFAULT_WORKSPACE_PATH}`,
 	].join("\n");
 }
 
 async function main(): Promise<void> {
 	const [, , command, workspace, ...rest] = process.argv;
 	if (command === "init") {
-		if (!workspace) throw new Error(`Missing workspace\n${usage()}`);
 		await initWorkspace(workspace);
 		return;
 	}
 	if (command === "run") {
-		if (!workspace) throw new Error(`Missing workspace\n${usage()}`);
 		await runDaemon(workspace);
 		return;
 	}
 	if (command === "memory") {
-		if (!workspace) throw new Error(`Missing workspace\n${memoryHelp()}`);
-		const workspacePath = resolve(workspace);
+		const { workspacePath, args } = parseMemoryArgs(workspace, rest);
+		if (isMemoryHelp(args)) {
+			console.log(memoryHelp());
+			return;
+		}
 		const envPath = resolve(workspacePath, ".env");
 		if (existsSync(envPath)) {
 			loadDotenv({ path: envPath, override: false });
 		}
 		const config = await loadConfig(workspacePath);
 		await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
-		await runMemoryOperator(config, rest);
+		await runMemoryOperator(config, args);
 		return;
 	}
 	if (command === "install-service" || command === "status" || command === "upgrade") {

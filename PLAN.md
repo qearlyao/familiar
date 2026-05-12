@@ -119,7 +119,7 @@ Browser/activity backend abstraction
 Runtime and packaging:
 
 - Main daemon: one `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, main agent, media workers, memory workers, embeddings, attachment writer, queues. Subagents can be added later.
-- Dev: `familiar run <workspace>`.
+- Dev: `familiar run [workspace]` defaults to `~/.familiar`.
 - Prod: `familiar install-service <workspace>` eventually writes systemd or launchd config.
 - Workspace layout: `<workspace>/config.toml`, `.env`, `SOUL.md`, `USER.md`, `MEMORY.md`, `INNER.md`, `memories/`, `data/`, `attachments/`, `logs/`.
 - Prefer npm package first. Single-binary/Docker can be revisited later.
@@ -313,8 +313,8 @@ Done when:
 
 ### Stage 13: Install, Service, and Docs
 
-- `familiar init <workspace>`.
-- `familiar run <workspace>`.
+- `familiar init [workspace]`.
+- `familiar run [workspace]`.
 - `familiar install-service <workspace>`.
 - systemd unit.
 - launchd plist where useful.

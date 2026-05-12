@@ -66,7 +66,7 @@ function registerModuleOnDb(mod: SqliteVecModule, db: Database.Database): void {
 function logUnavailableOnce(): void {
 	if (loggedUnavailable) return;
 	loggedUnavailable = true;
-	console.info("sqlite-vec unavailable; using linear scan");
+	console.info("sqlite-vec module unavailable; using JS linear scan over stored embeddings");
 }
 
 const availableState: SqliteVecAvailable = {

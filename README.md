@@ -13,10 +13,10 @@ npm run build
 
 ```sh
 npm run build
-node dist/cli.js init /path/to/workspace
+node dist/cli.js init
 ```
 
-Edit `/path/to/workspace/config.toml`, then set secrets in `/path/to/workspace/.env`.
+Edit `~/.familiar/config.toml`, then set secrets in `~/.familiar/.env`.
 
 The default model is configured as a provider/model ref:
 
@@ -35,10 +35,11 @@ that legacy escape hatch; a base URL alone does not define a new provider.
 ```sh
 cp .env.example ~/.familiar/.env
 $EDITOR ~/.familiar/.env
-node dist/cli.js run ~/.familiar
+node dist/cli.js run
 ```
 
-`familiar run` auto-loads `<workspace>/.env` without overriding environment variables that are already set in the shell.
+`familiar run` defaults to `~/.familiar` and auto-loads `<workspace>/.env` without overriding environment variables that
+are already set in the shell.
 
 For Google Vertex models with ADC, put `GOOGLE_CLOUD_PROJECT` or `GCLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` in
 `<workspace>/.env`. ADC itself can come from `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`.
@@ -46,7 +47,7 @@ For Google Vertex models with ADC, put `GOOGLE_CLOUD_PROJECT` or `GCLOUD_PROJECT
 ## Run
 
 ```sh
-node dist/cli.js run /path/to/workspace
+node dist/cli.js run
 ```
 
 DM the bot from the configured `discord.owner_id`. Guild channels are ignored unless their channel id is listed in

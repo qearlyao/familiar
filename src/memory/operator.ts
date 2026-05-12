@@ -58,12 +58,12 @@ export async function runMemoryOperator(config: FamiliarConfig, argv: string[]):
 export function memoryHelp(): string {
 	return [
 		"Usage:",
-		"  familiar memory <workspace> status [--json]",
-		"  familiar memory <workspace> doctor [--clean]",
-		"  familiar memory <workspace> reindex [--corpus <name>] [--force]",
-		"  familiar memory <workspace> backfill [--channels <ch1,ch2>] [--data-dir <path>] [--dry-run]",
-		"  familiar memory <workspace> prune --new-session-retain-depth <N> [--yes] [--vacuum]",
-		"  familiar memory <workspace> backup <out-dir>",
+		"  familiar memory [workspace] status [--json]",
+		"  familiar memory [workspace] doctor [--clean]",
+		"  familiar memory [workspace] reindex [--corpus <name>] [--force]",
+		"  familiar memory [workspace] backfill [--channels <ch1,ch2>] [--data-dir <path>] [--dry-run]",
+		"  familiar memory [workspace] prune --new-session-retain-depth <N> [--yes] [--vacuum]",
+		"  familiar memory [workspace] backup <out-dir>",
 	].join("\n");
 }
 

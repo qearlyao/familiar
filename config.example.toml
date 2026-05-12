@@ -116,33 +116,48 @@ weight_recency = 0.08
 weight_intensity = 0.1
 
 [memory.lcm]
+
 # Lossless-claw style LCM. Set enabled = false to disable the LCM context engine.
 enabled = true
+
 # Omit model to inherit [agent].model, or set an explicit provider/model ref.
 # model = "anthropic/claude-opus-4-7"
+
 # Connection settings inherit from [models.base_urls] and [models.api_key_envs].
 context_threshold = 0.75
+
 # Protect up to this many newest messages before LCM compacts older context.
-fresh_tail_count = 64
+fresh_tail_count = 100
+
 # Optional stricter token cap for the protected fresh tail; the smaller tail wins.
 # fresh_tail_max_tokens = 4000
-leaf_chunk_tokens = 20000
-leaf_target_tokens = 2400
+
+leaf_chunk_tokens = 14000
+leaf_target_tokens = 1000
+
 prompt_aware_eviction_enabled = true
 condense_group_size = 4
+
 max_summary_depth = 2
+
 # Context retained after /new. -1 keeps all context, 0 keeps all summaries,
 # and positive values keep summaries at that depth or higher; 2 keeps d2+.
 new_session_retain_depth = 2
+
 max_rounds = 10
+
 # Milliseconds before cached LCM summaries expire.
 cache_ttl_ms = 300000
+
 # Minimum remaining TTL before touching cached LCM summaries.
 cache_touch_slack_ms = 30000
+
 # Token overflow above which LCM runs even when context_threshold has not been reached.
 critical_overflow_tokens = 8000
+
 timeout_ms = 60000
-# prompt = "Inline summarization prompt override."
+
+# prompt = "Inline extra instruction appended to every LCM summary prompt."
 # prompt_path = "prompts/lcm-summary.md"
-# system_prompt = "Inline summarization system prompt override."
+# system_prompt = "Inline system prompt that replaces the default LCM summarizer system prompt."
 # system_prompt_path = "prompts/lcm-system.md"

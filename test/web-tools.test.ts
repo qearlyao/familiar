@@ -7,6 +7,27 @@ describe("web tools", () => {
 	it("warns that web content is untrusted", () => {
 		assert.match(webContentWarning(), /untrusted/);
 		assert.match(webContentWarning(), /web_search/);
+		assert.match(webContentWarning(), /^<untrusted_web_content>/);
+		assert.match(webContentWarning(), /<\/untrusted_web_content>$/);
+	});
+
+	it("prefixes web search and fetch results with the untrusted-content block", () => {
+		const search = __webToolsTest.formatSearchResults({
+			results: [{ title: "A", url: "https://example.com", snippet: "Hello world" }],
+			provider: "brave",
+			requestedDepth: "basic",
+			servedDepth: "basic",
+		});
+		const fetch = __webToolsTest.formatFetchContent("https://example.com", "jina", {
+			text: "Page body",
+			offset: 0,
+			returnedChars: 9,
+			totalChars: 9,
+			hasMore: false,
+		});
+
+		assert.match(search, /^<untrusted_web_content>/);
+		assert.match(fetch, /^<untrusted_web_content>/);
 	});
 
 	it("prefers TinyFish for fetch when configured", () => {

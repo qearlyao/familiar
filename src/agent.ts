@@ -24,7 +24,7 @@ import {
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { createTtsTool } from "./tts.js";
-import { createWebTools, webContentWarning } from "./web-tools.js";
+import { createWebTools } from "./web-tools.js";
 
 export interface FamiliarAgentReply {
 	text: string;
@@ -265,7 +265,7 @@ export async function createFamiliarAgent(
 	memoryService?: MemoryService,
 ): Promise<FamiliarAgent> {
 	const persona = await loadPersona(config);
-	const systemPrompt = [buildSystemPrompt(persona), webContentWarning()].join("\n\n");
+	const systemPrompt = buildSystemPrompt(persona);
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");

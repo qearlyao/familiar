@@ -66,7 +66,7 @@ export function normalizeChatRecords(
 		if (record.type === "outbound" && !record.silent) {
 			const notes = attachmentNotes(record.attachments ?? []);
 			const parts = assistantParts(record, assistantEventsByJob.get(record.jobId ?? ""));
-			appendTextPart(parts, withAttachmentNotes(record.text, notes));
+			appendAssistantFinalText(parts, withAttachmentNotes(record.text, notes));
 			const text = flattenLcmRecordParts(parts);
 			if (text) {
 				records.push({
@@ -182,6 +182,18 @@ function appendTextPart(parts: LcmRecordPart[], text: string): void {
 		return;
 	}
 	parts.push({ kind: "text", text });
+}
+
+function appendAssistantFinalText(parts: LcmRecordPart[], text: string): void {
+	const normalized = text.trim();
+	if (!normalized) return;
+	const existingText = parts
+		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
+		.map((part) => part.text)
+		.join("")
+		.trim();
+	if (existingText === normalized) return;
+	appendTextPart(parts, text);
 }
 
 function appendThinkingPart(parts: LcmRecordPart[], text: string): void {

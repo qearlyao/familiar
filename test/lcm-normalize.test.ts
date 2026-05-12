@@ -155,6 +155,54 @@ describe("normalizeChatRecords", () => {
 		assert.match(batch.records[0]?.text ?? "", /\[tool_call: read/);
 	});
 
+	it("does not duplicate outbound final text already captured in text deltas", () => {
+		const batch = normalizeChatRecords(
+			[
+				{
+					...base,
+					type: "agent_event",
+					recordId: 1,
+					jobId: "job-1",
+					messageId: "event-1",
+					event: {
+						type: "message_update",
+						assistantMessageEvent: {
+							type: "text_delta",
+							delta: "fish pie, you mean? ",
+						},
+					},
+				},
+				{
+					...base,
+					type: "agent_event",
+					recordId: 2,
+					jobId: "job-1",
+					messageId: "event-2",
+					event: {
+						type: "message_update",
+						assistantMessageEvent: {
+							type: "text_delta",
+							delta: "looks cursed.",
+						},
+					},
+				},
+				{
+					...base,
+					type: "outbound",
+					recordId: 3,
+					messageIds: ["m2"],
+					text: "fish pie, you mean? looks cursed.",
+					jobId: "job-1",
+				},
+			],
+			{ segmentId: "seg-a" },
+		);
+
+		assert.equal(batch.records.length, 1);
+		assert.equal(batch.records[0]?.text, "fish pie, you mean? looks cursed.");
+		assert.deepEqual(batch.records[0]?.parts, [{ kind: "text", text: "fish pie, you mean? looks cursed." }]);
+	});
+
 	it("normalizes tool_result chat record into tool_result part", () => {
 		const batch = normalizeChatRecords(
 			[

@@ -248,19 +248,26 @@ V0 agent tools:
     filters, and possibly `mode`.
   - Default scope should be context-sensitive but conservative. Ambient recall
     remains diary-first; explicit tool calls may use factual/all.
+  - Returns ids, type/time cues, and concise previews only. Source/provenance
+    details belong in `memory_open` so recall stays readable.
 - `memory_open`
   - Open a returned memory item by id.
   - Handles diary chunks, normalized LCM records, summaries, and provenance.
-  - Replaces most `describe`/`expand` needs in v0.
+  - Replaces most `describe` needs in v0, but does not perform deep summary-DAG
+    traversal yet.
 
 Possible later tools:
 
 - `memory_similar`
   - "More like this" over an existing item id.
+  - Add only if the agent often has one good result and needs adjacent memories
+    without inventing another query.
 - `memory_expand`
   - Deeper summary-DAG expansion if `memory_open` is not enough.
   - Only worth adding when summary DAG compression makes deterministic opening
     too shallow.
+  - If added, keep low-level traversal internal/sub-agent-only and expose a
+    focused main-agent wrapper rather than raw DAG plumbing.
 
 Operator commands are separate from agent tools:
 
@@ -565,6 +572,11 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
   DAG compression needs deterministic drill-down. `memory_open` today returns
   only the immediate chunk row; for summaries it should follow
   `summary_sources` and `lcm_summary_parents` back to the underlying records.
+- Add a lightweight tool-output reference path if tool results need to become
+  searchable. Borrow the `lossless-claw` boundary of indexing a concise
+  placeholder or generated summary while keeping raw output out of normal
+  recall; do not port its full large-file externalization system unless deeper
+  summary expansion needs exact tool-result drill-down.
 - Document the cache-boundary contract for ambient injection in code:
   ambient text must mutate only the current user turn, never the assistant
   tail that the upstream API caches up to. Add an explicit assertion or

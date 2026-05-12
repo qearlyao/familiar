@@ -258,6 +258,125 @@ describe("retrieveMemory", () => {
 		assert.deepEqual(store.semanticCorpora, []);
 	});
 
+	it("deduplicates repeated visible memories across runtime and backfill sources", async () => {
+		const runtime = hit(1, "lcm_record", "runtime", "yeah, stargazy pie. looks cursed.", 0.01, {
+			kind: "assistant",
+			timestamp: "2026-05-09T05:07:22.811Z",
+			source: { sourceRef: "runtime:abc" },
+		});
+		const backfill = hit(2, "lcm_record", "backfill", "yeah, stargazy pie. looks cursed.", 0.02, {
+			kind: "assistant",
+			timestamp: "2026-05-09T05:07:28.805Z",
+			source: { sourceRef: "chat/file.jsonl#1439" },
+		});
+		const doubledBackfill = hit(
+			3,
+			"lcm_record",
+			"doubled",
+			"fish pie, you mean? looks cursed.fish pie, you mean? looks cursed.",
+			0.03,
+		);
+		const cleanRuntime = hit(4, "lcm_record", "clean-runtime", "fish pie, you mean? looks cursed.", 0.04);
+		const store = new FakeStore([runtime, backfill, doubledBackfill, cleanRuntime], new Map());
+
+		const results = await retrieveMemory({
+			query: "stargazy pie",
+			store,
+			embeddingProvider: null,
+			useSemantic: false,
+			scope: { corpora: ["lcm_record"] },
+			limit: 8,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1, 3],
+		);
+	});
+
+	it("deduplicates cross-source memories by message id and rounded turn identity", async () => {
+		const runtimeUser = hit(1, "lcm_record", "runtime-user", "[user] noooo, it's called Stargazy pie", 0.01, {
+			kind: "user",
+			timestamp: "2026-05-09T05:07:22.811Z",
+			source: { sourceRef: "runtime:abc" },
+		});
+		const backfillUser = hit(2, "lcm_record", "backfill-user", "noooo, it's called Stargazy pie", 0.02, {
+			kind: "user",
+			timestamp: "2026-05-09T05:07:22.802Z",
+			source: {
+				sourceMessageId: "user_bc998055-f743-4803-8f82-e32e651b2e5a",
+				sourceRef: "chat/file.jsonl#1426",
+			},
+		});
+		const runtimeAssistant = hit(3, "lcm_record", "runtime-assistant", "works now. searched stargazy pie.", 0.03, {
+			kind: "assistant",
+			timestamp: "2026-05-09T10:07:11.188Z",
+			source: { sourceRef: "runtime:def" },
+		});
+		const backfillAssistant = hit(4, "lcm_record", "backfill-assistant", "[assistant] works now. searched stargazy pie.", 0.04, {
+			kind: "assistant",
+			timestamp: "2026-05-09T10:07:15.076Z",
+			source: {
+				sourceMessageId: "msg_40a07659-8fd7-403b-a5aa-67a89e67c504",
+				sourceRef: "chat/file.jsonl#1589",
+			},
+		});
+		const sharedMessageA = hit(5, "lcm_record", "runtime-shared", "same message id text", 0.05, {
+			kind: "assistant",
+			timestamp: "2026-05-12T03:33:37.000Z",
+			sourceMessageId: "same-message",
+		});
+		const sharedMessageB = hit(6, "lcm_record", "backfill-shared", "slightly different same message id text", 0.06, {
+			kind: "assistant",
+			timestamp: "2026-05-12T03:33:39.000Z",
+			source: { sourceMessageId: "same-message" },
+		});
+		const store = new FakeStore(
+			[runtimeUser, backfillUser, runtimeAssistant, backfillAssistant, sharedMessageA, sharedMessageB],
+			new Map(),
+		);
+
+		const results = await retrieveMemory({
+			query: "stargazy pie",
+			store,
+			embeddingProvider: null,
+			useSemantic: false,
+			scope: { corpora: ["lcm_record"] },
+			limit: 8,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1, 3, 5],
+		);
+	});
+
+	it("does not deduplicate short generic text across unrelated turns", async () => {
+		const first = hit(1, "lcm_record", "first-ok", "ok", 0.01, {
+			kind: "user",
+			timestamp: "2026-05-09T05:07:22.000Z",
+		});
+		const second = hit(2, "lcm_record", "second-ok", "ok", 0.02, {
+			kind: "user",
+			timestamp: "2026-05-09T05:12:22.000Z",
+		});
+		const store = new FakeStore([first, second], new Map());
+
+		const results = await retrieveMemory({
+			query: "ok",
+			store,
+			embeddingProvider: null,
+			useSemantic: false,
+			scope: { corpora: ["lcm_record"] },
+			limit: 8,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1, 2],
+		);
+	});
+
 	it("returns no hits for empty queries", async () => {
 		const store = new FakeStore([hit(1, "diary_chunk", "a", "unused", 0)], new Map());
 		const provider = new FakeEmbeddingProvider();

@@ -7,6 +7,8 @@ import type { MemoryIndexStore, StoredMemoryChunk } from "./index/store.js";
 
 const DEFAULT_RECALL_LIMIT = 8;
 const MAX_TEXT_PREVIEW_CHARS = 700;
+const MAX_CONTEXT_LABEL_CHARS = 120;
+const MAX_SOURCE_LABEL_CHARS = 160;
 const MEMORY_SCOPE_CORPORA = {
 	diary: ["diary_chunk"],
 	factual: ["atomic_fact", "lcm_record", "lcm_summary"],
@@ -97,7 +99,7 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 		name: "memory_recall",
 		label: "Memory Recall",
 		description:
-			"Search the shared memory index for relevant memory chunks. Returns concise previews and ids; use memory_open for full text and metadata.",
+			"Search memory for relevant diary, factual, or conversation chunks. Returns concise previews and ids; use memory_open for full text and source details.",
 		parameters: memoryRecallSchema,
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();
@@ -136,7 +138,7 @@ function makeMemoryOpenTool(deps: MemoryToolDeps): AgentTool<typeof memoryOpenSc
 	return {
 		name: "memory_open",
 		label: "Memory Open",
-		description: "Open one stored memory chunk by id, returning its full text and metadata.",
+		description: "Open one stored memory chunk by id, returning full text plus concise source details.",
 		parameters: memoryOpenSchema,
 		async execute(_toolCallId, input: MemoryOpenInput) {
 			const id = Math.trunc(input.id);
@@ -183,47 +185,59 @@ function formatRecallResults(hits: MemoryRetrievalHit[]): string {
 function formatRecallHit(hit: MemoryRetrievalHit, ordinal: number): string {
 	const chunk = hit.chunk;
 	const lines = [
-		`${ordinal}. id=${hit.id} corpus=${chunk.corpus} score=${hit.score.toFixed(4)}`,
-		`source=${formatSource(chunk)} chunk=${chunk.chunkIndex}`,
-		`text: ${previewText(chunk.snippet || chunk.text, MAX_TEXT_PREVIEW_CHARS)}`,
+		`${ordinal}. id=${hit.id} type=${memoryTypeLabel(chunk)} score=${hit.score.toFixed(4)}`,
+		...compactContextLines(chunk),
+		`preview: ${previewText(chunk.snippet || chunk.text, MAX_TEXT_PREVIEW_CHARS)}`,
 	];
-	const metadata = formatMetadata(chunk.metadata);
-	if (metadata) lines.push(`metadata: ${metadata}`);
 	return lines.join("\n");
 }
 
 function formatOpenChunk(chunk: StoredMemoryChunk): string {
 	const lines = [
-		`id=${chunk.id} corpus=${chunk.corpus}`,
-		`source=${formatSource(chunk)} chunk=${chunk.chunkIndex}`,
-		`createdAt=${formatUnixTimestamp(chunk.createdAt)} updatedAt=${formatUnixTimestamp(chunk.updatedAt)}`,
+		`id=${chunk.id} type=${memoryTypeLabel(chunk)}`,
+		...compactContextLines(chunk),
+		...openSourceLines(chunk),
+		`stored=${formatUnixTimestamp(chunk.createdAt)} updated=${formatUnixTimestamp(chunk.updatedAt)}`,
 		"",
 		chunk.text,
 	];
-	const metadata = formatMetadata(chunk.metadata);
-	if (metadata) lines.push("", `metadata: ${metadata}`);
 	return lines.join("\n");
 }
 
-function formatSource(chunk: StoredMemoryChunk): string {
+function memoryTypeLabel(chunk: StoredMemoryChunk): string {
+	if (chunk.corpus === "diary_chunk") return "diary";
+	if (chunk.corpus === "lcm_record") return "conversation";
+	if (chunk.corpus === "lcm_summary") return "conversation_summary";
+	if (chunk.corpus === "atomic_fact") return "fact";
+	return chunk.corpus;
+}
+
+function compactContextLines(chunk: StoredMemoryChunk): string[] {
+	const lines: string[] = [];
+	const happenedAt = metadataString(chunk.metadata, "happenedAt") ?? metadataString(chunk.metadata, "timestamp");
+	const date = metadataString(chunk.metadata, "date");
+	const heading = metadataString(chunk.metadata, "heading");
+	if (happenedAt) lines.push(`when=${happenedAt}`);
+	else if (date) lines.push(`when=${date}`);
+	if (heading) lines.push(`title=${previewText(heading, MAX_CONTEXT_LABEL_CHARS)}`);
+	return lines;
+}
+
+function openSourceLines(chunk: StoredMemoryChunk): string[] {
 	const sources =
 		chunk.sources.length > 0
 			? chunk.sources
 			: [{ sourceId: chunk.sourceId, sourceRef: chunk.sourceRef, chunkIndex: chunk.chunkIndex }];
-	const rendered = sources.map((source) =>
-		[
-			source.sourceId ? `id:${source.sourceId}` : undefined,
-			source.sourceRef ? `ref:${source.sourceRef}` : undefined,
-			`chunk:${source.chunkIndex}`,
-		]
-			.filter(Boolean)
-			.join(" "),
-	);
-	return rendered.filter(Boolean).join("; ") || "unknown";
+	const labels = sources
+		.map((source) => source.sourceRef ?? source.sourceId)
+		.filter((value): value is string => !!value)
+		.map((value) => previewText(value, MAX_SOURCE_LABEL_CHARS));
+	return labels.length ? [`sources=${Array.from(new Set(labels)).join("; ")}`] : [];
 }
 
-function formatMetadata(metadata: Record<string, unknown> | null): string {
-	return metadata ? JSON.stringify(metadata) : "";
+function metadataString(metadata: Record<string, unknown> | null, key: string): string | null {
+	const value = metadata?.[key];
+	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function previewText(text: string, maxLength: number): string {

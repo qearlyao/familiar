@@ -1,7 +1,7 @@
 import type { ChunkIndexer, ChunkIndexResult, MemoryChunkIndexInput } from "../index/chunk-indexer.js";
 import type { NormalizedLcmBatch } from "./normalize.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store.js";
-import type { StoredLcmRecord, StoredLcmSummary } from "./types.js";
+import type { LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export const LCM_RECORD_CORPUS = "lcm_record";
 export const LCM_SUMMARY_CORPUS = "lcm_summary";
@@ -71,7 +71,7 @@ export function lcmSummariesToIndexInputs(summaries: readonly StoredLcmSummary[]
 }
 
 export function lcmRecordToIndexInput(record: StoredLcmRecord): MemoryChunkIndexInput | null {
-	const text = record.text.trim();
+	const text = memoryTextForLcmRecord(record);
 	if (!text) return null;
 	return {
 		corpus: LCM_RECORD_CORPUS,
@@ -120,7 +120,7 @@ export function lcmSummaryToIndexInput(summary: StoredLcmSummary): MemoryChunkIn
 }
 
 function lcmRecordSnippet(record: StoredLcmRecord): string {
-	return `[${record.kind}] ${record.text}`.slice(0, 280);
+	return `[${record.kind}] ${memoryTextForLcmRecord(record)}`.slice(0, 280);
 }
 
 function lcmSummarySnippet(summary: StoredLcmSummary): string {
@@ -174,4 +174,66 @@ function isParentSnapshot(item: unknown): item is { snapshot: StoredLcmSummary["
 
 function isIsoTimeString(value: unknown): value is string {
 	return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function memoryTextForLcmRecord(record: StoredLcmRecord): string {
+	if (record.kind === "user") return visibleTextFromRecord(record);
+	if (record.kind === "assistant") return visibleTextFromRecord(record);
+	if (record.kind === "note" || record.kind === "boundary") return record.text.trim();
+	return "";
+}
+
+function visibleTextFromRecord(record: StoredLcmRecord): string {
+	if (!record.parts?.length) return normalizeVisibleText(record.text, record.kind).trim();
+	const text = record.parts
+		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
+		.map((part) => part.text.trim())
+		.filter(Boolean)
+		.join("\n")
+		.trim();
+	return normalizeVisibleText(text, record.kind).trim();
+}
+
+function normalizeVisibleText(text: string, kind: StoredLcmRecord["kind"]): string {
+	const visible = kind === "assistant" ? stripNoisyRecordMarkers(text) : text;
+	return collapseDuplicatedVisibleText(visible);
+}
+
+function stripNoisyRecordMarkers(text: string): string {
+	return text
+		.split(/\r?\n/)
+		.filter((line) => !isNoisyRecordMarkerLine(line))
+		.join("\n");
+}
+
+function isNoisyRecordMarkerLine(line: string): boolean {
+	const trimmed = line.trim();
+	if (/^\[(?:thinking|tool_call|tool_result)\]$/.test(trimmed)) return true;
+	if (/^\[thinking\]\s*\S/.test(trimmed)) return true;
+	if (/^\[tool_call:\s*[\w.-]+\s*\(.*\)\]$/.test(trimmed)) return true;
+	if (/^\[tool_result:\s*[\w.-]+\s*->\s*.*\]$/.test(trimmed)) return true;
+	return false;
+}
+
+function collapseDuplicatedVisibleText(text: string): string {
+	let normalized = text.trim();
+	for (let iteration = 0; iteration < 4; iteration += 1) {
+		const collapsed = collapseOnce(normalized);
+		if (collapsed === normalized) return normalized;
+		normalized = collapsed;
+	}
+	return normalized;
+}
+
+function collapseOnce(text: string): string {
+	for (let split = Math.floor(text.length / 2); split >= 24; split -= 1) {
+		const left = text.slice(0, split).trim();
+		const right = text.slice(split).trim();
+		if (left && normalizeComparableText(left) === normalizeComparableText(right)) return left;
+	}
+	return text;
+}
+
+function normalizeComparableText(text: string): string {
+	return text.replace(/\s+/g, " ").trim().toLowerCase();
 }

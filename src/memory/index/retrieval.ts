@@ -44,6 +44,7 @@ export interface MemoryRetrievalHit {
 const DEFAULT_LIMIT = 8;
 const DEFAULT_CANDIDATE_MULTIPLIER = 4;
 const RRF_K = 60;
+const TEXT_DEDUPE_MIN_CHARS = 24;
 
 export async function retrieveMemory(options: RetrieveMemoryOptions): Promise<MemoryRetrievalHit[]> {
 	const query = options.query.trim();
@@ -70,7 +71,7 @@ export async function retrieveMemory(options: RetrieveMemoryOptions): Promise<Me
 				)
 			: [];
 
-	return mergeRankedHits(lexicalHits, semanticHits, options.scope).slice(0, limit);
+	return dedupeMemoryHits(mergeRankedHits(lexicalHits, semanticHits, options.scope)).slice(0, limit);
 }
 
 function searchLexicalByScope(
@@ -166,6 +167,83 @@ function compareRetrievalHits(a: MemoryRetrievalHit, b: MemoryRetrievalHit): num
 
 function bestRank(hit: MemoryRetrievalHit): number {
 	return Math.min(hit.lexicalRank ?? Number.POSITIVE_INFINITY, hit.semanticRank ?? Number.POSITIVE_INFINITY);
+}
+
+function dedupeMemoryHits(hits: readonly MemoryRetrievalHit[]): MemoryRetrievalHit[] {
+	const groups: MemoryRetrievalHit[][] = [];
+	const groupByKey = new Map<string, number>();
+	for (const hit of hits) {
+		const keys = memoryDedupeKeys(hit.chunk);
+		const groupIndexes = new Set<number>();
+		for (const key of keys) {
+			const groupIndex = groupByKey.get(key);
+			if (groupIndex !== undefined) groupIndexes.add(groupIndex);
+		}
+		const targetIndex = groupIndexes.size > 0 ? Math.min(...groupIndexes) : groups.length;
+		const target = groups[targetIndex] ?? [];
+		target.push(hit);
+		groups[targetIndex] = target;
+		for (const groupIndex of groupIndexes) {
+			if (groupIndex === targetIndex) continue;
+			for (const grouped of groups[groupIndex] ?? []) {
+				target.push(grouped);
+				for (const key of memoryDedupeKeys(grouped.chunk)) groupByKey.set(key, targetIndex);
+			}
+			groups[groupIndex] = [];
+		}
+		for (const key of keys) groupByKey.set(key, targetIndex);
+	}
+	return groups
+		.filter((group) => group.length > 0)
+		.map((group) => group.sort(compareRetrievalHits)[0])
+		.filter((hit): hit is MemoryRetrievalHit => hit !== undefined)
+		.sort(compareRetrievalHits);
+}
+
+function memoryDedupeKeys(chunk: StoredMemoryChunk): string[] {
+	const keys = new Set<string>();
+	const text = normalizeMemoryText(chunk.text);
+	if (text) {
+		if (text.length >= TEXT_DEDUPE_MIN_CHARS) keys.add(`text:${chunk.corpus}:${text}`);
+		const kind = metadataString(chunk.metadata, "kind") ?? "";
+		const rounded = roundedChunkTimestamp(chunk);
+		if (kind && rounded !== null) keys.add(`turn:${chunk.corpus}:${kind}:${rounded}:${text}`);
+	}
+	const sourceMessageId =
+		metadataString(chunk.metadata, "sourceMessageId") ?? metadataSourceString(chunk, "sourceMessageId");
+	if (sourceMessageId) keys.add(`message:${chunk.corpus}:${sourceMessageId}`);
+	return [...keys];
+}
+
+function normalizeMemoryText(text: string): string {
+	const normalized = text
+		.replace(/^\s*\[[^\]]+\]\s*/, "")
+		.replace(/\s+/g, " ")
+		.trim()
+		.toLowerCase();
+	// Transitional shim for already-indexed legacy chunks that duplicated visible text.
+	const half = normalized.length / 2;
+	if (Number.isInteger(half) && normalized.slice(0, half).trim() === normalized.slice(half).trim()) {
+		return normalized.slice(0, half).trim();
+	}
+	return normalized;
+}
+
+function roundedChunkTimestamp(chunk: StoredMemoryChunk): number | null {
+	const timestamp = chunkTimestamp(chunk);
+	return timestamp === null ? null : Math.round(timestamp / 60_000);
+}
+
+function metadataString(metadata: StoredMemoryChunk["metadata"], key: string): string | null {
+	const value = metadata?.[key];
+	return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function metadataSourceString(chunk: StoredMemoryChunk, key: string): string | null {
+	const source = chunk.metadata?.source;
+	if (!source || typeof source !== "object") return null;
+	const value = (source as Record<string, unknown>)[key];
+	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function reciprocalRank(rank: number): number {

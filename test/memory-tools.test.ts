@@ -116,28 +116,31 @@ describe("memory tools", () => {
 				limit: 5,
 			});
 
-			assert.match(diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "", /corpus=diary_chunk/);
+			assert.match(diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "", /type=diary/);
 			assert.match(diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "", /blue lantern/);
 			assert.doesNotMatch(
 				diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "",
-				/corpus=lcm_record/,
+				/type=conversation/,
 			);
+			assert.doesNotMatch(diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "", /metadata:/);
 			assert.deepEqual(diaryResult.details.scope, "diary");
 			assert.deepEqual(diaryResult.details.ids.length, 1);
 
 			const factualRecall = createTools(store, [0, 1, 0]).find((tool) => tool.name === "memory_recall");
 			assert.ok(factualRecall);
-			const factualResult = await factualRecall.execute("call-2", {
-				query: "database migrations",
-				scope: "factual",
-				limit: 5,
-			});
+				const factualResult = await factualRecall.execute("call-2", {
+					query: "database migrations",
+					scope: "factual",
+					limit: 5,
+				});
 
-			const text = factualResult.content[0]?.type === "text" ? factualResult.content[0].text : "";
-			assert.match(text, /corpus=lcm_record/);
-			assert.doesNotMatch(text, /corpus=diary_chunk/);
-			assert.deepEqual(factualResult.details.scope, "factual");
-			assert.equal(factualResult.details.mode, "hybrid");
+				const text = factualResult.content[0]?.type === "text" ? factualResult.content[0].text : "";
+				assert.match(text, /type=conversation/);
+				assert.doesNotMatch(text, /type=diary/);
+				assert.doesNotMatch(text, /metadata:/);
+				assert.doesNotMatch(text, /source=/);
+				assert.deepEqual(factualResult.details.scope, "factual");
+				assert.equal(factualResult.details.mode, "hybrid");
 		} finally {
 			store.close();
 		}
@@ -183,8 +186,8 @@ describe("memory tools", () => {
 
 			assert.equal(result.details.scope, "factual");
 			assert.equal(result.details.mode, "lexical");
-			assert.match(text, /corpus=atomic_fact/);
-			assert.doesNotMatch(text, /corpus=diary_chunk/);
+			assert.match(text, /type=fact/);
+			assert.doesNotMatch(text, /type=diary/);
 			assert.doesNotMatch(text, /early chat/);
 		} finally {
 			store.close();
@@ -203,18 +206,25 @@ describe("memory tools", () => {
 				chunkIndex: 2,
 				text: "Full summary text with enough detail to prove memory_open does not return only a snippet.",
 				snippet: "Full summary text",
-				metadata: { depth: 1, segmentId: "seg-1" },
+				metadata: {
+					depth: 1,
+					segmentId: "seg-1",
+					timestamp: "2026-05-10T01:00:00.000Z",
+					source: { sourceRef: "summary-ref" },
+				},
 				embedding: vector([0, 1, 0]),
 			});
 
-			const open = createTools(store).find((tool) => tool.name === "memory_open");
-			assert.ok(open);
+				const open = createTools(store).find((tool) => tool.name === "memory_open");
+				assert.ok(open);
 
-			const result = await open.execute("call-3", { id });
-			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-			assert.match(text, new RegExp(`id=${id} corpus=lcm_summary`));
+				const result = await open.execute("call-3", { id });
+				const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+				assert.match(text, new RegExp(`id=${id} type=conversation_summary`));
+				assert.match(text, /when=2026-05-10T01:00:00.000Z/);
+				assert.match(text, /sources=summary-ref/);
 			assert.match(text, /Full summary text with enough detail/);
-			assert.match(text, /metadata: {"depth":1,"segmentId":"seg-1"}/);
+			assert.doesNotMatch(text, /metadata:/);
 			assert.doesNotMatch(text, /1970-/);
 			assert.deepEqual(result.details, {
 				id,

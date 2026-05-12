@@ -17,6 +17,7 @@ import {
 } from "../src/memory/lcm/indexer.js";
 import { normalizeChatRecords } from "../src/memory/lcm/normalize.js";
 import { LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "../src/memory/lcm/store.js";
+import type { LcmRecordPart, StoredLcmRecord } from "../src/memory/lcm/types.js";
 
 const base = {
 	ts: "2026-05-10T01:00:00.000Z",
@@ -37,6 +38,32 @@ function openMemoryStore(path: string, dimensions = 3): MemoryIndexStore {
 		embeddingModel: "fake-embedding",
 		embeddingDimensions: dimensions,
 	});
+}
+
+function storedRecord(input: {
+	id: number;
+	kind: StoredLcmRecord["kind"];
+	text: string;
+	parts?: LcmRecordPart[] | null;
+}): StoredLcmRecord {
+	return {
+		id: input.id,
+		recordKey: `record-${input.id}`,
+		segmentId: "seg-a",
+		kind: input.kind,
+		text: input.text,
+		parts: input.parts ?? null,
+		happenedAt: "2026-05-09T05:07:22.802Z",
+		sessionId: "session-a",
+		channelKey: "dm",
+		channelId: "room",
+		jobId: null,
+		source: { sourceType: "chat", sourceRef: `chat.jsonl#${input.id}` },
+		attachments: null,
+		metadata: null,
+		createdAt: 1,
+		updatedAt: 1,
+	};
 }
 
 class FakeEmbeddingProvider implements EmbeddingProvider {
@@ -193,6 +220,98 @@ describe("LCM indexer", () => {
 			assert.ok(lcmStore.getSummary(placeholderId));
 		} finally {
 			lcmStore.close();
+			memoryStore.close();
+		}
+	});
+
+	it("indexes only memory-facing visible text from noisy LCM records", async () => {
+		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-visible-indexer-memory-", "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
+		try {
+			const userRecord = storedRecord({
+				id: 1,
+				kind: "user",
+				text: "noooo, it's called Stargazy pie",
+			});
+			const visibleAssistant = storedRecord({
+				id: 2,
+				kind: "assistant",
+				text:
+					"[thinking] planning the search\n" +
+					"[tool_call: web_search({\"query\":\"Stargazy pie\"})]\n" +
+					"Stargazy pie is Cornish and tied to Mousehole.",
+				parts: [
+					{ kind: "thinking" as const, text: "planning the search" },
+					{
+						kind: "tool_call" as const,
+						toolCallId: "call-1",
+						toolName: "web_search",
+						arguments: { query: "Stargazy pie" },
+					},
+					{ kind: "text" as const, text: "Stargazy pie is Cornish and tied to Mousehole." },
+				],
+			});
+			const planningOnlyAssistant = storedRecord({
+				id: 3,
+				kind: "assistant",
+				text: "[thinking] only internal planning\n[tool_call: web_search({\"query\":\"Stargazy pie\"})]",
+				parts: [
+					{ kind: "thinking" as const, text: "only internal planning" },
+					{
+						kind: "tool_call" as const,
+						toolCallId: "call-2",
+						toolName: "web_search",
+						arguments: { query: "Stargazy pie" },
+					},
+				],
+			});
+			const toolResult = storedRecord({
+				id: 4,
+				kind: "tool",
+				text: "[tool_result: web_search -> raw result json about Stargazy pie]",
+				parts: [
+					{
+						kind: "tool_result" as const,
+						toolCallId: "call-2",
+						toolName: "web_search",
+						output: { text: "raw result json about Stargazy pie" },
+					},
+				],
+			});
+			const doubledLegacy = storedRecord({
+				id: 5,
+				kind: "assistant",
+				text:
+					"fish pie, you mean? yeah, heard of it. bones and regret.\n" +
+					"fish pie, you mean? yeah, heard of it. bones and regret.",
+			});
+			const quotedThinking = storedRecord({
+				id: 6,
+				kind: "user",
+				text: "[thinking] is a literal tag I want to discuss, not an internal block.",
+			});
+
+			const result = await indexLcmRecords({
+				indexer,
+				records: [userRecord, visibleAssistant, planningOnlyAssistant, toolResult, doubledLegacy, quotedThinking],
+			});
+
+			assert.equal(result.embedded, 4);
+			assert.deepEqual(provider.batches[0], [
+				"noooo, it's called Stargazy pie",
+				"Stargazy pie is Cornish and tied to Mousehole.",
+				"fish pie, you mean? yeah, heard of it. bones and regret.",
+				"[thinking] is a literal tag I want to discuss, not an internal block.",
+			]);
+			assert.equal(memoryStore.searchLexical("Mousehole", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 1);
+			const fishHit = memoryStore.searchLexical("bones regret", { corpus: LCM_RECORD_CORPUS, limit: 10 })[0];
+			assert.equal(fishHit?.chunk.text, "fish pie, you mean? yeah, heard of it. bones and regret.");
+			assert.equal(memoryStore.searchLexical("planning", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
+			assert.equal(memoryStore.searchLexical("tool_call", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
+			assert.equal(memoryStore.searchLexical("raw result", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
+			assert.equal(memoryStore.searchLexical("literal tag", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 1);
+		} finally {
 			memoryStore.close();
 		}
 	});

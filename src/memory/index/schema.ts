@@ -89,6 +89,7 @@ function reconcileEmbeddingConfig(db: Database.Database, options: MemoryIndexMig
 	) {
 		db.transaction(() => {
 			db.prepare("DELETE FROM memory_fts").run();
+			db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
 			db.prepare("DROP TABLE IF EXISTS memory_vec").run();
 			db.prepare("DELETE FROM memory_index_sources").run();
 			db.prepare("DELETE FROM memory_chunks").run();
@@ -113,7 +114,7 @@ function reconcileVectorTable(
 			if (!hadVectorTable) {
 				db.prepare(
 					`CREATE VIRTUAL TABLE memory_vec USING vec0(
-						embedding float[${options.embeddingDimensions}]
+						embedding float[${options.embeddingDimensions}] distance_metric=cosine
 					)`,
 				).run();
 			}

@@ -438,6 +438,9 @@ describe("MemoryIndexStore", () => {
 
 	it("drops stale memory_vec rows when embedding dimensions change without sqlite-vec loaded", async () => {
 		const path = await tempDbPath();
+		__memoryVecTest.setLoader(() => {
+			throw new Error("sqlite-vec unavailable during initial create");
+		});
 		const firstStore = openStore(path);
 		try {
 			firstStore.insertChunk({

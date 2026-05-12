@@ -495,7 +495,7 @@ export class MemoryIndexStore {
 			.run(id, item.text, item.snippet);
 		if (this.vectorCapability() === "sqlite-vec") {
 			this.db
-				.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)")
+				.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
 				.run(id, encodeVector(item.embedding));
 		}
 		this.insertSourceMapping(id, item);

@@ -585,6 +585,10 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
 - Re-evaluate the Stage 9 heartbeat/compaction hook idea before building on it:
   it may be useful as a gentle trigger for LCM summary work, but if real usage
   shows no clear value, drop it instead of carrying extra runtime machinery.
+- Add deterministic retained-summary headers at render time: include the
+  covered date range from summary coverage metadata and the generated time
+  from the summary row, while keeping model-generated summary text as the body.
+  Do not rely on the summarizer prompt to invent these timestamps.
 - Document the cache-boundary contract for ambient injection in code:
   ambient text must mutate only the current user turn, never the assistant
   tail that the upstream API caches up to. Add an explicit assertion or

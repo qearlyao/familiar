@@ -4,7 +4,8 @@ import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { retrieveAmbientDiary } from "./ambient.js";
 
-const AMBIENT_CONTEXT_PREFIX = "[diary recall]";
+const INJECTED_MEMORY_OPEN = "<injected_memory>";
+const INJECTED_MEMORY_CLOSE = "</injected_memory>";
 
 export interface AmbientDiaryInjectorOptions {
 	store: MemoryIndexStore;
@@ -126,15 +127,23 @@ function lastUserText(messages: readonly AgentMessage[]): string {
 }
 
 function renderAmbientDiaryRecall(hits: Awaited<ReturnType<typeof retrieveAmbientDiary>>): string {
-	const lines = [AMBIENT_CONTEXT_PREFIX];
+	const lines = [INJECTED_MEMORY_OPEN];
 	for (const [index, hit] of hits.entries()) {
 		const date = typeof hit.chunk.metadata?.date === "string" ? hit.chunk.metadata.date : undefined;
 		const heading = typeof hit.chunk.metadata?.heading === "string" ? hit.chunk.metadata.heading : undefined;
 		const label = [date, heading].filter(Boolean).join(" ");
 		const prefix = label ? `${index + 1}. ${label}` : `${index + 1}. diary`;
-		lines.push(`${prefix}: ${hit.chunk.snippet || hit.chunk.text}`);
+		lines.push(`${escapeXmlText(prefix)}: ${escapeXmlText(hit.chunk.snippet || hit.chunk.text)}`);
 	}
+	lines.push(INJECTED_MEMORY_CLOSE);
 	return lines.join("\n");
+}
+
+function escapeXmlText(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
 }
 
 export const __ambientDiaryInjectorTest = {

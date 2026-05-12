@@ -87,13 +87,13 @@ describe("MemoryService", () => {
 			{ role: "user" as const, content: [{ type: "text" as const, text: "blue lantern" }], timestamp: 3 },
 		];
 
-		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "[diary recall]\n1. 2026-05-10: warm");
+		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>");
 
 		assert.deepEqual(messages[0], next[0]);
 		const last = next[2];
 		assert.equal(last?.role, "user");
 		assert.equal(Array.isArray(last?.content), true);
-		assert.match(Array.isArray(last?.content) ? (last.content.at(-1) as { text: string }).text : "", /diary recall/);
+		assert.match(Array.isArray(last?.content) ? (last.content.at(-1) as { text: string }).text : "", /<injected_memory>/);
 	});
 
 	it("recalls indexed diary chunks through transformContext", async () => {
@@ -119,7 +119,8 @@ describe("MemoryService", () => {
 					{ role: "user", content: "blue lantern", timestamp: Date.now() },
 				]);
 				assert.equal(message?.role, "user");
-				assert.match(typeof message?.content === "string" ? message.content : "", /diary recall/);
+				assert.match(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
+				assert.match(typeof message?.content === "string" ? message.content : "", /<\/injected_memory>/);
 				assert.match(typeof message?.content === "string" ? message.content : "", /blue lantern/);
 			} finally {
 				service.close();

@@ -4,7 +4,7 @@ import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { retrieveAmbientDiary } from "./ambient.js";
 
-const AMBIENT_CONTEXT_PREFIX = "[Familiar diary recall]";
+const AMBIENT_CONTEXT_PREFIX = "[diary recall]";
 
 export interface AmbientDiaryInjectorOptions {
 	store: MemoryIndexStore;

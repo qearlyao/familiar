@@ -97,7 +97,7 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 		name: "memory_recall",
 		label: "Memory Recall",
 		description:
-			"Search Familiar's shared memory index. Returns concise chunk previews and ids; use memory_open for full text and metadata.",
+			"Search the shared memory index for relevant memory chunks. Returns concise previews and ids; use memory_open for full text and metadata.",
 		parameters: memoryRecallSchema,
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();

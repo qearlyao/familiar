@@ -19,7 +19,7 @@ import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
 import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmSummary } from "./types.js";
 
-const LCM_SUMMARY_PREFIX = "[Familiar retained LCM summary]";
+const LCM_SUMMARY_PREFIX = "[retained LCM summary]";
 
 export interface LcmContextTransformOptions {
 	sessionKey?: string;

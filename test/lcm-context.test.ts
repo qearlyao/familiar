@@ -31,7 +31,7 @@ describe("LCM context helpers", () => {
 			mode: "normal",
 			targetTokens: 120,
 		});
-		assert.match(leaf, /Familiar companion conversation/);
+		assert.match(leaf, /companion conversation/);
 		assert.match(leaf, /preferences, feelings, relationship context/);
 		assert.doesNotMatch(leaf, /Files: none/);
 

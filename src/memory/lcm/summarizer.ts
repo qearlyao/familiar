@@ -46,7 +46,7 @@ export type LcmCompleteFn = (
 ) => Promise<AssistantMessage>;
 
 export const LCM_SUMMARIZER_SYSTEM_PROMPT =
-	"You are Familiar's private continuity summarizer. Preserve what helps a companion agent remember the user with care, accuracy, and emotional tact. Return plain text summary content only.";
+	"You are a private continuity summarizer. Preserve what helps the companion agent remember the user with care, accuracy, and emotional tact. Return plain text summary content only.";
 
 export class DefaultLcmSummarizer implements LcmSummarizer {
 	private readonly complete: LcmCompleteFn;
@@ -165,7 +165,7 @@ export function buildLeafSummaryPrompt(params: {
 				].join("\n")
 			: [
 					"Normal summary policy:",
-					"- Preserve what helps Familiar continue as a warm companion: user preferences, feelings, relationship context, promises, boundaries, plans, and decisions.",
+					"- Preserve what helps the companion agent continue as a warm partner: user preferences, feelings, relationship context, promises, boundaries, plans, and decisions.",
 					"- Keep technical/project details only when they are part of the user's ongoing life, work, or shared context.",
 					"- Remove obvious repetition, filler, and private momentary phrasing that does not need to be remembered.",
 				].join("\n");
@@ -174,7 +174,7 @@ export function buildLeafSummaryPrompt(params: {
 		: "Additional operator instructions: (none)";
 
 	return [
-		"You summarize a SEGMENT of a Familiar companion conversation for future model turns.",
+		"You summarize a SEGMENT of a companion conversation for future model turns.",
 		"Treat this as incremental continuity memory, not a full transcript and not a coding handoff.",
 		policy,
 		instructionBlock,
@@ -212,13 +212,13 @@ function buildSessionSummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are merging several recent Familiar memory notes into one session-level continuity memory.",
+		"You are merging several recent memory notes into one session-level continuity memory.",
 		"Focus on what is new, changed, resolved, or still active across these notes.",
 		instructionBlock,
 		[
 			"Preserve:",
 			"- The user's preferences, boundaries, emotional state, and important relationship context.",
-			"- Active plans, promises, requests, open loops, and decisions that Familiar should remember.",
+			"- Active plans, promises, requests, open loops, and decisions that should be remembered.",
 			"- Work/project details only when they remain relevant for continuation.",
 			"",
 			"Drop:",
@@ -242,8 +242,8 @@ function buildTrajectorySummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are merging session-level Familiar memories into a trajectory-level continuity memory.",
-		"A future Familiar instance should understand the user's ongoing patterns and current state without replaying session minutiae.",
+		"You are merging session-level memories into a trajectory-level continuity memory.",
+		"A future companion agent should understand the user's ongoing patterns and current state without replaying session minutiae.",
 		instructionBlock,
 		[
 			"Preserve:",
@@ -272,12 +272,12 @@ function buildDurableSummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are creating a durable Familiar continuity memory from higher-level summaries.",
+		"You are creating a durable continuity memory from higher-level summaries.",
 		"This memory may persist for a long time. Keep only stable, useful context.",
 		instructionBlock,
 		[
 			"Preserve:",
-			"- Durable facts about the user, their preferences, values, boundaries, and relationship with Familiar.",
+			"- Durable facts about the user, their preferences, values, boundaries, and relationship with the companion agent.",
 			"- Long-running projects, commitments, unresolved tensions, and lessons learned.",
 			"- Important care instructions: what helps, what harms, and what should be handled gently.",
 			"",

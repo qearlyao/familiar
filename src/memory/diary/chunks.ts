@@ -72,7 +72,7 @@ export function chunkDiaryMarkdown(markdown: string, options: DiaryMarkdownChunk
 			...(section.heading ? { heading: section.heading } : {}),
 			...sectionMetadata,
 		});
-		for (const part of splitLongText(text, maxChars)) {
+		for (const part of splitDiaryTextBlocks(text, maxChars)) {
 			chunks.push({
 				text: part,
 				chunkIndex: chunks.length,
@@ -198,28 +198,48 @@ function camelMetadataKey(key: string): string {
 	return lower.replace(/[-_]([a-z])/g, (_match, letter: string) => letter.toUpperCase());
 }
 
-function splitLongText(text: string, maxChars: number): string[] {
-	if (text.length <= maxChars) return [text];
-	const paragraphs = text.split(/\n{2,}/);
+function splitDiaryTextBlocks(text: string, maxChars: number): string[] {
 	const chunks: string[] = [];
-	let current = "";
-
-	for (const paragraph of paragraphs) {
-		const trimmed = paragraph.trim();
-		if (!trimmed) continue;
-		if (!current) {
-			current = trimmed;
-			continue;
-		}
-		if (`${current}\n\n${trimmed}`.length <= maxChars) {
-			current = `${current}\n\n${trimmed}`;
-			continue;
-		}
-		chunks.push(...splitOversizedParagraph(current, maxChars));
-		current = trimmed;
+	for (const block of collectDiaryBlocks(text)) {
+		chunks.push(...splitOversizedParagraph(block, maxChars));
 	}
-	if (current) chunks.push(...splitOversizedParagraph(current, maxChars));
 	return chunks;
+}
+
+function collectDiaryBlocks(text: string): string[] {
+	const blocks: string[] = [];
+	let current: string[] = [];
+	let currentListIndent: number | null = null;
+
+	const flush = () => {
+		const block = current.join(" ").replace(/\s+/g, " ").trim();
+		if (block) blocks.push(block);
+		current = [];
+		currentListIndent = null;
+	};
+
+	for (const rawLine of text.replace(/\r\n/g, "\n").split("\n")) {
+		const line = rawLine.replace(/\s+$/g, "");
+		if (!line.trim()) {
+			flush();
+			continue;
+		}
+		const listItem = /^(\s*)(?:[-*+]|\d+[.)])\s+(.+)$/.exec(line);
+		if (listItem) {
+			flush();
+			current = [(listItem[2] ?? "").trim()];
+			currentListIndent = (listItem[1] ?? "").length;
+			continue;
+		}
+		if (currentListIndent !== null && /^\s+/.test(line)) {
+			current.push(line.trim());
+			continue;
+		}
+		flush();
+		current = [line.trim()];
+	}
+	flush();
+	return blocks;
 }
 
 function splitOversizedParagraph(text: string, maxChars: number): string[] {

@@ -137,9 +137,67 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, []);
 	});
 
+	it("strips injected memory blocks from the next ambient query", async () => {
+		const store = new FakeStore([], new Map());
+		const provider = new FakeEmbeddingProviderFull();
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			minQueryLength: 1,
+			throttleSeconds: 0,
+		});
+		const messages: AgentMessage[] = [
+			{
+				role: "user",
+				content: "wait what did you see?\n\n<injected_memory>\n1. 2026-05-12: secret diary text\n</injected_memory>",
+				timestamp: 0,
+			},
+		];
+
+		await injector.inject(messages, undefined, "session-a");
+
+		assert.deepEqual(provider.queries, ["wait what did you see?"]);
+	});
+
+	it("does not inject a diary when only a distant semantic nearest neighbor matched", async () => {
+		const distant = hit(1, "diary_chunk", "day.md", "memory system sleep-deprived", 0.9, {});
+		const store = new FakeStore([], new Map([["diary_chunk", [distant]]]));
+		const provider = new FakeEmbeddingProviderFull();
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			minQueryLength: 1,
+			throttleSeconds: 0,
+		});
+		const messages: AgentMessage[] = [{ role: "user", content: "wait what did you see?", timestamp: 0 }];
+
+		const next = await injector.inject(messages, undefined, "session-a");
+
+		assert.equal(next, messages);
+		assert.deepEqual(provider.queries, ["wait what did you see?"]);
+	});
+
+	it("does not let weak lexical matches bypass semantic relevance when embeddings are available", async () => {
+		const distant = hit(1, "diary_chunk", "day.md", "Qearl gave me a memory system today", 0.9, {});
+		const store = new FakeStore([distant], new Map([["diary_chunk", [distant]]]));
+		const provider = new FakeEmbeddingProviderFull();
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			minQueryLength: 1,
+			throttleSeconds: 0,
+		});
+		const messages: AgentMessage[] = [{ role: "user", content: "what did you see today?", timestamp: 0 }];
+
+		const next = await injector.inject(messages, undefined, "session-a");
+
+		assert.equal(next, messages);
+		assert.deepEqual(provider.queries, ["what did you see today?"]);
+	});
+
 	it("two ambient injections within throttle window skip the second call", async () => {
 		let now = 1_000;
-		const diary = hit(1, "diary_chunk", "day.md", "quiet memory", 0.5, {});
+		const diary = hit(1, "diary_chunk", "day.md", "quiet memory", 0.1, {});
 		const store = new FakeStore([diary], new Map([["diary_chunk", [diary]]]));
 		const provider = new FakeEmbeddingProviderFull();
 		const injector = new AmbientDiaryInjector({

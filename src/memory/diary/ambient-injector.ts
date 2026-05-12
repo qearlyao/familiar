@@ -6,6 +6,7 @@ import { retrieveAmbientDiary } from "./ambient.js";
 
 const INJECTED_MEMORY_OPEN = "<injected_memory>";
 const INJECTED_MEMORY_CLOSE = "</injected_memory>";
+const INJECTED_MEMORY_BLOCK_RE = /<injected_memory\b[^>]*>[\s\S]*?<\/injected_memory>/gi;
 
 export interface AmbientDiaryInjectorOptions {
 	store: MemoryIndexStore;
@@ -54,6 +55,7 @@ export class AmbientDiaryInjector {
 			const lastInjectedAt = this.lastInjectedAtBySession.get(sessionKey);
 			if (lastInjectedAt !== undefined && this.throttleMs > 0 && now - lastInjectedAt < this.throttleMs)
 				return messages;
+			debugAmbientQuery(sessionKey, query);
 			const hits = await retrieveAmbientDiary({
 				query,
 				store: this.store,
@@ -118,12 +120,32 @@ function lastUserText(messages: readonly AgentMessage[]): string {
 	if (index < 0) return "";
 	const message = messages[index];
 	if (!message || message.role !== "user") return "";
-	if (typeof message.content === "string") return message.content.trim();
-	return message.content
-		.filter((item): item is { type: "text"; text: string } => item.type === "text")
-		.map((item) => item.text)
-		.join("\n")
-		.trim();
+	const text =
+		typeof message.content === "string"
+			? message.content
+			: message.content
+					.filter(isTextPart)
+					.map((item) => item.text)
+					.join("\n");
+	return stripInjectedMemoryBlocks(text).trim();
+}
+
+function isTextPart(item: { type: string; text?: unknown }): item is { type: "text"; text: string } {
+	return item.type === "text" && typeof item.text === "string";
+}
+
+function stripInjectedMemoryBlocks(text: string): string {
+	return text.replace(INJECTED_MEMORY_BLOCK_RE, "").trim();
+}
+
+function debugAmbientQuery(sessionKey: string, query: string): void {
+	if (
+		!process.env.DEBUG?.split(",")
+			.map((part) => part.trim())
+			.includes("memory-ambient")
+	)
+		return;
+	console.error(JSON.stringify({ event: "ambient_diary_query", sessionKey, query }));
 }
 
 function renderAmbientDiaryRecall(hits: Awaited<ReturnType<typeof retrieveAmbientDiary>>): string {
@@ -181,5 +203,6 @@ export const __ambientDiaryInjectorTest = {
 	lastUserText,
 	renderAmbientDiaryRecall,
 	diaryLabel,
+	stripInjectedMemoryBlocks,
 	stripRepeatedDiaryPrefix,
 };

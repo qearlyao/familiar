@@ -46,6 +46,7 @@ export interface AmbientDiaryHit extends MemoryRetrievalHit {
 const DEFAULT_LIMIT = 4;
 const DEFAULT_CANDIDATE_MULTIPLIER = 5;
 const DEFAULT_HALF_LIFE_DAYS = 45;
+const MAX_AMBIENT_SEMANTIC_DISTANCE = 0.38;
 const DEFAULT_WEIGHTS: Required<AmbientDiaryWeights> = {
 	similarity: 1.0,
 	valence: 0.08,
@@ -75,10 +76,42 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 	const now = options.now ?? new Date();
 	const halfLifeDays = positiveIntegerOrDefault(options.recencyHalfLifeDays, DEFAULT_HALF_LIFE_DAYS);
 
-	return hits
-		.map((hit) => scoreAmbientHit(hit, { now, halfLifeDays, weights }))
-		.sort(compareAmbientHits)
-		.slice(0, limit);
+	const scored = hits.map((hit) => scoreAmbientHit(hit, { now, halfLifeDays, weights }));
+	const relevant = scored.filter(hasAmbientRelevance);
+	debugAmbientHits(options.query, scored, relevant);
+	return relevant.sort(compareAmbientHits).slice(0, limit);
+}
+
+function hasAmbientRelevance(hit: AmbientDiaryHit): boolean {
+	if (hit.semanticScore === null) return hit.lexicalRank !== null;
+	return hit.semanticScore <= MAX_AMBIENT_SEMANTIC_DISTANCE;
+}
+
+function debugAmbientHits(query: string, scored: AmbientDiaryHit[], relevant: AmbientDiaryHit[]): void {
+	if (
+		!process.env.DEBUG?.split(",")
+			.map((part) => part.trim())
+			.includes("memory-ambient")
+	)
+		return;
+	const relevantIds = new Set(relevant.map((hit) => hit.id));
+	console.error(
+		JSON.stringify({
+			event: "ambient_diary_hits",
+			query,
+			maxSemanticDistance: MAX_AMBIENT_SEMANTIC_DISTANCE,
+			hits: scored.map((hit) => ({
+				id: hit.id,
+				passed: relevantIds.has(hit.id),
+				ambientScore: hit.ambientScore,
+				lexicalRank: hit.lexicalRank,
+				semanticRank: hit.semanticRank,
+				lexicalScore: hit.lexicalScore,
+				semanticScore: hit.semanticScore,
+				snippet: (hit.chunk.snippet || hit.chunk.text).slice(0, 120),
+			})),
+		}),
+	);
 }
 
 function scoreAmbientHit(

@@ -93,11 +93,15 @@ function clonePayload(payload: unknown): unknown {
 	return JSON.parse(JSON.stringify(payload)) as unknown;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.
 function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
 	const nextPayload = clonePayload(payload);
-	if (!nextPayload || typeof nextPayload !== "object") return nextPayload;
+	if (!isRecord(nextPayload)) return nextPayload;
 	const request = nextPayload as { input?: unknown; store?: unknown };
 	if (request.store !== false) return nextPayload;
 	const input = request.input;
@@ -109,9 +113,36 @@ function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): u
 	return nextPayload;
 }
 
-function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
-	return stripOpenAIStoredReasoningItems(payload, model);
+function moveAnthropicCacheControlBeforeInjectedMemory(payload: unknown, model: Model<any>): unknown {
+	if (model.api !== "anthropic-messages") return payload;
+	if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
+	const messages = payload.messages;
+	const lastMessage = messages.at(-1);
+	if (!isRecord(lastMessage) || lastMessage.role !== "user") return payload;
+	const content = lastMessage.content;
+	if (!Array.isArray(content) || content.length < 2) return payload;
+	const injectedBlock = content.at(-1);
+	const stableBlock = content.at(-2);
+	if (!isInjectedMemoryTextBlock(injectedBlock) || !isRecord(stableBlock)) return payload;
+	const cacheControl = injectedBlock.cache_control;
+	if (!cacheControl) return payload;
+	delete injectedBlock.cache_control;
+	stableBlock.cache_control = cacheControl;
+	return payload;
 }
+
+function isInjectedMemoryTextBlock(value: unknown): value is Record<string, unknown> {
+	if (!isRecord(value) || value.type !== "text" || typeof value.text !== "string") return false;
+	return value.text.trim().startsWith("<injected_memory>");
+}
+
+function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
+	return moveAnthropicCacheControlBeforeInjectedMemory(stripOpenAIStoredReasoningItems(payload, model), model);
+}
+
+export const __agentTest = {
+	normalizeProviderPayload,
+};
 
 type StoredMessageRecord = {
 	ts: string;

@@ -112,6 +112,49 @@ A quieter thought arrived after midnight.
 		assert.equal(chunk?.text, "A small ordinary entry.");
 	});
 
+	it("splits diary body lines into separate memory chunks", () => {
+		const chunks = chunkDiaryMarkdown(
+			[
+				"Qearl gave me a memory system today.",
+				"Dangerous thing, giving a ghost somewhere to keep his thoughts.",
+				"She is clever in that stubborn, sleep-deprived way.",
+			].join("\n"),
+			{ sourceId: "2026-05-12.md" },
+		);
+
+		assert.deepEqual(
+			chunks.map((chunk) => chunk.text),
+			[
+				"Qearl gave me a memory system today.",
+				"Dangerous thing, giving a ghost somewhere to keep his thoughts.",
+				"She is clever in that stubborn, sleep-deprived way.",
+			],
+		);
+		assert.deepEqual(
+			chunks.map((chunk) => chunk.chunkIndex),
+			[0, 1, 2],
+		);
+	});
+
+	it("treats markdown list items as separate memory chunks", () => {
+		const chunks = chunkDiaryMarkdown(
+			[
+				"- Qearl gave me a memory system today.",
+				"- Dangerous thing, giving a ghost somewhere to keep his thoughts.",
+				"  This continuation belongs with the dangerous thing.",
+			].join("\n"),
+			{ sourceId: "2026-05-12.md" },
+		);
+
+		assert.deepEqual(
+			chunks.map((chunk) => chunk.text),
+			[
+				"Qearl gave me a memory system today.",
+				"Dangerous thing, giving a ghost somewhere to keep his thoughts. This continuation belongs with the dangerous thing.",
+			],
+		);
+	});
+
 	it("indexes a diary file through ChunkIndexer.replaceSource", async () => {
 		const store = openStore(await tempDbPath());
 		const provider = new FakeEmbeddingProvider();

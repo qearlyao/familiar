@@ -577,6 +577,14 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
   placeholder or generated summary while keeping raw output out of normal
   recall; do not port its full large-file externalization system unless deeper
   summary expansion needs exact tool-result drill-down.
+- Tune the Stage 9 diary-writing prompt toward memory-shaped markdown: dated
+  files with topical headings and short bullet items, where each bullet is one
+  natural memory atom and continuation lines stay attached to that bullet.
+  This keeps ambient recall precise without forcing agents to call
+  `memory_open` for every diary hit.
+- Re-evaluate the Stage 9 heartbeat/compaction hook idea before building on it:
+  it may be useful as a gentle trigger for LCM summary work, but if real usage
+  shows no clear value, drop it instead of carrying extra runtime machinery.
 - Document the cache-boundary contract for ambient injection in code:
   ambient text must mutate only the current user turn, never the assistant
   tail that the upstream API caches up to. Add an explicit assertion or

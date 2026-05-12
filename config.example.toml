@@ -107,6 +107,10 @@ dimensions = 3072
 batch_size = 32
 
 [memory.ambient]
+# Set enabled = false to pause automatic diary recall injection.
+# Manual memory_recall and memory_open tools still work when ambient is disabled.
+enabled = true
+
 top_k = 3
 min_query_length = 8
 throttle_seconds = 30

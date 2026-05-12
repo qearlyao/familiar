@@ -100,6 +100,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 		this.ambientInjector = new AmbientDiaryInjector({
 			store: this.memoryStore,
 			embeddingProvider: this.embeddingProvider,
+			enabled: config.memory.ambient.enabled,
 			topK: config.memory.ambient.topK,
 			minQueryLength: config.memory.ambient.minQueryLength,
 			throttleSeconds: config.memory.ambient.throttleSeconds,

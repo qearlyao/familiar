@@ -137,6 +137,24 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, []);
 	});
 
+	it("disabled ambient injection skips retrieval", async () => {
+		const store = new FakeStore([hit(1, "diary_chunk", "day.md", "quiet memory", 0.1, {})], new Map());
+		const provider = new FakeEmbeddingProviderFull();
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			enabled: false,
+			minQueryLength: 1,
+			throttleSeconds: 0,
+		});
+		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];
+
+		const next = await injector.inject(messages, undefined, "session-a");
+
+		assert.equal(next, messages);
+		assert.deepEqual(provider.queries, []);
+	});
+
 	it("strips injected memory blocks from the next ambient query", async () => {
 		const store = new FakeStore([], new Map());
 		const provider = new FakeEmbeddingProviderFull();

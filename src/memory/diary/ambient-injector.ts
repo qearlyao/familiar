@@ -11,6 +11,7 @@ const INJECTED_MEMORY_BLOCK_RE = /<injected_memory\b[^>]*>[\s\S]*?<\/injected_me
 export interface AmbientDiaryInjectorOptions {
 	store: MemoryIndexStore;
 	embeddingProvider: EmbeddingProvider;
+	enabled?: boolean;
 	topK?: number;
 	minQueryLength?: number;
 	throttleSeconds?: number;
@@ -22,6 +23,7 @@ export interface AmbientDiaryInjectorOptions {
 }
 
 export class AmbientDiaryInjector {
+	private readonly enabled: boolean;
 	private readonly store: MemoryIndexStore;
 	private readonly embeddingProvider: EmbeddingProvider;
 	private readonly topK: number;
@@ -35,6 +37,7 @@ export class AmbientDiaryInjector {
 	private readonly lastInjectedAtBySession = new Map<string, number>();
 
 	constructor(options: AmbientDiaryInjectorOptions) {
+		this.enabled = options.enabled ?? true;
 		this.store = options.store;
 		this.embeddingProvider = options.embeddingProvider;
 		this.topK = positiveIntegerOrDefault(options.topK, 3);
@@ -48,6 +51,7 @@ export class AmbientDiaryInjector {
 	}
 
 	async inject(messages: AgentMessage[], signal?: AbortSignal, sessionKey = "default"): Promise<AgentMessage[]> {
+		if (!this.enabled) return messages;
 		try {
 			const query = lastUserText(messages);
 			if (!query || query.length < this.minQueryLength) return messages;

@@ -171,6 +171,7 @@ retention_days = 7
 			batchSize: 32,
 		});
 		assert.deepEqual(config.memory.ambient, {
+			enabled: true,
 			topK: 3,
 			minQueryLength: 8,
 			throttleSeconds: 30,
@@ -229,6 +230,7 @@ dimensions = 1536
 batch_size = 8
 
 [memory.ambient]
+enabled = false
 top_k = 5
 min_query_length = 12
 throttle_seconds = 60
@@ -270,6 +272,7 @@ system_prompt_path = "prompts/lcm-system.md"
 			batchSize: 8,
 		});
 		assert.deepEqual(config.memory.ambient, {
+			enabled: false,
 			topK: 5,
 			minQueryLength: 12,
 			throttleSeconds: 60,

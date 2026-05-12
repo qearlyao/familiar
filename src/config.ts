@@ -129,6 +129,7 @@ export interface Config {
 			batchSize: number;
 		};
 		ambient: {
+			enabled: boolean;
 			topK: number;
 			minQueryLength: number;
 			throttleSeconds: number;
@@ -662,6 +663,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				batchSize: readInteger(memoryEmbedding.batch_size, 32, "memory.embedding.batch_size", 1),
 			},
 			ambient: {
+				enabled: readBoolean(memoryAmbient.enabled, true, "memory.ambient.enabled"),
 				topK: readInteger(memoryAmbient.top_k, 3, "memory.ambient.top_k", 1),
 				minQueryLength: readInteger(memoryAmbient.min_query_length, 8, "memory.ambient.min_query_length"),
 				throttleSeconds: readInteger(memoryAmbient.throttle_seconds, 30, "memory.ambient.throttle_seconds"),

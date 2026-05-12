@@ -625,6 +625,9 @@ export async function startWebDaemon(
 			await runtime.resetConversation("new conversation requested");
 			return "Started a fresh agent transcript for this channel.";
 		}
+		if (control.command === "reload") {
+			return familiarAgent.reload();
+		}
 		if (control.command === "model") {
 			return control.args
 				? await familiarAgent.setModel(runtime.channelKey, control.args)

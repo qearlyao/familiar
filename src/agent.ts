@@ -41,6 +41,7 @@ export interface FamiliarAgent {
 	steer(sessionKey: string, input: string): void;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
+	reload(): Promise<string>;
 	getModel(sessionKey: string): EffectiveSetting<string>;
 	getThinkingLevel(sessionKey: string): EffectiveSetting<string>;
 	setModel(sessionKey: string, input: string): Promise<string>;
@@ -54,6 +55,10 @@ interface FamiliarAgentSession {
 	thinkingLevel: ThinkingLevel;
 	mediaSink: GeneratedMediaSink;
 	promptQueue: Promise<void>;
+}
+
+export interface FamiliarAgentOptions {
+	reloadConfig?: () => Promise<Config>;
 }
 
 function deriveSessionId(workspacePath: string, sessionKey: string): string {
@@ -263,13 +268,14 @@ export async function createFamiliarAgent(
 	config: Config,
 	settings: SettingsStore,
 	memoryService?: MemoryService,
+	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
-	const persona = await loadPersona(config);
-	const systemPrompt = buildSystemPrompt(persona);
+	let persona = await loadPersona(config);
+	let systemPrompt = buildSystemPrompt(persona);
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
-	const defaultModel = createConfiguredModel(config);
+	let defaultModel = createConfiguredModel(config);
 	// Fail fast during startup if the configured default model cannot authenticate.
 	getRequestApiKey(config, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
@@ -300,7 +306,8 @@ export async function createFamiliarAgent(
 		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
 		const mediaSink = createGeneratedMediaSink();
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
-		const agent = new Agent({
+		let agent!: Agent;
+		agent = new Agent({
 			initialState: {
 				systemPrompt,
 				model,
@@ -340,7 +347,11 @@ export async function createFamiliarAgent(
 				}),
 			transformContext: memoryService
 				? (contextMessages, signal) =>
-						memoryService.transformContext(contextMessages, signal, { sessionKey, sessionId, model })
+						memoryService.transformContext(contextMessages, signal, {
+							sessionKey,
+							sessionId,
+							model: agent.state.model,
+						})
 				: undefined,
 		});
 
@@ -394,6 +405,17 @@ export async function createFamiliarAgent(
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
+	const refreshSession = (session: FamiliarAgentSession, sessionKey: string): void => {
+		const { model } = resolveChannelModel(sessionKey);
+		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
+		session.model = model;
+		session.thinkingLevel = thinkingLevel;
+		session.agent.state.systemPrompt = systemPrompt;
+		session.agent.state.model = model;
+		session.agent.state.thinkingLevel = thinkingLevel;
+		session.agent.state.tools = createFamiliarTools(config, session.mediaSink, memoryService);
+	};
+
 	return {
 		abort(sessionKey: string): void {
 			const session = sessions.get(sessionKey);
@@ -409,6 +431,34 @@ export async function createFamiliarAgent(
 			if (!existing) return;
 			const session = await existing;
 			resetSession(session);
+		},
+		async reload(): Promise<string> {
+			const previousModel = formatModel(defaultModel);
+			const nextConfig = await options.reloadConfig?.();
+			if (nextConfig) Object.assign(config, nextConfig);
+			persona = await loadPersona(config);
+			systemPrompt = buildSystemPrompt(persona);
+			defaultModel = createConfiguredModel(config);
+			getRequestApiKey(config, defaultModel);
+			const settledSessions = await Promise.allSettled(
+				[...sessions.entries()].map(async ([sessionKey, sessionPromise]) => {
+					const session = await sessionPromise;
+					refreshSession(session, sessionKey);
+					return sessionKey;
+				}),
+			);
+			const refreshed = settledSessions.filter((result) => result.status === "fulfilled").length;
+			const failed = settledSessions.length - refreshed;
+			const modelLine =
+				previousModel === formatModel(defaultModel)
+					? `default_model: ${previousModel}`
+					: `default_model: ${previousModel} -> ${formatModel(defaultModel)}`;
+			return [
+				"Reloaded persona prompt and live agent settings.",
+				modelLine,
+				`active_sessions: ${refreshed}${failed ? ` (${failed} failed)` : ""}`,
+				"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
+			].join("\n");
 		},
 		getModel(sessionKey: string): EffectiveSetting<string> {
 			const { model, source } = resolveChannelModel(sessionKey);

@@ -131,6 +131,11 @@ function getFamiliarApplicationCommand(): ApplicationCommandData {
 				type: ApplicationCommandOptionType.Subcommand,
 			},
 			{
+				name: "reload",
+				description: "Reload persona prompt files and live agent settings",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
 				name: "compact",
 				description: "Show compaction status",
 				type: ApplicationCommandOptionType.Subcommand,
@@ -523,6 +528,9 @@ async function applyControlCommand(options: {
 		await familiarAgent.reset(runtime.channelKey);
 		await runtime.resetConversation("new conversation requested");
 		return "Started a fresh agent transcript for this channel.";
+	}
+	if (control.command === "reload") {
+		return familiarAgent.reload();
 	}
 	if (control.command === "model") {
 		return control.args

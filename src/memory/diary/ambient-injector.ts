@@ -131,23 +131,55 @@ function renderAmbientDiaryRecall(hits: Awaited<ReturnType<typeof retrieveAmbien
 	for (const [index, hit] of hits.entries()) {
 		const date = typeof hit.chunk.metadata?.date === "string" ? hit.chunk.metadata.date : undefined;
 		const heading = typeof hit.chunk.metadata?.heading === "string" ? hit.chunk.metadata.heading : undefined;
-		const label = [date, heading].filter(Boolean).join(" ");
+		const rawLabel = [date, heading].filter(Boolean).join(" ");
+		const label = diaryLabel(date, heading);
 		const prefix = label ? `${index + 1}. ${label}` : `${index + 1}. diary`;
-		lines.push(`${escapeXmlText(prefix)}: ${escapeXmlText(hit.chunk.snippet || hit.chunk.text)}`);
+		const text = stripRepeatedDiaryPrefix(hit.chunk.snippet || hit.chunk.text, [rawLabel, label]);
+		lines.push(`${escapeXmlText(prefix)}: ${escapeXmlText(text)}`);
 	}
 	lines.push(INJECTED_MEMORY_CLOSE);
 	return lines.join("\n");
 }
 
+function diaryLabel(date?: string, heading?: string): string {
+	return uniqueNonEmptyStrings([date, heading]).join(" ");
+}
+
+function stripRepeatedDiaryPrefix(text: string, labels: readonly string[]): string {
+	let trimmed = text.trim();
+	for (const label of uniqueNonEmptyStrings(labels)) {
+		const escaped = escapeRegExp(label);
+		trimmed = trimmed.replace(new RegExp(`^(?:${escaped}\\s*:\\s*)+`, "i"), "").trim();
+	}
+	return trimmed;
+}
+
+function uniqueNonEmptyStrings(values: readonly (string | undefined)[]): string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	for (const value of values) {
+		const normalized = value?.trim();
+		if (!normalized) continue;
+		const key = normalized.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(normalized);
+	}
+	return out;
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function escapeXmlText(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;");
+	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export const __ambientDiaryInjectorTest = {
 	injectAmbientDiaryRecall,
 	lastUserText,
 	renderAmbientDiaryRecall,
+	diaryLabel,
+	stripRepeatedDiaryPrefix,
 };

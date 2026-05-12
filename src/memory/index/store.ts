@@ -53,6 +53,24 @@ export interface MemoryChunkSourceRef {
 	chunkIndex: number;
 }
 
+export interface MemorySourceStateInput {
+	corpus: string;
+	sourceId: string;
+	sourceRef?: string | null;
+	mtimeMs: number;
+	sizeBytes: number;
+}
+
+export interface MemorySourceState {
+	corpus: string;
+	sourceId: string;
+	sourceRef: string | null;
+	mtimeMs: number;
+	sizeBytes: number;
+	updatedAt: number;
+	hasMappings: boolean;
+}
+
 export interface MemorySearchOptions {
 	limit?: number;
 	corpus?: string | undefined;
@@ -309,6 +327,61 @@ export class MemoryIndexStore {
 		this.deleteBySourceInternal(corpus, sourceId);
 	}
 
+	getSourceState(corpus: string, sourceId: string): MemorySourceState | null {
+		const row = this.db
+			.prepare(
+				`SELECT
+					st.corpus,
+					st.source_id,
+					st.source_ref,
+					st.mtime_ms,
+					st.size_bytes,
+					st.updated_at,
+					EXISTS(
+						SELECT 1 FROM memory_index_sources s
+						WHERE s.corpus = st.corpus AND s.source_id = st.source_id
+					) AS has_mappings
+				 FROM memory_index_source_state st
+				 WHERE st.corpus = ? AND st.source_id = ?`,
+			)
+			.get(corpus, sourceId) as
+			| {
+					corpus: string;
+					source_id: string;
+					source_ref: string | null;
+					mtime_ms: number;
+					size_bytes: number;
+					updated_at: number;
+					has_mappings: 0 | 1;
+			  }
+			| undefined;
+		return row
+			? {
+					corpus: row.corpus,
+					sourceId: row.source_id,
+					sourceRef: row.source_ref,
+					mtimeMs: row.mtime_ms,
+					sizeBytes: row.size_bytes,
+					updatedAt: row.updated_at,
+					hasMappings: row.has_mappings === 1,
+				}
+			: null;
+	}
+
+	upsertSourceState(input: MemorySourceStateInput): void {
+		this.db
+			.prepare(
+				`INSERT INTO memory_index_source_state(corpus, source_id, source_ref, mtime_ms, size_bytes)
+				 VALUES (?, ?, ?, ?, ?)
+				 ON CONFLICT(corpus, source_id) DO UPDATE SET
+					source_ref = excluded.source_ref,
+					mtime_ms = excluded.mtime_ms,
+					size_bytes = excluded.size_bytes,
+					updated_at = unixepoch()`,
+			)
+			.run(input.corpus, input.sourceId, input.sourceRef ?? null, Math.floor(input.mtimeMs), input.sizeBytes);
+	}
+
 	deleteBySourceExceptHashes(corpus: string, sourceId: string, contentHashes: readonly string[]): void {
 		this.deleteBySourceExceptMappings(
 			corpus,
@@ -362,6 +435,7 @@ export class MemoryIndexStore {
 				this.db.prepare("INSERT INTO memory_fts(memory_fts) VALUES ('delete-all')").run();
 				if (this.vectorCapability() === "sqlite-vec") this.db.prepare("DELETE FROM memory_vec").run();
 				this.db.prepare("DELETE FROM memory_index_sources").run();
+				this.db.prepare("DELETE FROM memory_index_source_state").run();
 				this.db.prepare("DELETE FROM memory_chunks").run();
 			})
 			.immediate();
@@ -509,6 +583,7 @@ export class MemoryIndexStore {
 			id: number;
 		}[];
 		this.db.prepare("DELETE FROM memory_index_sources WHERE corpus = ? AND source_id = ?").run(corpus, sourceId);
+		this.db.prepare("DELETE FROM memory_index_source_state WHERE corpus = ? AND source_id = ?").run(corpus, sourceId);
 		for (const row of rows) this.deleteOrphanChunk(row.id);
 	}
 

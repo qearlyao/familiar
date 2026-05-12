@@ -4,7 +4,8 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 
 import type { Config } from "../../config.js";
 import type { ChunkIndexer, ChunkIndexResult } from "../index/chunk-indexer.js";
-import { indexDiaryMarkdown } from "./chunks.js";
+import type { MemoryIndexStore } from "../index/store.js";
+import { DIARY_CHUNK_CORPUS, indexDiaryMarkdown } from "./chunks.js";
 
 export const DIARY_INDEX_FILE_RE = /^\d{4}-\d{2}-\d{2}\.md$/;
 
@@ -13,6 +14,7 @@ export type DiaryFileSkipReason = "not-dated-markdown" | "not-file";
 export interface DiaryIndexerOptions {
 	config: Config;
 	indexer: ChunkIndexer;
+	store?: MemoryIndexStore;
 	signal?: AbortSignal;
 }
 
@@ -25,6 +27,7 @@ export interface DiaryFileIndexResult {
 	path: string;
 	sourceId: string;
 	result: ChunkIndexResult;
+	skippedUnchanged?: boolean;
 }
 
 export interface SkippedDiaryFileIndexResult {
@@ -81,6 +84,15 @@ export async function indexDiaryFile(options: IndexDiaryFileOptions): Promise<In
 		throw new Error(`Diary path is not a file: ${path}`);
 	}
 
+	if (options.store && isDiarySourceUnchanged(options.store, sourceId, path, fileStat)) {
+		return {
+			path,
+			sourceId,
+			result: { ids: [], embedded: 0, reused: 0, skipped: 0 },
+			skippedUnchanged: true,
+		};
+	}
+
 	const markdown = await readFile(path, "utf8");
 	const result = await indexDiaryMarkdown({
 		indexer: options.indexer,
@@ -88,6 +100,20 @@ export async function indexDiaryFile(options: IndexDiaryFileOptions): Promise<In
 		markdown,
 		signal: options.signal,
 	});
+	options.store?.upsertSourceState({
+		corpus: DIARY_CHUNK_CORPUS,
+		sourceId,
+		sourceRef: path,
+		mtimeMs: fileStat.mtimeMs,
+		sizeBytes: fileStat.size,
+	});
+	return { path, sourceId, result };
+}
+
+export async function removeDiaryFileIndex(options: IndexDiaryFileOptions): Promise<DiaryFileIndexResult> {
+	const path = resolveDiaryPath(options.config, options.path);
+	const sourceId = basename(path);
+	const result = await options.indexer.replaceSource(DIARY_CHUNK_CORPUS, sourceId, [], options.signal);
 	return { path, sourceId, result };
 }
 
@@ -103,4 +129,16 @@ export async function indexAllDiaryFiles(options: DiaryIndexerOptions): Promise<
 
 function resolveDiaryPath(config: Config, path: string): string {
 	return isAbsolute(path) ? resolve(path) : resolve(config.memory.diariesDir, path);
+}
+
+function isDiarySourceUnchanged(
+	store: MemoryIndexStore,
+	sourceId: string,
+	sourceRef: string,
+	fileStat: { mtimeMs: number; size: number },
+): boolean {
+	const state = store.getSourceState(DIARY_CHUNK_CORPUS, sourceId);
+	if (!state?.hasMappings) return false;
+	if (state.sourceRef !== sourceRef) return false;
+	return state.mtimeMs === Math.floor(fileStat.mtimeMs) && state.sizeBytes === fileStat.size;
 }

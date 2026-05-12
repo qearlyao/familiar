@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import type { Config } from "../src/config.js";
-import { indexAllDiaryFiles, indexDiaryFile, listDiaryMarkdownFiles } from "../src/memory/diary/index.js";
+import {
+	indexAllDiaryFiles,
+	indexDiaryFile,
+	listDiaryMarkdownFiles,
+	removeDiaryFileIndex,
+} from "../src/memory/diary/index.js";
 import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
@@ -109,6 +114,88 @@ describe("diary file indexer", () => {
 			assert.equal(store.searchLexical("remembered", 5).length, 0);
 			assert.equal(store.stats().indexed, 0);
 			assert.equal(provider.batches.length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("skips unchanged diary files when source state already matches", async () => {
+		const root = await tempRoot();
+		const diariesDir = resolve(root, "diaries");
+		await mkdir(diariesDir);
+		const diaryPath = resolve(diariesDir, "2026-05-10.md");
+		await writeFile(diaryPath, "A remembered thing.", "utf8");
+
+		const store = openStore(resolve(root, "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			const first = await indexDiaryFile({ config: configFor(diariesDir), indexer, store, path: diaryPath });
+			assert.equal("skipped" in first, false);
+			if ("skipped" in first) throw new Error("expected first diary indexing to run");
+			assert.equal(first.result.embedded, 1);
+			assert.equal(provider.batches.length, 1);
+
+			const second = await indexDiaryFile({ config: configFor(diariesDir), indexer, store, path: diaryPath });
+
+			assert.equal("skipped" in second, false);
+			if ("skipped" in second) throw new Error("expected second diary indexing to return index result");
+			assert.equal(second.skippedUnchanged, true);
+			assert.deepEqual(second.result, { ids: [], embedded: 0, reused: 0, skipped: 0 });
+			assert.equal(provider.batches.length, 1);
+
+			await writeFile(diaryPath, "A remembered thing with a new tail.", "utf8");
+			const third = await indexDiaryFile({ config: configFor(diariesDir), indexer, store, path: diaryPath });
+
+			assert.equal("skipped" in third, false);
+			if ("skipped" in third) throw new Error("expected changed diary indexing to run");
+			assert.equal(third.skippedUnchanged, undefined);
+			assert.equal(third.result.embedded, 1);
+			assert.equal(provider.batches.length, 2);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("reuses embeddings when source state is unavailable", async () => {
+		const root = await tempRoot();
+		const diariesDir = resolve(root, "diaries");
+		await mkdir(diariesDir);
+		await writeFile(resolve(diariesDir, "2026-05-10.md"), "A remembered thing.", "utf8");
+
+		const store = openStore(resolve(root, "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			await indexAllDiaryFiles({ config: configFor(diariesDir), indexer });
+			await indexAllDiaryFiles({ config: configFor(diariesDir), indexer });
+
+			assert.equal(provider.batches.length, 1);
+			assert.equal(store.stats().indexed, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("clears indexed chunks for a deleted diary file", async () => {
+		const root = await tempRoot();
+		const diariesDir = resolve(root, "diaries");
+		await mkdir(diariesDir);
+		const diaryPath = resolve(diariesDir, "2026-05-10.md");
+		await writeFile(diaryPath, "A remembered thing.", "utf8");
+
+		const store = openStore(resolve(root, "memory.sqlite"));
+		const provider = new FakeEmbeddingProvider();
+		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
+		try {
+			await indexDiaryFile({ config: configFor(diariesDir), indexer, path: diaryPath });
+			assert.equal(store.searchLexical("remembered", 5).length, 1);
+
+			await rm(diaryPath);
+			await removeDiaryFileIndex({ config: configFor(diariesDir), indexer, path: diaryPath });
+
+			assert.equal(store.searchLexical("remembered", 5).length, 0);
+			assert.equal(store.stats().indexed, 0);
 		} finally {
 			store.close();
 		}

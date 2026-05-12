@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -126,6 +126,67 @@ describe("MemoryService", () => {
 				service.close();
 			}
 		});
+	});
+
+	it("debounces changed diary files into the shared memory index", async () => {
+		const config = await memoryConfig();
+		await mkdir(config.memory.diariesDir, { recursive: true });
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { diaryWatchDebounceMs: 20 });
+			try {
+				service.watchDiaries();
+				const diaryPath = resolve(config.memory.diariesDir, "2026-05-12.md");
+				await writeFile(diaryPath, "first ambient watcher line", "utf8");
+				await writeFile(diaryPath, "second ambient watcher line", "utf8");
+				await writeFile(resolve(config.memory.diariesDir, "notes.md"), "not indexed", "utf8");
+
+				await waitFor(() => {
+					const hits = serviceMemoryStore(service).searchLexical("second", { corpus: "diary_chunk", limit: 5 });
+					return hits.length === 1;
+				});
+				assert.equal(serviceMemoryStore(service).searchLexical("first", { corpus: "diary_chunk", limit: 5 }).length, 0);
+				assert.equal(
+					serviceMemoryStore(service).searchLexical("indexed", { corpus: "diary_chunk", limit: 5 }).length,
+					0,
+				);
+
+				await rm(diaryPath);
+				await waitFor(() => {
+					return serviceMemoryStore(service).searchLexical("second", { corpus: "diary_chunk", limit: 5 }).length === 0;
+				});
+			} finally {
+				service.close();
+			}
+		});
+	});
+
+	it("skips unchanged diary files during repeated startup indexing", async () => {
+		const config = await memoryConfig();
+		await mkdir(config.memory.diariesDir, { recursive: true });
+		await writeFile(resolve(config.memory.diariesDir, "2026-05-12.md"), "startup diary once", "utf8");
+		let embeddingCalls = 0;
+		const previousFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			embeddingCalls += 1;
+			return new Response(JSON.stringify({ embeddings: [{ values: [1, 0, 0] }] }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}) as typeof fetch;
+		try {
+			const service = createMemoryService(config);
+			try {
+				await service.indexDiaries();
+				await service.indexDiaries();
+
+				assert.equal(embeddingCalls, 1);
+				assert.equal(serviceMemoryStore(service).searchLexical("startup", { corpus: "diary_chunk", limit: 5 }).length, 1);
+			} finally {
+				service.close();
+			}
+		} finally {
+			globalThis.fetch = previousFetch;
+		}
 	});
 
 	it("projects runtime records into LCM and rotates segments on reset", async () => {
@@ -1925,6 +1986,15 @@ function additiveDebtMessages(freshTail: string) {
 		},
 		{ role: "user" as const, content: freshTail, timestamp: 12 },
 	];
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		if (predicate()) return;
+		await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+	}
+	assert.equal(predicate(), true);
 }
 
 function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore & {

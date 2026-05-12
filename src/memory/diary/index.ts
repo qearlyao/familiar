@@ -26,5 +26,6 @@ export {
 	indexDiaryFile,
 	isDatedDiaryMarkdownFile,
 	listDiaryMarkdownFiles,
+	removeDiaryFileIndex,
 	type SkippedDiaryFileIndexResult,
 } from "./indexer.js";

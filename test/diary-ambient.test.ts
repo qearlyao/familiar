@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import { AmbientDiaryInjector } from "../src/memory/diary/ambient-injector.js";
+import { __memoryServiceTest } from "../src/memory/service.js";
 import { retrieveAmbientDiary } from "../src/memory/diary/index.js";
 import type { EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import {
@@ -159,6 +160,32 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, ["quiet memory please"]);
 	});
 
+	it("does not duplicate diary date and heading prefixes in injected memory", async () => {
+		const text = __memoryServiceTest.renderAmbientDiaryRecall([
+			ambientHit(
+				hit(1, "diary_chunk", "2026-05-12.md", "quiet thread", 0.1, {
+					date: "2026-05-12",
+					heading: "2026-05-12",
+				}),
+				"2026-05-12 2026-05-12: quiet thread",
+			),
+		]);
+
+		assert.match(text, /1\. 2026-05-12: quiet thread/);
+		assert.doesNotMatch(text, /2026-05-12 2026-05-12/);
+		assert.doesNotMatch(text, /2026-05-12: 2026-05-12/);
+	});
+
+	it("strips repeated prefixes from already-indexed ambient snippets", () => {
+		assert.equal(
+			__memoryServiceTest.stripRepeatedDiaryPrefix(
+				"2026-05-12 2026-05-12: 2026-05-12 2026-05-12: Qearl gave me a memory system today.",
+				["2026-05-12 2026-05-12", "2026-05-12"],
+			),
+			"Qearl gave me a memory system today.",
+		);
+	});
+
 	it("weight knobs influence final ordering", async () => {
 		const similar = hit(1, "diary_chunk", "old.md", "similar old", 0.01, {
 			date: "2025-01-01",
@@ -224,6 +251,24 @@ function hit(
 			createdAt: 1_775_779_200,
 			updatedAt: 1_775_779_200,
 		} satisfies StoredMemoryChunk,
+	};
+}
+
+function ambientHit(base: MemorySearchHit, snippet: string): Awaited<ReturnType<typeof retrieveAmbientDiary>>[number] {
+	return {
+		...base,
+		chunk: { ...base.chunk, snippet },
+		lexicalRank: 1,
+		semanticRank: null,
+		lexicalScore: base.score,
+		semanticScore: null,
+		ambientScore: 1,
+		boosts: {
+			similarity: 1,
+			valence: 0,
+			intensity: 0,
+			recency: 0,
+		},
 	};
 }
 

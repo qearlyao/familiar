@@ -105,6 +105,12 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		loadDotenv({ path: envPath, override: false });
 	}
 	const config = await loadConfig(workspacePath);
+	const reloadConfig = async () => {
+		if (existsSync(envPath)) {
+			loadDotenv({ path: envPath, override: true });
+		}
+		return loadConfig(workspacePath);
+	};
 	await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
 	const removedAttachments = await cleanupGeneratedAttachments(config);
 	if (removedAttachments > 0) {
@@ -118,7 +124,8 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	const settings = await loadSettingsStore(config);
 	const memoryService = createMemoryService(config);
 	await memoryService.indexDiaries().catch((error) => console.error("initial diary indexing failed", error));
-	const familiarAgent = await createFamiliarAgent(config, settings, memoryService);
+	memoryService.watchDiaries();
+	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig });
 	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService);
 	const webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon);
 	console.log(`familiar running for workspace ${config.workspacePath}`);

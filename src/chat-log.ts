@@ -5,7 +5,15 @@ import type { Config } from "./config.js";
 
 export type ChatService = "discord" | "web";
 export type ChatScope = "dm" | "channel" | "thread" | "web";
-export type ControlCommand = "stop" | "status" | "new" | "compact" | "model" | "thinking" | "channel-trigger";
+export type ControlCommand =
+	| "stop"
+	| "status"
+	| "new"
+	| "reload"
+	| "compact"
+	| "model"
+	| "thinking"
+	| "channel-trigger";
 export type JobTrigger = "dm" | "mention" | "message";
 
 export interface ChatChannelRef {

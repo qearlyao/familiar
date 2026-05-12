@@ -8,7 +8,7 @@ export interface MemoryIndexMigrationOptions {
 	embeddingDimensions: number;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function runMemoryIndexMigrations(db: Database.Database, options: MemoryIndexMigrationOptions): void {
 	db.pragma("journal_mode = WAL");
@@ -48,6 +48,16 @@ export function runMemoryIndexMigrations(db: Database.Database, options: MemoryI
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_memory_index_sources_chunk ON memory_index_sources(chunk_id);
+
+		CREATE TABLE IF NOT EXISTS memory_index_source_state (
+			corpus TEXT NOT NULL,
+			source_id TEXT NOT NULL,
+			source_ref TEXT,
+			mtime_ms INTEGER NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+			PRIMARY KEY(corpus, source_id)
+		);
 
 		-- Contentless FTS avoids SQLite maintaining shadow copies or stale external-content rows.
 		CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
@@ -91,6 +101,7 @@ function reconcileEmbeddingConfig(db: Database.Database, options: MemoryIndexMig
 			db.prepare("DELETE FROM memory_fts").run();
 			db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
 			db.prepare("DROP TABLE IF EXISTS memory_vec").run();
+			db.prepare("DELETE FROM memory_index_source_state").run();
 			db.prepare("DELETE FROM memory_index_sources").run();
 			db.prepare("DELETE FROM memory_chunks").run();
 			writeMeta(db, "requires_reindex", "1");

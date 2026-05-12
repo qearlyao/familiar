@@ -77,4 +77,45 @@ describe("ConversationRuntime", () => {
 			await runtime.disconnect();
 		}
 	});
+
+	it("parses reload as an owner-only control command", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+			botUserId: "bot",
+		});
+
+		try {
+			assert.deepEqual(
+				runtime.parseControlCommand({
+					authorId: "owner",
+					text: "/reload",
+					isBot: false,
+				}),
+				{ command: "reload", args: "" },
+			);
+			assert.deepEqual(
+				runtime.parseControlCommand({
+					authorId: "owner",
+					text: "<@bot> reload",
+					isBot: false,
+					mentionedBot: true,
+				}),
+				{ command: "reload", args: "" },
+			);
+			assert.equal(
+				runtime.parseControlCommand({
+					authorId: "someone-else",
+					text: "/reload",
+					isBot: false,
+				}),
+				undefined,
+			);
+		} finally {
+			await runtime.disconnect();
+		}
+	});
 });

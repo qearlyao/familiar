@@ -598,6 +598,16 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
   capability transition, but if a future migration adds chunks while
   sqlite-vec is unavailable and then re-enables, the doctor should surface
   the gap (clean path: re-run the backfill).
+- Finish embedding-provider compatibility beyond Gemini: `memory.embedding`
+  accepts `openai`/`voyage` formats, but `createEmbeddingProvider` still gates
+  non-Gemini formats. Add a real OpenAI provider path before documenting it as
+  usable, and re-check current provider docs before choosing request shapes.
+- Revisit multimodal memory indexing for attachments. The Gemini provider
+  adapter can serialize `inlineData`, but the shared chunk indexer currently
+  embeds only text chunks; image/audio/video attachments enter memory only via
+  derived text notes. If a provider/model with supported multimodal embeddings
+  is selected, add explicit image/audio index inputs, source metadata, hashing,
+  and tests instead of assuming text chunking covers media.
 
 ## Open Questions
 

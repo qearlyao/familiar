@@ -21,7 +21,7 @@ import {
 	type MessageResolvable,
 	Partials,
 } from "discord.js";
-import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
+import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "./agent.js";
 import {
 	type AgentEventSummary,
 	createAgentEventRecorder,
@@ -709,13 +709,14 @@ export async function startDiscordDaemon(
 			| typeof CRON_SKIPPED
 			| Promise<AgentMessage | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED>,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		options?: FamiliarPromptOptions,
 	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED> => {
 		const run = agentWorkQueue.then(async () => {
 			const message = await buildMessage();
 			if (message === HEARTBEAT_SKIPPED || message === CRON_SKIPPED) return message;
 			activeAgentOwner = runtime.channelKey;
 			try {
-				return await familiarAgent.promptMessage(runtime.channelKey, message, onEvent);
+				return await familiarAgent.promptMessage(runtime.channelKey, message, onEvent, options);
 			} finally {
 				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
 			}
@@ -949,6 +950,7 @@ export async function startDiscordDaemon(
 							await recorder.record(storedEvent);
 						}
 					},
+					{ skipAmbient: true },
 				);
 			} finally {
 				await recorder.flush();
@@ -1019,7 +1021,7 @@ export async function startDiscordDaemon(
 				deliveryMode: job.deliveryMode,
 			});
 			await markCronSlotStarted(job, slot);
-			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now));
+			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), { skipAmbient: true });
 			await completeCronSlot(job, slot);
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_completed",
@@ -1061,6 +1063,7 @@ export async function startDiscordDaemon(
 						await recorder.record(storedEvent);
 					}
 				},
+				{ skipAmbient: true },
 			);
 		} finally {
 			await recorder.flush();

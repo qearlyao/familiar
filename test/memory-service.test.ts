@@ -128,6 +128,50 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("skips ambient diary retrieval when requested for a transform", async () => {
+		const config = await memoryConfig();
+		const store = MemoryIndexStore.open(config);
+		try {
+			store.insertChunk({
+				corpus: "diary_chunk",
+				sourceId: "2026-05-10.md",
+				text: "The heartbeat lantern should stay out of ambient recall.",
+				snippet: "2026-05-10 Evening: The heartbeat lantern should stay out of ambient recall.",
+				metadata: { date: "2026-05-10", heading: "Evening", valence: 1, intensity: 1 },
+				embedding: vector([1, 0, 0]),
+			});
+		} finally {
+			store.close();
+		}
+
+		let embeddingCalls = 0;
+		const previousFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			embeddingCalls += 1;
+			return new Response(JSON.stringify({ embeddings: [{ values: [1, 0, 0] }] }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}) as typeof fetch;
+		try {
+			const service = createMemoryService(config);
+			try {
+				const [message] = await service.transformContext(
+					[{ role: "user", content: "heartbeat lantern", timestamp: Date.now() }],
+					undefined,
+					{ skipAmbient: true },
+				);
+				assert.equal(message?.role, "user");
+				assert.doesNotMatch(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
+				assert.equal(embeddingCalls, 0);
+			} finally {
+				service.close();
+			}
+		} finally {
+			globalThis.fetch = previousFetch;
+		}
+	});
+
 	it("debounces changed diary files into the shared memory index", async () => {
 		const config = await memoryConfig();
 		await mkdir(config.memory.diariesDir, { recursive: true });

@@ -32,6 +32,10 @@ export interface FamiliarAgentReply {
 	attachments: GeneratedAttachment[];
 }
 
+export interface FamiliarPromptOptions {
+	skipAmbient?: boolean;
+}
+
 export interface FamiliarAgent {
 	prompt(
 		sessionKey: string,
@@ -43,11 +47,12 @@ export interface FamiliarAgent {
 		sessionKey: string,
 		message: AgentMessage,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		options?: FamiliarPromptOptions,
 	): Promise<FamiliarAgentReply>;
 	steer(sessionKey: string, input: string): void;
 	// Stage 9 scheduled jobs use message-shaped injections to preserve timestamps without faking user identity.
 	steerMessage(sessionKey: string, message: AgentMessage): void;
-	followUpMessage(sessionKey: string, message: AgentMessage): Promise<void>;
+	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
@@ -329,6 +334,10 @@ export async function createFamiliarAgent(
 	// Fail fast during startup if the configured default model cannot authenticate.
 	getRequestApiKey(config, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+	// activePromptOptions covers the synchronous promptMessage window; skipAmbientMessages
+	// tags message identities so followUpMessage's fire-and-forget path also opts out.
+	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
+	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
 		const override = settings.getChannelModel(sessionKey);
@@ -396,12 +405,16 @@ export async function createFamiliarAgent(
 					},
 				}),
 			transformContext: memoryService
-				? (contextMessages, signal) =>
-						memoryService.transformContext(contextMessages, signal, {
+				? (contextMessages, signal) => {
+						const activeOptions = activePromptOptions.get(sessionKey);
+						const skipAmbient = activeOptions?.skipAmbient || lastUserMessageSkipsAmbient(contextMessages);
+						return memoryService.transformContext(contextMessages, signal, {
 							sessionKey,
 							sessionId,
 							model: agent.state.model,
-						})
+							...(skipAmbient ? { skipAmbient: true } : {}),
+						});
+					}
 				: undefined,
 		});
 
@@ -591,14 +604,20 @@ export async function createFamiliarAgent(
 			sessionKey: string,
 			message: AgentMessage,
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
+			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
 				session.mediaSink.drain();
 				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
+				const previousOptions = activePromptOptions.get(sessionKey);
+				activePromptOptions.set(sessionKey, options);
+				if (options.skipAmbient) skipAmbientMessages.add(message);
 				try {
 					await session.agent.prompt(message);
 				} finally {
+					if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
+					else activePromptOptions.delete(sessionKey);
 					unsubscribe?.();
 				}
 				return {
@@ -630,9 +649,24 @@ export async function createFamiliarAgent(
 				})
 				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
 		},
-		async followUpMessage(sessionKey: string, message: AgentMessage): Promise<void> {
+		async followUpMessage(
+			sessionKey: string,
+			message: AgentMessage,
+			options: FamiliarPromptOptions = {},
+		): Promise<void> {
 			const session = await getSession(sessionKey);
+			if (options.skipAmbient) skipAmbientMessages.add(message);
 			session.agent.followUp(message);
 		},
 	};
+
+	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {
+		for (let index = messages.length - 1; index >= 0; index -= 1) {
+			const message = messages[index];
+			if (!message || typeof message !== "object" || !("role" in message)) continue;
+			if (message.role !== "user") continue;
+			return skipAmbientMessages.has(message);
+		}
+		return false;
+	}
 }

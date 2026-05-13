@@ -43,6 +43,7 @@ export interface MemoryTransformOptions {
 	sessionKey?: string;
 	sessionId?: string;
 	model?: Model<any>;
+	skipAmbient?: boolean;
 }
 
 export interface MemoryServiceOptions {
@@ -151,6 +152,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 		options: MemoryTransformOptions = {},
 	): Promise<AgentMessage[]> {
 		const compacted = await this.contextTransformer.transformLcmContext(messages, signal, options);
+		if (options.skipAmbient) return compacted;
 		return this.ambientInjector.inject(compacted, signal, options.sessionKey ?? options.sessionId ?? "default");
 	}
 

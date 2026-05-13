@@ -11,7 +11,7 @@ Implemented or recently added:
 - Stages 0-6 are v0-complete: core runtime, WebUI, TTS v0, event dashboard, and media intake.
 - Native `web_search` and `web_fetch` tools are shipped: Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, SSRF-style URL guards, page cache, and XML-wrapped untrusted-content warnings in tool results.
 - Stage 7-8 memory foundation is shipped: shared memory index, LCM context compaction, memory recall/open tools, diary indexing, and ambient diary recall.
-- Stage 5 `image_gen`, skills, and WebUI TTS polish remain active.
+- Stage 5 `image_gen` and WebUI TTS polish remain active.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
 Next step checkpoint:
@@ -169,6 +169,7 @@ Status: shipped enough for current development. Keep details in git history and 
 - Stage 3: shipped WebUI side-door with HTTP/WebSocket transport, auth scaffolding, session picker, shared Discord/Web runtime, thinking/text streaming, persona label detection, and current frontend baseline.
 - Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
 - Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
+- Stage 5 Skills v0: shipped workspace `skills/` discovery without `AgentSession`, compact `<available_skills>` injection inside the direct `Agent` system prompt, reload refresh, and focused tests; skills remain instruction loading, not conversation memory.
 - Web access v0: shipped native `web_search` and `web_fetch`, with Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, cache behavior, XML-wrapped untrusted-content warnings, and focused tests.
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
 - Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
@@ -178,11 +179,12 @@ Still open from completed foundations:
 
 - Add public-2fa login UI when the frontend pass resumes.
 - Add richer WebUI panes for memory/diary/transcript/payload inspection later.
+- Add per-skill toggles by filtering which loaded skills are passed to `formatFamiliarSkillsForPrompt()`.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
 
-Status: TTS v0 is done. Remaining work is image generation, skills, and WebUI TTS polish.
+Status: TTS v0 and skills v0 are done. Remaining work is image generation and WebUI TTS polish.
 
 Image-generation tool:
 
@@ -199,14 +201,6 @@ Image-generation tool:
 - Keep media tools simple and direct; do not route generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 - Add a manual generated-media cleanup command later if startup retention is not enough.
-
-Skills:
-
-- Add Familiar skill discovery without `AgentSession`: load workspace skills from `skills/` and append pi-style progressive skill entries to the direct `Agent` system prompt.
-- Use skills for large, rarely used media/persona/character instructions: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
-- Keep tool definitions generic. The model should load relevant skills before calling `tts` or `image_gen` when a request matches a character/media workflow.
-- Keep LCM as the only automatic context compaction layer; skills are instruction loading, not conversation memory.
-- Later add per-skill toggles by filtering which loaded skills are passed to `formatFamiliarSkillsForPrompt()`.
 
 WebUI TTS polish:
 

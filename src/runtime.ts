@@ -128,6 +128,7 @@ export class ConversationRuntime {
 	private records: ChatLogRecord[] = [];
 	private nextRecordId = 1;
 	private armedAfterRecordId: number | undefined;
+	private lastUserInteractionAt = 0;
 	private pendingJobs: QueuedJob[] = [];
 	private activeJob: QueuedJob | undefined;
 	private listeners = new Set<RuntimeRecordListener>();
@@ -161,7 +162,18 @@ export class ConversationRuntime {
 		await this.log.acquire(`familiar-${process.pid}-${this.channelKey}`);
 		this.records = await this.log.read();
 		this.nextRecordId = this.records.reduce((max, record) => Math.max(max, record.recordId), 0) + 1;
+		this.lastUserInteractionAt = this.findLastUserInteractionAt();
 		this.rebuildPendingJobs();
+	}
+
+	private findLastUserInteractionAt(): number {
+		for (let index = this.records.length - 1; index >= 0; index--) {
+			const record = this.records[index];
+			if (!record || record.type !== "inbound" || !this.isOwnerMessage(record)) continue;
+			const parsed = Date.parse(record.ts);
+			if (Number.isFinite(parsed)) return parsed;
+		}
+		return Date.now();
 	}
 
 	private rebuildPendingJobs(): void {
@@ -185,6 +197,10 @@ export class ConversationRuntime {
 		await this.log.release();
 	}
 
+	getLastUserInteractionAt(): number {
+		return this.lastUserInteractionAt;
+	}
+
 	async armAfterCurrentTail(): Promise<void> {
 		this.armedAfterRecordId = this.records.at(-1)?.recordId ?? 0;
 		await this.appendRecord({
@@ -195,9 +211,31 @@ export class ConversationRuntime {
 		});
 	}
 
+	async noteHeartbeat(detail: string): Promise<void> {
+		await this.appendRecord({
+			type: "runtime",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			event: "heartbeat",
+			detail,
+		});
+	}
+
+	async noteHeartbeatFailure(detail: string): Promise<void> {
+		await this.appendRecord({
+			type: "runtime",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			event: "heartbeat_failed",
+			detail,
+		});
+	}
+
 	private async appendRecord(record: ChatLogRecord, options: { notify?: boolean } = {}): Promise<void> {
 		this.records.push(record);
 		this.nextRecordId = Math.max(this.nextRecordId, record.recordId + 1);
+		if (record.type === "inbound" && this.isOwnerMessage(record)) {
+			const parsed = Date.parse(record.ts);
+			this.lastUserInteractionAt = Number.isFinite(parsed) ? parsed : Date.now();
+		}
 		await this.log.append(record);
 		if (options.notify === false) return;
 		for (const listener of this.listeners) {
@@ -563,6 +601,10 @@ export class ConversationRuntime {
 			lastRecordId: this.records.at(-1)?.recordId ?? 0,
 			armed: this.armedAfterRecordId !== undefined,
 		};
+	}
+
+	hasLiveWork(): boolean {
+		return this.activeJob !== undefined || this.pendingJobs.length > 0;
 	}
 
 	formatStatus(): string {

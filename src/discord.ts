@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	type ApplicationCommandData,
 	type ApplicationCommandOptionChoiceData,
@@ -35,6 +35,7 @@ import type { Config } from "./config.js";
 import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
+import { buildHeartbeatInjectionText, isHeartbeatDue } from "./scheduler.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
 const FAMILIAR_COMMAND_NAME = "familiar";
@@ -42,6 +43,7 @@ const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
+const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -347,6 +349,27 @@ async function sendReply(
 	return sentIds;
 }
 
+async function sendChannelMessage(
+	config: Config,
+	channel: DiscordChatChannel,
+	text: string,
+	attachments: StoredAttachment[] = [],
+): Promise<string[]> {
+	if (!channel.isSendable()) {
+		throw new Error("Discord channel is not sendable");
+	}
+	const normalizedText = normalizeOutboundText(text);
+	const chunks = chunkDiscord(config, normalizedText);
+	const sentIds: string[] = [];
+	for (const [index, chunk] of chunks.entries()) {
+		const files =
+			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
+		const sent = await channel.send(files.length > 0 ? { content: chunk, files } : chunk);
+		sentIds.push(sent.id);
+	}
+	return sentIds;
+}
+
 type DiscordInteractionChannel = NonNullable<
 	ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]
 >;
@@ -591,6 +614,25 @@ function webMessageId(): string {
 	return `msg_${randomUUID()}`;
 }
 
+function scheduledUserMessage(text: string, timestamp: number): AgentMessage {
+	return { role: "user", content: [{ type: "text", text }], timestamp };
+}
+
+function heartbeatStillDue(
+	config: Config,
+	now: number,
+	lastUserInteractionAt: number,
+	lastHeartbeatAt: number | undefined,
+): boolean {
+	return isHeartbeatDue({
+		now,
+		lastUserInteractionAt,
+		lastHeartbeatAt,
+		idleThresholdMs: config.heartbeat.idleThresholdMs,
+		intervalMs: config.heartbeat.intervalMs,
+	});
+}
+
 function startTypingIndicator(message: Message): () => void {
 	const sendTyping = () => {
 		if (!message.channel.isSendable()) return;
@@ -615,6 +657,10 @@ export async function startDiscordDaemon(
 	const collectTimers = new Map<string, NodeJS.Timeout>();
 	let activeAgentOwner: string | undefined;
 	let agentWorkQueue = Promise.resolve();
+	let heartbeatTimer: NodeJS.Timeout | undefined;
+	// v0 cadence state is process-local; restart can re-enter the first idle-threshold fire path.
+	let lastHeartbeatAt: number | undefined;
+	let heartbeatQueued = false;
 
 	const promptForRuntime = async (
 		runtime: ConversationRuntime,
@@ -632,6 +678,31 @@ export async function startDiscordDaemon(
 				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent);
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
+			} finally {
+				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
+			}
+		});
+		agentWorkQueue = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	};
+
+	const promptScheduledMessage = async (
+		runtime: ConversationRuntime,
+		buildMessage: () =>
+			| AgentMessage
+			| typeof HEARTBEAT_SKIPPED
+			| Promise<AgentMessage | typeof HEARTBEAT_SKIPPED>,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED> => {
+		const run = agentWorkQueue.then(async () => {
+			const message = await buildMessage();
+			if (message === HEARTBEAT_SKIPPED) return HEARTBEAT_SKIPPED;
+			activeAgentOwner = runtime.channelKey;
+			try {
+				return await familiarAgent.promptMessage(runtime.channelKey, message, onEvent);
 			} finally {
 				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
 			}
@@ -699,6 +770,12 @@ export async function startDiscordDaemon(
 			});
 		}
 		return sessions;
+	};
+
+	const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime; channel: DiscordChatChannel }> => {
+		const dmChannel = await client.users.createDM(config.discord.ownerId);
+		const runtime = await getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
+		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};
 
 	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
@@ -776,6 +853,82 @@ export async function startDiscordDaemon(
 			} finally {
 				stopTyping();
 			}
+		}
+	};
+
+	const runHeartbeat = async (): Promise<void> => {
+		if (!config.heartbeat.enabled) return;
+		if (activeAgentOwner) return;
+		if (heartbeatQueued) return;
+		heartbeatQueued = true;
+		let runtime: ConversationRuntime | undefined;
+		try {
+			const session = await getOwnerDmSession();
+			runtime = session.runtime;
+			const heartbeatRuntime = session.runtime;
+			const channel = session.channel;
+			const now = Date.now();
+			if (heartbeatRuntime.hasLiveWork()) return;
+			const lastUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
+			if (!heartbeatStillDue(config, now, lastUserInteractionAt, lastHeartbeatAt)) return;
+
+			const assistantMessageId = webMessageId();
+			const summary: AgentEventSummary = { thinking: "" };
+			const recorder = createAgentEventRecorder((storedEvent) =>
+				heartbeatRuntime.noteAgentEvent("heartbeat", assistantMessageId, storedEvent, { notify: false }),
+			);
+			let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED;
+			try {
+				reply = await promptScheduledMessage(
+					heartbeatRuntime,
+					async () => {
+						const queuedNow = Date.now();
+						const latestUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
+						if (heartbeatRuntime.hasLiveWork()) return HEARTBEAT_SKIPPED;
+						if (!heartbeatStillDue(config, queuedNow, latestUserInteractionAt, lastHeartbeatAt)) {
+							return HEARTBEAT_SKIPPED;
+						}
+						const text = buildHeartbeatInjectionText({ now: queuedNow, idleSince: latestUserInteractionAt });
+						await heartbeatRuntime.noteHeartbeat(
+							`started after ${Math.floor((queuedNow - latestUserInteractionAt) / 60_000)} idle minute(s)`,
+						);
+						return scheduledUserMessage(text, queuedNow);
+					},
+					async (event) => {
+						updateAgentEventSummary(summary, event);
+						const storedEvent = storedAgentEventFromAgentEvent(event);
+						if (storedEvent) {
+							heartbeatRuntime.publishAgentEvent("heartbeat", assistantMessageId, storedEvent);
+							await recorder.record(storedEvent);
+						}
+					},
+				);
+			} finally {
+				await recorder.flush();
+			}
+			if (reply === HEARTBEAT_SKIPPED) return;
+			lastHeartbeatAt = Date.now();
+			const parsedReply = parseAgentReply(reply.text);
+			const messageIds = parsedReply.silent
+				? []
+				: await sendChannelMessage(config, channel, parsedReply.text, reply.attachments);
+			await heartbeatRuntime.noteOutbound({
+				text: parsedReply.text,
+				messageIds,
+				webMessageId: assistantMessageId,
+				attachments: reply.attachments,
+				thinking: summary.thinking,
+				thinkingMs: thinkingDurationMs(summary),
+				silent: parsedReply.silent,
+				jobId: "heartbeat",
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await runtime?.noteHeartbeatFailure(message);
+			await runtime?.appendError(`Heartbeat failed: ${message}`);
+			console.error("Heartbeat failed", error);
+		} finally {
+			heartbeatQueued = false;
 		}
 	};
 
@@ -915,6 +1068,13 @@ export async function startDiscordDaemon(
 	client.ws.on("close" as any, (event: unknown) => {
 		console.warn("Discord websocket closed; discord.js will reconnect when possible", event);
 	});
+	if (config.heartbeat.enabled) {
+		const tickHeartbeat = () => {
+			void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
+		};
+		heartbeatTimer = setInterval(tickHeartbeat, Math.min(config.heartbeat.intervalMs, 60_000));
+		tickHeartbeat();
+	}
 
 	return {
 		client,
@@ -930,6 +1090,7 @@ export async function startDiscordDaemon(
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);
+			if (heartbeatTimer) clearInterval(heartbeatTimer);
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
 			const resolvedRuntimes = await Promise.all(

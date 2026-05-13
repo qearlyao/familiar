@@ -53,6 +53,11 @@ node dist/cli.js run
 DM the bot from the configured `discord.owner_id`. Guild channels are ignored unless their channel id is listed in
 `discord.allowed_channels`.
 
+## Heartbeat
+
+Heartbeat is disabled by default. Before setting `[heartbeat].enabled = true`, replace the workspace `HEARTBEAT.md`
+placeholder; Familiar only tells the agent to read that file when the idle-triggered heartbeat fires.
+
 ## Discord Dispatch
 
 `discord.dm_mode` controls DMs: `steer` injects owner messages into active work, `queue` starts independent jobs, and

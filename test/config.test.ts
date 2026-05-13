@@ -41,6 +41,11 @@ describe("loadConfig tts", () => {
 			transcripts: { retentionDays: 0 },
 			payloads: { retentionDays: 7 },
 		});
+		assert.deepEqual(config.heartbeat, {
+			enabled: false,
+			idleThresholdMs: 60 * 60_000,
+			intervalMs: 240 * 60_000,
+		});
 		assert.deepEqual(config.tts.voiceSettings, {
 			stability: 0.5,
 			similarityBoost: 0.75,
@@ -209,8 +214,29 @@ retention_days = 7
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.agent.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.heartbeat.enabled, false);
 		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-7");
 		assert.ok(config.models.allow.includes(config.memory.lcm.model));
+	});
+
+	it("loads heartbeat settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[heartbeat]
+enabled = true
+idle_threshold_minutes = 30
+interval_minutes = 90
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.heartbeat, {
+			enabled: true,
+			idleThresholdMs: 30 * 60_000,
+			intervalMs: 90 * 60_000,
+		});
 	});
 
 	it("loads memory overrides", async () => {

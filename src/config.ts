@@ -64,6 +64,11 @@ export interface Config {
 		cacheRetention: CacheRetention;
 		thinkingLevel: ThinkingLevel;
 	};
+	heartbeat: {
+		enabled: boolean;
+		idleThresholdMs: number;
+		intervalMs: number;
+	};
 	models: {
 		allow: string[];
 		baseUrls: Record<string, string>;
@@ -403,6 +408,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
+	const heartbeat = (parsed.heartbeat ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
@@ -581,6 +587,12 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					: "agent.cache_retention",
 			),
 			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
+		},
+		heartbeat: {
+			enabled: readBoolean(heartbeat.enabled, false, "heartbeat.enabled"),
+			idleThresholdMs:
+				readInteger(heartbeat.idle_threshold_minutes, 60, "heartbeat.idle_threshold_minutes", 1) * 60_000,
+			intervalMs: readInteger(heartbeat.interval_minutes, 240, "heartbeat.interval_minutes", 1) * 60_000,
 		},
 		models: {
 			allow: modelAllow,

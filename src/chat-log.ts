@@ -169,7 +169,7 @@ export interface CheckpointChatRecord extends ChatRecordBase {
 
 export interface RuntimeChatRecord extends ChatRecordBase {
 	type: "runtime";
-	event: "armed" | "reset" | "stopped";
+	event: "armed" | "reset" | "stopped" | "heartbeat" | "heartbeat_failed";
 	detail?: string;
 }
 

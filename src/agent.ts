@@ -38,7 +38,15 @@ export interface FamiliarAgent {
 		images?: ImageContent[],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 	): Promise<FamiliarAgentReply>;
+	promptMessage(
+		sessionKey: string,
+		message: AgentMessage,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+	): Promise<FamiliarAgentReply>;
 	steer(sessionKey: string, input: string): void;
+	// Stage 9 scheduled jobs use message-shaped injections to preserve timestamps without faking user identity.
+	steerMessage(sessionKey: string, message: AgentMessage): void;
+	followUpMessage(sessionKey: string, message: AgentMessage): Promise<void>;
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
@@ -277,6 +285,14 @@ function logUsage(event: AgentEvent): void {
 			cost: usage.cost.total,
 		}),
 	);
+}
+
+function userTextMessage(text: string, timestamp = Date.now()): AgentMessage {
+	return {
+		role: "user",
+		content: [{ type: "text", text }],
+		timestamp,
+	};
 }
 
 function createFamiliarTools(
@@ -565,18 +581,52 @@ export async function createFamiliarAgent(
 			);
 			return run;
 		},
+		async promptMessage(
+			sessionKey: string,
+			message: AgentMessage,
+			onEvent?: (event: AgentEvent) => void | Promise<void>,
+		): Promise<FamiliarAgentReply> {
+			const session = await getSession(sessionKey);
+			const run = session.promptQueue.then(async () => {
+				session.mediaSink.drain();
+				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
+				try {
+					await session.agent.prompt(message);
+				} finally {
+					unsubscribe?.();
+				}
+				return {
+					text: getLastAssistantText(session.agent),
+					attachments: session.mediaSink.drain(),
+				};
+			});
+			session.promptQueue = run.then(
+				() => undefined,
+				() => undefined,
+			);
+			return run;
+		},
 		steer(sessionKey: string, input: string): void {
 			const session = sessions.get(sessionKey);
 			if (!session) return;
 			void session
 				.then((resolved) => {
-					resolved.agent.steer({
-						role: "user",
-						content: [{ type: "text", text: input }],
-						timestamp: Date.now(),
-					});
+					resolved.agent.steer(userTextMessage(input));
 				})
 				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
+		},
+		steerMessage(sessionKey: string, message: AgentMessage): void {
+			const session = sessions.get(sessionKey);
+			if (!session) return;
+			void session
+				.then((resolved) => {
+					resolved.agent.steer(message);
+				})
+				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
+		},
+		async followUpMessage(sessionKey: string, message: AgentMessage): Promise<void> {
+			const session = await getSession(sessionKey);
+			session.agent.followUp(message);
 		},
 	};
 }

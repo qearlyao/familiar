@@ -94,6 +94,7 @@ async function initWorkspace(workspaceInput?: string): Promise<void> {
 	await copyFile(resolve(PROJECT_ROOT, "SOUL.md"), resolve(workspacePath, "SOUL.md"));
 	await copyFile(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
 	await copyFile(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
+	await copyFile(resolve(PROJECT_ROOT, "HEARTBEAT.md"), resolve(workspacePath, "HEARTBEAT.md"));
 	await ensureWorkspaceDirs(defaultWorkspaceDirs(workspacePath));
 	console.log(`Initialized familiar workspace at ${workspacePath}`);
 }

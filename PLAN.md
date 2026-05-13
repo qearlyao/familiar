@@ -249,7 +249,7 @@ Trigger model:
 - Does not fire during active conversation.
 - Activates after an idle threshold (~1 hour of no primary-channel user message).
 - First fire after idle is highest-value; re-fires every X hours are optional. v0 default: first-fire plus a forced backstop (~4am local) so no day goes diary-less.
-- User-editable `heartbeat.md` carries the prompt voice — voice over rules, same as `SOUL.md`. Time-of-day plus idle duration are passed in the system message body so the agent doesn't need a tool to know them.
+- User-editable `HEARTBEAT.md` carries the prompt voice — voice over rules, same as `SOUL.md`, but it is read only when a heartbeat fires, not injected into the persona/system prompt. Time-of-day plus idle duration are passed in the heartbeat message body so the agent doesn't need a tool to know them.
 
 Mini-session shape:
 

@@ -21,6 +21,15 @@ model = "anthropic/claude-opus-4-7"
 cache_retention = "long"
 thinking_level = "medium"
 
+[heartbeat]
+enabled = false
+# Before enabling, replace the placeholder HEARTBEAT.md in the workspace.
+# The first heartbeat can fire once idle time reaches idle_threshold_minutes.
+# Later heartbeats repeat every interval_minutes while the DM remains idle.
+# Only owner/user messages reset the idle timer; agent replies and tool work do not.
+idle_threshold_minutes = 60
+interval_minutes = 240
+
 [models]
 allow = [
 	"anthropic/claude-opus-4-7",

@@ -161,7 +161,9 @@ function cacheControlLocations(payload: Record<string, unknown>): string[] {
 function findObjectKeyLocations(value: unknown, key: string, path: string, locations: string[]): void {
 	if (!value || typeof value !== "object") return;
 	if (Array.isArray(value)) {
-		value.forEach((item, index) => findObjectKeyLocations(item, key, `${path}[${index}]`, locations));
+		for (const [index, item] of value.entries()) {
+			findObjectKeyLocations(item, key, `${path}[${index}]`, locations);
+		}
 		return;
 	}
 	const record = value as Record<string, unknown>;
@@ -247,7 +249,8 @@ function printRequest(record: PayloadRecord, args: Args, path: string): void {
 	console.log("");
 
 	console.log(`Cache controls: ${cacheControls.length}`);
-	for (const location of anthropicCacheControls.length ? anthropicCacheControls : cacheControls) console.log(`  ${location}`);
+	for (const location of anthropicCacheControls.length ? anthropicCacheControls : cacheControls)
+		console.log(`  ${location}`);
 	console.log("");
 
 	const start = Math.max(0, messages.length - args.messages);
@@ -309,7 +312,9 @@ function printDiff(before: PayloadRecord, after: PayloadRecord, args: Args, path
 
 	console.log(`Payload log: ${path}`);
 	console.log("Comparing latest request with previous matching request");
-	console.log(`Previous: ${before.ts ?? "(unknown)"} ${before.sessionKey ?? "(unknown session)"} ${recordModel(before)}`);
+	console.log(
+		`Previous: ${before.ts ?? "(unknown)"} ${before.sessionKey ?? "(unknown session)"} ${recordModel(before)}`,
+	);
 	console.log(`Latest:   ${after.ts ?? "(unknown)"} ${after.sessionKey ?? "(unknown session)"} ${recordModel(after)}`);
 	console.log(`Payload hash: ${hashValue(beforePayload).slice(0, 12)} -> ${hashValue(afterPayload).slice(0, 12)}`);
 	console.log("");
@@ -558,7 +563,8 @@ function diffArray(before: unknown[], after: unknown[], path: string, lines: Dif
 		}
 		const childPath = `${path}[${index}]`;
 		if (index >= beforeEnd) lines.push({ path: childPath, detail: `added ${summarizeValue(after[index], args)}` });
-		else if (index >= afterEnd) lines.push({ path: childPath, detail: `removed ${summarizeValue(before[index], args)}` });
+		else if (index >= afterEnd)
+			lines.push({ path: childPath, detail: `removed ${summarizeValue(before[index], args)}` });
 		else if (hashValue(before[index]) !== hashValue(after[index])) {
 			if (isDrillablePair(before[index], after[index])) {
 				diffValue(before[index], after[index], childPath, lines, args);
@@ -579,7 +585,10 @@ function isDrillablePair(before: unknown, after: unknown): boolean {
 	return isPlainObject(before) || isPlainObject(after);
 }
 
-function commonArrayShape(before: unknown[], after: unknown[]): { prefix: number; suffix: number; firstChanged: number | null } {
+function commonArrayShape(
+	before: unknown[],
+	after: unknown[],
+): { prefix: number; suffix: number; firstChanged: number | null } {
 	let prefix = 0;
 	while (prefix < before.length && prefix < after.length && hashValue(before[prefix]) === hashValue(after[prefix])) {
 		prefix++;
@@ -661,11 +670,12 @@ function xmlishBlockDiff(before: string, after: string, args: Args): string | nu
 function xmlishBlocks(text: string): Array<{ tag: string; body: string }> {
 	const blocks: Array<{ tag: string; body: string }> = [];
 	const pattern = /<([A-Za-z][\w:-]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
-	let match: RegExpExecArray | null;
-	while ((match = pattern.exec(text)) !== null) {
+	let match = pattern.exec(text);
+	while (match !== null) {
 		const tag = match[1];
 		const body = match[2];
 		if (tag && body !== undefined) blocks.push({ tag, body: body.trim() });
+		match = pattern.exec(text);
 	}
 	return blocks;
 }
@@ -718,7 +728,9 @@ function findStringLocations(value: unknown, needle: string, path: string, locat
 	}
 	if (!value || typeof value !== "object") return;
 	if (Array.isArray(value)) {
-		value.forEach((item, index) => findStringLocations(item, needle, `${path}[${index}]`, locations));
+		for (const [index, item] of value.entries()) {
+			findStringLocations(item, needle, `${path}[${index}]`, locations);
+		}
 		return;
 	}
 	for (const [key, childValue] of Object.entries(value as Record<string, unknown>)) {
@@ -766,7 +778,12 @@ async function main(): Promise<void> {
 		if (requests.length < 2) {
 			throw new Error(`Need at least two matching request records in ${path}; found ${requests.length}`);
 		}
-		printDiff(requests[requests.length - 2] as PayloadRecord, requests[requests.length - 1] as PayloadRecord, args, path);
+		printDiff(
+			requests[requests.length - 2] as PayloadRecord,
+			requests[requests.length - 1] as PayloadRecord,
+			args,
+			path,
+		);
 		return;
 	}
 	const record = findLatestRequest(records, args);

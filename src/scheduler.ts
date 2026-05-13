@@ -169,7 +169,11 @@ function latestScheduledDate(job: CronJobConfig, now: Date): Date | undefined {
 	return scheduledDate(now.getFullYear(), now.getMonth() - 1, day, time);
 }
 
-export function dueCronSlot(job: CronJobConfig, state: CronJobState | undefined, now: Date | number): string | undefined {
+export function dueCronSlot(
+	job: CronJobConfig,
+	state: CronJobState | undefined,
+	now: Date | number,
+): string | undefined {
 	if (!job.enabled) return undefined;
 	if (state?.completed) return undefined;
 	const nowDate = toDate(now);

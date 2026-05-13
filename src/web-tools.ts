@@ -517,11 +517,13 @@ function formatFetchContent(
 ): string {
 	const header = `## Content from ${url} (via ${provider})`;
 	if (chunk.offset >= chunk.totalChars) {
-		return prefixUntrustedWebContent([
-			header,
-			"",
-			`[Offset ${chunk.offset} is beyond the end of the document. Total content length: ${chunk.totalChars} characters.]`,
-		].join("\n"));
+		return prefixUntrustedWebContent(
+			[
+				header,
+				"",
+				`[Offset ${chunk.offset} is beyond the end of the document. Total content length: ${chunk.totalChars} characters.]`,
+			].join("\n"),
+		);
 	}
 	const lines = [
 		header,
@@ -969,9 +971,7 @@ function formatSearchResults(args: {
 		notes,
 	});
 	const output = prefixUntrustedWebContent(document);
-	return output.length > SEARCH_OUTPUT_BUDGET
-		? `${output.slice(0, SEARCH_OUTPUT_BUDGET - 3).trimEnd()}...`
-		: output;
+	return output.length > SEARCH_OUTPUT_BUDGET ? `${output.slice(0, SEARCH_OUTPUT_BUDGET - 3).trimEnd()}...` : output;
 }
 
 function makeSearchTool(config: LoadedConfig): AgentTool<typeof webSearchSchema> {

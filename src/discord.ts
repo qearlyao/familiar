@@ -37,14 +37,14 @@ import type { MemoryService } from "./memory/service.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
 import {
 	appendSchedulerLog,
-	buildHeartbeatInjectionText,
 	buildCronInjectionText,
+	buildHeartbeatInjectionText,
+	type CronJobConfig,
 	dueCronSlot,
 	isHeartbeatDue,
 	loadSchedulerState,
-	saveSchedulerState,
-	type CronJobConfig,
 	type SchedulerState,
+	saveSchedulerState,
 } from "./scheduler.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 

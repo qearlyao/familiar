@@ -476,11 +476,16 @@ function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
 		]);
 		const id = readString(job.id, `${prefix}.id`);
 		if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
-			throw new Error(`Config value ${prefix}.id may only contain letters, numbers, dot, underscore, equals, or dash`);
+			throw new Error(
+				`Config value ${prefix}.id may only contain letters, numbers, dot, underscore, equals, or dash`,
+			);
 		}
 		if (seen.has(id)) throw new Error(`Duplicate cron job id: ${id}`);
 		seen.add(id);
-		const frequency = readCronFrequency(readConfigString(job.frequency, "once", `${prefix}.frequency`), `${prefix}.frequency`);
+		const frequency = readCronFrequency(
+			readConfigString(job.frequency, "once", `${prefix}.frequency`),
+			`${prefix}.frequency`,
+		);
 		const runAt = readOptionalConfigString(job.run_at, `${prefix}.run_at`);
 		const time = readOptionalConfigString(job.time, `${prefix}.time`);
 		assertCronRunAt(runAt, `${prefix}.run_at`);

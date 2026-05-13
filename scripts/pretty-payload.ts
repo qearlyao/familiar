@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -8,13 +9,17 @@ type Args = {
 	dataDir: string;
 	date?: string;
 	model?: string;
+	session?: string;
 	messages: number;
 	full: boolean;
+	diff: boolean;
 };
 
 type PayloadRecord = {
 	ts?: string;
 	direction?: string;
+	sessionId?: string;
+	sessionKey?: string;
 	model?: string;
 	payload?: Record<string, unknown>;
 };
@@ -24,6 +29,7 @@ function parseArgs(argv: string[]): Args {
 		dataDir: process.env.FAMILIAR_DATA_DIR || resolve(homedir(), ".familiar/data"),
 		messages: 8,
 		full: false,
+		diff: false,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
@@ -37,11 +43,16 @@ function parseArgs(argv: string[]): Args {
 		} else if (arg === "--model" && next) {
 			args.model = next;
 			i++;
+		} else if (arg === "--session" && next) {
+			args.session = next;
+			i++;
 		} else if (arg === "--messages" && next) {
 			args.messages = Math.max(0, Number.parseInt(next, 10) || args.messages);
 			i++;
 		} else if (arg === "--full") {
 			args.full = true;
+		} else if (arg === "--diff") {
+			args.diff = true;
 		} else if (arg === "--help" || arg === "-h") {
 			printHelp();
 			process.exit(0);
@@ -57,7 +68,9 @@ Options:
   --data-dir <path>   familiar data dir (default: ~/.familiar/data)
   --date <YYYY-MM-DD> payload log date (default: latest file)
   --model <text>      only show requests whose model includes text
+  --session <text>    only show requests whose session id/key includes text
   --messages <n>      number of tail messages to preview (default: 8)
+  --diff              compare the latest request with the previous matching request
   --full              print full text instead of compact previews
 `);
 }
@@ -84,18 +97,33 @@ function parseJsonl(contents: string): PayloadRecord[] {
 	return records;
 }
 
-function isAnthropicRequest(record: PayloadRecord, modelFilter?: string): boolean {
-	if (record.direction !== "request" || !record.payload) return false;
-	const payloadModel = typeof record.payload.model === "string" ? record.payload.model : "";
-	const logModel = typeof record.model === "string" ? record.model : "";
-	if (!payloadModel || !Array.isArray(record.payload.messages)) return false;
-	if (modelFilter && !payloadModel.includes(modelFilter) && !logModel.includes(modelFilter)) return false;
-	return payloadModel.includes("claude") || Array.isArray(record.payload.system);
+function recordModel(record: PayloadRecord): string {
+	return String(record.payload?.model ?? record.model ?? "(unknown)");
 }
 
-function findLatestAnthropic(records: PayloadRecord[], modelFilter?: string): PayloadRecord | undefined {
+function isRequest(record: PayloadRecord, args: Pick<Args, "model" | "session">): boolean {
+	if (record.direction !== "request" || !record.payload) return false;
+	if (args.model && !recordModel(record).includes(args.model) && !String(record.model ?? "").includes(args.model)) {
+		return false;
+	}
+	if (
+		args.session &&
+		!String(record.sessionKey ?? "").includes(args.session) &&
+		!String(record.sessionId ?? "").includes(args.session)
+	) {
+		return false;
+	}
+	return true;
+}
+
+function matchingRequests(records: PayloadRecord[], args: Pick<Args, "model" | "session">): PayloadRecord[] {
+	return records.filter((record) => isRequest(record, args));
+}
+
+function findLatestRequest(records: PayloadRecord[], args: Pick<Args, "model" | "session">): PayloadRecord | undefined {
 	for (let i = records.length - 1; i >= 0; i--) {
-		if (isAnthropicRequest(records[i], modelFilter)) return records[i];
+		const record = records[i];
+		if (record && isRequest(record, args)) return record;
 	}
 	return undefined;
 }
@@ -125,6 +153,25 @@ function contentType(block: unknown): string {
 }
 
 function cacheControlLocations(payload: Record<string, unknown>): string[] {
+	const locations: string[] = [];
+	findObjectKeyLocations(payload, "cache_control", "$", locations);
+	return locations;
+}
+
+function findObjectKeyLocations(value: unknown, key: string, path: string, locations: string[]): void {
+	if (!value || typeof value !== "object") return;
+	if (Array.isArray(value)) {
+		value.forEach((item, index) => findObjectKeyLocations(item, key, `${path}[${index}]`, locations));
+		return;
+	}
+	const record = value as Record<string, unknown>;
+	if (key in record) locations.push(path);
+	for (const [childKey, childValue] of Object.entries(record)) {
+		findObjectKeyLocations(childValue, key, joinPath(path, childKey), locations);
+	}
+}
+
+function anthropicCacheControlLocations(payload: Record<string, unknown>): string[] {
 	const locations: string[] = [];
 	const system = payload.system;
 	if (Array.isArray(system)) {
@@ -167,11 +214,15 @@ function printRequest(record: PayloadRecord, args: Args, path: string): void {
 	const messages = Array.isArray(payload.messages) ? payload.messages : [];
 	const system = Array.isArray(payload.system) ? payload.system : [];
 	const tools = Array.isArray(payload.tools) ? payload.tools : [];
+	const topLevelArrays = topLevelArraysForPreview(payload);
 	const cacheControls = cacheControlLocations(payload);
+	const anthropicCacheControls = anthropicCacheControlLocations(payload);
 
 	console.log(`Payload log: ${path}`);
 	console.log(`Timestamp: ${record.ts ?? "(unknown)"}`);
-	console.log(`Model: ${String(payload.model ?? record.model ?? "(unknown)")}`);
+	console.log(`Session: ${record.sessionKey ?? "(unknown)"} (${record.sessionId ?? "no sessionId"})`);
+	console.log(`Model: ${recordModel(record)}`);
+	console.log(`Top-level keys: ${Object.keys(payload).sort().join(", ") || "(none)"}`);
 	console.log(`Max tokens: ${String(payload.max_tokens ?? "(unset)")}`);
 	console.log(`Thinking: ${inspect(payload.thinking ?? "(unset)", { depth: 4, colors: false, compact: true })}`);
 	console.log(
@@ -196,7 +247,7 @@ function printRequest(record: PayloadRecord, args: Args, path: string): void {
 	console.log("");
 
 	console.log(`Cache controls: ${cacheControls.length}`);
-	for (const location of cacheControls) console.log(`  ${location}`);
+	for (const location of anthropicCacheControls.length ? anthropicCacheControls : cacheControls) console.log(`  ${location}`);
 	console.log("");
 
 	const start = Math.max(0, messages.length - args.messages);
@@ -221,6 +272,227 @@ function printRequest(record: PayloadRecord, args: Args, path: string): void {
 			if (text) console.log(indent(preview(text, args.full), 6));
 		}
 	}
+	for (const [name, items] of topLevelArrays) {
+		if (name === "messages" || name === "system" || name === "tools") continue;
+		printArrayTail(name, items, args);
+	}
+}
+
+function topLevelArraysForPreview(payload: Record<string, unknown>): Array<[string, unknown[]]> {
+	return Object.entries(payload)
+		.filter((entry): entry is [string, unknown[]] => Array.isArray(entry[1]))
+		.sort(([a], [b]) => a.localeCompare(b));
+}
+
+function printArrayTail(name: string, items: unknown[], args: Args): void {
+	console.log("");
+	const start = Math.max(0, items.length - args.messages);
+	console.log(`${name}: ${items.length} total, showing ${items.length - start} tail`);
+	for (let index = start; index < items.length; index++) {
+		const item = items[index];
+		console.log(`  ${name}[${index}] ${summarizeValue(item, args)}`);
+	}
+}
+
+type DiffLine = { path: string; detail: string };
+
+function printDiff(before: PayloadRecord, after: PayloadRecord, args: Args, path: string): void {
+	if (!before.payload || !after.payload) throw new Error("Selected records must contain request payloads");
+	const beforePayload = before.payload;
+	const afterPayload = after.payload;
+	const diffLines: DiffLine[] = [];
+	diffValue(beforePayload, afterPayload, "$", diffLines, args);
+	const beforeCacheControls = cacheControlLocations(beforePayload);
+	const afterCacheControls = cacheControlLocations(afterPayload);
+	const beforeLcm = lcmSummaryLocations(beforePayload);
+	const afterLcm = lcmSummaryLocations(afterPayload);
+
+	console.log(`Payload log: ${path}`);
+	console.log("Comparing latest request with previous matching request");
+	console.log(`Previous: ${before.ts ?? "(unknown)"} ${before.sessionKey ?? "(unknown session)"} ${recordModel(before)}`);
+	console.log(`Latest:   ${after.ts ?? "(unknown)"} ${after.sessionKey ?? "(unknown session)"} ${recordModel(after)}`);
+	console.log(`Payload hash: ${hashValue(beforePayload).slice(0, 12)} -> ${hashValue(afterPayload).slice(0, 12)}`);
+	console.log("");
+	printTopLevelSummary(beforePayload, afterPayload);
+	console.log("");
+	printArraySummary("messages", beforePayload.messages, afterPayload.messages);
+	printArraySummary("input", beforePayload.input, afterPayload.input);
+	printArraySummary("contents", beforePayload.contents, afterPayload.contents);
+	console.log("");
+	console.log(`Cache controls: ${beforeCacheControls.length} -> ${afterCacheControls.length}`);
+	printLocationChange(beforeCacheControls, afterCacheControls, args);
+	console.log("");
+	console.log(`LCM summaries: ${beforeLcm.length} -> ${afterLcm.length}`);
+	printLocationChange(beforeLcm, afterLcm, args);
+	console.log("");
+	console.log("Changed paths:");
+	if (diffLines.length === 0) {
+		console.log("  (no payload changes)");
+		return;
+	}
+	for (const line of diffLines.slice(0, 40)) console.log(`  ${line.path}: ${line.detail}`);
+	if (diffLines.length > 40) console.log(`  ... ${diffLines.length - 40} more change(s)`);
+}
+
+function printTopLevelSummary(before: Record<string, unknown>, after: Record<string, unknown>): void {
+	const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+	const changed = keys.filter((key) => hashValue(before[key]) !== hashValue(after[key]));
+	console.log(`Top-level keys changed: ${changed.length ? changed.join(", ") : "(none)"}`);
+}
+
+function printArraySummary(name: string, before: unknown, after: unknown): void {
+	if (!Array.isArray(before) && !Array.isArray(after)) return;
+	const beforeArray = Array.isArray(before) ? before : [];
+	const afterArray = Array.isArray(after) ? after : [];
+	const common = commonArrayShape(beforeArray, afterArray);
+	console.log(
+		`${name}: ${beforeArray.length} -> ${afterArray.length}; common prefix ${common.prefix}, suffix ${common.suffix}`,
+	);
+	if (common.firstChanged !== null) {
+		console.log(`  first changed: ${name}[${common.firstChanged}]`);
+	}
+}
+
+function printLocationChange(before: string[], after: string[], args: Args): void {
+	const beforeSet = new Set(before);
+	const afterSet = new Set(after);
+	const added = after.filter((location) => !beforeSet.has(location));
+	const removed = before.filter((location) => !afterSet.has(location));
+	if (added.length === 0 && removed.length === 0) {
+		for (const location of after.slice(0, 8)) console.log(`  ${location}`);
+		if (after.length > 8) console.log(`  ... ${after.length - 8} more`);
+		return;
+	}
+	for (const location of removed.slice(0, args.full ? removed.length : 8)) console.log(`  - ${location}`);
+	for (const location of added.slice(0, args.full ? added.length : 8)) console.log(`  + ${location}`);
+	const omitted = removed.length + added.length - (args.full ? removed.length + added.length : 16);
+	if (omitted > 0) console.log(`  ... ${omitted} more location change(s)`);
+}
+
+function diffValue(before: unknown, after: unknown, path: string, lines: DiffLine[], args: Args): void {
+	if (hashValue(before) === hashValue(after) || lines.length >= 200) return;
+	if (Array.isArray(before) || Array.isArray(after)) {
+		diffArray(Array.isArray(before) ? before : [], Array.isArray(after) ? after : [], path, lines, args);
+		return;
+	}
+	if (isPlainObject(before) || isPlainObject(after)) {
+		const beforeRecord = isPlainObject(before) ? before : {};
+		const afterRecord = isPlainObject(after) ? after : {};
+		for (const key of [...new Set([...Object.keys(beforeRecord), ...Object.keys(afterRecord)])].sort()) {
+			diffValue(beforeRecord[key], afterRecord[key], joinPath(path, key), lines, args);
+			if (lines.length >= 200) return;
+		}
+		return;
+	}
+	lines.push({
+		path,
+		detail: `${summarizeValue(before, args)} -> ${summarizeValue(after, args)}`,
+	});
+}
+
+function diffArray(before: unknown[], after: unknown[], path: string, lines: DiffLine[], args: Args): void {
+	const common = commonArrayShape(before, after);
+	lines.push({
+		path,
+		detail: `array length ${before.length} -> ${after.length}; common prefix ${common.prefix}, suffix ${common.suffix}`,
+	});
+	const beforeEnd = before.length - common.suffix;
+	const afterEnd = after.length - common.suffix;
+	const maxItems = args.full ? Number.POSITIVE_INFINITY : 8;
+	let shown = 0;
+	for (let index = common.prefix; index < Math.max(beforeEnd, afterEnd); index++) {
+		if (shown >= maxItems) {
+			lines.push({ path, detail: `... ${Math.max(beforeEnd, afterEnd) - index} more changed item(s)` });
+			return;
+		}
+		const childPath = `${path}[${index}]`;
+		if (index >= beforeEnd) lines.push({ path: childPath, detail: `added ${summarizeValue(after[index], args)}` });
+		else if (index >= afterEnd) lines.push({ path: childPath, detail: `removed ${summarizeValue(before[index], args)}` });
+		else if (hashValue(before[index]) !== hashValue(after[index])) {
+			lines.push({
+				path: childPath,
+				detail: `${summarizeValue(before[index], args)} -> ${summarizeValue(after[index], args)}`,
+			});
+		}
+		shown++;
+	}
+}
+
+function commonArrayShape(before: unknown[], after: unknown[]): { prefix: number; suffix: number; firstChanged: number | null } {
+	let prefix = 0;
+	while (prefix < before.length && prefix < after.length && hashValue(before[prefix]) === hashValue(after[prefix])) {
+		prefix++;
+	}
+	let suffix = 0;
+	while (
+		suffix < before.length - prefix &&
+		suffix < after.length - prefix &&
+		hashValue(before[before.length - 1 - suffix]) === hashValue(after[after.length - 1 - suffix])
+	) {
+		suffix++;
+	}
+	return {
+		prefix,
+		suffix,
+		firstChanged: prefix === before.length && prefix === after.length ? null : prefix,
+	};
+}
+
+function summarizeValue(value: unknown, args: Args): string {
+	if (value === undefined) return "(missing)";
+	if (value === null || typeof value === "boolean" || typeof value === "number") return String(value);
+	if (typeof value === "string") return JSON.stringify(preview(value, args.full, 140));
+	if (Array.isArray(value)) return `[${value.length} item(s)] hash=${hashValue(value).slice(0, 10)}`;
+	if (!isPlainObject(value)) return typeof value;
+	const role = typeof value.role === "string" ? ` role=${value.role}` : "";
+	const type = typeof value.type === "string" ? ` type=${value.type}` : "";
+	const name = typeof value.name === "string" ? ` name=${value.name}` : "";
+	const text = blockText(value);
+	const textSummary = text ? ` text=${JSON.stringify(preview(text, args.full, 120))}` : "";
+	return `{${Object.keys(value).length} key(s)${role}${type}${name}${textSummary}} hash=${hashValue(value).slice(0, 10)}`;
+}
+
+function lcmSummaryLocations(payload: Record<string, unknown>): string[] {
+	const locations: string[] = [];
+	findStringLocations(payload, "[retained LCM summary]", "$", locations);
+	return locations;
+}
+
+function findStringLocations(value: unknown, needle: string, path: string, locations: string[]): void {
+	if (typeof value === "string") {
+		if (value.includes(needle)) locations.push(path);
+		return;
+	}
+	if (!value || typeof value !== "object") return;
+	if (Array.isArray(value)) {
+		value.forEach((item, index) => findStringLocations(item, needle, `${path}[${index}]`, locations));
+		return;
+	}
+	for (const [key, childValue] of Object.entries(value as Record<string, unknown>)) {
+		findStringLocations(childValue, needle, joinPath(path, key), locations);
+	}
+}
+
+function hashValue(value: unknown): string {
+	return createHash("sha256").update(stableStringify(value)).digest("hex");
+}
+
+function stableStringify(value: unknown): string {
+	if (value === null || typeof value !== "object") return JSON.stringify(value);
+	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+	const record = value as Record<string, unknown>;
+	return `{${Object.keys(record)
+		.sort()
+		.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+		.join(",")}}`;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function joinPath(path: string, key: string): string {
+	return /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
 }
 
 function indent(value: string, spaces: number): string {
@@ -236,8 +508,16 @@ async function main(): Promise<void> {
 	const path = await latestPayloadPath(args.dataDir, args.date);
 	if (!existsSync(path)) throw new Error(`Payload log does not exist: ${path}`);
 	const records = parseJsonl(await readFile(path, "utf8"));
-	const record = findLatestAnthropic(records, args.model);
-	if (!record) throw new Error(`No Anthropic request found in ${path}`);
+	if (args.diff) {
+		const requests = matchingRequests(records, args);
+		if (requests.length < 2) {
+			throw new Error(`Need at least two matching request records in ${path}; found ${requests.length}`);
+		}
+		printDiff(requests[requests.length - 2] as PayloadRecord, requests[requests.length - 1] as PayloadRecord, args, path);
+		return;
+	}
+	const record = findLatestRequest(records, args);
+	if (!record) throw new Error(`No matching request found in ${path}`);
 	printRequest(record, args, path);
 }
 

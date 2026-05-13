@@ -88,10 +88,16 @@ The older slash-style text commands still work as a fallback:
 
 ## Inspect Payloads
 
-Pretty-print the latest Anthropic request that familiar sent:
+Pretty-print the latest provider request that familiar sent:
 
 ```sh
 npm run payload:pretty
+```
+
+Compare the latest matching request with the previous matching request:
+
+```sh
+npm run payload:pretty -- --diff
 ```
 
 Useful options:
@@ -101,9 +107,12 @@ npm run payload:pretty -- --messages 12
 npm run payload:pretty -- --full
 npm run payload:pretty -- --date 2026-05-04
 npm run payload:pretty -- --model claude-opus-4-7
+npm run payload:pretty -- --session discord
 ```
 
-The output shows the model, thinking config, system sections, tools, cache-control locations, and tail messages.
+The output shows the model, top-level request shape, cache-control locations, LCM summary locations, and tail request
+items. `--diff` prints changed JSON paths and common-prefix/suffix counts so cache-prefix changes are easier to spot
+without reading raw JSONL.
 
 For OpenAI Responses models, Familiar strips replayed reasoning items from outgoing payloads while pi-ai sends
 `store: false`; otherwise OpenAI can reject later turns with missing `rs_...` item references.

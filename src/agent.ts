@@ -23,6 +23,7 @@ import {
 } from "./models.js";
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
+import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "./skills.js";
 import { createTtsTool } from "./tts.js";
 import { createWebTools } from "./web-tools.js";
 
@@ -318,7 +319,9 @@ export async function createFamiliarAgent(
 	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
 	let persona = await loadPersona(config);
-	let systemPrompt = buildSystemPrompt(persona);
+	let skillsResult = loadFamiliarSkills(config);
+	logSkillDiagnostics(skillsResult);
+	let systemPrompt = buildSystemPrompt(persona, formatFamiliarSkillsForPrompt(skillsResult.skills));
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
@@ -484,7 +487,9 @@ export async function createFamiliarAgent(
 			const nextConfig = await options.reloadConfig?.();
 			if (nextConfig) Object.assign(config, nextConfig);
 			persona = await loadPersona(config);
-			systemPrompt = buildSystemPrompt(persona);
+			skillsResult = loadFamiliarSkills(config);
+			logSkillDiagnostics(skillsResult);
+			systemPrompt = buildSystemPrompt(persona, formatFamiliarSkillsForPrompt(skillsResult.skills));
 			defaultModel = createConfiguredModel(config);
 			getRequestApiKey(config, defaultModel);
 			const settledSessions = await Promise.allSettled(
@@ -501,8 +506,9 @@ export async function createFamiliarAgent(
 					? `default_model: ${previousModel}`
 					: `default_model: ${previousModel} -> ${formatModel(defaultModel)}`;
 			return [
-				"Reloaded persona prompt and live agent settings.",
+				"Reloaded persona prompt, skills, and live agent settings.",
 				modelLine,
+				`skills: ${skillsResult.skills.length} loaded${skillsResult.diagnostics.length ? ` (${skillsResult.diagnostics.length} warnings)` : ""}`,
 				`active_sessions: ${refreshed}${failed ? ` (${failed} failed)` : ""}`,
 				"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
 			].join("\n");

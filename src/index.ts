@@ -43,4 +43,5 @@ export {
 	type SettingSource,
 	type SettingsStore,
 } from "./settings.js";
+export { type FamiliarSkillsResult, formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "./skills.js";
 export { startWebDaemon, type WebDaemon } from "./web.js";

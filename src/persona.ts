@@ -28,13 +28,14 @@ ${file.contents.trim()}
 </file>`;
 }
 
-export function buildSystemPrompt(persona: Persona): string {
+export function buildSystemPrompt(persona: Persona, skillsBlock = ""): string {
 	const files: SystemPromptFile[] = [
 		{ name: "SOUL.md", contents: persona.soul },
 		{ name: "USER.md", contents: persona.user },
 		{ name: "MEMORY.md", contents: persona.memory },
 	];
 	const renderedFiles = files.map(renderSystemPromptFile).join("\n\n");
+	const renderedSkillsBlock = skillsBlock.trim() ? `\n\n${skillsBlock.trim()}` : "";
 	return `<system-reminder>
 ${renderedFiles}
 
@@ -43,6 +44,7 @@ If you learn something durable about the user, you may edit MEMORY.md to keep it
 Relative paths resolve from the workspace root; absolute paths and ~/... are also accepted.
 You may output [[FAMILIAR_SILENT]] to end the conversation without sending a visible reply, optionally followed by a short reason.
 </instructions>
+${renderedSkillsBlock}
 </system-reminder>`;
 }
 

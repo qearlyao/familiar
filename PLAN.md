@@ -202,10 +202,11 @@ Image-generation tool:
 
 Skills:
 
-- Add Familiar skill discovery without `AgentSession`: load user/project skills and append pi's progressive skill index to the direct `Agent` system prompt.
+- Add Familiar skill discovery without `AgentSession`: load workspace skills from `skills/` and append pi-style progressive skill entries to the direct `Agent` system prompt.
 - Use skills for large, rarely used media/persona/character instructions: voice IDs, required tags, reference image paths, style preferences, negative prompts, and safety constraints.
 - Keep tool definitions generic. The model should load relevant skills before calling `tts` or `image_gen` when a request matches a character/media workflow.
 - Keep LCM as the only automatic context compaction layer; skills are instruction loading, not conversation memory.
+- Later add per-skill toggles by filtering which loaded skills are passed to `formatFamiliarSkillsForPrompt()`.
 
 WebUI TTS polish:
 

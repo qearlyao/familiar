@@ -110,6 +110,92 @@ describe("scheduler helpers", () => {
 		);
 	});
 
+	it("uses persisted heartbeat time across restarts", () => {
+		const minute = 60 * 1000;
+		const lastUserInteractionAt = Date.parse("2026-05-13T00:00:00.000Z");
+		const lastHeartbeatAt = "2026-05-13T01:00:00.000Z";
+
+		assert.equal(
+			isHeartbeatDue({
+				now: lastUserInteractionAt + 120 * minute,
+				lastUserInteractionAt,
+				lastHeartbeatAt,
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			false,
+		);
+		assert.equal(
+			isHeartbeatDue({
+				now: lastUserInteractionAt + 300 * minute,
+				lastUserInteractionAt,
+				lastHeartbeatAt,
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			true,
+		);
+	});
+
+	it("suppresses cold-start heartbeat until the seeded repeat window", () => {
+		const minute = 60 * 1000;
+		const lastUserInteractionAt = Date.parse("2026-05-13T00:00:00.000Z");
+		const suppressUntil = "2026-05-13T08:00:00.000Z";
+
+		assert.equal(
+			isHeartbeatDue({
+				now: Date.parse("2026-05-13T05:00:00.000Z"),
+				lastUserInteractionAt,
+				suppressUntil,
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			false,
+		);
+		assert.equal(
+			isHeartbeatDue({
+				now: Date.parse("2026-05-13T08:00:00.000Z"),
+				lastUserInteractionAt,
+				suppressUntil,
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			true,
+		);
+	});
+
+	it("lets a later user reply bypass stale cold-start suppression", () => {
+		const minute = 60 * 1000;
+		const lastUserInteractionAt = Date.parse("2026-05-13T07:00:00.000Z");
+
+		assert.equal(
+			isHeartbeatDue({
+				now: Date.parse("2026-05-13T08:00:00.000Z"),
+				lastUserInteractionAt,
+				suppressUntil: "2026-05-13T08:00:00.000Z",
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			true,
+		);
+	});
+
+	it("resets heartbeat first-fire eligibility after a later user reply", () => {
+		const minute = 60 * 1000;
+		const lastUserInteractionAt = Date.parse("2026-05-13T03:00:00.000Z");
+
+		assert.equal(
+			isHeartbeatDue({
+				now: lastUserInteractionAt + 60 * minute,
+				lastUserInteractionAt,
+				lastHeartbeatAt: "2026-05-13T01:00:00.000Z",
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			true,
+		);
+	});
+
 	it("builds cron envelopes without user identity fields", () => {
 		const job: CronJobConfig = {
 			id: "daily-review",

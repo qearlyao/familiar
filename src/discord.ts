@@ -633,12 +633,14 @@ function heartbeatStillDue(
 	config: Config,
 	now: number,
 	lastUserInteractionAt: number,
-	lastHeartbeatAt: number | undefined,
+	lastHeartbeatAt: string | undefined,
+	suppressUntil: string | undefined,
 ): boolean {
 	return isHeartbeatDue({
 		now,
 		lastUserInteractionAt,
 		lastHeartbeatAt,
+		suppressUntil,
 		idleThresholdMs: config.heartbeat.idleThresholdMs,
 		intervalMs: config.heartbeat.intervalMs,
 	});
@@ -670,8 +672,6 @@ export async function startDiscordDaemon(
 	let agentWorkQueue = Promise.resolve();
 	let heartbeatTimer: NodeJS.Timeout | undefined;
 	let cronTimer: NodeJS.Timeout | undefined;
-	// v0 cadence state is process-local; restart can re-enter the first idle-threshold fire path.
-	let lastHeartbeatAt: number | undefined;
 	let heartbeatQueued = false;
 	let cronRunning = false;
 	let schedulerState: SchedulerState = { cron: {} };
@@ -793,8 +793,19 @@ export async function startDiscordDaemon(
 		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};
 
-	const saveCronState = async (): Promise<void> => {
+	const saveScheduler = async (): Promise<void> => {
 		await saveSchedulerState(config.workspace.dataDir, schedulerState);
+	};
+
+	const initializeHeartbeatState = async (runtime: ConversationRuntime): Promise<void> => {
+		if (!config.heartbeat.enabled || schedulerState.heartbeat) return;
+		const now = Date.now();
+		const lastUserInteractionAt = runtime.getLastUserInteractionAt();
+		if (now - lastUserInteractionAt < config.heartbeat.idleThresholdMs) return;
+		schedulerState.heartbeat = {
+			suppressUntil: new Date(now + config.heartbeat.intervalMs).toISOString(),
+		};
+		await saveScheduler();
 	};
 
 	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
@@ -889,7 +900,17 @@ export async function startDiscordDaemon(
 			const now = Date.now();
 			if (heartbeatRuntime.hasLiveWork()) return;
 			const lastUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
-			if (!heartbeatStillDue(config, now, lastUserInteractionAt, lastHeartbeatAt)) return;
+			if (
+				!heartbeatStillDue(
+					config,
+					now,
+					lastUserInteractionAt,
+					schedulerState.heartbeat?.lastFiredAt,
+					schedulerState.heartbeat?.suppressUntil,
+				)
+			) {
+				return;
+			}
 
 			const assistantMessageId = webMessageId();
 			const summary: AgentEventSummary = { thinking: "" };
@@ -904,9 +925,19 @@ export async function startDiscordDaemon(
 						const queuedNow = Date.now();
 						const latestUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
 						if (heartbeatRuntime.hasLiveWork()) return HEARTBEAT_SKIPPED;
-						if (!heartbeatStillDue(config, queuedNow, latestUserInteractionAt, lastHeartbeatAt)) {
+						if (
+							!heartbeatStillDue(
+								config,
+								queuedNow,
+								latestUserInteractionAt,
+								schedulerState.heartbeat?.lastFiredAt,
+								schedulerState.heartbeat?.suppressUntil,
+							)
+						) {
 							return HEARTBEAT_SKIPPED;
 						}
+						schedulerState.heartbeat = { lastFiredAt: new Date(queuedNow).toISOString() };
+						await saveScheduler();
 						const text = buildHeartbeatInjectionText({ now: queuedNow, idleSince: latestUserInteractionAt });
 						await heartbeatRuntime.noteHeartbeat(
 							`started after ${Math.floor((queuedNow - latestUserInteractionAt) / 60_000)} idle minute(s)`,
@@ -926,7 +957,6 @@ export async function startDiscordDaemon(
 				await recorder.flush();
 			}
 			if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) return;
-			lastHeartbeatAt = Date.now();
 			const parsedReply = parseAgentReply(reply.text);
 			const messageIds = parsedReply.silent
 				? []
@@ -957,7 +987,7 @@ export async function startDiscordDaemon(
 			lastFiredAt: new Date().toISOString(),
 			...(schedulerState.cron[job.id]?.completed ? { completed: true } : {}),
 		};
-		await saveCronState();
+		await saveScheduler();
 	};
 
 	const completeCronSlot = async (job: CronJobConfig, slot: string): Promise<void> => {
@@ -967,7 +997,7 @@ export async function startDiscordDaemon(
 			lastFiredAt: schedulerState.cron[job.id]?.lastFiredAt ?? new Date().toISOString(),
 			...(job.frequency === "once" ? { completed: true } : {}),
 		};
-		await saveCronState();
+		await saveScheduler();
 	};
 
 	const runCronJob = async (
@@ -1237,6 +1267,7 @@ export async function startDiscordDaemon(
 	});
 	schedulerState = await loadSchedulerState(config.workspace.dataDir);
 	if (config.heartbeat.enabled) {
+		await initializeHeartbeatState((await getOwnerDmSession()).runtime);
 		const tickHeartbeat = () => {
 			void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
 		};

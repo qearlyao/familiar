@@ -24,6 +24,10 @@ export interface CronJobState {
 }
 
 export interface SchedulerState {
+	heartbeat?: {
+		lastFiredAt?: string;
+		suppressUntil?: string;
+	};
 	cron: Record<string, CronJobState>;
 }
 
@@ -206,6 +210,10 @@ export async function loadSchedulerState(dataDir: string): Promise<SchedulerStat
 		const raw = await readFile(path, "utf8");
 		const parsed = JSON.parse(raw) as Partial<SchedulerState>;
 		return {
+			heartbeat:
+				parsed.heartbeat && typeof parsed.heartbeat === "object" && !Array.isArray(parsed.heartbeat)
+					? parsed.heartbeat
+					: undefined,
 			cron: parsed.cron && typeof parsed.cron === "object" && !Array.isArray(parsed.cron) ? parsed.cron : {},
 		};
 	} catch (error) {
@@ -230,15 +238,21 @@ export async function appendSchedulerLog(dataDir: string, event: SchedulerLogEve
 export function isHeartbeatDue(options: {
 	now: number;
 	lastUserInteractionAt: number;
-	lastHeartbeatAt?: number;
+	lastHeartbeatAt?: number | string;
+	suppressUntil?: number | string;
 	idleThresholdMs: number;
 	intervalMs: number;
 }): boolean {
 	if (options.now < options.lastUserInteractionAt) return false;
 	const idleDurationMs = options.now - options.lastUserInteractionAt;
 	if (idleDurationMs < options.idleThresholdMs) return false;
-	if (options.lastHeartbeatAt == null || options.lastHeartbeatAt <= options.lastUserInteractionAt) {
+	const suppressUntil =
+		typeof options.suppressUntil === "string" ? Date.parse(options.suppressUntil) : options.suppressUntil;
+	if (suppressUntil != null && Number.isFinite(suppressUntil) && options.now < suppressUntil) return false;
+	const lastHeartbeatAt =
+		typeof options.lastHeartbeatAt === "string" ? Date.parse(options.lastHeartbeatAt) : options.lastHeartbeatAt;
+	if (lastHeartbeatAt == null || !Number.isFinite(lastHeartbeatAt) || lastHeartbeatAt <= options.lastUserInteractionAt) {
 		return true;
 	}
-	return options.now - options.lastHeartbeatAt >= Math.max(0, options.intervalMs);
+	return options.now - lastHeartbeatAt >= Math.max(0, options.intervalMs);
 }

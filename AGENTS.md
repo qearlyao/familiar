@@ -25,7 +25,7 @@ For high-value upstream/local file references, check `PLAN.md` section `## 6. Re
 ## Project Rules
 
 - For complex code, add concise comments that explain the non-obvious intent, invariants, or failure mode. Do not comment trivial assignments.
-- For broad reviews, large migrations, or multi-part implementation work, use an agent team when helpful and delegate focused subtasks to subagents to improve speed and coverage.
+- Flexibly and proactively utilize the agent team/sub-agents to enhance work efficiency; when necessary, please review the changes made by the sub-agents.
 
 ## Commit Messages
 

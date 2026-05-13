@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
@@ -26,7 +26,6 @@ export interface CronJobState {
 export interface SchedulerState {
 	heartbeat?: {
 		lastFiredAt?: string;
-		suppressUntil?: string;
 	};
 	cron: Record<string, CronJobState>;
 }
@@ -39,6 +38,8 @@ export interface SchedulerLogEvent {
 	deliveryMode?: CronDeliveryMode;
 	detail?: string;
 }
+
+const stateWriteQueues = new Map<string, Promise<void>>();
 
 function toDate(value: Date | number | string): Date {
 	if (value instanceof Date) return value;
@@ -224,8 +225,19 @@ export async function loadSchedulerState(dataDir: string): Promise<SchedulerStat
 
 export async function saveSchedulerState(dataDir: string, state: SchedulerState): Promise<void> {
 	const path = schedulerStatePath(dataDir);
-	await mkdir(dirname(path), { recursive: true });
-	await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+	const prior = stateWriteQueues.get(path) ?? Promise.resolve();
+	const write = prior.then(async () => {
+		await mkdir(dirname(path), { recursive: true });
+		const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+		await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+		await rename(tempPath, path);
+	});
+	const queued: Promise<void> = write.catch(() => undefined);
+	stateWriteQueues.set(path, queued);
+	void queued.finally(() => {
+		if (stateWriteQueues.get(path) === queued) stateWriteQueues.delete(path);
+	});
+	await write;
 }
 
 export async function appendSchedulerLog(dataDir: string, event: SchedulerLogEvent): Promise<void> {
@@ -238,19 +250,14 @@ export async function appendSchedulerLog(dataDir: string, event: SchedulerLogEve
 export function isHeartbeatDue(options: {
 	now: number;
 	lastUserInteractionAt: number;
-	lastHeartbeatAt?: number | string;
-	suppressUntil?: number | string;
+	lastHeartbeatAt?: string;
 	idleThresholdMs: number;
 	intervalMs: number;
 }): boolean {
 	if (options.now < options.lastUserInteractionAt) return false;
 	const idleDurationMs = options.now - options.lastUserInteractionAt;
 	if (idleDurationMs < options.idleThresholdMs) return false;
-	const suppressUntil =
-		typeof options.suppressUntil === "string" ? Date.parse(options.suppressUntil) : options.suppressUntil;
-	if (suppressUntil != null && Number.isFinite(suppressUntil) && options.now < suppressUntil) return false;
-	const lastHeartbeatAt =
-		typeof options.lastHeartbeatAt === "string" ? Date.parse(options.lastHeartbeatAt) : options.lastHeartbeatAt;
+	const lastHeartbeatAt = options.lastHeartbeatAt ? Date.parse(options.lastHeartbeatAt) : undefined;
 	if (lastHeartbeatAt == null || !Number.isFinite(lastHeartbeatAt) || lastHeartbeatAt <= options.lastUserInteractionAt) {
 		return true;
 	}

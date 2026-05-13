@@ -55,11 +55,12 @@ describe("scheduler helpers", () => {
 			}),
 			false,
 		);
+		const base = Date.parse("2026-05-13T00:00:00.000Z");
 		assert.equal(
 			isHeartbeatDue({
-				now: 60 * 60 * 1000,
-				lastUserInteractionAt: 20 * 60 * 1000,
-				lastHeartbeatAt: 50 * 60 * 1000,
+				now: base + 60 * 60 * 1000,
+				lastUserInteractionAt: base + 20 * 60 * 1000,
+				lastHeartbeatAt: new Date(base + 50 * 60 * 1000).toISOString(),
 				idleThresholdMs: 10 * 60 * 1000,
 				intervalMs: 15 * 60 * 1000,
 			}),
@@ -67,9 +68,9 @@ describe("scheduler helpers", () => {
 		);
 		assert.equal(
 			isHeartbeatDue({
-				now: 60 * 60 * 1000,
-				lastUserInteractionAt: 20 * 60 * 1000,
-				lastHeartbeatAt: 35 * 60 * 1000,
+				now: base + 60 * 60 * 1000,
+				lastUserInteractionAt: base + 20 * 60 * 1000,
+				lastHeartbeatAt: new Date(base + 35 * 60 * 1000).toISOString(),
 				idleThresholdMs: 10 * 60 * 1000,
 				intervalMs: 15 * 60 * 1000,
 			}),
@@ -79,10 +80,11 @@ describe("scheduler helpers", () => {
 
 	it("treats interval as repeat cadence after the first idle-threshold fire", () => {
 		const minute = 60 * 1000;
+		const base = Date.parse("2026-05-13T00:00:00.000Z");
 		assert.equal(
 			isHeartbeatDue({
-				now: 60 * minute,
-				lastUserInteractionAt: 0,
+				now: base + 60 * minute,
+				lastUserInteractionAt: base,
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),
@@ -90,9 +92,9 @@ describe("scheduler helpers", () => {
 		);
 		assert.equal(
 			isHeartbeatDue({
-				now: 240 * minute,
-				lastUserInteractionAt: 0,
-				lastHeartbeatAt: 60 * minute,
+				now: base + 240 * minute,
+				lastUserInteractionAt: base,
+				lastHeartbeatAt: new Date(base + 60 * minute).toISOString(),
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),
@@ -100,9 +102,9 @@ describe("scheduler helpers", () => {
 		);
 		assert.equal(
 			isHeartbeatDue({
-				now: 300 * minute,
-				lastUserInteractionAt: 0,
-				lastHeartbeatAt: 60 * minute,
+				now: base + 300 * minute,
+				lastUserInteractionAt: base,
+				lastHeartbeatAt: new Date(base + 60 * minute).toISOString(),
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),
@@ -137,16 +139,16 @@ describe("scheduler helpers", () => {
 		);
 	});
 
-	it("suppresses cold-start heartbeat until the seeded repeat window", () => {
+	it("waits one interval after a cold-start seeded fire when the user stays silent", () => {
 		const minute = 60 * 1000;
 		const lastUserInteractionAt = Date.parse("2026-05-13T00:00:00.000Z");
-		const suppressUntil = "2026-05-13T08:00:00.000Z";
+		const lastHeartbeatAt = "2026-05-13T04:00:00.000Z";
 
 		assert.equal(
 			isHeartbeatDue({
-				now: Date.parse("2026-05-13T05:00:00.000Z"),
+				now: Date.parse("2026-05-13T07:00:00.000Z"),
 				lastUserInteractionAt,
-				suppressUntil,
+				lastHeartbeatAt,
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),
@@ -156,7 +158,7 @@ describe("scheduler helpers", () => {
 			isHeartbeatDue({
 				now: Date.parse("2026-05-13T08:00:00.000Z"),
 				lastUserInteractionAt,
-				suppressUntil,
+				lastHeartbeatAt,
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),
@@ -164,15 +166,27 @@ describe("scheduler helpers", () => {
 		);
 	});
 
-	it("lets a later user reply bypass stale cold-start suppression", () => {
+	it("falls back to first-fire after cold-start when the user replies during the window", () => {
 		const minute = 60 * 1000;
-		const lastUserInteractionAt = Date.parse("2026-05-13T07:00:00.000Z");
+		// Cold start seeded lastFiredAt at 04:00, then the user replied at 05:00.
+		const lastHeartbeatAt = "2026-05-13T04:00:00.000Z";
+		const lastUserInteractionAt = Date.parse("2026-05-13T05:00:00.000Z");
 
 		assert.equal(
 			isHeartbeatDue({
-				now: Date.parse("2026-05-13T08:00:00.000Z"),
+				now: lastUserInteractionAt + 30 * minute,
 				lastUserInteractionAt,
-				suppressUntil: "2026-05-13T08:00:00.000Z",
+				lastHeartbeatAt,
+				idleThresholdMs: 60 * minute,
+				intervalMs: 240 * minute,
+			}),
+			false,
+		);
+		assert.equal(
+			isHeartbeatDue({
+				now: lastUserInteractionAt + 60 * minute,
+				lastUserInteractionAt,
+				lastHeartbeatAt,
 				idleThresholdMs: 60 * minute,
 				intervalMs: 240 * minute,
 			}),

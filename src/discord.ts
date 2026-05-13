@@ -634,13 +634,11 @@ function heartbeatStillDue(
 	now: number,
 	lastUserInteractionAt: number,
 	lastHeartbeatAt: string | undefined,
-	suppressUntil: string | undefined,
 ): boolean {
 	return isHeartbeatDue({
 		now,
 		lastUserInteractionAt,
 		lastHeartbeatAt,
-		suppressUntil,
 		idleThresholdMs: config.heartbeat.idleThresholdMs,
 		intervalMs: config.heartbeat.intervalMs,
 	});
@@ -802,9 +800,10 @@ export async function startDiscordDaemon(
 		const now = Date.now();
 		const lastUserInteractionAt = runtime.getLastUserInteractionAt();
 		if (now - lastUserInteractionAt < config.heartbeat.idleThresholdMs) return;
-		schedulerState.heartbeat = {
-			suppressUntil: new Date(now + config.heartbeat.intervalMs).toISOString(),
-		};
+		// Treat a cold start on an already-idle transcript as "we just fired at boot":
+		// the standard cadence/first-fire branches in isHeartbeatDue then handle user-reply
+		// vs. no-reply correctly without a separate suppression concept.
+		schedulerState.heartbeat = { lastFiredAt: new Date(now).toISOString() };
 		await saveScheduler();
 	};
 
@@ -906,7 +905,6 @@ export async function startDiscordDaemon(
 					now,
 					lastUserInteractionAt,
 					schedulerState.heartbeat?.lastFiredAt,
-					schedulerState.heartbeat?.suppressUntil,
 				)
 			) {
 				return;
@@ -931,7 +929,6 @@ export async function startDiscordDaemon(
 								queuedNow,
 								latestUserInteractionAt,
 								schedulerState.heartbeat?.lastFiredAt,
-								schedulerState.heartbeat?.suppressUntil,
 							)
 						) {
 							return HEARTBEAT_SKIPPED;

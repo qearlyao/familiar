@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+	buildCronInjectionText,
 	buildHeartbeatInjectionText,
+	dueCronSlot,
 	formatIdleDuration,
 	formatLocalTimestamp,
 	isHeartbeatDue,
+	type CronJobConfig,
 } from "../src/scheduler.js";
 
 describe("scheduler helpers", () => {
@@ -104,6 +107,110 @@ describe("scheduler helpers", () => {
 				intervalMs: 240 * minute,
 			}),
 			true,
+		);
+	});
+
+	it("builds cron envelopes without user identity fields", () => {
+		const job: CronJobConfig = {
+			id: "daily-review",
+			enabled: true,
+			frequency: "daily",
+			deliveryMode: "queue",
+			time: "09:00",
+			prompt: "Review priorities.",
+		};
+		const text = buildCronInjectionText({
+			job,
+			slot: "daily-review:daily:2026-05-13T09:00",
+			now: "2026-05-13T09:00:00",
+		});
+
+		assert.match(text, /^<cron id="daily-review" frequency="daily" delivery="queue" /);
+		assert.match(text, /Review priorities/);
+		assert.doesNotMatch(text, /uid:/);
+		assert.doesNotMatch(text, /author/i);
+	});
+
+	it("computes due cron slots and suppresses repeats by slot", () => {
+		const daily: CronJobConfig = {
+			id: "daily-review",
+			enabled: true,
+			frequency: "daily",
+			deliveryMode: "queue",
+			time: "09:00",
+			prompt: "Review priorities.",
+		};
+		const slot = dueCronSlot(daily, undefined, new Date(2026, 4, 13, 9, 5));
+		assert.equal(slot, "daily-review:daily:2026-05-13T09:00");
+		assert.equal(dueCronSlot(daily, { lastFiredSlot: slot }, new Date(2026, 4, 13, 9, 10)), undefined);
+		assert.equal(
+			dueCronSlot(daily, { lastFiredSlot: slot }, new Date(2026, 4, 14, 9, 0)),
+			"daily-review:daily:2026-05-14T09:00",
+		);
+	});
+
+	it("supports one-time, hourly, weekly, and monthly cron slots", () => {
+		assert.equal(
+			dueCronSlot(
+				{
+					id: "once",
+					enabled: true,
+					frequency: "once",
+					deliveryMode: "queue",
+					runAt: "2026-05-13 09:00",
+					prompt: "once",
+				},
+				undefined,
+				new Date(2026, 4, 13, 8, 59),
+			),
+			undefined,
+		);
+		assert.equal(
+			dueCronSlot(
+				{
+					id: "hourly",
+					enabled: true,
+					frequency: "hourly",
+					deliveryMode: "follow_up",
+					minute: 15,
+					prompt: "hourly",
+				},
+				undefined,
+				new Date(2026, 4, 13, 10, 14),
+			),
+			"hourly:hourly:2026-05-13T09:15",
+		);
+		assert.equal(
+			dueCronSlot(
+				{
+					id: "weekly",
+					enabled: true,
+					frequency: "weekly",
+					deliveryMode: "queue",
+					weekday: 3,
+					time: "09:30",
+					prompt: "weekly",
+				},
+				undefined,
+				new Date(2026, 4, 13, 9, 30),
+			),
+			"weekly:weekly:2026-05-13T09:30",
+		);
+		assert.equal(
+			dueCronSlot(
+				{
+					id: "monthly",
+					enabled: true,
+					frequency: "monthly",
+					deliveryMode: "queue",
+					day: 31,
+					time: "20:00",
+					prompt: "monthly",
+				},
+				undefined,
+				new Date(2026, 3, 30, 20, 0),
+			),
+			"monthly:monthly:2026-04-30T20:00",
 		);
 	});
 });

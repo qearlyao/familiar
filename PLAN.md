@@ -273,6 +273,10 @@ Done when:
 - Self-time outputs persist and influence subsequent conversations and diary entries.
 - Scheduler persists state, handles missed runs, respects all guardrails.
 
+TODO:
+
+- Add runtime cron management so the user and agent can create, inspect, pause, edit, and delete scheduled jobs without hand-editing `config.toml`; persist those jobs in scheduler state while keeping config-defined jobs as boot defaults.
+
 ### Stage 10: Subagent Delegation Tool
 
 - Revisit the deferred `task` tool after media output, LCM/diary, and proactive scheduling have enough shape to justify delegation.

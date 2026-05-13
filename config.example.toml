@@ -30,6 +30,18 @@ enabled = false
 idle_threshold_minutes = 60
 interval_minutes = 240
 
+[cron]
+enabled = false
+poll_seconds = 60
+
+# [[cron.jobs]]
+# id = "daily-review"
+# enabled = true
+# frequency = "daily" # once | hourly | daily | weekly | monthly
+# delivery_mode = "queue" # queue | follow_up
+# time = "09:00"
+# prompt = "Review today's priorities and remind me what matters."
+
 [models]
 allow = [
 	"anthropic/claude-opus-4-7",

@@ -35,7 +35,17 @@ import type { Config } from "./config.js";
 import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
-import { buildHeartbeatInjectionText, isHeartbeatDue } from "./scheduler.js";
+import {
+	appendSchedulerLog,
+	buildHeartbeatInjectionText,
+	buildCronInjectionText,
+	dueCronSlot,
+	isHeartbeatDue,
+	loadSchedulerState,
+	saveSchedulerState,
+	type CronJobConfig,
+	type SchedulerState,
+} from "./scheduler.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 
 const FAMILIAR_COMMAND_NAME = "familiar";
@@ -44,6 +54,7 @@ const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
+const CRON_SKIPPED = Symbol("cron-skipped");
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -658,9 +669,12 @@ export async function startDiscordDaemon(
 	let activeAgentOwner: string | undefined;
 	let agentWorkQueue = Promise.resolve();
 	let heartbeatTimer: NodeJS.Timeout | undefined;
+	let cronTimer: NodeJS.Timeout | undefined;
 	// v0 cadence state is process-local; restart can re-enter the first idle-threshold fire path.
 	let lastHeartbeatAt: number | undefined;
 	let heartbeatQueued = false;
+	let cronRunning = false;
+	let schedulerState: SchedulerState = { cron: {} };
 
 	const promptForRuntime = async (
 		runtime: ConversationRuntime,
@@ -694,12 +708,13 @@ export async function startDiscordDaemon(
 		buildMessage: () =>
 			| AgentMessage
 			| typeof HEARTBEAT_SKIPPED
-			| Promise<AgentMessage | typeof HEARTBEAT_SKIPPED>,
+			| typeof CRON_SKIPPED
+			| Promise<AgentMessage | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED>,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
-	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED> => {
+	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED> => {
 		const run = agentWorkQueue.then(async () => {
 			const message = await buildMessage();
-			if (message === HEARTBEAT_SKIPPED) return HEARTBEAT_SKIPPED;
+			if (message === HEARTBEAT_SKIPPED || message === CRON_SKIPPED) return message;
 			activeAgentOwner = runtime.channelKey;
 			try {
 				return await familiarAgent.promptMessage(runtime.channelKey, message, onEvent);
@@ -776,6 +791,10 @@ export async function startDiscordDaemon(
 		const dmChannel = await client.users.createDM(config.discord.ownerId);
 		const runtime = await getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
 		return { runtime, channel: dmChannel as DiscordChatChannel };
+	};
+
+	const saveCronState = async (): Promise<void> => {
+		await saveSchedulerState(config.workspace.dataDir, schedulerState);
 	};
 
 	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
@@ -877,7 +896,7 @@ export async function startDiscordDaemon(
 			const recorder = createAgentEventRecorder((storedEvent) =>
 				heartbeatRuntime.noteAgentEvent("heartbeat", assistantMessageId, storedEvent, { notify: false }),
 			);
-			let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED;
+			let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
 			try {
 				reply = await promptScheduledMessage(
 					heartbeatRuntime,
@@ -906,7 +925,7 @@ export async function startDiscordDaemon(
 			} finally {
 				await recorder.flush();
 			}
-			if (reply === HEARTBEAT_SKIPPED) return;
+			if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) return;
 			lastHeartbeatAt = Date.now();
 			const parsedReply = parseAgentReply(reply.text);
 			const messageIds = parsedReply.silent
@@ -929,6 +948,154 @@ export async function startDiscordDaemon(
 			console.error("Heartbeat failed", error);
 		} finally {
 			heartbeatQueued = false;
+		}
+	};
+
+	const markCronSlotStarted = async (job: CronJobConfig, slot: string): Promise<void> => {
+		schedulerState.cron[job.id] = {
+			lastFiredSlot: slot,
+			lastFiredAt: new Date().toISOString(),
+			...(schedulerState.cron[job.id]?.completed ? { completed: true } : {}),
+		};
+		await saveCronState();
+	};
+
+	const completeCronSlot = async (job: CronJobConfig, slot: string): Promise<void> => {
+		schedulerState.cron[job.id] = {
+			...schedulerState.cron[job.id],
+			lastFiredSlot: slot,
+			lastFiredAt: schedulerState.cron[job.id]?.lastFiredAt ?? new Date().toISOString(),
+			...(job.frequency === "once" ? { completed: true } : {}),
+		};
+		await saveCronState();
+	};
+
+	const runCronJob = async (
+		job: CronJobConfig,
+		slot: string,
+		runtime: ConversationRuntime,
+		channel: DiscordChatChannel,
+	): Promise<void> => {
+		await appendSchedulerLog(config.workspace.dataDir, {
+			type: "cron_due",
+			jobId: job.id,
+			slot,
+			deliveryMode: job.deliveryMode,
+		});
+		if (job.deliveryMode === "follow_up" && activeAgentOwner === runtime.channelKey) {
+			const now = Date.now();
+			const text = buildCronInjectionText({ job, slot, now });
+			await appendSchedulerLog(config.workspace.dataDir, {
+				type: "cron_started",
+				jobId: job.id,
+				slot,
+				deliveryMode: job.deliveryMode,
+			});
+			await markCronSlotStarted(job, slot);
+			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now));
+			await completeCronSlot(job, slot);
+			await appendSchedulerLog(config.workspace.dataDir, {
+				type: "cron_completed",
+				jobId: job.id,
+				slot,
+				deliveryMode: job.deliveryMode,
+				detail: "queued as follow-up",
+			});
+			return;
+		}
+
+		const assistantMessageId = webMessageId();
+		const summary: AgentEventSummary = { thinking: "" };
+		const recorder = createAgentEventRecorder((storedEvent) =>
+			runtime.noteAgentEvent(`cron:${job.id}`, assistantMessageId, storedEvent, { notify: false }),
+		);
+		let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
+		try {
+			reply = await promptScheduledMessage(
+				runtime,
+				async () => {
+					const jobState = schedulerState.cron[job.id];
+					if (jobState?.completed || jobState?.lastFiredSlot === slot) return CRON_SKIPPED;
+					const now = Date.now();
+					await appendSchedulerLog(config.workspace.dataDir, {
+						type: "cron_started",
+						jobId: job.id,
+						slot,
+						deliveryMode: job.deliveryMode,
+					});
+					await markCronSlotStarted(job, slot);
+					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
+				},
+				async (event) => {
+					updateAgentEventSummary(summary, event);
+					const storedEvent = storedAgentEventFromAgentEvent(event);
+					if (storedEvent) {
+						runtime.publishAgentEvent(`cron:${job.id}`, assistantMessageId, storedEvent);
+						await recorder.record(storedEvent);
+					}
+				},
+			);
+		} finally {
+			await recorder.flush();
+		}
+		if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) {
+			await appendSchedulerLog(config.workspace.dataDir, {
+				type: "cron_skipped",
+				jobId: job.id,
+				slot,
+				deliveryMode: job.deliveryMode,
+				detail: "already completed before prompt",
+			});
+			return;
+		}
+		const parsedReply = parseAgentReply(reply.text);
+		const messageIds = parsedReply.silent
+			? []
+			: await sendChannelMessage(config, channel, parsedReply.text, reply.attachments);
+		await runtime.noteOutbound({
+			text: parsedReply.text,
+			messageIds,
+			webMessageId: assistantMessageId,
+			attachments: reply.attachments,
+			thinking: summary.thinking,
+			thinkingMs: thinkingDurationMs(summary),
+			silent: parsedReply.silent,
+			jobId: `cron:${job.id}`,
+		});
+		await completeCronSlot(job, slot);
+		await appendSchedulerLog(config.workspace.dataDir, {
+			type: "cron_completed",
+			jobId: job.id,
+			slot,
+			deliveryMode: job.deliveryMode,
+		});
+	};
+
+	const tickCron = async (): Promise<void> => {
+		if (!config.cron.enabled || cronRunning) return;
+		cronRunning = true;
+		try {
+			const session = await getOwnerDmSession();
+			for (const job of config.cron.jobs) {
+				const slot = dueCronSlot(job, schedulerState.cron[job.id], Date.now());
+				if (!slot) continue;
+				try {
+					await runCronJob(job, slot, session.runtime, session.channel);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					await appendSchedulerLog(config.workspace.dataDir, {
+						type: "cron_failed",
+						jobId: job.id,
+						slot,
+						deliveryMode: job.deliveryMode,
+						detail: message,
+					});
+					await session.runtime.appendError(`Cron job ${job.id} failed: ${message}`);
+					console.error(`Cron job ${job.id} failed`, error);
+				}
+			}
+		} finally {
+			cronRunning = false;
 		}
 	};
 
@@ -1068,12 +1235,20 @@ export async function startDiscordDaemon(
 	client.ws.on("close" as any, (event: unknown) => {
 		console.warn("Discord websocket closed; discord.js will reconnect when possible", event);
 	});
+	schedulerState = await loadSchedulerState(config.workspace.dataDir);
 	if (config.heartbeat.enabled) {
 		const tickHeartbeat = () => {
 			void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
 		};
 		heartbeatTimer = setInterval(tickHeartbeat, Math.min(config.heartbeat.intervalMs, 60_000));
 		tickHeartbeat();
+	}
+	if (config.cron.enabled && config.cron.jobs.some((job) => job.enabled)) {
+		const runCronTick = () => {
+			void tickCron().catch((error) => console.error("Cron tick failed", error));
+		};
+		cronTimer = setInterval(runCronTick, config.cron.pollMs);
+		runCronTick();
 	}
 
 	return {
@@ -1091,6 +1266,7 @@ export async function startDiscordDaemon(
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);
 			if (heartbeatTimer) clearInterval(heartbeatTimer);
+			if (cronTimer) clearInterval(cronTimer);
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
 			const resolvedRuntimes = await Promise.all(

@@ -58,6 +58,12 @@ DM the bot from the configured `discord.owner_id`. Guild channels are ignored un
 Heartbeat is disabled by default. Before setting `[heartbeat].enabled = true`, replace the workspace `HEARTBEAT.md`
 placeholder; Familiar only tells the agent to read that file when the idle-triggered heartbeat fires.
 
+## Cron Jobs
+
+Cron jobs are disabled by default. Add `[[cron.jobs]]` entries to schedule in-band reminders into the owner DM context.
+`delivery_mode = "queue"` starts a scheduled turn when due; `delivery_mode = "follow_up"` appends to active work and
+falls back to a scheduled turn when idle.
+
 ## Discord Dispatch
 
 `discord.dm_mode` controls DMs: `steer` injects owner messages into active work, `queue` starts independent jobs, and

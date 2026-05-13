@@ -46,6 +46,11 @@ describe("loadConfig tts", () => {
 			idleThresholdMs: 60 * 60_000,
 			intervalMs: 240 * 60_000,
 		});
+		assert.deepEqual(config.cron, {
+			enabled: false,
+			pollMs: 60_000,
+			jobs: [],
+		});
 		assert.deepEqual(config.tts.voiceSettings, {
 			stability: 0.5,
 			similarityBoost: 0.75,
@@ -237,6 +242,112 @@ interval_minutes = 90
 			idleThresholdMs: 30 * 60_000,
 			intervalMs: 90 * 60_000,
 		});
+	});
+
+	it("loads cron jobs", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[cron]
+enabled = true
+poll_seconds = 30
+
+[[cron.jobs]]
+id = "daily-review"
+frequency = "daily"
+delivery_mode = "queue"
+time = "09:00"
+prompt = "Review today's priorities."
+
+[[cron.jobs]]
+id = "one-shot"
+enabled = false
+frequency = "once"
+delivery_mode = "follow_up"
+run_at = "2026-05-13 23:00"
+prompt = "Remember this once."
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.cron, {
+			enabled: true,
+			pollMs: 30_000,
+			jobs: [
+				{
+					id: "daily-review",
+					enabled: true,
+					frequency: "daily",
+					deliveryMode: "queue",
+					time: "09:00",
+					prompt: "Review today's priorities.",
+				},
+				{
+					id: "one-shot",
+					enabled: false,
+					frequency: "once",
+					deliveryMode: "follow_up",
+					runAt: "2026-05-13 23:00",
+					prompt: "Remember this once.",
+				},
+			],
+		});
+	});
+
+	it("rejects invalid cron jobs", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[cron]
+enabled = true
+
+[[cron.jobs]]
+id = "bad job"
+frequency = "daily"
+time = "09:00"
+prompt = "Bad id."
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.id/);
+	});
+
+	it("rejects once cron jobs with repeating time", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[cron]
+enabled = true
+
+[[cron.jobs]]
+id = "one-shot"
+frequency = "once"
+run_at = "2026-05-13 23:00"
+time = "09:00"
+prompt = "Conflicting schedule."
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.time/);
+	});
+
+	it("rejects invalid cron time strings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[cron]
+enabled = true
+
+[[cron.jobs]]
+id = "daily-review"
+frequency = "daily"
+time = "25:00"
+prompt = "Bad time."
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /HH:MM local time/);
 	});
 
 	it("loads memory overrides", async () => {

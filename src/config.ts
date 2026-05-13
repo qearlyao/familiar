@@ -10,6 +10,8 @@ export type DiscordReplyMode = "plain" | "reply";
 export type DiscordChunkMode = "simple" | "paragraph";
 export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
+export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
+export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
@@ -68,6 +70,22 @@ export interface Config {
 		enabled: boolean;
 		idleThresholdMs: number;
 		intervalMs: number;
+	};
+	cron: {
+		enabled: boolean;
+		pollMs: number;
+		jobs: Array<{
+			id: string;
+			enabled: boolean;
+			frequency: CronFrequency;
+			deliveryMode: CronDeliveryMode;
+			prompt: string;
+			runAt?: string;
+			time?: string;
+			minute?: number;
+			weekday?: number;
+			day?: number;
+		}>;
 	};
 	models: {
 		allow: string[];
@@ -277,6 +295,18 @@ function readDiscordChannelTrigger(value: unknown): DiscordChannelTrigger {
 	throw new Error('Config value discord.channel_trigger must be one of "mention" or "always"');
 }
 
+function readCronFrequency(value: unknown, path: string): CronFrequency {
+	if (value === "once" || value === "hourly" || value === "daily" || value === "weekly" || value === "monthly") {
+		return value;
+	}
+	throw new Error(`Config value ${path} must be one of "once", "hourly", "daily", "weekly", or "monthly"`);
+}
+
+function readCronDeliveryMode(value: unknown, path: string): CronDeliveryMode {
+	if (value === "queue" || value === "follow_up") return value;
+	throw new Error(`Config value ${path} must be one of "queue" or "follow_up"`);
+}
+
 function readWebAuthMode(value: unknown): WebAuthMode {
 	if (value === "tailscale-only" || value === "bearer" || value === "public-2fa") return value;
 	throw new Error('Config value web.auth_mode must be one of "tailscale-only", "bearer", or "public-2fa"');
@@ -347,6 +377,32 @@ function readOptionalInteger(value: unknown, path: string, min = 0): number | un
 	return value;
 }
 
+function readIntegerInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
+	const read = readInteger(value, fallback, path, min);
+	if (read > max) throw new Error(`Config value ${path} must be an integer <= ${max}`);
+	return read;
+}
+
+function readOptionalIntegerInRange(value: unknown, path: string, min: number, max: number): number | undefined {
+	const read = readOptionalInteger(value, path, min);
+	if (read !== undefined && read > max) throw new Error(`Config value ${path} must be an integer <= ${max}`);
+	return read;
+}
+
+function assertCronTime(value: string | undefined, path: string): void {
+	if (value === undefined) return;
+	if (!/^([01]?\d|2[0-3]):([0-5]\d)$/.test(value)) {
+		throw new Error(`Config value ${path} must be HH:MM local time`);
+	}
+}
+
+function assertCronRunAt(value: string | undefined, path: string): void {
+	if (value === undefined) return;
+	if (Number.isFinite(Date.parse(value))) return;
+	if (/^\d{4}-\d{2}-\d{2}[ T]([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.test(value)) return;
+	throw new Error(`Config value ${path} must be an ISO timestamp or YYYY-MM-DD HH:MM local time`);
+}
+
 function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
 }
@@ -395,6 +451,68 @@ function readPromptOverrides(
 	};
 }
 
+function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
+	const rawJobs = cron.jobs;
+	if (rawJobs === undefined) return [];
+	if (!Array.isArray(rawJobs)) throw new Error("Config value cron.jobs must be an array");
+	const seen = new Set<string>();
+	return rawJobs.map((rawJob, index) => {
+		if (!rawJob || typeof rawJob !== "object" || Array.isArray(rawJob)) {
+			throw new Error(`Config value cron.jobs[${index}] must be a table`);
+		}
+		const job = rawJob as Record<string, unknown>;
+		const prefix = `cron.jobs[${index}]`;
+		assertKnownKeys(job, prefix, [
+			"id",
+			"enabled",
+			"frequency",
+			"delivery_mode",
+			"prompt",
+			"run_at",
+			"time",
+			"minute",
+			"weekday",
+			"day",
+		]);
+		const id = readString(job.id, `${prefix}.id`);
+		if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
+			throw new Error(`Config value ${prefix}.id may only contain letters, numbers, dot, underscore, equals, or dash`);
+		}
+		if (seen.has(id)) throw new Error(`Duplicate cron job id: ${id}`);
+		seen.add(id);
+		const frequency = readCronFrequency(readConfigString(job.frequency, "once", `${prefix}.frequency`), `${prefix}.frequency`);
+		const runAt = readOptionalConfigString(job.run_at, `${prefix}.run_at`);
+		const time = readOptionalConfigString(job.time, `${prefix}.time`);
+		assertCronRunAt(runAt, `${prefix}.run_at`);
+		assertCronTime(time, `${prefix}.time`);
+		if (frequency === "once" && !runAt) throw new Error(`Config value ${prefix}.run_at is required for once jobs`);
+		if (frequency === "once" && time) throw new Error(`Config value ${prefix}.time is only valid for repeating jobs`);
+		if (frequency !== "once" && runAt) throw new Error(`Config value ${prefix}.run_at is only valid for once jobs`);
+		if (frequency !== "once" && frequency !== "hourly" && !time) {
+			throw new Error(`Config value ${prefix}.time is required for ${frequency} jobs`);
+		}
+		return {
+			id,
+			enabled: readBoolean(job.enabled, true, `${prefix}.enabled`),
+			frequency,
+			deliveryMode: readCronDeliveryMode(
+				readConfigString(job.delivery_mode, "queue", `${prefix}.delivery_mode`),
+				`${prefix}.delivery_mode`,
+			),
+			prompt: readString(job.prompt, `${prefix}.prompt`),
+			...(runAt ? { runAt } : {}),
+			...(time ? { time } : {}),
+			...(job.minute !== undefined
+				? { minute: readOptionalIntegerInRange(job.minute, `${prefix}.minute`, 0, 59) }
+				: {}),
+			...(job.weekday !== undefined
+				? { weekday: readOptionalIntegerInRange(job.weekday, `${prefix}.weekday`, 0, 6) }
+				: {}),
+			...(job.day !== undefined ? { day: readOptionalIntegerInRange(job.day, `${prefix}.day`, 1, 31) } : {}),
+		};
+	});
+}
+
 export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspacePath = resolve(workspacePathInput);
 	const configPath = resolve(workspacePath, "config.toml");
@@ -409,6 +527,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const heartbeat = (parsed.heartbeat ?? {}) as Record<string, unknown>;
+	const cron = (parsed.cron ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
@@ -593,6 +712,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			idleThresholdMs:
 				readInteger(heartbeat.idle_threshold_minutes, 60, "heartbeat.idle_threshold_minutes", 1) * 60_000,
 			intervalMs: readInteger(heartbeat.interval_minutes, 240, "heartbeat.interval_minutes", 1) * 60_000,
+		},
+		cron: {
+			enabled: readBoolean(cron.enabled, false, "cron.enabled"),
+			pollMs: readIntegerInRange(cron.poll_seconds, 60, "cron.poll_seconds", 1, 3600) * 1000,
+			jobs: readCronJobs(cron),
 		},
 		models: {
 			allow: modelAllow,

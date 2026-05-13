@@ -232,8 +232,9 @@ Ambient recall:
 Manual recall:
 
 - Provide a tool for active digging.
-- Tool should support scopes, e.g. diary/factual/all, but default behavior should
-  not blur private affective memory with factual transcript memory.
+- Tool should support scopes, e.g. diary/factual/all. Current default is all so
+  explicit recall can find diary and conversation memory unless the agent narrows
+  scope.
 
 ## Agent Tools and Operator Commands
 
@@ -246,8 +247,8 @@ V0 agent tools:
   - Hybrid semantic/FTS recall.
   - Parameters include `query`, `scope` (`diary`, `factual`, `all`), `k`, time
     filters, and possibly `mode`.
-  - Default scope should be context-sensitive but conservative. Ambient recall
-    remains diary-first; explicit tool calls may use factual/all.
+  - Default scope is all; ambient recall remains diary-first and more
+    conservative than explicit tool calls.
   - Returns ids, type/time cues, and concise previews only. Source/provenance
     details belong in `memory_open` so recall stays readable.
 - `memory_open`

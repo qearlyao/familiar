@@ -313,6 +313,13 @@ function printDiff(before: PayloadRecord, after: PayloadRecord, args: Args, path
 	console.log(`Latest:   ${after.ts ?? "(unknown)"} ${after.sessionKey ?? "(unknown session)"} ${recordModel(after)}`);
 	console.log(`Payload hash: ${hashValue(beforePayload).slice(0, 12)} -> ${hashValue(afterPayload).slice(0, 12)}`);
 	console.log("");
+	console.log("Summary:");
+	const summaryLines = summaryDiffLines(beforePayload, afterPayload, args);
+	if (summaryLines.length === 0) console.log("  (no payload changes)");
+	for (const line of summaryLines.slice(0, 16)) console.log(`  ${line}`);
+	if (summaryLines.length > 16) console.log(`  ... ${summaryLines.length - 16} more summary change(s)`);
+	console.log("");
+	console.log("Structure:");
 	printTopLevelSummary(beforePayload, afterPayload);
 	console.log("");
 	printArraySummary("messages", beforePayload.messages, afterPayload.messages);
@@ -332,6 +339,146 @@ function printDiff(before: PayloadRecord, after: PayloadRecord, args: Args, path
 	}
 	for (const line of diffLines.slice(0, 40)) console.log(`  ${line.path}: ${line.detail}`);
 	if (diffLines.length > 40) console.log(`  ... ${diffLines.length - 40} more change(s)`);
+}
+
+function summaryDiffLines(before: Record<string, unknown>, after: Record<string, unknown>, args: Args): string[] {
+	for (const key of ["input", "messages", "contents"]) {
+		const beforeArray = before[key];
+		const afterArray = after[key];
+		if (Array.isArray(beforeArray) || Array.isArray(afterArray)) {
+			const lines = summaryArrayLines(
+				Array.isArray(beforeArray) ? beforeArray : [],
+				Array.isArray(afterArray) ? afterArray : [],
+				args,
+			);
+			if (lines.length > 0) return lines;
+		}
+	}
+	return Object.keys(after)
+		.sort()
+		.filter((key) => hashValue(before[key]) !== hashValue(after[key]))
+		.map((key) => `~ ${key}`);
+}
+
+function summaryArrayLines(before: unknown[], after: unknown[], args: Args): string[] {
+	if (hashValue(before) === hashValue(after)) return [];
+	const common = commonArrayShape(before, after);
+	const beforeEnd = before.length - common.suffix;
+	const afterEnd = after.length - common.suffix;
+	const lines: string[] = [];
+	for (let index = common.prefix; index < Math.max(beforeEnd, afterEnd); index++) {
+		if (index >= beforeEnd) {
+			lines.push(`+ ${summaryItem(after[index], args)}`);
+		} else if (index >= afterEnd) {
+			lines.push(`- ${summaryItem(before[index], args)}`);
+		} else if (hashValue(before[index]) !== hashValue(after[index])) {
+			const nested = nestedSummaryLines(before[index], after[index], args);
+			if (nested.length > 0) lines.push(...nested);
+			else lines.push(`~ ${summaryItem(after[index], args)}`);
+		}
+	}
+	return lines;
+}
+
+function nestedSummaryLines(before: unknown, after: unknown, args: Args): string[] {
+	if (hashValue(before) === hashValue(after)) return [];
+	if (typeof before === "string" || typeof after === "string") return stringSummaryLines(before, after, args);
+	if (Array.isArray(before) || Array.isArray(after)) {
+		return summaryArrayLines(Array.isArray(before) ? before : [], Array.isArray(after) ? after : [], args);
+	}
+	if (isPlainObject(before) || isPlainObject(after)) {
+		const beforeRecord = isPlainObject(before) ? before : {};
+		const afterRecord = isPlainObject(after) ? after : {};
+		const lines: string[] = [];
+		for (const key of [...new Set([...Object.keys(beforeRecord), ...Object.keys(afterRecord)])].sort()) {
+			if (hashValue(beforeRecord[key]) === hashValue(afterRecord[key])) continue;
+			if (!(key in afterRecord)) lines.push(`- ${summaryItem(beforeRecord[key], args)}`);
+			else if (!(key in beforeRecord)) lines.push(`+ ${summaryItem(afterRecord[key], args)}`);
+			else lines.push(...nestedSummaryLines(beforeRecord[key], afterRecord[key], args));
+		}
+		return lines;
+	}
+	return [];
+}
+
+function stringSummaryLines(before: unknown, after: unknown, args: Args): string[] {
+	if (typeof before !== "string" || typeof after !== "string") return [];
+	const beforeMemory = xmlishBlocks(before).filter((block) => block.tag === "injected_memory");
+	const afterMemory = xmlishBlocks(after).filter((block) => block.tag === "injected_memory");
+	const lines: string[] = [];
+	const max = Math.max(beforeMemory.length, afterMemory.length);
+	for (let index = 0; index < max; index++) {
+		const oldBlock = beforeMemory[index]?.body;
+		const newBlock = afterMemory[index]?.body;
+		if (oldBlock === newBlock) continue;
+		if (oldBlock !== undefined) lines.push(`- <injected_memory> ${inlinePreview(oldBlock, args, 700)}`);
+		if (newBlock !== undefined) lines.push(`+ <injected_memory> ${inlinePreview(newBlock, args, 700)}`);
+	}
+	if (lines.length > 0) return lines;
+	return [`~ text ${inlinePreview(after, args, 220)}`];
+}
+
+function summaryItem(value: unknown, args: Args): string {
+	const memory = firstXmlBlock(value, "injected_memory");
+	if (memory !== undefined) return `<injected_memory> ${inlinePreview(memory, args, 700)}`;
+	if (isPlainObject(value)) {
+		const role = typeof value.role === "string" ? value.role : undefined;
+		const type = typeof value.type === "string" ? value.type : undefined;
+		const text = firstText(value);
+		if (role === "assistant") return `assistant turn${text ? `: ${inlinePreview(text, args, 180)}` : ""}`;
+		if (role === "user") return `user turn${text ? `: ${inlinePreview(text, args, 180)}` : ""}`;
+		if (type) return `${type}${text ? `: ${inlinePreview(text, args, 180)}` : ""}`;
+	}
+	if (typeof value === "string") return `text: ${inlinePreview(value, args, 180)}`;
+	return stripHash(summarizeValue(value, args));
+}
+
+function firstXmlBlock(value: unknown, tag: string): string | undefined {
+	if (typeof value === "string") return xmlishBlocks(value).find((block) => block.tag === tag)?.body;
+	if (!value || typeof value !== "object") return undefined;
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const found = firstXmlBlock(item, tag);
+			if (found !== undefined) return found;
+		}
+		return undefined;
+	}
+	for (const child of Object.values(value as Record<string, unknown>)) {
+		const found = firstXmlBlock(child, tag);
+		if (found !== undefined) return found;
+	}
+	return undefined;
+}
+
+function firstText(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (!value || typeof value !== "object") return undefined;
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const found = firstText(item);
+			if (found) return found;
+		}
+		return undefined;
+	}
+	const record = value as Record<string, unknown>;
+	for (const key of ["text", "content", "output"]) {
+		if (typeof record[key] === "string") return record[key] as string;
+	}
+	for (const child of Object.values(record)) {
+		const found = firstText(child);
+		if (found) return found;
+	}
+	return undefined;
+}
+
+function inlinePreview(text: string, args: Args, max: number): string {
+	const compact = text.replace(/\s+/g, " ").trim();
+	if (args.full || compact.length <= max) return compact;
+	return `${compact.slice(0, max)}... (${compact.length} chars, truncated)`;
+}
+
+function stripHash(value: string): string {
+	return value.replace(/\s+hash=[0-9a-f]+/g, "");
 }
 
 function printTopLevelSummary(before: Record<string, unknown>, after: Record<string, unknown>): void {
@@ -371,6 +518,10 @@ function printLocationChange(before: string[], after: string[], args: Args): voi
 
 function diffValue(before: unknown, after: unknown, path: string, lines: DiffLine[], args: Args): void {
 	if (hashValue(before) === hashValue(after) || lines.length >= 200) return;
+	if (typeof before === "string" || typeof after === "string") {
+		lines.push({ path, detail: stringDiffDetail(before, after, args) });
+		return;
+	}
 	if (Array.isArray(before) || Array.isArray(after)) {
 		diffArray(Array.isArray(before) ? before : [], Array.isArray(after) ? after : [], path, lines, args);
 		return;
@@ -409,13 +560,23 @@ function diffArray(before: unknown[], after: unknown[], path: string, lines: Dif
 		if (index >= beforeEnd) lines.push({ path: childPath, detail: `added ${summarizeValue(after[index], args)}` });
 		else if (index >= afterEnd) lines.push({ path: childPath, detail: `removed ${summarizeValue(before[index], args)}` });
 		else if (hashValue(before[index]) !== hashValue(after[index])) {
-			lines.push({
-				path: childPath,
-				detail: `${summarizeValue(before[index], args)} -> ${summarizeValue(after[index], args)}`,
-			});
+			if (isDrillablePair(before[index], after[index])) {
+				diffValue(before[index], after[index], childPath, lines, args);
+			} else {
+				lines.push({
+					path: childPath,
+					detail: `${summarizeValue(before[index], args)} -> ${summarizeValue(after[index], args)}`,
+				});
+			}
 		}
 		shown++;
 	}
+}
+
+function isDrillablePair(before: unknown, after: unknown): boolean {
+	if (typeof before === "string" || typeof after === "string") return true;
+	if (Array.isArray(before) || Array.isArray(after)) return true;
+	return isPlainObject(before) || isPlainObject(after);
 }
 
 function commonArrayShape(before: unknown[], after: unknown[]): { prefix: number; suffix: number; firstChanged: number | null } {
@@ -450,6 +611,98 @@ function summarizeValue(value: unknown, args: Args): string {
 	const text = blockText(value);
 	const textSummary = text ? ` text=${JSON.stringify(preview(text, args.full, 120))}` : "";
 	return `{${Object.keys(value).length} key(s)${role}${type}${name}${textSummary}} hash=${hashValue(value).slice(0, 10)}`;
+}
+
+function stringDiffDetail(before: unknown, after: unknown, args: Args): string {
+	if (typeof before !== "string" || typeof after !== "string") {
+		return `${summarizeValue(before, args)} -> ${summarizeValue(after, args)}`;
+	}
+	const blockDiff = xmlishBlockDiff(before, after, args);
+	if (blockDiff) return blockDiff;
+	const common = commonStringShape(before, after);
+	return `text len ${before.length} -> ${after.length}; common prefix ${common.prefix}, suffix ${common.suffix}\n${indent(
+		`- ${previewChangedSlice(before, common, args)}\n+ ${previewChangedSlice(after, common, args)}`,
+		4,
+	)}`;
+}
+
+function xmlishBlockDiff(before: string, after: string, args: Args): string | null {
+	const beforeBlocks = xmlishBlocks(before);
+	const afterBlocks = xmlishBlocks(after);
+	if (beforeBlocks.length === 0 && afterBlocks.length === 0) return null;
+	const beforeByTag = blocksByTag(beforeBlocks);
+	const afterByTag = blocksByTag(afterBlocks);
+	const tags = [...new Set([...beforeByTag.keys(), ...afterByTag.keys()])].sort();
+	const lines: string[] = [];
+	for (const tag of tags) {
+		const previous = beforeByTag.get(tag) ?? [];
+		const current = afterByTag.get(tag) ?? [];
+		const max = Math.max(previous.length, current.length);
+		for (let index = 0; index < max; index++) {
+			const oldText = previous[index];
+			const newText = current[index];
+			const label = max > 1 ? `<${tag}>[${index}]` : `<${tag}>`;
+			if (oldText === newText) continue;
+			if (oldText === undefined) {
+				lines.push(`+ ${label} ${previewXmlBlock(newText ?? "", args)}`);
+			} else if (newText === undefined) {
+				lines.push(`- ${label} ${previewXmlBlock(oldText, args)}`);
+			} else {
+				lines.push(`~ ${label} len ${oldText.length} -> ${newText.length}`);
+				lines.push(`  - ${previewXmlBlock(oldText, args)}`);
+				lines.push(`  + ${previewXmlBlock(newText, args)}`);
+			}
+		}
+	}
+	if (lines.length === 0) return null;
+	return `text block changes:\n${indent(lines.join("\n"), 4)}`;
+}
+
+function xmlishBlocks(text: string): Array<{ tag: string; body: string }> {
+	const blocks: Array<{ tag: string; body: string }> = [];
+	const pattern = /<([A-Za-z][\w:-]*)\b[^>]*>([\s\S]*?)<\/\1>/g;
+	let match: RegExpExecArray | null;
+	while ((match = pattern.exec(text)) !== null) {
+		const tag = match[1];
+		const body = match[2];
+		if (tag && body !== undefined) blocks.push({ tag, body: body.trim() });
+	}
+	return blocks;
+}
+
+function blocksByTag(blocks: Array<{ tag: string; body: string }>): Map<string, string[]> {
+	const map = new Map<string, string[]>();
+	for (const block of blocks) {
+		const values = map.get(block.tag) ?? [];
+		values.push(block.body);
+		map.set(block.tag, values);
+	}
+	return map;
+}
+
+function commonStringShape(before: string, after: string): { prefix: number; suffix: number } {
+	let prefix = 0;
+	while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++;
+	let suffix = 0;
+	while (
+		suffix < before.length - prefix &&
+		suffix < after.length - prefix &&
+		before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+	) {
+		suffix++;
+	}
+	return { prefix, suffix };
+}
+
+function previewChangedSlice(text: string, common: { prefix: number; suffix: number }, args: Args): string {
+	const end = common.suffix ? text.length - common.suffix : text.length;
+	const slice = text.slice(common.prefix, end).trim();
+	if (!slice) return "(empty)";
+	return JSON.stringify(preview(slice, args.full, 360));
+}
+
+function previewXmlBlock(text: string, args: Args): string {
+	return JSON.stringify(preview(text.trim(), args.full, 500));
 }
 
 function lcmSummaryLocations(payload: Record<string, unknown>): string[] {

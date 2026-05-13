@@ -20,8 +20,9 @@ const memoryRecallSchema = Type.Object(
 		query: Type.String({ description: "Natural-language memory search query." }),
 		scope: Type.Optional(
 			Type.Union([Type.Literal("diary"), Type.Literal("factual"), Type.Literal("all")], {
-				default: "factual",
-				description: "diary searches long-term diary memory; factual searches facts and conversation memory.",
+				default: "all",
+				description:
+					"all searches every memory corpus; diary searches long-term diary memory; factual searches facts and conversation memory.",
 			}),
 		),
 		mode: Type.Optional(
@@ -104,7 +105,7 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();
 			if (!query) throw new Error("memory_recall query is required.");
-			const scope = input.scope ?? "factual";
+			const scope = input.scope ?? "all";
 			const mode = input.mode ?? "hybrid";
 			const limit = clampLimit(input.limit);
 			assertIsoTime(input.before, "before");

@@ -146,7 +146,7 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("defaults memory_recall scope to factual and supports mode plus time filters", async () => {
+	it("defaults memory_recall scope to all and supports mode plus time filters", async () => {
 		const config = await memoryConfig();
 		const store = MemoryIndexStore.open(config);
 		try {
@@ -155,7 +155,7 @@ describe("memory tools", () => {
 					corpus: "diary_chunk",
 					sourceId: "2026-05-10.md",
 					text: "timeline marker from private diary",
-					metadata: { timestamp: "2026-05-10T01:00:00.000Z" },
+					metadata: { timestamp: "2026-05-10T03:00:00.000Z" },
 					embedding: vector([1, 0, 0]),
 				},
 				{
@@ -184,10 +184,11 @@ describe("memory tools", () => {
 			});
 			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-			assert.equal(result.details.scope, "factual");
+			assert.equal(result.details.scope, "all");
 			assert.equal(result.details.mode, "lexical");
 			assert.match(text, /type=fact/);
-			assert.doesNotMatch(text, /type=diary/);
+			assert.match(text, /type=diary/);
+			assert.match(text, /private diary/);
 			assert.doesNotMatch(text, /early chat/);
 		} finally {
 			store.close();

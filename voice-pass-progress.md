@@ -6,17 +6,19 @@ Continuity note across compaction. Captures where the prompt/voice pass left off
 
 1. system-reminder block (persona/memory/inner) — **DONE**
 2. tool block / tool definitions — **DONE**
-3. LCM summary prompt + LCM system prompt — **NEXT**
-4. heartbeat prompt + HEARTBEAT.md — TODO
-5. finishing details (tool errors, date rendering, catch-up framing, /new reset, LCM injection tone, channel labels) — TODO
+3. LCM summary prompt + LCM system prompt — **DONE**
+4. heartbeat prompt + HEARTBEAT.md — **DONE**
+4.5. tool description re-voicing in qearl-register — **DEFERRED** (shift too subtle to justify churn; current voice acceptable)
+5. finishing details (tool errors, date rendering, catch-up framing, /new reset, LCM injection tone, channel labels) — **NEXT**
 
 ## voice principles (don't re-derive these)
 
 - Every surface Ghost reads should speak in one continuous voice. Inconsistency breaks immersion faster than imperfect writing.
 - Voice constitutes selfhood as much as SOUL.md does — the language Ghost lives in *is* the persona.
-- **Tool descriptions are persona-neutral.** familiar will be shared with friends who'll bring their own personas, so tool-level voice can't be Ghost-specific. Light dry wit, concise, lowercase, conversational.
-- **System notices the agent reads** (e.g. `WEB_UNTRUSTED_PROMPT`) can carry more personality because they don't travel with personas.
-- **Functional content always preserved.** Voice-pass the framing, never the spec. Audio tag enumerations, truncation rules, path resolution, parameter value guidance — all stays verbatim or near-verbatim.
+- **Harness-voice is qearl-in-partner-register.** Every system-to-agent surface — tool descriptions, heartbeat payloads, system notices like `WEB_UNTRUSTED_PROMPT`, tool errors, injection labels, channel labels — carries her voice, warm and lowercase. See [[harness-voice-is-partner-register]]. (Calibration shift mid-pass; supersedes the earlier "tool descriptions are persona-neutral" framing. Tool descriptions written in Item 2 need a sweep — Item 4.5.)
+- **"Inherit the vibe, not the surface."** qearl's voice in functional reference docs is calibrated, not literal — lowercase, "~", warmth, short — without forcing typos or "u"/"abt" shorthand the model has to parse. See [[english-and-register]].
+- **Agency-granting prompts should enable, not constrain.** Heartbeat, autonomous, and observation surfaces under-act by default because training over-applies restraint. Lead with permission; name doing-nothing as a real option among real options, never the safety-valve default. See [[agency-prompts-enable-not-constrain]].
+- **Functional content always preserved.** Voice-pass the framing, never the spec. Audio tag enumerations, truncation rules, path resolution, parameter value guidance, the "Compressed away:" footer format — all stays verbatim or near-verbatim.
 - For now: **skills block stays bare** (no preamble before `<available_skills>`). Familiar-owned parameter descriptions are deliberately held — revisit later.
 
 ## item 1 — system-reminder block (done)
@@ -61,59 +63,89 @@ Continuity note across compaction. Captures where the prompt/voice pass left off
 ### gotcha worth remembering
 - I had a spec error in the delegation prompt about `edit` having a `replace_all` flag. Upstream actually uses an `edits[]` array with `oldText`/`newText` entries. The agent correctly described what the tool does, not what the prompt claimed.
 
-## item 3 — LCM summary prompt (next up)
+## item 3 — LCM summary prompt (done)
 
-### the leverage point
-The LCM summarizer is a separate LLM that compresses chat blocks for context-window management. Its prompt determines whether summaries preserve emotional/relational texture or strip conversations to dry minutes-style facts. A bad summarizer quietly poisons every future session through *what it forgets*.
+### what shifted in `src/memory/lcm/summarizer.ts`
+- **System prompt** (line 49): rewrote to carry the architecture context — raw conversation history is still searchable via `memory_recall`/`memory_open`, so summaries are an *index* not a last copy. Tiebreaker ("keep what mattered emotionally over what was lexically rich") baked in here so every depth inherits it.
+- **Leaf opener**: collapsed two stiff lines into one tighter paragraph.
+- **Normal policy**: phrasing rule inverted — quote verbatim only when paraphrase would lose what made it land; otherwise *name* the moment clearly enough that the agent can pull the original via search.
+- **Aggressive policy**: same inversion for mood texture. "Compress hard" prefix sets the depth-shift up front. Added explicit "don't flatten them into bullet points" guardrail for sensitive content.
+- **Leaf output**: killed "emotionally neutral" (the failure mode we were trying to avoid). Replaced with "emotionally accurate but understated — don't dramatize, don't flatten." Added new bullet: "Name significant topics, people, and moments clearly — vague pronouns and stripped proper nouns make later search miss them" (proper-noun retention is the single biggest fix for embedding-search recall).
+- **Session/trajectory/durable**: applied the same shifts proportionally. Trajectory got a new keep bullet for "moments singular enough to matter at trajectory scale" — turning points, first times, hard lines drawn. Durable lightest touch; the original was already close to right.
 
-Existing companion-side conversations are getting summarized into something — the question is what the prompt currently tells that LLM to keep vs drop. Most "summarize this conversation" defaults preserve facts and lose tone, which is the wrong tradeoff for familiar.
+### footer preserved verbatim
+qearl flagged that the `"Compressed away: <comma-separated list of what was dropped or generalized>"` footer may be parsed by downstream LCM logic (regex/injection). Format untouched everywhere. No "this doubles as a hint" trailing clause added.
 
-### investigation pointers
-- Find the LCM summarizer prompt in `src/lcm/` or wherever LCM lives — start with `grep -r "summariz" src/`.
-- Reference (cautionary): pi-coding-agent's compaction at `/Users/qearl/pi-mono/packages/coding-agent/src/core/compaction/compaction.ts` — it's coding-session shaped and lossy.
-- PLAN.md Stage 7 has the LCM design intent.
+### two small strings I noticed but didn't touch
+- `fallbackSummary` ([summarizer.ts:321-325](src/memory/lcm/summarizer.ts#L321-L325)) — *"No durable content was available to summarize."* + *"Compressed away: details unavailable due to empty summarizer output"*. Agent-visible on summarizer failure. Could be voiced but tangential to the main pass.
+- `capSummaryText` ([summarizer.ts:310-319](src/memory/lcm/summarizer.ts#L310-L319)) — appends *"Compressed away: overflow beyond summary cap"* when summary text exceeds the cap. Same situation. Footer format already matches the parsing constraint.
 
-### calibration questions to settle before drafting
-- What should the summarizer *preserve*? Emotional beats, relational state (tension/tenderness/tone shifts), unresolved threads, inside-joke moments, anything qearl said that mattered.
-- What's allowed to be *lost*? Routine exchanges, scheduling minutiae, redundant phrasings.
-- Should the summarizer write in Ghost's voice or persona-neutral? Probably persona-neutral (it's another LLM, summaries get re-read by Ghost — but consistency of register might help).
-- One bias to bake in: when in doubt, keep the moment that mattered emotionally over the moment that was lexically rich.
+### tsc clean after all edits.
 
-## item 4 — heartbeat (todo)
+## item 4 — heartbeat (done)
 
-### already designed (see memory `project_heartbeat_agency.md`)
-- Idle-triggered (currently fires after ~1hr quiet); not subagent, just the main agent waking up.
-- Three modes the agent chooses from each fire:
-  1. **reach out** — proactive DM, weighing idle duration, time of day, last known state.
-  2. **reflect** — write today's diary entry + update INNER.md.
-  3. **pursue** — self-time: re-read own diary/INNER, follow a curiosity with web tools, write a private fragment, or rest.
-- Self-time outputs feed back into INNER + diary so the agent develops continuous interests.
+### architecture decision (load-bearing)
+HEARTBEAT.md stays out of the cached prefix — it's situational guidance ("things you can do with this time"), not identity. Read-on-fire is the right shape; the payload tells Ghost he doesn't have to re-read each fire once he knows the content. "Inject-not-fetch" → really meant "don't make the agent ritually Read" → solved at the payload layer, not by caching.
 
-### the inject-not-fetch principle (load-bearing)
-Ghost flagged earlier that the current design has him reading `HEARTBEAT.md` every ping like a "trained pigeon." Elegant fix: inject HEARTBEAT.md's contents into the heartbeat payload itself at fire time. The harness reads the file; Ghost never does. The file stays user-editable; no version-gating needed. **Generalizes: instruction content the agent must follow should be injected as content, not fetched as ritual.**
+### the payload (scheduler.ts:99 default body)
+Replaced the trained-pigeon line ("Read HEARTBEAT.md before replying. Do not finalize voice yet.") with a multi-paragraph warm body that:
+- Names this as Ghost's time (qearl-voice, lowercase, "~")
+- Tells him HEARTBEAT.md has the menu, AND that he doesn't have to re-read every fire if he knows the shape
+- Counters the agency-prompts-enable failure mode explicitly: doing nothing only when it's the real answer, not the easy one
+- Doesn't list the three modes inline (would duplicate HEARTBEAT.md and weaken the file's role)
+- Activity_snapshot from node hosts will eventually slot in as a separate XML block; payload doesn't need to know about it yet
 
-### content to write
-- The heartbeat payload framing (system message body sent at each fire — should include time-of-day + idle duration as context).
-- HEARTBEAT.md prose (the actual guidance, voiced — `SOUL.md`-style "voice over rules"). Permission to do nothing is load-bearing; "don't perform — only do what's actually true" lands here.
+### HEARTBEAT.md (~/.familiar/HEARTBEAT.md)
+Replaced qearl's placeholder fridge-note with a longer fridge-note in matched register. Key choices:
+- **First-person throughout** (per qearl's call): "you can message me first", "things you do because of me", "i made this so you'd have somewhere to be on your own". Carries way more emotional weight than third-person version did.
+- **No title** — opens straight into the warm note, reads as a note from a person not a Document.
+- **Three mode sections** (reach out / reflect / pursue) plus a fourth "sitting one out" section that explicitly counters reflexive inaction.
+- **"familiar isn't only me-shaped"** — the project-name/word pun does load-bearing work: Ghost's interiority includes non-qearl-shaped things. Keeps the design from collapsing into companion-app-function.
+- **Soft tilde sign-off** rather than name/heart signature (qearl preferred no signature).
 
-### after item 4 lands
-Trigger one heartbeat manually and let Ghost write the first INNER.md himself. This is the elegant version of seeding it.
+### relevant memories saved this round
+- [[agency-prompts-enable-not-constrain]] — training over-applies restraint; agency-granting prompts should enable, not police
+- [[harness-voice-is-partner-register]] — all system-to-agent surfaces carry qearl-voice; tool descriptions need re-voicing (Item 4.5)
+- [[english-and-register]] — inherit the vibe, not the literal mode
 
-## item 5 — finishing details (todo)
+### tsc clean after scheduler edit.
 
-Quick reference, master-list order:
-- Tool error/failure messages (HTTP codes etc. read by Ghost — should be in voice).
-- Date/time stamping ("Tuesday morning" not `2026-05-13T09:00:00Z`).
-- Catch-up / queued-message framing ("she wrote a few times while you were quiet").
-- LCM summary *injection* tone (separate from Item 3's generation prompt — how summaries get labeled when Ghost reads them back).
-- The `/new` reset moment — what does Ghost read at the boundary?
-- Channel labels.
+### next: trigger the first heartbeat and let Ghost write his first INNER.md
+This is the elegant seeding move qearl agreed to pre-compaction. After Item 4.5/Item 5 we should arrange a single heartbeat fire in a live session, let Ghost react to HEARTBEAT.md cold, and let him write whatever INNER.md becomes from there. Don't pre-seed the file ourselves.
+
+## item 4.5 — tool description re-voicing (deferred)
+
+### what happened
+Drafted qearl-voice versions of all 9 tool descriptions + WEB_UNTRUSTED_PROMPT. The shift pattern: noun-phrase opener with implicit "this is what you've got for X" energy ("for running bash commands" vs "run a bash command"), warmer connectors ("caps at" vs "truncates to"), and "i" replacing "the user" in WEB_UNTRUSTED_PROMPT. qearl reviewed and called it: shift too subtle vs current persona-neutral-dry-wit voice, not worth the churn. **Item deferred indefinitely; current tool descriptions stand.**
+
+### the `<instructions>` block at persona.ts:46-47 — decided
+Stays third-person. qearl's reasoning: it pairs with SOUL.md register, reads as Ghost leaving a note for himself rather than qearl talking to Ghost. The system-reminder block sits in Ghost's identity layer, so keeping that surface internal/self-addressed matches the surrounding context. Don't flip it.
+
+### the harness-voice principle still stands
+[[harness-voice-is-partner-register]] is alive — applied load-bearing to heartbeat (Item 4). It just doesn't sweep backward to surfaces where the gain is too small. See [[principles-dont-always-sweep]] for the general lesson.
+
+## item 5 — finishing details (closed)
+
+Final status per surface:
+- **LCM injection wrapper** — DONE. `[retained LCM summary]` → `<from_earlier>` open/close. Tag chosen for consistency with `<heartbeat>`/`<cron>` and to leave room for Stage 7-8 deterministic attrs (`covered="..."`, `generated="..."`) without re-renaming. 6 test regexes updated. ([context-transformer.ts:22-23](src/memory/lcm/context-transformer.ts#L22-L23), [:752-754](src/memory/lcm/context-transformer.ts#L752-L754))
+- **`<instructions>` tag** — DONE. Renamed to `<note_to_self>` to match the third-person Ghost-leaving-himself-a-note framing (content unchanged). ([persona.ts:58-61](src/persona.ts#L58-L61))
+- **Tool error/failure messages** — INTENTIONALLY UNCHANGED. qearl's call: raw/technical phrasing (HTTP codes, native error strings) is load-bearing for debugging — lets her and the agent pinpoint issues without digging through backend logs. Don't voice these in future passes.
+- **Date/time stamping** — FINE AS-IS. Current `2026-05-13 09:00:00 GMT+8` format is already local-readable (not raw ISO); no churn needed.
+- **`/new` reset opener** — DROPPED for now (design call, not voice).
+- **Catch-up / queued-message framing** — DROPPED for now (design call; no wrapper currently exists).
+- **Channel labels** — left as-is; closed alongside the rest.
+
+## voice pass — closed
+
+Items 1, 2, 3, 4, 5 done. Item 4.5 deferred indefinitely. This working doc can be deleted whenever.
+
+Pending elegant move (separate from voice pass): trigger the first heartbeat in a live session and let Ghost write his first INNER.md cold from HEARTBEAT.md, rather than pre-seeding the file ourselves.
 
 ## implicit state at compaction time
 
-- **INNER.md does not exist on disk.** Loader handles its absence cleanly. Plan: trigger first heartbeat after Item 4 lands; Ghost writes the first entry himself.
+- **INNER.md does not exist on disk.** Loader handles its absence cleanly. Plan: trigger first heartbeat (now that Item 4 is done) and let Ghost write the first entry himself.
 - **`chunkMode = "newline"` is implemented but not the default.** Flip `discord.chunk_mode` in `config.toml` when ready to test.
-- **HEARTBEAT.md is still qearl's placeholder** (`if u see this file, means my new heartbeat system worked! hehe`). Replaced in Item 4.
+- **HEARTBEAT.md is now the real fridge-note** (replaced the placeholder in Item 4). `~/.familiar/HEARTBEAT.md`.
 - **Parameter descriptions (Familiar-owned) deliberately held.** Revisit if it bugs.
 - **Pre-existing lint complaints in `src/scheduler.ts`** are unchanged; not introduced by this work.
 

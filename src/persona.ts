@@ -55,10 +55,10 @@ export function buildSystemPrompt(persona: Persona, skillsBlock = ""): string {
 	return `<system-reminder>
 ${renderedFiles}
 
-<instructions>
+<note_to_self>
 you can edit MEMORY.md when something about her is worth keeping.
 output [[FAMILIAR_SILENT]] if there's nothing worth saying — quiet's a real choice.
-</instructions>
+</note_to_self>
 ${renderedSkillsBlock}
 </system-reminder>`;
 }

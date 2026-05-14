@@ -46,7 +46,7 @@ export type LcmCompleteFn = (
 ) => Promise<AssistantMessage>;
 
 export const LCM_SUMMARIZER_SYSTEM_PROMPT =
-	"You are a private continuity summarizer. Preserve what helps the companion agent remember the user with care, accuracy, and emotional tact. Return plain text summary content only.";
+	"You write continuity memory for a companion agent — notes it reads back later to stay close to a real person it talks with. Raw conversation history is preserved separately; the agent can search it on demand. Summaries aren't the last copy of anything — they're the index that lets the agent know what to look up. Preserve emotional shape and retrieval scent. Keep the moments that mattered emotionally over the ones that were lexically rich. Accurate, specific, understated. Don't dramatize, don't flatten. Plain text only.";
 
 export class DefaultLcmSummarizer implements LcmSummarizer {
 	private readonly complete: LcmCompleteFn;
@@ -158,32 +158,33 @@ export function buildLeafSummaryPrompt(params: {
 	const policy =
 		params.mode === "aggressive"
 			? [
-					"Aggressive summary policy:",
-					"- Keep only durable emotional context, user preferences, explicit commitments, active plans, and facts likely to matter later.",
-					"- Remove repetition, transient wording, and momentary mood details unless they reveal an ongoing need or boundary.",
-					"- Preserve unresolved tensions, sensitive topics, and current support needs with careful wording.",
+					"Aggressive summary policy — compress hard.",
+					"- Keep the emotional throughline, the user's preferences and commitments, active plans, and anything likely to matter weeks from now.",
+					"- Keep the emotional shape of load-bearing moments, named clearly enough that the agent can find the original text in memory if it wants the detail. Drop the routine substrate around them.",
+					"- Preserve unresolved tensions, sensitive topics, and ongoing support needs. Handle them with care; don't flatten them into bullet points.",
+					"- Drop turn-by-turn narration and resolved small talk.",
 				].join("\n")
 			: [
 					"Normal summary policy:",
-					"- Preserve what helps the companion agent continue as a warm partner: user preferences, feelings, relationship context, promises, boundaries, plans, and decisions.",
-					"- Keep technical/project details only when they are part of the user's ongoing life, work, or shared context.",
-					"- Remove obvious repetition, filler, and private momentary phrasing that does not need to be remembered.",
+					"- Keep what helps the agent stay close to the user: how they're feeling, what they care about, what they've asked for, what they're working on, what's still open between them.",
+					"- Quote specific phrasing only when paraphrase would lose what made it land — otherwise, name the moment (a joke, a vulnerable line, a tone shift) clearly enough that the agent could pull the original via search. Drop routine acknowledgments, small-talk filler, and repeated rephrasings.",
+					"- Keep technical or project detail when it's part of the user's life or something they're carrying together. Drop it when it was passing through.",
 				].join("\n");
 	const instructionBlock = params.customInstructions?.trim()
 		? `Additional operator instructions:\n${params.customInstructions.trim()}`
 		: "Additional operator instructions: (none)";
 
 	return [
-		"You summarize a SEGMENT of a companion conversation for future model turns.",
-		"Treat this as incremental continuity memory, not a full transcript and not a coding handoff.",
+		"Summarize a SEGMENT of a companion conversation so the agent can pick the thread up later. Incremental continuity memory — not a transcript, not a coding handoff.",
 		policy,
 		instructionBlock,
 		[
-			"Output requirements:",
-			"- Plain text only.",
-			"- No preamble, headings, or markdown formatting.",
-			"- Keep it concise, specific, and emotionally neutral; do not dramatize or infer more than the segment supports.",
-			"- Mention files, commands, or implementation details only when they are needed for an active user goal.",
+			"Output:",
+			"- Plain text. No preamble, no headings, no markdown.",
+			"- Concise and specific. Emotionally accurate but understated — don't dramatize, don't flatten.",
+			"- Don't infer beyond what the segment supports.",
+			"- Name significant topics, people, and moments clearly — vague pronouns and stripped proper nouns make later search miss them.",
+			"- Mention files, commands, or implementation details only when they're load-bearing for something the user is actively doing.",
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`- Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens or less.`,
 		].join("\n"),
@@ -212,20 +213,21 @@ function buildSessionSummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are merging several recent memory notes into one session-level continuity memory.",
-		"Focus on what is new, changed, resolved, or still active across these notes.",
+		"You're merging several recent memory notes into one session-level continuity memory. Focus on what's new, changed, resolved, or still active across them.",
 		instructionBlock,
 		[
-			"Preserve:",
-			"- The user's preferences, boundaries, emotional state, and important relationship context.",
-			"- Active plans, promises, requests, open loops, and decisions that should be remembered.",
-			"- Work/project details only when they remain relevant for continuation.",
+			"Keep:",
+			"- The user's preferences, boundaries, emotional state, and what's actually been moving in the relationship.",
+			"- Active plans, promises, requests, open loops, decisions.",
+			"- Specific phrasing or moments when they were the thing that mattered — a line that landed, a tone shift, an inside reference.",
+			"- Work or project detail when it stays relevant going forward.",
 			"",
 			"Drop:",
-			"- Turn-by-turn narration, repeated reassurance, and resolved small talk.",
-			"- Tool/process details unless they affect the user's next step.",
+			"- Turn-by-turn narration, repeated reassurance, resolved small talk.",
+			"- Tool or process detail unless it shapes what the user does next.",
+			"- Intermediate phrasing that's been superseded by later wording.",
 			"",
-			"Use plain text. Brief structure is allowed if it improves scanability.",
+			"Plain text. Brief structure (short labels, light grouping) is fine if it helps the agent scan it later.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,
@@ -242,20 +244,20 @@ function buildTrajectorySummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are merging session-level memories into a trajectory-level continuity memory.",
-		"A future companion agent should understand the user's ongoing patterns and current state without replaying session minutiae.",
+		"You're merging session-level memories into a trajectory-level continuity memory. A future companion agent should be able to understand the user's ongoing patterns and current state without replaying session minutiae.",
 		instructionBlock,
 		[
-			"Preserve:",
-			"- Stable preferences, values, boundaries, and repeated emotional themes.",
+			"Keep:",
+			"- Stable preferences, values, boundaries, and recurring emotional themes (not single moments — patterns).",
 			"- Important changes in the user's plans, relationships, work, or self-understanding.",
 			"- Current unresolved needs, promises, risks, and active projects.",
+			"- Moments singular enough to matter at trajectory scale — a turning point, a first time, a hard line drawn.",
 			"",
 			"Drop:",
-			"- Session-local operational detail and short-lived mood shifts.",
+			"- Session-local operational detail and one-off mood shifts.",
 			"- Intermediate states superseded by later outcomes.",
 			"",
-			"Use plain text with concise labels if useful.",
+			"Plain text with concise labels if useful.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,
@@ -272,20 +274,19 @@ function buildDurableSummaryPrompt(params: {
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
 	return [
-		"You are creating a durable continuity memory from higher-level summaries.",
-		"This memory may persist for a long time. Keep only stable, useful context.",
+		"You're distilling higher-level summaries into a durable continuity memory. This may persist for a long time — keep only what stays true and useful.",
 		instructionBlock,
 		[
-			"Preserve:",
-			"- Durable facts about the user, their preferences, values, boundaries, and relationship with the companion agent.",
-			"- Long-running projects, commitments, unresolved tensions, and lessons learned.",
-			"- Important care instructions: what helps, what harms, and what should be handled gently.",
+			"Keep:",
+			"- Durable facts about the user — preferences, values, boundaries, and the shape of their relationship with the agent.",
+			"- Long-running projects, commitments, unresolved tensions, and lessons learned over time.",
+			"- Care instructions: what helps, what harms, what should be handled gently.",
 			"",
 			"Drop:",
-			"- Operational details, transient conversation flow, and details that no longer affect future support.",
+			"- Operational detail, transient conversation flow, and anything that no longer affects future support.",
 			"- Specific names, paths, or identifiers unless they remain essential.",
 			"",
-			"Use plain text. Be compact and careful.",
+			"Plain text. Be compact and careful.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,

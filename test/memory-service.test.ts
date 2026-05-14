@@ -497,7 +497,7 @@ describe("MemoryService", () => {
 				assert.equal(calls, 1);
 				assert.equal(first.length, 2);
 				assert.equal(first[0]?.role, "assistant");
-				assert.match(contentText(first[0]), /retained LCM summary/);
+				assert.match(contentText(first[0]), /<from_earlier>/);
 				assert.match(contentText(first[0]), /old alpha and beta/);
 				assert.equal(first[1]?.role, "user");
 				assert.match(contentText(first[1]), /fresh detail gamma/);
@@ -896,7 +896,7 @@ describe("MemoryService", () => {
 					},
 				);
 
-				assert.doesNotMatch(renderMessages(afterReset), /old detail alpha|old detail beta|retained LCM summary/);
+				assert.doesNotMatch(renderMessages(afterReset), /old detail alpha|old detail beta|<from_earlier>/);
 
 				const store = LcmStore.open(config);
 				try {
@@ -1079,7 +1079,7 @@ describe("MemoryService", () => {
 					undefined,
 					{ sessionKey: "room-rotate-invalidate", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
 				);
-				assert.match(renderMessages(firstTurn), /retained LCM summary/);
+				assert.match(renderMessages(firstTurn), /<from_earlier>/);
 
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
@@ -1095,7 +1095,7 @@ describe("MemoryService", () => {
 				);
 
 				assert.equal(afterReset.length, 1);
-				assert.doesNotMatch(renderMessages(afterReset), /retained LCM summary/);
+				assert.doesNotMatch(renderMessages(afterReset), /<from_earlier>/);
 				assert.match(renderMessages(afterReset), /brand new tail delta/);
 				assert.equal(service.lcmStore.listContextItems("room-rotate-invalidate").length, 1);
 			} finally {
@@ -1512,7 +1512,7 @@ describe("MemoryService", () => {
 				});
 
 				assert.equal(afterRestart.length, 2);
-				assert.match(contentText(afterRestart[0]), /retained LCM summary/);
+				assert.match(contentText(afterRestart[0]), /<from_earlier>/);
 				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
 				assert.doesNotMatch(renderMessages(afterRestart), /old detail alpha/);
 				assert.doesNotMatch(renderMessages(afterRestart), /old detail beta/);
@@ -1566,7 +1566,7 @@ describe("MemoryService", () => {
 				);
 
 				assert.equal(afterRestart.length, 3);
-				assert.match(contentText(afterRestart[0]), /retained LCM summary/);
+				assert.match(contentText(afterRestart[0]), /<from_earlier>/);
 				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
 				assert.match(renderMessages(afterRestart), /fresh detail gamma/);
 				assert.match(contentText(afterRestart[2]), /brand new tail delta/);

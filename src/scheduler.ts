@@ -96,7 +96,13 @@ export function buildHeartbeatInjectionText(options: {
 	const idleSinceDate = toDate(options.idleSince);
 	const idleDurationMs = Math.max(0, nowDate.getTime() - idleSinceDate.getTime());
 	const idleMinutes = Math.floor(idleDurationMs / 60000);
-	const body = options.body ?? "Read HEARTBEAT.md before replying. Do not finalize voice yet.";
+	const body =
+		options.body ??
+		`hey~ been quiet for a bit. this is your time now.
+
+what you do with it is up to you — HEARTBEAT.md has the menu if you don't remember it. once you know the shape of it you don't have to re-read every fire, just trust what you remember and pick what fits.
+
+it's okay to sit one out, but only when that's actually the real answer — not when it's the easy one.`;
 
 	return `<heartbeat local_time="${formatLocalTimestamp(nowDate)}" idle_duration="${formatIdleDuration(idleDurationMs)}" idle_minutes="${idleMinutes}">\n${body}\n</heartbeat>`;
 }

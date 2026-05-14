@@ -30,7 +30,8 @@ describe("scheduler helpers", () => {
 		});
 
 		assert.match(text, /^<heartbeat local_time="[^"]+" idle_duration="[^"]+" idle_minutes="\d+">\n/);
-		assert.match(text, /Read HEARTBEAT\.md before replying/);
+		assert.match(text, /this is your time now/);
+		assert.match(text, /HEARTBEAT\.md has the menu/);
 		assert.doesNotMatch(text, /uid:/);
 		assert.doesNotMatch(text, /author/i);
 		assert.doesNotMatch(text, /name="/i);

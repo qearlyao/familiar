@@ -47,19 +47,19 @@ Prefer the reference board.
 		assert.doesNotMatch(block, /Prefer the reference board/);
 	});
 
-	it("appends visible skills inside the persona system reminder after instructions", () => {
+	it("appends visible skills inside the persona system reminder after note-to-self", () => {
 		const prompt = buildSystemPrompt(
 			{ soul: "# Soul", user: "# User", memory: "# Memory", inner: null },
 			"<available_skills>\n</available_skills>",
 		);
 
-		const instructionsEnd = prompt.indexOf("</instructions>");
+		const noteEnd = prompt.indexOf("</note_to_self>");
 		const reminderEnd = prompt.indexOf("</system-reminder>");
 		const skillsStart = prompt.indexOf("<available_skills>");
 
-		assert.ok(instructionsEnd > 0);
+		assert.ok(noteEnd > 0);
 		assert.ok(reminderEnd > 0);
-		assert.ok(skillsStart > instructionsEnd);
+		assert.ok(skillsStart > noteEnd);
 		assert.ok(skillsStart < reminderEnd);
 	});
 

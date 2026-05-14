@@ -19,7 +19,8 @@ import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
 import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmSummary } from "./types.js";
 
-const LCM_SUMMARY_PREFIX = "[retained LCM summary]";
+const LCM_SUMMARY_OPEN_TAG = "<from_earlier>";
+const LCM_SUMMARY_CLOSE_TAG = "</from_earlier>";
 
 export interface LcmContextTransformOptions {
 	sessionKey?: string;
@@ -750,7 +751,7 @@ function renderMessageForSummary(message: AgentMessage): string {
 }
 
 function renderLcmSummaryMessage(text: string): string {
-	return `${LCM_SUMMARY_PREFIX}\n${text.trim()}`;
+	return `${LCM_SUMMARY_OPEN_TAG}\n${text.trim()}\n${LCM_SUMMARY_CLOSE_TAG}`;
 }
 
 function extractTextFromMessage(message: AgentMessage): string {

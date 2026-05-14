@@ -32,7 +32,8 @@ describe("LCM context helpers", () => {
 			targetTokens: 120,
 		});
 		assert.match(leaf, /companion conversation/);
-		assert.match(leaf, /preferences, feelings, relationship context/);
+		assert.match(leaf, /stay close to the user/);
+		assert.match(leaf, /what's still open between them/);
 		assert.doesNotMatch(leaf, /Files: none/);
 
 		const d2 = buildCondensedSummaryPrompt({

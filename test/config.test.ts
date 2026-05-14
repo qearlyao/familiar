@@ -219,6 +219,7 @@ retention_days = 7
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.agent.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.discord.chunkMode, "newline");
 		assert.equal(config.heartbeat.enabled, false);
 		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-7");
 		assert.ok(config.models.allow.includes(config.memory.lcm.model));

@@ -100,7 +100,7 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 		name: "memory_recall",
 		label: "Memory Recall",
 		description:
-			"Search memory for relevant diary, factual, or conversation chunks. Returns concise previews and ids; use memory_open for full text and source details.",
+			"search memory for diary, fact, or conversation chunks. returns previews and ids; use memory_open for full text and source details.",
 		parameters: memoryRecallSchema,
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();
@@ -139,7 +139,7 @@ function makeMemoryOpenTool(deps: MemoryToolDeps): AgentTool<typeof memoryOpenSc
 	return {
 		name: "memory_open",
 		label: "Memory Open",
-		description: "Open one stored memory chunk by id, returning full text plus concise source details.",
+		description: "open one stored memory chunk by id. returns the full text plus source details.",
 		parameters: memoryOpenSchema,
 		async execute(_toolCallId, input: MemoryOpenInput) {
 			const id = Math.trunc(input.id);

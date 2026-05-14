@@ -6,15 +6,30 @@ export interface Persona {
 	soul: string;
 	user: string;
 	memory: string;
+	inner: string | null;
+}
+
+function isMissingFile(error: unknown): boolean {
+	return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+async function readOptionalPersonaFile(path: string): Promise<string | null> {
+	try {
+		return await readFile(path, "utf8");
+	} catch (error) {
+		if (isMissingFile(error)) return null;
+		throw error;
+	}
 }
 
 export async function loadPersona(config: Config): Promise<Persona> {
-	const [soul, user, memory] = await Promise.all([
+	const [soul, user, memory, inner] = await Promise.all([
 		readFile(config.persona.soul, "utf8"),
 		readFile(config.persona.user, "utf8"),
 		readFile(config.persona.memory, "utf8"),
+		readOptionalPersonaFile(config.persona.inner),
 	]);
-	return { soul, user, memory };
+	return { soul, user, memory, inner };
 }
 
 type SystemPromptFile = {
@@ -33,6 +48,7 @@ export function buildSystemPrompt(persona: Persona, skillsBlock = ""): string {
 		{ name: "SOUL.md", contents: persona.soul },
 		{ name: "USER.md", contents: persona.user },
 		{ name: "MEMORY.md", contents: persona.memory },
+		...(persona.inner !== null ? [{ name: "INNER.md", contents: persona.inner }] : []),
 	];
 	const renderedFiles = files.map(renderSystemPromptFile).join("\n\n");
 	const renderedSkillsBlock = skillsBlock.trim() ? `\n\n${skillsBlock.trim()}` : "";
@@ -40,9 +56,8 @@ export function buildSystemPrompt(persona: Persona, skillsBlock = ""): string {
 ${renderedFiles}
 
 <instructions>
-If you learn something durable about the user, you may edit MEMORY.md to keep it. Stay yourself.
-Relative paths resolve from the workspace root; absolute paths and ~/... are also accepted.
-You may output [[FAMILIAR_SILENT]] to end the conversation without sending a visible reply, optionally followed by a short reason.
+you can edit MEMORY.md when something about her is worth keeping.
+output [[FAMILIAR_SILENT]] if there's nothing worth saying — quiet's a real choice.
 </instructions>
 ${renderedSkillsBlock}
 </system-reminder>`;

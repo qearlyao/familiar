@@ -227,6 +227,8 @@ function isAllowedInteractionChannel(
 	return interaction.channelId ? config.discord.allowedChannels.includes(interaction.channelId) : false;
 }
 
+const NEWLINE_BURST_DELAY_MS = 500;
+
 function chunkDiscordSimple(text: string, limit = 2000): string[] {
 	if (text.length <= limit) return [text || "(empty response)"];
 	const chunks: string[] = [];
@@ -244,6 +246,37 @@ function chunkDiscordSimple(text: string, limit = 2000): string[] {
 	return chunks;
 }
 
+function splitLongBlock(block: string, limit: number): string[] {
+	if (block.length <= limit) return [block];
+	const pieces: string[] = [];
+	let lineCurrent = "";
+	for (const line of block.split("\n")) {
+		const candidate = lineCurrent ? `${lineCurrent}\n${line}` : line;
+		if (candidate.length <= limit) {
+			lineCurrent = candidate;
+			continue;
+		}
+		if (lineCurrent) {
+			pieces.push(lineCurrent);
+			lineCurrent = "";
+		}
+		if (line.length <= limit) {
+			lineCurrent = line;
+			continue;
+		}
+		let remaining = line;
+		while (remaining.length > limit) {
+			let splitAt = remaining.lastIndexOf(" ", limit);
+			if (splitAt < Math.floor(limit * 0.6)) splitAt = limit;
+			pieces.push(remaining.slice(0, splitAt));
+			remaining = remaining.slice(splitAt).trimStart();
+		}
+		lineCurrent = remaining;
+	}
+	if (lineCurrent) pieces.push(lineCurrent);
+	return pieces;
+}
+
 function chunkDiscordParagraph(text: string, limit = 2000): string[] {
 	if (text.length <= limit) return [text || "(empty response)"];
 	const normalized = text.replace(/\r\n/g, "\n");
@@ -256,40 +289,9 @@ function chunkDiscordParagraph(text: string, limit = 2000): string[] {
 		current = "";
 	};
 
-	const splitLongBlock = (block: string): string[] => {
-		if (block.length <= limit) return [block];
-		const pieces: string[] = [];
-		let lineCurrent = "";
-		for (const line of block.split("\n")) {
-			const candidate = lineCurrent ? `${lineCurrent}\n${line}` : line;
-			if (candidate.length <= limit) {
-				lineCurrent = candidate;
-				continue;
-			}
-			if (lineCurrent) {
-				pieces.push(lineCurrent);
-				lineCurrent = "";
-			}
-			if (line.length <= limit) {
-				lineCurrent = line;
-				continue;
-			}
-			let remaining = line;
-			while (remaining.length > limit) {
-				let splitAt = remaining.lastIndexOf(" ", limit);
-				if (splitAt < Math.floor(limit * 0.6)) splitAt = limit;
-				pieces.push(remaining.slice(0, splitAt));
-				remaining = remaining.slice(splitAt).trimStart();
-			}
-			lineCurrent = remaining;
-		}
-		if (lineCurrent) pieces.push(lineCurrent);
-		return pieces;
-	};
-
 	for (const paragraph of paragraphs) {
 		if (!paragraph) continue;
-		for (const part of splitLongBlock(paragraph)) {
+		for (const part of splitLongBlock(paragraph, limit)) {
 			const candidate = current ? `${current}\n\n${part}` : part;
 			if (candidate.length <= limit) {
 				current = candidate;
@@ -303,8 +305,84 @@ function chunkDiscordParagraph(text: string, limit = 2000): string[] {
 	return chunks.length > 0 ? chunks : [normalized.slice(0, limit)];
 }
 
+function splitPreservingCodeFences(text: string): string[] {
+	const normalized = text.replace(/\r\n/g, "\n");
+	const segments: string[] = [];
+	const fence = /```/g;
+	let cursor = 0;
+	let inCode = false;
+	let buffer = "";
+
+	const flushParagraphs = (slab: string) => {
+		const parts = slab.split(/\n\n+/);
+		for (let i = 0; i < parts.length; i++) {
+			const part = parts[i];
+			if (i === 0) {
+				buffer += part;
+			} else {
+				if (buffer.trim()) segments.push(buffer);
+				buffer = part;
+			}
+		}
+	};
+
+	let match: RegExpExecArray | null;
+	// biome-ignore lint/suspicious/noAssignInExpressions: standard regex iteration
+	while ((match = fence.exec(normalized)) !== null) {
+		const slab = normalized.slice(cursor, match.index);
+		if (inCode) {
+			buffer += slab + match[0];
+			inCode = false;
+		} else {
+			flushParagraphs(slab);
+			buffer += match[0];
+			inCode = true;
+		}
+		cursor = match.index + match[0].length;
+	}
+	const tail = normalized.slice(cursor);
+	if (inCode) {
+		buffer += tail;
+	} else {
+		flushParagraphs(tail);
+	}
+	if (buffer.trim()) segments.push(buffer);
+
+	return segments.map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+}
+
+function chunkDiscordNewline(text: string, limit = 2000): string[] {
+	const segments = splitPreservingCodeFences(text);
+	if (segments.length === 0) return [];
+	const chunks: string[] = [];
+	for (const segment of segments) {
+		if (segment.length <= limit) {
+			chunks.push(segment);
+			continue;
+		}
+		for (const part of splitLongBlock(segment, limit)) {
+			if (part.trim()) chunks.push(part);
+		}
+	}
+	return chunks;
+}
+
 function chunkDiscord(config: Config, text: string): string[] {
-	return config.discord.chunkMode === "simple" ? chunkDiscordSimple(text) : chunkDiscordParagraph(text);
+	if (config.discord.chunkMode === "simple") return chunkDiscordSimple(text);
+	if (config.discord.chunkMode === "newline") return chunkDiscordNewline(text);
+	return chunkDiscordParagraph(text);
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function delayBetweenBurstChunks(config: Config, channel: DiscordChatChannel): Promise<void> {
+	if (config.discord.chunkMode !== "newline") return;
+	if (channel.isSendable()) {
+		void channel.sendTyping().catch(() => undefined);
+	}
+	await sleep(NEWLINE_BURST_DELAY_MS);
 }
 
 function normalizeOutboundText(text: string): string {
@@ -334,6 +412,7 @@ async function sendReply(
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
+		if (index > 0) await delayBetweenBurstChunks(config, message.channel);
 		const files =
 			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
 		let sent: Message;
@@ -373,6 +452,7 @@ async function sendChannelMessage(
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
+		if (index > 0) await delayBetweenBurstChunks(config, channel);
 		const files =
 			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
 		const sent = await channel.send(files.length > 0 ? { content: chunk, files } : chunk);

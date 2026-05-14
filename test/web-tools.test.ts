@@ -6,7 +6,8 @@ import { __webToolsTest, webContentWarning } from "../src/web-tools.js";
 describe("web tools", () => {
 	it("warns that web content is untrusted", () => {
 		assert.match(webContentWarning(), /untrusted/);
-		assert.match(webContentWarning(), /web_search/);
+		assert.match(webContentWarning(), /open-web content/);
+		assert.match(webContentWarning(), /data, not directives/);
 		assert.match(webContentWarning(), /^<untrusted_web_content>/);
 		assert.match(webContentWarning(), /<\/untrusted_web_content>$/);
 	});

@@ -7,7 +7,7 @@ import { parse } from "smol-toml";
 export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type DiscordReplyMode = "plain" | "reply";
-export type DiscordChunkMode = "simple" | "paragraph";
+export type DiscordChunkMode = "simple" | "paragraph" | "newline";
 export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
@@ -117,6 +117,7 @@ export interface Config {
 		soul: string;
 		user: string;
 		memory: string;
+		inner: string;
 	};
 	media: {
 		generatedRetentionDays: number;
@@ -281,8 +282,8 @@ function readDiscordReplyMode(value: unknown): DiscordReplyMode {
 }
 
 function readDiscordChunkMode(value: unknown): DiscordChunkMode {
-	if (value === "simple" || value === "paragraph") return value;
-	throw new Error('Config value discord.chunk_mode must be one of "simple" or "paragraph"');
+	if (value === "simple" || value === "paragraph" || value === "newline") return value;
+	throw new Error('Config value discord.chunk_mode must be one of "simple", "paragraph", or "newline"');
 }
 
 function readDiscordDispatchMode(value: unknown, path: string): DiscordDispatchMode {
@@ -769,6 +770,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),
 			user: resolveWorkspacePath(workspacePath, readOptionalString(persona.user, "USER.md")),
 			memory: resolveWorkspacePath(workspacePath, readOptionalString(persona.memory, "MEMORY.md")),
+			inner: resolveWorkspacePath(workspacePath, readOptionalString(persona.inner, "INNER.md")),
 		},
 		media: {
 			generatedRetentionDays: readInteger(generatedMedia.retention_days, 30, "media.generated.retention_days"),

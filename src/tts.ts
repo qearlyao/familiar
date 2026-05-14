@@ -106,7 +106,7 @@ export function createTtsTool(
 		name: "tts",
 		label: "tts",
 		description:
-			"Generate a speech audio attachment from text. Use when sending voice messages or speaking aloud. Custom bracketed tags are allowed; keep them short. Examples: voice tags like [laughs] or [whispers], sound effects like [applause] or [gunshot], and special tags like [sings] or [strong Manchester accent]. Place tags before the text they affect; combine tags when useful, like [excited][laughs].",
+			"synthesize text into a voice message. bracketed tags steer delivery — voice tags like [laughs] or [whispers], sound effects like [applause] or [gunshot], special tags like [sings] or [strong Manchester accent]. tags go before the text they affect; combine when useful, like [excited][laughs]. keep them short.",
 		parameters: ttsSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: TtsToolInput, signal?: AbortSignal) {

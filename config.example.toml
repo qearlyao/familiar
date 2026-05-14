@@ -2,7 +2,7 @@
 owner_id = "YOUR_DISCORD_USER_ID"
 allowed_channels = []
 reply_mode = "plain" # plain | reply
-chunk_mode = "paragraph" # simple | paragraph
+chunk_mode = "newline" # simple | paragraph | newline
 dm_mode = "steer" # steer | queue | collect
 channel_mode = "collect" # collect | queue | steer
 channel_trigger = "always" # mention | always

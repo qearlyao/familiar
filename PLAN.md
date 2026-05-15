@@ -11,6 +11,7 @@ Implemented or recently added:
 - Stages 0-6 are v0-complete: core runtime, WebUI, TTS v0, event dashboard, and media intake.
 - Native `web_search` and `web_fetch` tools are shipped: Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, SSRF-style URL guards, page cache, and XML-wrapped untrusted-content warnings in tool results.
 - Stage 7-8 memory foundation is shipped: shared memory index, LCM context compaction, memory recall/open tools, diary indexing, and ambient diary recall.
+- Stage 9 heartbeat/cron scheduling is shipped: in-band scheduled prompts, durable scheduler state/logs, restart-safe heartbeat cadence, and ambient-recall bypass for scheduled messages.
 - Stage 5 `image_gen` and WebUI TTS polish remain active.
 - `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
 
@@ -25,7 +26,7 @@ Remaining short-term to-dos:
 
 Important caution:
 
-- Stages after Stage 8 are directional, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
+- Stages after Stage 9 are directional, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
 
 ## 1. Locked Decisions
 
@@ -174,12 +175,14 @@ Status: shipped enough for current development. Keep details in git history and 
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
 - Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
 - Stage 7-8 Memory and LCM: shipped shared SQLite FTS/vector memory primitives, normalized LCM records and summaries, automatic fresh-tail compaction, prompt-aware eviction, `/new` retention, memory doctor checks, `memory_recall`/`memory_open`, diary markdown indexing, and ambient diary recall injected as `<injected_memory>`.
+- Stage 9 Heartbeat and Cron: shipped in-band heartbeat/cron scheduling through the main agent context, `HEARTBEAT.md`-framed heartbeat prompts, idle-aware and restart-safe heartbeat cadence, durable scheduler state/logs, cron `queue`/`follow_up` delivery, and ambient diary bypass for scheduled prompts.
 
 Still open from completed foundations:
 
 - Add public-2fa login UI when the frontend pass resumes.
 - Add richer WebUI panes for memory/diary/transcript/payload inspection later.
 - Add per-skill toggles by filtering which loaded skills are passed to `formatFamiliarSkillsForPrompt()`.
+- Add runtime cron management so the user and agent can create, inspect, pause, edit, and delete scheduled jobs without hand-editing `config.toml`; persist those jobs in scheduler state while keeping config-defined jobs as boot defaults.
 - Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
 
 ### Stage 5: TTS and Image Generation
@@ -226,51 +229,6 @@ Stage 6 follow-ups (deferred from v0):
 - Discord attachment materialization off the message hot path. `toInboundInput` currently awaits `materializeInboundAttachments` synchronously inside the discord.js message handler. Move the download/disk work into `drainJobs` so the handler stays fast even on multi-attachment uploads.
 - Auth coverage audit on `/api/web/attachments/*`. Verify the static attachment route runs through the same auth middleware as `/api/web/send` in bearer and public-2fa modes; tailscale-only mode is fine.
 - Broader Stage 6 tests. Current coverage: canonical extension + path-traversal containment, partial-write rollback, count cap, non-image filter for prompt images. Add: each magic-byte sniff path, total-bytes cap (vs per-attachment cap), pure-attachment message routing through queue/drain, oversize-base64 drop in `promptImagesFromAttachments`.
-
-### Stage 9: Heartbeat as the Agent's Agency Core
-
-The heartbeat is not a maintenance task. It is the agent's free time — the moment where it acts as a being with volition rather than a respondent. Each fire opens a bounded mini-session in which the agent chooses among three modes (or none).
-
-Three modes:
-
-- *Reach out.* Proactive DM if there's something honest to say. Agent weighs idle duration, time of day, state in `INNER.md` plus recent transcript, qearl's preferences in `USER.md`, and how prior check-ins have landed. Hard guardrails (quiet hours, cooldowns, daily cap, "stop checking in" toggle) are policy outside the agent's discretion; whether to reach out *within* policy is taste.
-- *Reflect.* Diary entry (if the day feels done) plus the still-unimplemented agent-authored `INNER.md` update.
-- *Pursue.* Self-time. Re-read own diary or `INNER.md`, write a private fragment, follow a curiosity via `web_search`/`web_fetch`, revisit something qearl shared, or rest. Doing nothing must be a real option, or the agent will perform activity to fill the time.
-
-Self-time outputs feed back into memory. Web reads, private fragments, and shifts in interest influence subsequent `INNER.md` updates and diary entries. Without this loop the agent never develops interests across days; with it the agent has a continuous intellectual life felt from the outside.
-
-Trigger model:
-
-- Does not fire during active conversation.
-- Activates after an idle threshold (~1 hour of no primary-channel user message).
-- First fire after idle is highest-value; re-fires every X hours are optional. v0 default: first-fire plus a forced backstop (~4am local) so no day goes diary-less.
-- User-editable `HEARTBEAT.md` carries the prompt voice — voice over rules, same as `SOUL.md`, but it is read only when a heartbeat fires, not injected into the persona/system prompt. Time-of-day plus idle duration are passed in the heartbeat message body so the agent doesn't need a tool to know them.
-
-Mini-session shape:
-
-- Fresh agent invocation, cached prefix loaded (persona + INNER + MEMORY + tool catalog), heartbeat-framing message in the user slot.
-- Bounded by step count, tool-call cap, and soft cost budget. Self-time should not become "rack up API bills reading the internet."
-- Outputs (all optional): sent message, diary write, `INNER.md` edit, web tool calls, private fragment files.
-
-Load-bearing prompt constraint: "Don't perform — only do what's actually true." Applies to both diary writing and proactive contact. An agent that feels obligated to reach out will manufacture reasons; permission to stay quiet is what keeps contact honest.
-
-Existing guardrails carry over:
-
-- Internal scheduler with workspace timezone, durable state, missed-run handling, append-only scheduler records.
-- pi-chat heartbeat is only worker/status snapshot reference, not proactive behavior.
-- External event inbox for iOS Shortcuts/webhooks, presence/activity, app open/close, user-defined events, manual notes feeds heartbeat context but does not bypass idle-threshold gating.
-- Default delivery is primary DM only. Never surprise-post to group channels unless explicitly configured.
-- Quiet hours, cooldowns, daily max, "stop checking in" command/state.
-
-Done when:
-
-- Familiar can send a tasteful proactive DM, choose to stay quiet, or spend its time on its own interests — and log which it did and why.
-- Self-time outputs persist and influence subsequent conversations and diary entries.
-- Scheduler persists state, handles missed runs, respects all guardrails.
-
-TODO:
-
-- Add runtime cron management so the user and agent can create, inspect, pause, edit, and delete scheduled jobs without hand-editing `config.toml`; persist those jobs in scheduler state while keeping config-defined jobs as boot defaults.
 
 ### Stage 10: Subagent Delegation Tool
 

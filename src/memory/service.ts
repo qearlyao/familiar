@@ -124,6 +124,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 				if (!filename) return;
 				this.scheduleDiaryIndex(String(filename));
 			});
+			this.scheduleDiaryCatchUpIndex();
 		} catch (error) {
 			if (isEnoent(error)) {
 				console.info(`diary watcher found no diary directory at ${this.config.memory.diariesDir}; disabled`);
@@ -201,6 +202,17 @@ class DefaultMemoryService implements MemoryOperatorService {
 			void this.indexDiarySource(sourceId);
 		}, this.diaryWatchDebounceMs);
 		this.diaryWatchTimers.set(sourceId, timer);
+	}
+
+	private scheduleDiaryCatchUpIndex(): void {
+		const timerKey = "__all__";
+		const existing = this.diaryWatchTimers.get(timerKey);
+		if (existing) clearTimeout(existing);
+		const timer = setTimeout(() => {
+			this.diaryWatchTimers.delete(timerKey);
+			void this.indexDiaries().catch((error) => console.error("diary watcher catch-up indexing failed", error));
+		}, this.diaryWatchDebounceMs);
+		this.diaryWatchTimers.set(timerKey, timer);
 	}
 
 	private async indexDiarySource(sourceId: string): Promise<void> {

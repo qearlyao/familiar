@@ -21,7 +21,6 @@ bind_address = "127.0.0.1"
 # browser-harness when you want Familiar to attach to your already-running Chrome.
 enabled = false
 backend = "opencli" # opencli | browser-harness
-command = "opencli" # legacy alias for opencli_command
 opencli_command = "opencli"
 harness_command = "browser-harness"
 session = "familiar"

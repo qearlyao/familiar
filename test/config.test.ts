@@ -54,7 +54,6 @@ describe("loadConfig tts", () => {
 		assert.deepEqual(config.browser, {
 			enabled: false,
 			backend: "opencli",
-			command: "opencli",
 			opencliCommand: "opencli",
 			harnessCommand: "browser-harness",
 			session: "familiar",
@@ -146,7 +145,7 @@ stability = 1.1
 			minimalConfigToml(`
 	[browser]
 	enabled = true
-	command = "opencli-dev"
+	opencli_command = "opencli-dev"
 	session = "familiar-main"
 	profile = "work"
 	window = "foreground"
@@ -164,7 +163,6 @@ stability = 1.1
 
 		assert.equal(config.browser.enabled, true);
 		assert.equal(config.browser.backend, "opencli");
-		assert.equal(config.browser.command, "opencli-dev");
 		assert.equal(config.browser.opencliCommand, "opencli-dev");
 		assert.equal(config.browser.harnessCommand, "browser-harness");
 		assert.equal(config.browser.session, "familiar-main");
@@ -191,7 +189,6 @@ stability = 1.1
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.browser.backend, "browser-harness");
-		assert.equal(config.browser.command, "opencli");
 		assert.equal(config.browser.opencliCommand, "opencli");
 		assert.equal(config.browser.harnessCommand, "browser-harness-dev");
 		assert.equal(config.browser.session, "personal");

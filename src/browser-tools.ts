@@ -84,7 +84,7 @@ const browserSchema = Type.Object(
 	{
 		mode: Type.Union([Type.Literal("page"), Type.Literal("site"), Type.Literal("list_commands")], {
 			description:
-				"page drives the current browser session; site runs an allowlisted site adapter; list_commands shows configured site commands.",
+				"Choose page for generic live-browser control of tabs/pages. Choose site for curated OpenCLI adapters on allowlisted services such as X/Twitter, Reddit, YouTube, Bilibili, TikTok/Douyin, Xiaohongshu/Rednote, or Spotify; site mode requires site, command, and optional args, and is best for service-specific tasks. Choose list_commands before site mode when you need to discover the configured site/command allowlist.",
 		}),
 		backend: Type.Optional(
 			Type.Union([Type.Literal("opencli"), Type.Literal("browser-harness")], {
@@ -691,7 +691,7 @@ export function createBrowserTools(
 			name: "browser",
 			label: "Browser",
 			description:
-				"drive a real browser through a bounded interface. mode=page for live page/session control; mode=site for allowlisted site adapters; mode=list_commands to see what those adapters expose.",
+				"drive a real browser through a bounded interface.",
 			parameters: browserSchema,
 			executionMode: "sequential",
 			async execute(_toolCallId, rawInput, signal?: AbortSignal) {
@@ -713,7 +713,7 @@ export function createBrowserTools(
 				return {
 					content: [{ type: "text", text }],
 					details: {
-						backend: config.browser.backend,
+						backend: result.backend,
 						mode: input.mode,
 						ok: result.ok,
 						exitCode: result.exitCode,

@@ -35,7 +35,6 @@ describe("browser tools", () => {
 		});
 
 		assert.equal(config.browser.backend, "opencli");
-		assert.equal(config.browser.command, "opencli");
 		assert.equal(config.browser.opencliCommand, "opencli");
 		assert.equal(config.browser.harnessCommand, "browser-harness");
 		assert.equal(config.browser.session, "familiar");
@@ -230,6 +229,40 @@ describe("browser tools", () => {
 		assert.equal(result.details?.backend, "browser-harness");
 		assert.deepEqual(result.details?.json, [{ targetId: "tab-1", title: "Inbox", url: "https://mail.example" }]);
 		assert.match(textFrom(result), /browser-harness ok/);
+	});
+
+	it("routes site mode through OpenCLI even when page mode uses browser-harness", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir, {
+			browser: { enabled: true, backend: "browser-harness", opencliCommand: "opencli-dev" },
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: spec.backend,
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: JSON.stringify({ items: [] }),
+				stderr: "",
+				json: { items: [] },
+				truncated: false,
+			};
+		});
+
+		const result = await tool.execute("call-1", {
+			mode: "site",
+			site: "reddit",
+			command: "saved",
+			args: { limit: 5 },
+		});
+
+		assert.equal(calls[0]?.backend, "opencli");
+		assert.equal(calls[0]?.command, "opencli-dev");
+		assert.deepEqual(calls[0]?.args, ["reddit", "saved", "--limit", "5", "-f", "json"]);
+		assert.equal(result.details?.backend, "opencli");
+		assert.match(textFrom(result), /OpenCLI ok/);
 	});
 
 	it("lists configured site commands without shelling out", async () => {

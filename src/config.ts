@@ -60,7 +60,6 @@ export interface Config {
 	browser: {
 		enabled: boolean;
 		backend: BrowserBackend;
-		command: string;
 		opencliCommand: string;
 		harnessCommand: string;
 		session: string;
@@ -864,8 +863,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		browser: {
 			enabled: readBoolean(browser.enabled, false, "browser.enabled"),
 			backend: readBrowserBackend(readOptionalString(browser.backend, "opencli")),
-			command: readOptionalString(browser.command, "opencli"),
-			opencliCommand: readOptionalString(browser.opencli_command, readOptionalString(browser.command, "opencli")),
+			opencliCommand: readOptionalString(browser.opencli_command, "opencli"),
 			harnessCommand: readOptionalString(browser.harness_command, "browser-harness"),
 			session: readOptionalString(browser.session, "familiar"),
 			profile: readOptionalString(browser.profile, "") || undefined,

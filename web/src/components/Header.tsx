@@ -1,4 +1,6 @@
-import { ThemeToggle } from "./ThemeToggle";
+import { Settings2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { NewChatButton } from "./NewChatButton";
 import { SessionPicker } from "./SessionPicker";
 import { cn } from "@/lib/utils";
 import type { ConnectionState, SessionInfo } from "@/lib/api";
@@ -15,13 +17,19 @@ export function Header({
   personaName,
   sessions,
   activeSessionKey,
+  channelKey,
   onSelectSession,
+  onOpenConfig,
+  onNewChatStarted,
 }: {
   connection: ConnectionState;
   personaName: string;
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
+  channelKey: string | undefined;
   onSelectSession: (key: string) => void;
+  onOpenConfig: () => void;
+  onNewChatStarted: () => void;
 }) {
   const live = connection === "open";
 
@@ -39,7 +47,18 @@ export function Header({
         <span className="font-serif text-lg leading-none tracking-tight">{personaName}</span>
         <div className="ml-auto flex items-center gap-1">
           <SessionPicker sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
-          <ThemeToggle />
+          <NewChatButton channelKey={channelKey} onStarted={onNewChatStarted} />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="settings"
+            title="settings"
+            className="size-8"
+            onClick={onOpenConfig}
+          >
+            <Settings2 className="size-4" />
+          </Button>
         </div>
       </div>
     </header>

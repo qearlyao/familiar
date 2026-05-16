@@ -57,6 +57,7 @@ export interface FamiliarAgent {
 	abort(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
+	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };
 	getModel(sessionKey: string): EffectiveSetting<string>;
 	getThinkingLevel(sessionKey: string): EffectiveSetting<string>;
 	setModel(sessionKey: string, input: string): Promise<string>;
@@ -548,6 +549,7 @@ export async function createFamiliarAgent(
 				"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
 			].join("\n");
 		},
+		resolveChannelModel,
 		getModel(sessionKey: string): EffectiveSetting<string> {
 			const { model, source } = resolveChannelModel(sessionKey);
 			return { value: formatModel(model), source };

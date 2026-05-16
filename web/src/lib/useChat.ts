@@ -53,6 +53,7 @@ export interface ChatHook {
   activeSessionKey: string | undefined;
   selectSession: (key: string) => void;
   send: (text: string, attachments?: File[]) => Promise<void>;
+  notifyNewChat: () => void;
 }
 
 export function useChat(): ChatHook {
@@ -291,5 +292,18 @@ export function useChat(): ChatHook {
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
 
-  return { messages, connection, personaName, sessions, activeSessionKey, selectSession, send };
+  const notifyNewChat = useCallback(() => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        role: "system",
+        who: "",
+        text: "started fresh",
+        ts: Date.now(),
+      },
+    ]);
+  }, []);
+
+  return { messages, connection, personaName, sessions, activeSessionKey, selectSession, send, notifyNewChat };
 }

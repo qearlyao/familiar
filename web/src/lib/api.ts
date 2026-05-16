@@ -123,3 +123,57 @@ export function streamUrl(channelKey?: string): string {
   const params = channelKey ? `?channelKey=${encodeURIComponent(channelKey)}` : "";
   return `${proto}//${window.location.host}/api/web/stream${params}`;
 }
+
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+export type SettingSource = "config" | "override";
+
+export interface AgentSettings {
+  model: { value: string; source: SettingSource };
+  thinking: { value: ThinkingLevel; source: SettingSource };
+  supportedThinking: ThinkingLevel[];
+  persona: { name: string };
+}
+
+export async function fetchAgentSettings(channelKey?: string): Promise<AgentSettings> {
+  const params = new URLSearchParams();
+  if (channelKey) params.set("channelKey", channelKey);
+  const res = await fetch(`/api/web/agent/settings${params.toString() ? `?${params.toString()}` : ""}`);
+  if (!res.ok) throw new Error(`agent/settings: ${res.status}`);
+  return (await res.json()) as AgentSettings;
+}
+
+export async function fetchAvailableModels(): Promise<string[]> {
+  const res = await fetch("/api/web/agent/models");
+  if (!res.ok) throw new Error(`agent/models: ${res.status}`);
+  const body = (await res.json()) as { models: string[] };
+  return body.models;
+}
+
+export async function updateAgentSettings(
+  channelKey: string,
+  changes: { model?: string; thinking?: ThinkingLevel },
+): Promise<AgentSettings> {
+  const res = await fetch("/api/web/agent/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channelKey, ...changes }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `agent/settings: ${res.status}`);
+  }
+  return (await res.json()) as AgentSettings;
+}
+
+export async function startNewChat(channelKey: string): Promise<void> {
+  const res = await fetch("/api/web/agent/new", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channelKey }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `agent/new: ${res.status}`);
+  }
+}

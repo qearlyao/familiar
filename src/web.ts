@@ -16,6 +16,7 @@ import type { Config, WebAuthMode } from "./config.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
+import { supportedThinkingLevels } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -341,6 +342,20 @@ function formatSetting<T>(setting: EffectiveSetting<T>): string {
 	return `${setting.value} (${setting.source})`;
 }
 
+function agentSettingsPayload(
+	familiarAgent: FamiliarAgent,
+	channelKey: string,
+	personaName: string,
+): Record<string, unknown> {
+	const { model } = familiarAgent.resolveChannelModel(channelKey);
+	return {
+		model: familiarAgent.getModel(channelKey),
+		thinking: familiarAgent.getThinkingLevel(channelKey),
+		supportedThinking: supportedThinkingLevels(model),
+		persona: { name: personaName },
+	};
+}
+
 function sessionDto(session: DiscordWebSession): Record<string, unknown> {
 	return {
 		key: session.key,
@@ -545,8 +560,8 @@ export async function startWebDaemon(
 				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
 					started = true;
 				}
-				updateAgentEventSummary(summary, event);
-				const storedEvent = storedAgentEventFromAgentEvent(event);
+				const storedEvent = storedAgentEventFromAgentEvent(event, summary);
+				updateAgentEventSummary(summary, storedEvent ?? event);
 				if (storedEvent) {
 					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
 					await recorder.record(storedEvent);
@@ -679,6 +694,15 @@ export async function startWebDaemon(
 				sendJson(response, 200, { messages: page, hasMore: safeEnd - limit > 0, channelKey: runtime.channelKey });
 				return true;
 			}
+			if (request.method === "GET" && url.pathname === "/api/web/agent/settings") {
+				const runtime = await getRuntime(getChannelKeyFromRequest(url));
+				sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+				return true;
+			}
+			if (request.method === "GET" && url.pathname === "/api/web/agent/models") {
+				sendJson(response, 200, { models: config.models.allow });
+				return true;
+			}
 			if (request.method === "POST" && url.pathname === "/api/web/send") {
 				const contentType = request.headers["content-type"] ?? "";
 				const isMultipart = Array.isArray(contentType)
@@ -721,6 +745,39 @@ export async function startWebDaemon(
 				await runtime.ingestInbound(input, { mode: "queue" });
 				void drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
 				sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
+				return true;
+			}
+			if (request.method === "POST" && url.pathname === "/api/web/agent/settings") {
+				const body = await readJsonBody(request);
+				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+				if (!isObject(body)) {
+					sendJson(response, 400, { error: "body is required" });
+					return true;
+				}
+				try {
+					if (typeof body.model === "string") await familiarAgent.setModel(runtime.channelKey, body.model);
+					if (typeof body.thinking === "string")
+						await familiarAgent.setThinkingLevel(runtime.channelKey, body.thinking);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					sendJson(response, 400, { error: message });
+					return true;
+				}
+				sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+				return true;
+			}
+			if (request.method === "POST" && url.pathname === "/api/web/agent/new") {
+				const body = await readJsonBody(request);
+				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+				await familiarAgent.reset(runtime.channelKey);
+				await runtime.resetConversation("new conversation requested from web");
+				publish({
+					type: "status",
+					channelKey: runtime.channelKey,
+					kind: "idle",
+					detail: "started fresh from web",
+				});
+				sendJson(response, 200, { ok: true });
 				return true;
 			}
 			if (request.method === "POST" && url.pathname === "/api/web/control") {

@@ -560,8 +560,8 @@ export async function startWebDaemon(
 				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
 					started = true;
 				}
-				const storedEvent = storedAgentEventFromAgentEvent(event, summary);
-				updateAgentEventSummary(summary, storedEvent ?? event);
+				updateAgentEventSummary(summary, event);
+				const storedEvent = storedAgentEventFromAgentEvent(event);
 				if (storedEvent) {
 					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
 					await recorder.record(storedEvent);

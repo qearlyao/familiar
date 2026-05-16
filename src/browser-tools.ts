@@ -36,6 +36,7 @@ const PAGE_ACTIONS = [
 	"extract",
 	"network",
 	"screenshot",
+	"tab",
 	"close",
 ] as const;
 type BrowserPageAction = (typeof PAGE_ACTIONS)[number];
@@ -74,7 +75,10 @@ const PAGE_ACTIONS_WITH_WINDOW_MODE = new Set<BrowserPageAction>([
 	"extract",
 	"network",
 	"screenshot",
+	"tab",
 ]);
+
+const WRITE_TAB_ACTIONS = new Set(["close", "new", "select"]);
 
 const browserSchema = Type.Object(
 	{
@@ -82,8 +86,14 @@ const browserSchema = Type.Object(
 			description:
 				"page drives the current browser session; site runs an allowlisted site adapter; list_commands shows configured site commands.",
 		}),
+		backend: Type.Optional(
+			Type.Union([Type.Literal("opencli"), Type.Literal("browser-harness")], {
+				description:
+					"Optional page backend override. opencli uses owned/adapter sessions; browser-harness attaches to the user's running Chrome via CDP.",
+			}),
+		),
 		action: Type.Optional(
-			Type.String({ description: "Page action such as state, open, click, type, screenshot, network." }),
+			Type.String({ description: "Page action such as state, open, click, type, screenshot, network, tab." }),
 		),
 		session: Type.Optional(
 			Type.String({ description: "OpenCLI browser session name. Defaults to browser.session." }),
@@ -105,6 +115,8 @@ const browserSchema = Type.Object(
 			Type.String({ description: "Sub-action for get, wait, network, dialog, or tab-like actions." }),
 		),
 		amount: Type.Optional(Type.Number({ description: "Scroll amount in pixels." })),
+		x: Type.Optional(Type.Number({ description: "Viewport x coordinate for browser-harness click." })),
+		y: Type.Optional(Type.Number({ description: "Viewport y coordinate for browser-harness click." })),
 		limit: Type.Optional(Type.Number({ description: "Result limit where supported." })),
 		offset: Type.Optional(Type.Number({ description: "Chunk offset for extract." })),
 		maxChars: Type.Optional(Type.Number({ description: "Maximum returned text characters." })),
@@ -121,7 +133,7 @@ type BrowserToolInput = Static<typeof browserSchema>;
 
 export interface BrowserCommandResult {
 	ok: boolean;
-	backend: "opencli";
+	backend: Config["browser"]["backend"];
 	command: string[];
 	exitCode: number;
 	stdout: string;
@@ -130,29 +142,46 @@ export interface BrowserCommandResult {
 	truncated: boolean;
 }
 
+export type BrowserRunSpec = {
+	command: string;
+	args: string[];
+	stdin?: string;
+	backend: Config["browser"]["backend"];
+};
+
 type BrowserRunner = (
-	args: string[],
+	spec: BrowserRunSpec,
 	options: { timeoutMs: number; signal?: AbortSignal },
 ) => Promise<BrowserCommandResult>;
 
-function defaultBrowserRunner(command: string): BrowserRunner {
-	return (args, options) =>
+function defaultBrowserRunner(): BrowserRunner {
+	return (spec, options) =>
 		new Promise((resolvePromise, reject) => {
-			const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+			const child = spawn(spec.command, spec.args, {
+				stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"] as ["pipe" | "ignore", "pipe", "pipe"],
+			});
 			const timeout = setTimeout(() => {
 				child.kill("SIGTERM");
-				reject(new Error(`OpenCLI command timed out after ${options.timeoutMs}ms.`));
+				reject(new Error(`Browser command timed out after ${options.timeoutMs}ms.`));
 			}, options.timeoutMs);
 			const abort = () => {
 				child.kill("SIGTERM");
 				reject(new Error("Browser command aborted."));
 			};
 			options.signal?.addEventListener("abort", abort, { once: true });
+			if (!child.stdout || !child.stderr) {
+				clearTimeout(timeout);
+				reject(new Error("Browser command failed to open stdout/stderr pipes."));
+				return;
+			}
 
 			const stdout: Buffer[] = [];
 			const stderr: Buffer[] = [];
 			child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
 			child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+			if (spec.stdin && child.stdin) {
+				child.stdin.end(spec.stdin);
+			}
 			child.on("error", (error) => {
 				clearTimeout(timeout);
 				options.signal?.removeEventListener("abort", abort);
@@ -165,8 +194,8 @@ function defaultBrowserRunner(command: string): BrowserRunner {
 				const errorOutput = Buffer.concat(stderr).toString("utf8");
 				resolvePromise({
 					ok: code === 0,
-					backend: "opencli",
-					command: [command, ...args],
+					backend: spec.backend,
+					command: [spec.command, ...spec.args],
 					exitCode: code ?? 1,
 					stdout: output,
 					stderr: errorOutput,
@@ -235,6 +264,10 @@ function outputLimit(input: BrowserToolInput, config: Config): number {
 	return Math.max(1000, Math.min(50_000, Math.trunc(requested)));
 }
 
+function stringField(value: unknown, field: string): string | undefined {
+	return isRecord(value) ? stringArg(value[field]) : undefined;
+}
+
 function truncateText(text: string, maxChars: number): { text: string; truncated: boolean } {
 	if (text.length <= maxChars) return { text, truncated: false };
 	return { text: `${text.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`, truncated: true };
@@ -246,8 +279,9 @@ function commandText(command: string[]): string {
 
 function formatBrowserResult(result: BrowserCommandResult, maxChars: number): { text: string; truncated: boolean } {
 	const body = result.stdout.trim() || result.stderr.trim() || "(no output)";
+	const label = result.backend === "opencli" ? "OpenCLI" : "browser-harness";
 	const header = [
-		`OpenCLI ${result.ok ? "ok" : "failed"} (exit ${result.exitCode})`,
+		`${label} ${result.ok ? "ok" : "failed"} (exit ${result.exitCode})`,
 		`Command: ${commandText(result.command)}`,
 	];
 	if (result.stderr.trim() && result.stdout.trim()) header.push(`stderr:\n${result.stderr.trim()}`);
@@ -270,9 +304,31 @@ function browserSession(input: BrowserToolInput, config: Config): string {
 	return session;
 }
 
+function pageBackend(input: BrowserToolInput, config: Config): Config["browser"]["backend"] {
+	return input.backend ?? config.browser.backend;
+}
+
 async function defaultScreenshotPath(): Promise<string> {
 	const dir = await ensureBrowserScreenshotsDir();
 	return resolve(dir, `browser_${randomUUID()}.png`);
+}
+
+function openCliSpec(config: Config, args: string[]): BrowserRunSpec {
+	return {
+		command: config.browser.opencliCommand,
+		args,
+		backend: "opencli",
+	};
+}
+
+function harnessSpec(input: BrowserToolInput, config: Config, script: string): BrowserRunSpec {
+	const envLines = [`import os`, `os.environ.setdefault("BU_NAME", ${JSON.stringify(browserSession(input, config))})`];
+	return {
+		command: config.browser.harnessCommand,
+		args: [],
+		stdin: `${envLines.join("\n")}\n${script}`,
+		backend: "browser-harness",
+	};
 }
 
 async function buildPageArgs(input: BrowserToolInput, config: Config): Promise<string[]> {
@@ -281,6 +337,7 @@ async function buildPageArgs(input: BrowserToolInput, config: Config): Promise<s
 		throw new Error(`Browser page action "${action}" is disabled until browser.read_write is true.`);
 	}
 	const args = [...baseArgs(config), "browser", browserSession(input, config)];
+	if (PAGE_ACTIONS_WITH_WINDOW_MODE.has(action)) args.push("--window", config.browser.windowMode);
 	switch (action) {
 		case "open": {
 			const url = stringArg(input.url);
@@ -372,6 +429,19 @@ async function buildPageArgs(input: BrowserToolInput, config: Config): Promise<s
 			args.push("screenshot");
 			args.push(await defaultScreenshotPath());
 			break;
+		case "tab": {
+			const kind = stringArg(input.kind) ?? "list";
+			if (!["close", "list", "new", "select"].includes(kind)) {
+				throw new Error(`Unsupported browser tab action: ${kind}`);
+			}
+			if (WRITE_TAB_ACTIONS.has(kind) && !config.browser.readWrite) {
+				throw new Error(`Browser tab action "${kind}" is disabled until browser.read_write is true.`);
+			}
+			args.push("tab", kind);
+			if (kind === "new" && input.url) args.push(String(input.url));
+			if ((kind === "close" || kind === "select") && input.target) args.push(String(input.target));
+			break;
+		}
 		case "bind":
 		case "unbind":
 		case "back":
@@ -381,8 +451,139 @@ async function buildPageArgs(input: BrowserToolInput, config: Config): Promise<s
 		default:
 			throw new Error(`Unsupported browser page action: ${action}`);
 	}
-	if (PAGE_ACTIONS_WITH_WINDOW_MODE.has(action)) args.push("--window", config.browser.windowMode);
 	return args;
+}
+
+function harnessJson(script: string): string {
+	return `import json\n${script}`;
+}
+
+function requireHarnessReadWrite(action: string, config: Config): void {
+	if (!config.browser.readWrite) {
+		throw new Error(`Browser page action "${action}" is disabled until browser.read_write is true.`);
+	}
+}
+
+async function buildHarnessSpec(input: BrowserToolInput, config: Config): Promise<BrowserRunSpec> {
+	const action = normalizeAction(input.action);
+	switch (action) {
+		case "state":
+			return harnessSpec(input, config, harnessJson(`print(json.dumps(page_info(), ensure_ascii=False))\n`));
+		case "tab": {
+			const kind = stringArg(input.kind) ?? "list";
+			if (kind === "list") {
+				return harnessSpec(
+					input,
+					config,
+					harnessJson(`print(json.dumps(list_tabs(include_chrome=False), ensure_ascii=False))\n`),
+				);
+			}
+			if (kind !== "select" && kind !== "new") {
+				throw new Error(`browser-harness does not support browser tab action: ${kind}`);
+			}
+			requireHarnessReadWrite(`tab ${kind}`, config);
+			if (kind === "select") {
+				const target = stringArg(input.target);
+				if (!target) throw new Error("browser-harness tab select requires target.");
+				return harnessSpec(
+					input,
+					config,
+					harnessJson(
+						`switch_tab(${JSON.stringify(target)})\nprint(json.dumps(current_tab(), ensure_ascii=False))\n`,
+					),
+				);
+			}
+			const url = stringArg(input.url) ?? "about:blank";
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(
+					`new_tab(${JSON.stringify(url)})\nwait_for_load()\nprint(json.dumps(current_tab(), ensure_ascii=False))\n`,
+				),
+			);
+		}
+		case "open": {
+			requireHarnessReadWrite(action, config);
+			const url = stringArg(input.url);
+			if (!url) throw new Error("browser page open requires url.");
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(
+					`new_tab(${JSON.stringify(url)})\nwait_for_load()\nprint(json.dumps(page_info(), ensure_ascii=False))\n`,
+				),
+			);
+		}
+		case "screenshot": {
+			const path = await defaultScreenshotPath();
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(
+					`path = capture_screenshot(${JSON.stringify(path)}, max_dim=1800)\nprint(json.dumps({"path": path}, ensure_ascii=False))\n`,
+				),
+			);
+		}
+		case "eval": {
+			requireHarnessReadWrite(action, config);
+			const jsText = stringArg(input.text);
+			if (!jsText) throw new Error("browser page eval requires text containing JavaScript.");
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(`print(json.dumps(js(${JSON.stringify(jsText)}), ensure_ascii=False))\n`),
+			);
+		}
+		case "click": {
+			requireHarnessReadWrite(action, config);
+			if (typeof input.x !== "number" || typeof input.y !== "number") {
+				throw new Error("browser-harness click requires x and y coordinates.");
+			}
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(
+					`click_at_xy(${JSON.stringify(input.x)}, ${JSON.stringify(input.y)})\nprint(json.dumps(page_info(), ensure_ascii=False))\n`,
+				),
+			);
+		}
+		case "type":
+		case "fill": {
+			requireHarnessReadWrite(action, config);
+			const text = stringArg(input.text);
+			if (!text) throw new Error(`browser page ${action} requires text.`);
+			const selector = stringArg(input.selector);
+			const body = selector
+				? `fill_input(${JSON.stringify(selector)}, ${JSON.stringify(text)}, timeout=5)\n`
+				: `type_text(${JSON.stringify(text)})\n`;
+			return harnessSpec(input, config, harnessJson(`${body}print(json.dumps(page_info(), ensure_ascii=False))\n`));
+		}
+		case "keys": {
+			requireHarnessReadWrite(action, config);
+			const key = stringArg(input.text);
+			if (!key) throw new Error("browser page keys requires text as the key.");
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(`press_key(${JSON.stringify(key)})\nprint(json.dumps(page_info(), ensure_ascii=False))\n`),
+			);
+		}
+		case "scroll": {
+			requireHarnessReadWrite(action, config);
+			const amount = typeof input.amount === "number" ? input.amount : 600;
+			const direction = stringArg(input.direction) ?? "down";
+			const delta = direction === "up" ? -Math.abs(amount) : Math.abs(amount);
+			return harnessSpec(
+				input,
+				config,
+				harnessJson(
+					`scroll(500, 500, dy=${JSON.stringify(delta)})\nprint(json.dumps(page_info(), ensure_ascii=False))\n`,
+				),
+			);
+		}
+		default:
+			throw new Error(`browser-harness does not support browser page action: ${action}`);
+	}
 }
 
 function siteAccess(config: Config, site: string, command: string): "read" | "write" | undefined {
@@ -423,6 +624,15 @@ function buildSiteArgs(input: BrowserToolInput, config: Config): string[] {
 	return args;
 }
 
+function buildRunSpec(input: BrowserToolInput, config: Config): Promise<BrowserRunSpec> | BrowserRunSpec {
+	if (input.mode === "site") return openCliSpec(config, buildSiteArgs(input, config));
+	const backend = pageBackend(input, config);
+	if (backend === "opencli") {
+		return buildPageArgs(input, config).then((args) => openCliSpec(config, args));
+	}
+	return buildHarnessSpec(input, config);
+}
+
 function listCommands(input: BrowserToolInput, config: Config): string {
 	const site = stringArg(input.site);
 	const sites = site ? { [site]: config.browser.allowedSites[site] } : config.browser.allowedSites;
@@ -441,7 +651,7 @@ async function maybeAttachScreenshot(
 	result: BrowserCommandResult,
 ): Promise<{ attachmentName?: string }> {
 	if (input.mode !== "page" || input.action !== "screenshot" || !result.ok) return {};
-	const sourcePath = screenshotPathFromCommand(result.command);
+	const sourcePath = screenshotPathFromCommand(result.command) ?? stringField(result.json, "path");
 	if (!sourcePath) return {};
 	const fileStat = await stat(sourcePath).catch(() => undefined);
 	if (!fileStat?.isFile()) return {};
@@ -473,7 +683,7 @@ function screenshotPathFromCommand(command: string[]): string | undefined {
 export function createBrowserTools(
 	config: Config,
 	mediaSink: GeneratedMediaSink,
-	runner: BrowserRunner = defaultBrowserRunner(config.browser.command),
+	runner: BrowserRunner = defaultBrowserRunner(),
 ): AgentTool<any>[] {
 	if (!config.browser.enabled) return [];
 	return [
@@ -490,11 +700,11 @@ export function createBrowserTools(
 				if (input.mode === "list_commands") {
 					return {
 						content: [{ type: "text", text: listCommands(input, config) }],
-						details: { backend: config.browser.backend, mode: "list_commands" },
+						details: { backend: "opencli", mode: "list_commands" },
 					};
 				}
-				const args = input.mode === "page" ? await buildPageArgs(input, config) : buildSiteArgs(input, config);
-				const result = await runner(args, { timeoutMs: config.browser.timeoutMs, signal });
+				const spec = await buildRunSpec(input, config);
+				const result = await runner(spec, { timeoutMs: config.browser.timeoutMs, signal });
 				const attachment = await maybeAttachScreenshot(input, config, mediaSink, result);
 				const formatted = formatBrowserResult(result, maxChars);
 				const text = attachment.attachmentName
@@ -519,7 +729,9 @@ export function createBrowserTools(
 }
 
 export const __browserToolsTest = {
+	buildHarnessSpec,
 	buildPageArgs,
+	buildRunSpec,
 	buildSiteArgs,
 	formatBrowserResult,
 	listCommands,

@@ -55,6 +55,8 @@ describe("loadConfig tts", () => {
 			enabled: false,
 			backend: "opencli",
 			command: "opencli",
+			opencliCommand: "opencli",
+			harnessCommand: "browser-harness",
 			session: "familiar",
 			profile: undefined,
 			windowMode: "background",
@@ -161,7 +163,10 @@ stability = 1.1
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.browser.enabled, true);
+		assert.equal(config.browser.backend, "opencli");
 		assert.equal(config.browser.command, "opencli-dev");
+		assert.equal(config.browser.opencliCommand, "opencli-dev");
+		assert.equal(config.browser.harnessCommand, "browser-harness");
 		assert.equal(config.browser.session, "familiar-main");
 		assert.equal(config.browser.profile, "work");
 		assert.equal(config.browser.windowMode, "foreground");
@@ -169,6 +174,27 @@ stability = 1.1
 		assert.equal(config.browser.maxOutputChars, 9000);
 		assert.equal(config.browser.readWrite, true);
 		assert.deepEqual(config.browser.allowedSites, { twitter: { read: ["timeline"], write: ["post"] } });
+	});
+
+	it("loads browser-harness browser backend settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+	[browser]
+	enabled = true
+	backend = "browser-harness"
+	harness_command = "browser-harness-dev"
+	session = "personal"
+	`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.browser.backend, "browser-harness");
+		assert.equal(config.browser.command, "opencli");
+		assert.equal(config.browser.opencliCommand, "opencli");
+		assert.equal(config.browser.harnessCommand, "browser-harness-dev");
+		assert.equal(config.browser.session, "personal");
 	});
 
 	it("rejects invalid browser settings", async () => {

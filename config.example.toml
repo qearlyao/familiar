@@ -17,18 +17,20 @@ totp_secret = "${FAMILIAR_WEB_TOTP_SECRET:-}"
 bind_address = "127.0.0.1"
 
 [browser]
-# Real-browser control through OpenCLI. Requires `opencli` plus the Browser Bridge
-# extension/daemon on the host, or an SSH reverse tunnel to a Mac daemon.
+# Real-browser control. Use OpenCLI for site adapters/owned sessions, or
+# browser-harness when you want Familiar to attach to your already-running Chrome.
 enabled = false
-backend = "opencli"
-command = "opencli"
+backend = "opencli" # opencli | browser-harness
+command = "opencli" # legacy alias for opencli_command
+opencli_command = "opencli"
+harness_command = "browser-harness"
 session = "familiar"
 # profile = "work"
 window = "background" # foreground | background
 timeout_ms = 60000
 max_output_chars = 12000
 # Keep false until you explicitly want the agent to click/type/close sessions or run write adapters.
-read_write = true
+read_write = false
 
 # By default Familiar exposes a read-only allowlist for twitter/x, xiaohongshu,
 # rednote, reddit, bilibili, youtube, tiktok, douyin, and spotify.

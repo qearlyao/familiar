@@ -16,7 +16,7 @@ export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
-export type BrowserBackend = "opencli";
+export type BrowserBackend = "opencli" | "browser-harness";
 
 const loggedConfigWarnings = new Set<string>();
 
@@ -61,6 +61,8 @@ export interface Config {
 		enabled: boolean;
 		backend: BrowserBackend;
 		command: string;
+		opencliCommand: string;
+		harnessCommand: string;
 		session: string;
 		profile?: string;
 		windowMode: "foreground" | "background";
@@ -342,8 +344,8 @@ function readMemoryEmbeddingFormat(value: unknown, path = "memory.embedding.form
 }
 
 function readBrowserBackend(value: unknown): BrowserBackend {
-	if (value === "opencli") return value;
-	throw new Error('Config value browser.backend must be "opencli"');
+	if (value === "opencli" || value === "browser-harness") return value;
+	throw new Error('Config value browser.backend must be "opencli" or "browser-harness"');
 }
 
 function readBrowserWindowMode(value: unknown): "foreground" | "background" {
@@ -863,6 +865,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			enabled: readBoolean(browser.enabled, false, "browser.enabled"),
 			backend: readBrowserBackend(readOptionalString(browser.backend, "opencli")),
 			command: readOptionalString(browser.command, "opencli"),
+			opencliCommand: readOptionalString(browser.opencli_command, readOptionalString(browser.command, "opencli")),
+			harnessCommand: readOptionalString(browser.harness_command, "browser-harness"),
 			session: readOptionalString(browser.session, "familiar"),
 			profile: readOptionalString(browser.profile, "") || undefined,
 			windowMode: readBrowserWindowMode(readOptionalString(browser.window, "background")),

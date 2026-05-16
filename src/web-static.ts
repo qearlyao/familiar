@@ -5,7 +5,7 @@ import { extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Config } from "./config.js";
-import { attachmentsDir, generatedAttachmentsDir } from "./generated-media.js";
+import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "./generated-media.js";
 import { sendText } from "./web-http.js";
 
 function getProjectRoot(): string {
@@ -53,11 +53,15 @@ export async function serveAttachment(config: Config, response: ServerResponse, 
 		sendText(response, 404, "Not found");
 		return true;
 	}
-	const candidates = [generatedAttachmentsDir(config), attachmentsDir(config)];
-	for (const root of candidates) {
+	const candidates = [
+		{ root: generatedAttachmentsDir(config), relativePath },
+		{ root: attachmentsDir(config), relativePath },
+		{ root: browserScreenshotsDir(), relativePath: relativePath.replace(/^screenshot[\\/]/, "") },
+	];
+	for (const { root, relativePath: candidateRelativePath } of candidates) {
 		const rootRealPath = await realpath(root).catch(() => undefined);
 		if (!rootRealPath) continue;
-		const filePath = resolve(root, relativePath);
+		const filePath = resolve(root, candidateRelativePath);
 		const rel = relative(root, filePath);
 		if (rel.startsWith("..") || rel.startsWith("/") || rel.startsWith("\\") || rel === "") {
 			sendText(response, 403, "Forbidden");

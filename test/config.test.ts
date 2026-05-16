@@ -51,6 +51,18 @@ describe("loadConfig tts", () => {
 			pollMs: 60_000,
 			jobs: [],
 		});
+		assert.deepEqual(config.browser, {
+			enabled: false,
+			backend: "opencli",
+			command: "opencli",
+			session: "familiar",
+			profile: undefined,
+			windowMode: "background",
+			timeoutMs: 60_000,
+			maxOutputChars: 12_000,
+			readWrite: false,
+			allowedSites: config.browser.allowedSites,
+		});
 		assert.deepEqual(config.tts.voiceSettings, {
 			stability: 0.5,
 			similarityBoost: 0.75,
@@ -124,6 +136,51 @@ stability = 1.1
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.voice_settings\.stability/);
+	});
+
+	it("loads browser settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+	[browser]
+	enabled = true
+	command = "opencli-dev"
+	session = "familiar-main"
+	profile = "work"
+	window = "foreground"
+	timeout_ms = 120000
+	max_output_chars = 9000
+	read_write = true
+
+	[browser.sites.twitter]
+	read = ["timeline"]
+	write = ["post"]
+	`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.browser.enabled, true);
+		assert.equal(config.browser.command, "opencli-dev");
+		assert.equal(config.browser.session, "familiar-main");
+		assert.equal(config.browser.profile, "work");
+		assert.equal(config.browser.windowMode, "foreground");
+		assert.equal(config.browser.timeoutMs, 120000);
+		assert.equal(config.browser.maxOutputChars, 9000);
+		assert.equal(config.browser.readWrite, true);
+		assert.deepEqual(config.browser.allowedSites, { twitter: { read: ["timeline"], write: ["post"] } });
+	});
+
+	it("rejects invalid browser settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+	[browser]
+	backend = "other"
+	`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /browser\.backend/);
 	});
 
 	it("loads generated media retention settings", async () => {

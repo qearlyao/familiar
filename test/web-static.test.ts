@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { describe, it } from "node:test";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { generatedAttachmentsDir } from "../src/generated-media.js";
 import { serveAttachment } from "../src/web-static.js";
@@ -52,6 +53,22 @@ describe("serveAttachment", () => {
 		assert.equal(handled, true);
 		assert.equal(response.statusCode, 200);
 		assert.equal(response.headers?.["content-type"], "audio/mpeg");
+	});
+
+	it("serves browser screenshot files", async () => {
+		const root = await createTempDataDir();
+		const config = await configWithDataDir(root);
+		const dir = resolve(homedir(), ".familiar", "data", "attachments", "screenshot");
+		await rm(dir, { recursive: true, force: true });
+		await mkdir(dir, { recursive: true });
+		await writeFile(resolve(dir, "screen.png"), "png", "utf8");
+		const response = new FakeResponse();
+
+		const handled = await serveAttachment(config, response as any, "/api/web/attachments/screenshot/screen.png");
+
+		assert.equal(handled, true);
+		assert.equal(response.statusCode, 200);
+		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
 	it("rejects traversal attempts", async () => {

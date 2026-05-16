@@ -44,7 +44,8 @@ Important caution:
   - Prioritize output/media tools now; postpone `task`/subagent delegation.
   - Keep one compact `browser` tool with structured actions later.
 - Upstream coding-agent currently does not ship dedicated `web_fetch` or `web_search` tool factories; its built-in factories remain local workspace tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). Familiar owns server-side web search/fetch unless upstream adds a first-class web tool later.
-- Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local, remote sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, etc.
+- Browser/computer-use is moving quickly across agent providers. Familiar should own the stable `browser` contract and use external browser extensions, CDP bridges, or provider-native computer-use as backend implementations, without exposing the full upstream tool surface to the model.
+- Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local OpenCLI, Mac sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, provider computer-use, etc.
 - WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door. Product direction: WebUI becomes the full information stream and dashboard for messages, reasoning, tool activity, memory, diagnostics, and generated media.
 - Discord remains a clean chat delivery adapter by default: show final assistant text and outbound media only. Do not expose thinking blocks or verbose tool lifecycle details in Discord unless a future explicit debug mode asks for them.
 - Single-owner is locked. Extensibility means tools, channels, providers, triggers, memory adapters, and subagent personas, not multi-user account isolation.
@@ -245,11 +246,18 @@ Done when:
 ### Stage 11: Browser/Activity Backend and Mac Sidecar
 
 - Define browser/activity backend contract, not Mac-specific.
+- Keep the backend adapter thin and swappable; do not bake any one third-party browser toolkit into Familiar's model-facing API.
+- First backend candidate: extension/daemon bridge such as OpenCLI Browser Bridge for unattended Mac control, especially where raw CDP would require per-session browser consent.
+- Also track direct CDP and provider/upstream computer-use extensions as replaceable backends.
+- Preserve room for OpenCLI adapter surfaces beyond generic browser control: site adapters now, desktop app adapters and CLI Hub later. Familiar should adapt these through allowlisted backend commands rather than exposing OpenCLI wholesale.
 - Local backend for Windows/Linux/macOS installs where browser is on same host.
 - Optional `familiar-mac` sidecar for qearl's Mac.
-- Transport options: direct HTTP, reverse sidecar connection to VPS, or private networking such as Tailscale.
-- Keep implementation undecided until build time: Chrome DevTools MCP/CDP, mature CLI repos, native automation, Playwright only if best.
+- Current remote-browser bridge: keep Chrome, OpenCLI extension, and OpenCLI daemon on the Mac; use an SSH reverse tunnel so VPS-local `127.0.0.1:19825` reaches the Mac daemon. Remote VPS OpenCLI cannot bootstrap the Mac daemon.
+- Future `familiar-mac` sidecar should own Mac-local dependencies and permissions: OpenCLI, Chrome extension, desktop adapters, AppleScript/Accessibility, screen/camera capture, and computer-use primitives.
+- Transport options: SSH reverse tunnel for current OpenCLI daemon forwarding; later authenticated sidecar transport via reverse connection to VPS, direct private HTTP, or Tailscale.
+- Implementation engine remains undecided until build time: OpenCLI-style extension bridge, Chrome DevTools MCP/CDP, mature CLI repos, native automation, provider computer-use, Playwright only if best.
 - Activity signals can include foreground app/window, idle/lock state, screen summary, and safe user-defined automation events.
+- Do not expose raw CDP, OpenCLI daemon ports, or browser extension control endpoints publicly; require private networking, reverse tunnel/sidecar connection, or equivalent auth.
 
 Done when:
 
@@ -259,7 +267,12 @@ Done when:
 
 - One `browser` tool with structured actions like `navigate`, `eval`, `read_visible`, `screenshot`, `screen_read`, `activity`.
 - Prefer one tool with actions over many narrow browser tools.
+- Expose only Familiar-curated actions and bounded outputs, even if the backend supports much more.
+- Add a curated `site_command` path for high-value OpenCLI adapters, with read commands enabled separately from write commands.
+- Initial recurring-site allowlist candidates: `twitter`/X, `xiaohongshu`/`rednote`, `reddit`, `bilibili`, `youtube`, `tiktok`, `douyin`, and `spotify`.
+- Make the allowlist data-driven so adding a new OpenCLI site/command later is a config or small adapter-table change, not a redesign.
 - Backend adapters for local host mode and remote sidecar mode.
+- Near-term implementation may shell out to local `opencli`; sidecar mode later should move command execution onto the Mac while keeping the same Familiar-facing `browser` schema and allowlist.
 - Keep real browser control separate from the already-shipped server-side `web_search`/`web_fetch` tools.
 - Activity reads for Stage 9 should usually be scheduler context, but may be exposed through the compact `browser` surface if useful.
 - Conservative truncation and attachment handling.

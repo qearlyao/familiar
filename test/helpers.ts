@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { type Config, loadConfig } from "../src/config.js";
 
 type ConfigOverrides = Partial<{
-	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory">]: Partial<Config[K]>;
+	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser">]: Partial<Config[K]>;
 }> & {
 	data?: {
 		chat?: Partial<Config["data"]["chat"]>;
@@ -14,6 +14,7 @@ type ConfigOverrides = Partial<{
 	};
 	heartbeat?: Partial<Config["heartbeat"]>;
 	cron?: Partial<Config["cron"]>;
+	browser?: Partial<Config["browser"]>;
 	memory?: Omit<Partial<Config["memory"]>, "embedding" | "lcm"> & {
 		embedding?: Partial<Config["memory"]["embedding"]>;
 		lcm?: Partial<Config["memory"]["lcm"]>;
@@ -64,6 +65,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			...overrides,
 			discord: { ...config.discord, ...overrides.discord },
 			web: { ...config.web, ...overrides.web },
+			browser: { ...config.browser, ...overrides.browser },
 			agent: { ...config.agent, ...overrides.agent },
 			heartbeat: { ...config.heartbeat, ...overrides.heartbeat },
 			cron: { ...config.cron, ...overrides.cron },

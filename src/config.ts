@@ -16,6 +16,7 @@ export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
+export type BrowserBackend = "opencli";
 
 const loggedConfigWarnings = new Set<string>();
 
@@ -55,6 +56,18 @@ export interface Config {
 		bearerToken?: string;
 		totpSecret?: string;
 		bindAddress: string;
+	};
+	browser: {
+		enabled: boolean;
+		backend: BrowserBackend;
+		command: string;
+		session: string;
+		profile?: string;
+		windowMode: "foreground" | "background";
+		timeoutMs: number;
+		maxOutputChars: number;
+		readWrite: boolean;
+		allowedSites: Record<string, { read: string[]; write: string[] }>;
 	};
 	agent: {
 		model: string;
@@ -328,6 +341,16 @@ function readMemoryEmbeddingFormat(value: unknown, path = "memory.embedding.form
 	throw new Error(`Config value ${path} must be one of "gemini", "openai", or "voyage"`);
 }
 
+function readBrowserBackend(value: unknown): BrowserBackend {
+	if (value === "opencli") return value;
+	throw new Error('Config value browser.backend must be "opencli"');
+}
+
+function readBrowserWindowMode(value: unknown): "foreground" | "background" {
+	if (value === "foreground" || value === "background") return value;
+	throw new Error('Config value browser.window must be one of "foreground" or "background"');
+}
+
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
 	if (typeof value === "boolean") return value;
@@ -519,6 +542,143 @@ function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
 	});
 }
 
+function readBrowserAllowedSites(browser: Record<string, unknown>): Config["browser"]["allowedSites"] {
+	const rawSites = browser.sites;
+	if (rawSites === undefined) return defaultBrowserAllowedSites();
+	if (!rawSites || typeof rawSites !== "object" || Array.isArray(rawSites)) {
+		throw new Error("Config value browser.sites must be a table");
+	}
+	const sites: Config["browser"]["allowedSites"] = {};
+	for (const [siteName, rawSite] of Object.entries(rawSites)) {
+		if (!rawSite || typeof rawSite !== "object" || Array.isArray(rawSite)) {
+			throw new Error(`Config value browser.sites.${siteName} must be a table`);
+		}
+		const site = rawSite as Record<string, unknown>;
+		assertKnownKeys(site, `browser.sites.${siteName}`, ["read", "write"]);
+		const read = readStringArray(site.read, `browser.sites.${siteName}.read`);
+		const write = readStringArray(site.write, `browser.sites.${siteName}.write`);
+		sites[siteName] = { read, write };
+	}
+	return sites;
+}
+
+function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {
+	return {
+		twitter: {
+			read: [
+				"article",
+				"bookmark-folders",
+				"bookmarks",
+				"following",
+				"likes",
+				"list-tweets",
+				"lists",
+				"notifications",
+				"profile",
+				"search",
+				"thread",
+				"timeline",
+				"trending",
+				"tweets",
+			],
+			write: [],
+		},
+		xiaohongshu: {
+			read: [
+				"comments",
+				"creator-note-detail",
+				"creator-notes",
+				"creator-notes-summary",
+				"creator-profile",
+				"creator-stats",
+				"feed",
+				"note",
+				"notifications",
+				"search",
+				"user",
+			],
+			write: [],
+		},
+		rednote: {
+			read: ["comments", "feed", "note", "notifications", "search", "user"],
+			write: [],
+		},
+		reddit: {
+			read: [
+				"frontpage",
+				"home",
+				"hot",
+				"popular",
+				"read",
+				"saved",
+				"search",
+				"subreddit",
+				"subreddit-info",
+				"upvoted",
+				"user",
+				"user-comments",
+				"user-posts",
+				"whoami",
+			],
+			write: [],
+		},
+		bilibili: {
+			read: [
+				"comments",
+				"dynamic",
+				"feed",
+				"following",
+				"history",
+				"hot",
+				"me",
+				"ranking",
+				"search",
+				"subtitle",
+				"user-videos",
+				"video",
+			],
+			write: [],
+		},
+		youtube: {
+			read: [
+				"channel",
+				"comments",
+				"feed",
+				"history",
+				"playlist",
+				"search",
+				"subscriptions",
+				"transcript",
+				"video",
+				"watch-later",
+			],
+			write: [],
+		},
+		tiktok: {
+			read: ["explore", "friends", "live", "notifications", "profile", "search", "user"],
+			write: [],
+		},
+		douyin: {
+			read: [
+				"activities",
+				"collections",
+				"drafts",
+				"hashtag",
+				"location",
+				"profile",
+				"stats",
+				"user-videos",
+				"videos",
+			],
+			write: [],
+		},
+		spotify: {
+			read: ["search", "status"],
+			write: [],
+		},
+	};
+}
+
 export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspacePath = resolve(workspacePathInput);
 	const configPath = resolve(workspacePath, "config.toml");
@@ -531,6 +691,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
+	const browser = (parsed.browser ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const heartbeat = (parsed.heartbeat ?? {}) as Record<string, unknown>;
 	const cron = (parsed.cron ?? {}) as Record<string, unknown>;
@@ -697,6 +858,18 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
 			totpSecret: readOptionalString(web.totp_secret, "") || undefined,
 			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),
+		},
+		browser: {
+			enabled: readBoolean(browser.enabled, false, "browser.enabled"),
+			backend: readBrowserBackend(readOptionalString(browser.backend, "opencli")),
+			command: readOptionalString(browser.command, "opencli"),
+			session: readOptionalString(browser.session, "familiar"),
+			profile: readOptionalString(browser.profile, "") || undefined,
+			windowMode: readBrowserWindowMode(readOptionalString(browser.window, "background")),
+			timeoutMs: readInteger(browser.timeout_ms, 60_000, "browser.timeout_ms", 1),
+			maxOutputChars: readInteger(browser.max_output_chars, 12_000, "browser.max_output_chars", 1000),
+			readWrite: readBoolean(browser.read_write, false, "browser.read_write"),
+			allowedSites: readBrowserAllowedSites(browser),
 		},
 		agent: {
 			model: agentModel,

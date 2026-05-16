@@ -7,6 +7,7 @@ import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
 
 import type { Config, ThinkingLevel } from "./config.js";
+import { createBrowserTools } from "./browser-tools.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import type { MemoryService } from "./memory/service.js";
 import {
@@ -333,6 +334,7 @@ function createFamiliarTools(
 		editTool,
 		createTtsTool(config, mediaSink),
 		...createWebTools(config),
+		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),
 	];
 }

@@ -89,11 +89,14 @@ const browserSchema = Type.Object(
 		backend: Type.Optional(
 			Type.Union([Type.Literal("opencli"), Type.Literal("browser-harness")], {
 				description:
-					"Optional page backend override. opencli uses owned/adapter sessions; browser-harness attaches to the user's running Chrome via CDP.",
+					"Optional page backend override. opencli uses owned/adapter sessions and can work unattended through Browser Bridge without a local remote-debugging consent click; browser-harness attaches to the user's running Chrome via CDP.",
 			}),
 		),
 		action: Type.Optional(
-			Type.String({ description: "Page action such as state, open, click, type, screenshot, network, tab." }),
+			Type.String({
+				description:
+					"Page action to run. browser-harness supports only state/tab/open/screenshot/eval/click/type/fill/keys/scroll; opencli supports the full action set.",
+			}),
 		),
 		session: Type.Optional(
 			Type.String({ description: "OpenCLI browser session name. Defaults to browser.session." }),
@@ -146,6 +149,7 @@ export type BrowserRunSpec = {
 	command: string;
 	args: string[];
 	stdin?: string;
+	env?: NodeJS.ProcessEnv;
 	backend: Config["browser"]["backend"];
 };
 
@@ -159,6 +163,7 @@ function defaultBrowserRunner(): BrowserRunner {
 		new Promise((resolvePromise, reject) => {
 			const child = spawn(spec.command, spec.args, {
 				stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"] as ["pipe" | "ignore", "pipe", "pipe"],
+				env: spec.env,
 			});
 			const timeout = setTimeout(() => {
 				child.kill("SIGTERM");
@@ -322,11 +327,11 @@ function openCliSpec(config: Config, args: string[]): BrowserRunSpec {
 }
 
 function harnessSpec(input: BrowserToolInput, config: Config, script: string): BrowserRunSpec {
-	const envLines = [`import os`, `os.environ.setdefault("BU_NAME", ${JSON.stringify(browserSession(input, config))})`];
 	return {
 		command: config.browser.harnessCommand,
 		args: [],
-		stdin: `${envLines.join("\n")}\n${script}`,
+		stdin: script,
+		env: { ...process.env, BU_NAME: browserSession(input, config) },
 		backend: "browser-harness",
 	};
 }
@@ -690,8 +695,7 @@ export function createBrowserTools(
 		{
 			name: "browser",
 			label: "Browser",
-			description:
-				"drive a real browser through a bounded interface.",
+			description: "drive a real browser through a bounded interface.",
 			parameters: browserSchema,
 			executionMode: "sequential",
 			async execute(_toolCallId, rawInput, signal?: AbortSignal) {

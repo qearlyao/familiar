@@ -205,7 +205,7 @@ describe("browser tools", () => {
 		const config = await configWithDataDir(dataDir, {
 			browser: { enabled: true, backend: "browser-harness", session: "personal" },
 		});
-		const calls: Array<{ command: string; args: string[]; stdin?: string; backend: string }> = [];
+		const calls: BrowserRunSpec[] = [];
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			calls.push(spec);
 			return {
@@ -224,7 +224,8 @@ describe("browser tools", () => {
 
 		assert.equal(calls[0]?.command, "browser-harness");
 		assert.deepEqual(calls[0]?.args, []);
-		assert.match(calls[0]?.stdin ?? "", /BU_NAME/);
+		assert.equal(calls[0]?.env?.BU_NAME, "personal");
+		assert.doesNotMatch(calls[0]?.stdin ?? "", /BU_NAME/);
 		assert.match(calls[0]?.stdin ?? "", /list_tabs\(include_chrome=False\)/);
 		assert.equal(result.details?.backend, "browser-harness");
 		assert.deepEqual(result.details?.json, [{ targetId: "tab-1", title: "Inbox", url: "https://mail.example" }]);

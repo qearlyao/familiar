@@ -19,6 +19,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function assistantMessageContent(event: Extract<AgentEvent, { type: "message_update" }>): unknown[] | undefined {
+	const message = event.message;
+	if (message.role !== "assistant") return undefined;
+	if (!Array.isArray((message as { content?: unknown }).content)) return undefined;
+	return (message as { content: unknown[] }).content;
+}
+
 function normalizeToolArguments(value: unknown): Record<string, unknown> {
 	return isRecord(value) ? value : {};
 }
@@ -39,6 +46,20 @@ function deltaText(event: StoredAgentEvent): string {
 
 function deltaEvent(kind: "text_delta" | "thinking_delta", delta: string): StoredAgentEvent {
 	return { type: "message_update", assistantMessageEvent: { type: kind, delta } };
+}
+
+function textDeltaTargetsThinkingBlock(
+	event: Extract<AgentEvent, { type: "message_update" }>,
+	contentIndex: number,
+): boolean {
+	const content = assistantMessageContent(event);
+	const block = content?.[contentIndex];
+	return (
+		!!block &&
+		typeof block === "object" &&
+		!Array.isArray(block) &&
+		(block as { type?: unknown }).type === "thinking"
+	);
 }
 
 export function createAgentEventRecorder(write: AgentEventWriter): AgentEventRecorder {
@@ -91,14 +112,26 @@ function usageFromAgentEvent(event: AgentEvent): Extract<StoredAgentEvent, { typ
 	};
 }
 
-function storedAssistantMessageEvent(event: AgentEvent): StoredAssistantMessageEvent | undefined {
+function storedAssistantMessageEvent(
+	event: AgentEvent,
+	summary?: AgentEventSummary,
+): StoredAssistantMessageEvent | undefined {
 	if (event.type !== "message_update") return undefined;
 	const assistantEvent = event.assistantMessageEvent;
 	if (assistantEvent.type === "text_delta") {
+		if (textDeltaTargetsThinkingBlock(event, assistantEvent.contentIndex)) {
+			return { type: "thinking_delta", delta: assistantEvent.delta };
+		}
 		return { type: "text_delta", delta: assistantEvent.delta };
 	}
 	if (assistantEvent.type === "thinking_delta") {
 		return { type: "thinking_delta", delta: assistantEvent.delta };
+	}
+	if (assistantEvent.type === "thinking_end") {
+		if (summary?.thinkingStart === undefined && assistantEvent.content.trim().length > 0) {
+			return { type: "thinking_delta", delta: assistantEvent.content };
+		}
+		return undefined;
 	}
 	if (assistantEvent.type === "toolcall_start") {
 		return { type: "toolcall_start", contentIndex: assistantEvent.contentIndex };
@@ -124,14 +157,17 @@ function storedAssistantMessageEvent(event: AgentEvent): StoredAssistantMessageE
 	return undefined;
 }
 
-export function storedAgentEventFromAgentEvent(event: AgentEvent): StoredAgentEvent | undefined {
+export function storedAgentEventFromAgentEvent(
+	event: AgentEvent,
+	summary?: AgentEventSummary,
+): StoredAgentEvent | undefined {
 	if (event.type === "agent_start" || event.type === "agent_end") return { type: event.type };
 	if (event.type === "turn_start" || event.type === "turn_end") return { type: event.type };
 	if (event.type === "message_start") {
 		return { type: "message_start", role: event.message.role };
 	}
 	if (event.type === "message_update") {
-		const assistantMessageEvent = storedAssistantMessageEvent(event);
+		const assistantMessageEvent = storedAssistantMessageEvent(event, summary);
 		return assistantMessageEvent ? { type: "message_update", assistantMessageEvent } : undefined;
 	}
 	if (event.type === "message_end") {
@@ -169,7 +205,11 @@ export function storedAgentEventFromAgentEvent(event: AgentEvent): StoredAgentEv
 	};
 }
 
-export function updateAgentEventSummary(summary: AgentEventSummary, event: AgentEvent, now = Date.now()): void {
+export function updateAgentEventSummary(
+	summary: AgentEventSummary,
+	event: AgentEvent | StoredAgentEvent,
+	now = Date.now(),
+): void {
 	if (event.type !== "message_update") return;
 	const assistantEvent = event.assistantMessageEvent;
 	if (assistantEvent.type === "thinking_delta") {

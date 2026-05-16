@@ -915,8 +915,8 @@ export async function startDiscordDaemon(
 						dispatch.prompt,
 						dispatch.attachments,
 						async (event) => {
-							updateAgentEventSummary(summary, event);
-							const storedEvent = storedAgentEventFromAgentEvent(event);
+							const storedEvent = storedAgentEventFromAgentEvent(event, summary);
+							updateAgentEventSummary(summary, storedEvent ?? event);
 							if (storedEvent) {
 								runtime.publishAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent);
 								await recorder.record(storedEvent);
@@ -1023,8 +1023,8 @@ export async function startDiscordDaemon(
 						return scheduledUserMessage(text, queuedNow);
 					},
 					async (event) => {
-						updateAgentEventSummary(summary, event);
-						const storedEvent = storedAgentEventFromAgentEvent(event);
+						const storedEvent = storedAgentEventFromAgentEvent(event, summary);
+						updateAgentEventSummary(summary, storedEvent ?? event);
 						if (storedEvent) {
 							heartbeatRuntime.publishAgentEvent("heartbeat", assistantMessageId, storedEvent);
 							await recorder.record(storedEvent);
@@ -1136,8 +1136,8 @@ export async function startDiscordDaemon(
 					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
 				},
 				async (event) => {
-					updateAgentEventSummary(summary, event);
-					const storedEvent = storedAgentEventFromAgentEvent(event);
+					const storedEvent = storedAgentEventFromAgentEvent(event, summary);
+					updateAgentEventSummary(summary, storedEvent ?? event);
 					if (storedEvent) {
 						runtime.publishAgentEvent(`cron:${job.id}`, assistantMessageId, storedEvent);
 						await recorder.record(storedEvent);

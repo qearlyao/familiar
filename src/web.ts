@@ -865,7 +865,7 @@ export async function startWebDaemon(
 				console.error("WebSocket runtime lookup failed", error);
 				netSocket.destroy();
 			});
-		netSocket.on("data", (chunk) => {
+		netSocket.on("data", (chunk: Buffer) => {
 			try {
 				frameBuffer = Buffer.concat([frameBuffer, chunk]);
 				const decoded = decodeFrames(frameBuffer);

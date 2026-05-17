@@ -6,7 +6,7 @@ product
 
 ## Users
 
-qearl (primary) plus a small trusted circle of 5–10 close friends, each running their own personal AI companion. Used across desktop and mobile, often casually throughout the day rather than in dedicated work sessions.
+The primary owner plus a small trusted circle of 5–10 close friends, each running their own personal AI companion. Used across desktop and mobile, often casually throughout the day rather than in dedicated work sessions.
 
 The interface should feel personal enough that one user's instance feels distinctly *theirs*, while staying generalizable enough that ten different personas can inhabit the same shell without it feeling like a generic template.
 

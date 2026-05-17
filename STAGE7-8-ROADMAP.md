@@ -480,11 +480,11 @@ Local data refs:
 
 Upstream Pi refs:
 
-- `/Users/qearl/pi-mono/packages/agent/src/agent.ts`
+- `/path/to/pi-mono/packages/agent/src/agent.ts`
   - `Agent` state/options, direct runtime integration.
-- `/Users/qearl/pi-mono/packages/agent/src/agent-loop.ts`
+- `/path/to/pi-mono/packages/agent/src/agent-loop.ts`
   - `transformContext` call site.
-- `/Users/qearl/pi-mono/packages/agent/src/types.ts`
+- `/path/to/pi-mono/packages/agent/src/types.ts`
   - `AgentMessage`, tool shape, events.
 - `/tmp/pi-chat/src/core/runtime-types.ts`
   - chat runtime/log type reference.
@@ -495,65 +495,65 @@ Upstream Pi refs:
 
 Research clones:
 
-- `/private/tmp/familiar-research/lossless-claw`
+- `/path/to/familiar-research/lossless-claw`
   - primary LCM architecture reference.
-- `/private/tmp/familiar-research/pi-lcm`
+- `/path/to/familiar-research/pi-lcm`
   - original Pi LCM extension reference.
-- `/private/tmp/familiar-research/pi-lcm-memory`
+- `/path/to/familiar-research/pi-lcm-memory`
   - primary indexing/retrieval implementation reference.
 
 High-value `lossless-claw` files:
 
-- `/private/tmp/familiar-research/lossless-claw/docs/architecture.md`
+- `/path/to/familiar-research/lossless-claw/docs/architecture.md`
   - LCM data model, summary DAG, context assembly, expansion, reconciliation.
-- `/private/tmp/familiar-research/lossless-claw/src/assembler.ts`
+- `/path/to/familiar-research/lossless-claw/src/assembler.ts`
   - ordered context item assembly, fresh tail, budget selection, prompt-aware
     eviction, structured message reconstruction.
-- `/private/tmp/familiar-research/lossless-claw/src/engine.ts`
+- `/path/to/familiar-research/lossless-claw/src/engine.ts`
   - lifecycle, ingest/bootstrap/maintain/compact orchestration, cache-aware
     compaction policies, transcript GC hooks.
-- `/private/tmp/familiar-research/lossless-claw/src/compaction.ts`
+- `/path/to/familiar-research/lossless-claw/src/compaction.ts`
   - leaf/condensed compaction behavior and summary generation.
-- `/private/tmp/familiar-research/lossless-claw/src/store/conversation-store.ts`
+- `/path/to/familiar-research/lossless-claw/src/store/conversation-store.ts`
   - conversations, messages, message parts.
-- `/private/tmp/familiar-research/lossless-claw/src/store/summary-store.ts`
+- `/path/to/familiar-research/lossless-claw/src/store/summary-store.ts`
   - summaries, parents, sources, context items.
-- `/private/tmp/familiar-research/lossless-claw/src/prune.ts`
+- `/path/to/familiar-research/lossless-claw/src/prune.ts`
   - age-based conversation pruning and cascaded cleanup.
-- `/private/tmp/familiar-research/lossless-claw/src/retrieval.ts`
+- `/path/to/familiar-research/lossless-claw/src/retrieval.ts`
   - factual retrieval over messages/summaries and describe/expand foundations.
-- `/private/tmp/familiar-research/lossless-claw/src/plugin/index.ts`
+- `/path/to/familiar-research/lossless-claw/src/plugin/index.ts`
   - plugin wiring, prompt policy, tool registration, OpenClaw lifecycle bridge.
-- `/private/tmp/familiar-research/lossless-claw/src/plugin/lcm-command.ts`
+- `/path/to/familiar-research/lossless-claw/src/plugin/lcm-command.ts`
   - operator command patterns: status, backup, rotate, doctor/clean.
 
 High-value `pi-lcm-memory` files:
 
-- `/private/tmp/familiar-research/pi-lcm-memory/index.ts`
+- `/path/to/familiar-research/pi-lcm-memory/index.ts`
   - extension lifecycle, context hook injection, tool registration.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/db/schema.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/db/schema.ts`
   - vector/index/meta schema and dimension/model reconciliation.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/db/store.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/db/store.ts`
   - batched writes, content-hash dedupe, id mappings, kNN.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/db/vec.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/db/vec.ts`
   - sqlite-vec dynamic load and soft-fail.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/indexer.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/indexer.ts`
   - hook-plus-sweep indexer, batching, backoff, event-loop yielding.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/retrieval.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/retrieval.ts`
   - hybrid FTS/vector retrieval and RRF merge.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/bridge.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/bridge.ts`
   - Pi-specific read bridge to replace with Familiar source adapters.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/embeddings/embedder.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/embeddings/embedder.ts`
   - local worker-thread embedder controller.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/embeddings/worker.mjs`
+- `/path/to/familiar-research/pi-lcm-memory/src/embeddings/worker.mjs`
   - Transformers.js worker implementation.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/primer.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/primer.ts`
   - first-turn primer behavior.
-- `/private/tmp/familiar-research/pi-lcm-memory/src/auto-recall.ts`
+- `/path/to/familiar-research/pi-lcm-memory/src/auto-recall.ts`
   - regex-triggered recall behavior.
-- `/private/tmp/familiar-research/pi-lcm-memory/bench/results/perf.latest.md`
+- `/path/to/familiar-research/pi-lcm-memory/bench/results/perf.latest.md`
   - current benchmark snapshot.
-- `/private/tmp/familiar-research/pi-lcm-memory/ROADMAP.md`
+- `/path/to/familiar-research/pi-lcm-memory/ROADMAP.md`
   - stabilization history and reranker postmortem.
 
 ## Remaining TODOs

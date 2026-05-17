@@ -1,6 +1,6 @@
 # familiar plan
 
-Personal companion agent for qearl. Discord-first in the early stages, but designed for a first-class WebUI chat surface later. VPS-hosted, always on, single-owner, reactive in v0, with later proactive check-ins and pluggable browser/activity backends.
+Personal companion agent. Discord-first in the early stages, but designed for a first-class WebUI chat surface later. VPS-hosted, always on, single-owner, reactive in v0, with later proactive check-ins and pluggable browser/activity backends.
 
 This is the session-start operating plan. It keeps only the decisions, stage map, and high-value references needed when Codex starts with no memory. Older investigative detail was intentionally compressed to save context.
 
@@ -34,7 +34,7 @@ Important caution:
 - Keep direct `Agent` as Familiar's runtime. Do not reinstate `AgentSession` just to get skills.
 - Do not use upstream lossy auto-compaction as Familiar's memory system. Familiar owns LCM plus diary RAG through `Agent.transformContext`.
 - Reuse pi's standalone skill loader/formatter for progressive instructions: the agent sees skill name/description/path, then uses `read` to load `SKILL.md` only when needed.
-- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, `MEMORY.md`, and `INNER.md`. Upstream does not know these names. `SOUL.md` and `USER.md` are qearl-edited; `MEMORY.md` and `INNER.md` are agent-edited.
+- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, `MEMORY.md`, and `INNER.md`. Upstream does not know these names. `SOUL.md` and `USER.md` are owner-edited; `MEMORY.md` and `INNER.md` are agent-edited.
 - `MEMORY.md` holds durable load-bearing facts. `INNER.md` holds the agent's current felt interior, updated by the agent on heartbeat fires. Episodic recall belongs in diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
@@ -113,7 +113,7 @@ Discord adapter       WebUI adapter       future event sources
 
 Browser/activity backend abstraction
   - local backend when browser is on same host
-  - remote sidecar when browser is on qearl's Mac
+  - remote sidecar when browser is on the owner's Mac
   - transport: direct HTTPS, reverse sidecar connection, or Tailscale/private network
   - implementation choice deferred: Chrome DevTools MCP/CDP, CLI repo, native automation, Playwright only if still best
 ```
@@ -130,8 +130,8 @@ Runtime and packaging:
 
 Tier 1: stable prompt files in the cached prefix.
 
-- `SOUL.md`: persona, qearl-edited.
-- `USER.md`: about qearl, qearl-edited.
+- `SOUL.md`: persona, owner-edited.
+- `USER.md`: about the owner, owner-edited.
 - `MEMORY.md`: durable load-bearing facts, agent-edited via upstream filesystem tools.
 - `INNER.md`: agent's current felt interior — mood, what it's been carrying, current curiosities, current shape of the relationship. Agent-edited; updated by the agent on heartbeat fires (Stage 9). Load-bearing specifically post-`/new` and at fresh sessions, where it's the difference between "neutral assistant" and "still myself, still carrying yesterday."
 - Failure mode: bloat. Keep all four short.
@@ -147,7 +147,7 @@ Tier 2: LCM, today's lossless-ish context engine.
 
 Tier 3: diary RAG, previous days.
 
-- Source: `memories/diaries/YYYY-MM-DD.md`. Stage 9 heartbeat instructions own the diary's voice/format/reflection policy. Editable by qearl.
+- Source: `memories/diaries/YYYY-MM-DD.md`. Stage 9 heartbeat instructions own the diary's voice/format/reflection policy. Editable by the owner.
 - Written by the main agent itself when the heartbeat (Stage 9) fires with end-of-day framing. No subagent. Empty entries are valid — the agent has permission to write nothing on quiet days.
 - Index: diary chunks plus atomic facts, embedded in SQLite. Chunks tagged at write time with valence (emotional intensity).
 - Retrieval: ambient, into the volatile region of the user-message envelope each turn. Top-K (3–5) excerpts scored by `similarity + valence + recency`, optional thread-overlap boost. No LLM monitor — the main agent's reasoning is the synthesizer.
@@ -196,7 +196,7 @@ Image-generation tool:
 - Implemented `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation.
 - Upstream status: `@earendil-works/pi-ai@0.74.1` publishes the image-generation API: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support.
 - Strategy: do not invent a parallel provider abstraction. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
-- Initial Familiar provider target is qearl's custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
+- Initial Familiar provider target is a custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
 - Treat upstream's OpenRouter image implementation as an API-shape/reference implementation only, not the default provider choice.
 - Config shape should distinguish chat models from image models, e.g. provider/model/base URL/API shape for image generation, because upstream uses `ImagesModel`, not normal `Model`.
 - Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, WebUI live/history attachment plumbing, and retention cleanup from TTS.
@@ -252,7 +252,7 @@ Done when:
 - Also track direct CDP and provider/upstream computer-use extensions as replaceable backends.
 - Preserve room for OpenCLI adapter surfaces beyond generic browser control: site adapters now, desktop app adapters and CLI Hub later. Familiar should adapt these through allowlisted backend commands rather than exposing OpenCLI wholesale.
 - Local backend for Windows/Linux/macOS installs where browser is on same host.
-- Optional `familiar-mac` sidecar for qearl's Mac.
+- Optional `familiar-mac` sidecar for the owner's Mac.
 - Current remote-browser bridge: keep Chrome, OpenCLI extension, and OpenCLI daemon on the Mac; use an SSH reverse tunnel so VPS-local `127.0.0.1:19825` reaches the Mac daemon. Remote VPS OpenCLI cannot bootstrap the Mac daemon.
 - Future `familiar-mac` sidecar should own Mac-local dependencies and permissions: OpenCLI, Chrome extension, desktop adapters, AppleScript/Accessibility, screen/camera capture, and computer-use primitives.
 - Transport options: SSH reverse tunnel for current OpenCLI daemon forwarding; later authenticated sidecar transport via reverse connection to VPS, direct private HTTP, or Tailscale.
@@ -262,7 +262,7 @@ Done when:
 
 Done when:
 
-- Same browser/activity interface works against local backend or qearl's Mac sidecar.
+- Same browser/activity interface works against local backend or the owner's Mac sidecar.
 
 ### Stage 12: Browser Tool Client
 
@@ -324,65 +324,65 @@ Use `rg` first. Open only the target file/range you need.
 
 Upstream package roots:
 
-- `/Users/qearl/pi-mono` is a local reference clone of `https://github.com/earendil-works/pi` (directory name is historical).
-- `/Users/qearl/pi-mono/packages/agent`
-- `/Users/qearl/pi-mono/packages/ai`
-- `/Users/qearl/pi-mono/packages/coding-agent`
+- `/path/to/pi-mono` is a local reference clone of `https://github.com/earendil-works/pi` (directory name is historical).
+- `/path/to/pi-mono/packages/agent`
+- `/path/to/pi-mono/packages/ai`
+- `/path/to/pi-mono/packages/coding-agent`
 - `/tmp/pi-chat` is a local reference clone of `https://github.com/earendil-works/pi-chat`.
-- `/private/tmp/familiar-research` holds local research clones for LCM-adjacent projects:
-  - `/private/tmp/familiar-research/lossless-claw`
-  - `/private/tmp/familiar-research/pi-lcm`
-  - `/private/tmp/familiar-research/pi-lcm-memory`
+- `/path/to/familiar-research` holds local research clones for LCM-adjacent projects:
+  - `/path/to/familiar-research/lossless-claw`
+  - `/path/to/familiar-research/pi-lcm`
+  - `/path/to/familiar-research/pi-lcm-memory`
 
 Agent/runtime refs:
 
-- `/Users/qearl/pi-mono/packages/agent/src/agent.ts`
+- `/path/to/pi-mono/packages/agent/src/agent.ts`
   - constructor/state/options: search `constructor`
   - `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`
-- `/Users/qearl/pi-mono/packages/agent/src/agent-loop.ts`
+- `/path/to/pi-mono/packages/agent/src/agent-loop.ts`
   - `transformContext`
   - tool execution
   - steering/follow-up timing
-- `/Users/qearl/pi-mono/packages/agent/src/types.ts`
+- `/path/to/pi-mono/packages/agent/src/types.ts`
   - `AgentMessage`, tool shape, events, usage-bearing messages
 
 Provider/cache refs:
 
-- `/Users/qearl/pi-mono/packages/ai/src/types.ts`
+- `/path/to/pi-mono/packages/ai/src/types.ts`
   - `cacheRetention`, usage fields, image-generation types on main (`ImagesModel`, `ImagesContext`, `AssistantImages`)
-- `/Users/qearl/pi-mono/packages/ai/src/providers/anthropic.ts`
+- `/path/to/pi-mono/packages/ai/src/providers/anthropic.ts`
   - upstream `cache_control` behavior
-- `/Users/qearl/pi-mono/packages/ai/src/providers/openai-responses.ts`
+- `/path/to/pi-mono/packages/ai/src/providers/openai-responses.ts`
   - session/cache headers
-- `/Users/qearl/pi-mono/packages/ai/src/images.ts`
+- `/path/to/pi-mono/packages/ai/src/images.ts`
   - upstream `generateImages()` entry point, published in `@earendil-works/pi-ai@0.74.1`
-- `/Users/qearl/pi-mono/packages/ai/src/image-models.ts`
+- `/path/to/pi-mono/packages/ai/src/image-models.ts`
   - upstream image model discovery on main: `getImageModel`, `getImageModels`, `getImageProviders`
-- `/Users/qearl/pi-mono/packages/ai/src/providers/images/openrouter.ts`
+- `/path/to/pi-mono/packages/ai/src/providers/images/openrouter.ts`
   - first upstream image provider implementation on main, returns base64 `ImageContent` plus optional text
-- `/Users/qearl/pi-mono/.pi/extensions/tps.ts`
+- `/path/to/pi-mono/.pi/extensions/tps.ts`
   - cache read/write usage reporting pattern
 
 Tool refs:
 
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/index.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/tools/index.ts`
   - confirms current upstream built-ins are workspace/local tools, not web fetch/search tools
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/bash.ts`
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/read.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/tools/bash.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/tools/read.ts`
   - image read path returns text note plus `ImageContent`; warns for non-vision models
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/tools/write.ts`
-- `/Users/qearl/pi-mono/packages/coding-agent/src/cli/file-processor.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/tools/write.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/cli/file-processor.ts`
   - `@file` argument handling: local image detection, resize, dimension note, `ImageContent[]`
-- `/Users/qearl/pi-mono/packages/coding-agent/src/utils/mime.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/utils/mime.ts`
   - magic-byte supported image MIME detection for jpg/png/gif/webp
-- `/Users/qearl/pi-mono/packages/coding-agent/src/utils/image-resize.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/utils/image-resize.ts`
   - Photon-backed resize/re-encode and max inline image payload policy
 
 Compaction/session refs:
 
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/agent-session.ts`
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/session-manager.ts`
-- `/Users/qearl/pi-mono/packages/coding-agent/src/core/compaction/compaction.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/agent-session.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/session-manager.ts`
+- `/path/to/pi-mono/packages/coding-agent/src/core/compaction/compaction.ts`
 
 pi-chat refs:
 
@@ -400,9 +400,9 @@ pi-chat refs:
 
 Upstream WebUI/media refs:
 
-- `/Users/qearl/pi-mono/packages/web-ui/src/utils/attachment-utils.ts`
+- `/path/to/pi-mono/packages/web-ui/src/utils/attachment-utils.ts`
   - browser-side attachment loading and document text extraction helper; useful frontend reference, not Familiar backend storage policy
-- `/Users/qearl/pi-mono/packages/web-ui/src/tools/extract-document.ts`
+- `/path/to/pi-mono/packages/web-ui/src/tools/extract-document.ts`
   - document fetch/extract tool with size guard pattern and collapsible renderer reference
 
 Local refs:

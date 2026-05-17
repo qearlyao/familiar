@@ -1,14 +1,34 @@
 {
 	"name": "@qearl/familiar",
-	"version": "0.0.0",
-	"private": true,
+	"version": "0.1.0",
+	"license": "MIT",
 	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/qearlyao/familiar.git"
+	},
 	"bin": {
 		"familiar": "./dist/cli.js"
 	},
+	"files": [
+		"dist/**/*.js",
+		"web/dist/**",
+		"config.example.toml",
+		".env.example",
+		"SOUL.md",
+		"USER.md",
+		"MEMORY.md",
+		"HEARTBEAT.md",
+		"README.md",
+		"LICENSE"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
+		"clean": "node -e \"const fs=require('node:fs'); for (const p of ['dist','web/dist']) fs.rmSync(p,{recursive:true,force:true});\"",
 		"dev": "tsx watch src/cli.ts run",
-		"build": "tsc -p tsconfig.build.json",
+		"build": "npm run clean && tsc -p tsconfig.build.json && npm --prefix web run build",
 		"lint": "biome check",
 		"format": "biome format --write",
 		"payload:pretty": "tsx scripts/pretty-payload.ts",

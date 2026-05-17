@@ -8,7 +8,7 @@
 		"url": "git+https://github.com/qearlyao/familiar.git"
 	},
 	"bin": {
-		"familiar": "./dist/cli.js"
+		"familiar": "dist/cli.js"
 	},
 	"files": [
 		"dist/**/*.js",

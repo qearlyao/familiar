@@ -91,6 +91,11 @@ interface WorkspaceReferenceImage {
 	size: number;
 }
 
+interface RecoveredImage {
+	mimeType: string;
+	data: string;
+}
+
 function formatImageGenNotice(name: string): string {
 	return `${IMAGE_GEN_NOTICE_PREFIX} ${name}`;
 }
@@ -165,9 +170,7 @@ function resolveImageModelApiKey(config: Config, model: ImagesModel<any>): strin
 function imageResultError(result: AssistantImages): string | undefined {
 	if (result.stopReason === "error") return result.errorMessage ?? "image generation failed";
 	if (result.stopReason === "aborted") return result.errorMessage ?? "image generation aborted";
-	if (!result.output.some((item) => item.type === "image")) {
-		return textOutput(result) || "image generation returned no image output";
-	}
+	if (!result.output.some((item) => item.type === "image")) return "image generation returned no image output";
 	return undefined;
 }
 
@@ -177,6 +180,63 @@ function textOutput(result: AssistantImages): string {
 		.map((item) => item.text.trim())
 		.filter(Boolean)
 		.join("\n");
+}
+
+function imageMimeTypeFromBytes(buffer: Buffer): string | undefined {
+	if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
+	if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+		return "image/png";
+	}
+	if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") {
+		return "image/gif";
+	}
+	if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+		return "image/webp";
+	}
+	return undefined;
+}
+
+function recoveredImageFromBase64(value: string, mimeType?: string): RecoveredImage | undefined {
+	const data = value.trim();
+	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length % 4 !== 0) return undefined;
+	const buffer = Buffer.from(data, "base64");
+	if (!buffer.length) return undefined;
+	const detectedMimeType = imageMimeTypeFromBytes(buffer);
+	if (!detectedMimeType) return undefined;
+	return {
+		mimeType: detectedMimeType,
+		data,
+	};
+}
+
+function recoveredImageFromText(text: string): RecoveredImage | undefined {
+	const trimmed = text.trim();
+	const dataUrlMatch = trimmed.match(/^data:(image\/[^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+	if (dataUrlMatch) return recoveredImageFromBase64(dataUrlMatch[2] ?? "", dataUrlMatch[1]);
+	const embeddedDataUrlMatch = text.match(/data:(image\/[^;)\]\s]+);base64,([A-Za-z0-9+/]+={0,2})/);
+	if (embeddedDataUrlMatch) {
+		return recoveredImageFromBase64(embeddedDataUrlMatch[2] ?? "", embeddedDataUrlMatch[1]);
+	}
+	return recoveredImageFromBase64(trimmed);
+}
+
+function normalizeCompatibleImageText(result: AssistantImages): AssistantImages {
+	if (result.output.some((item) => item.type === "image")) return result;
+	const output: AssistantImages["output"] = [];
+	for (const item of result.output) {
+		if (item.type !== "text") {
+			output.push(item);
+			continue;
+		}
+		const recovered = recoveredImageFromText(item.text);
+		if (!recovered) {
+			output.push(item);
+			continue;
+		}
+		output.push({ type: "image", mimeType: recovered.mimeType, data: recovered.data });
+	}
+	if (!output.some((item) => item.type === "image")) return result;
+	return { ...result, output };
 }
 
 function mimeTypeFromPath(path: string): string | undefined {
@@ -360,11 +420,13 @@ async function tryGenerateImages(
 	const context = await buildImageContext(model, prompt, references, workspaceRefs, config);
 	return {
 		model,
-		result: await generate(model, context, {
-			apiKey: resolveImageModelApiKey(config, model),
-			signal,
-			timeoutMs: config.imageGen.timeoutMs,
-		}),
+		result: normalizeCompatibleImageText(
+			await generate(model, context, {
+				apiKey: resolveImageModelApiKey(config, model),
+				signal,
+				timeoutMs: config.imageGen.timeoutMs,
+			}),
+		),
 	};
 }
 

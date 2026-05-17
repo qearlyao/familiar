@@ -39,6 +39,13 @@ async function noisyPngBytes(size = 1600): Promise<Buffer> {
 	return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer();
 }
 
+function pngBytes(): Buffer {
+	return Buffer.from(
+		"89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000154012a0b0000000049454e44ae426082",
+		"hex",
+	);
+}
+
 describe("image_gen helpers", () => {
 	it("maps common image mime types to file extensions", () => {
 		assert.equal(imageExtension("image/png"), "png");
@@ -175,6 +182,152 @@ describe("image_gen tool", () => {
 			else process.env.PRIMARY_IMAGE_KEY = previousPrimary;
 			if (previousFallback === undefined) delete process.env.FALLBACK_IMAGE_KEY;
 			else process.env.FALLBACK_IMAGE_KEY = previousFallback;
+		}
+	});
+
+	it("recovers provider text data URLs as generated images", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const sink = createGeneratedMediaSink();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gpt-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, sink, {
+				generateImages: async (model) => {
+					return imageResult(
+						[
+							{
+								type: "text",
+								text: `data:image/png;base64,${pngBytes().toString("base64")}`,
+							},
+						],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			const result = await tool.execute("call-1", { prompt: "draw via text data url" });
+			const attachments = sink.drain();
+
+			assert.equal(attachments.length, 1);
+			assert.equal(attachments[0]?.mimeType, "image/png");
+			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.doesNotMatch(toolText(result), /data:image/);
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("recovers provider markdown image data URLs as generated images", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const sink = createGeneratedMediaSink();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gpt-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, sink, {
+				generateImages: async (model) => {
+					return imageResult(
+						[
+							{
+								type: "text",
+								text: `![image](data:image/jpeg;base64,${pngBytes().toString("base64")})`,
+							},
+						],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			const result = await tool.execute("call-1", { prompt: "draw via markdown image" });
+			const attachments = sink.drain();
+
+			assert.equal(attachments.length, 1);
+			assert.equal(attachments[0]?.mimeType, "image/png");
+			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.doesNotMatch(toolText(result), /data:image/);
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("recovers provider raw base64 text as generated images", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const sink = createGeneratedMediaSink();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gpt-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, sink, {
+				generateImages: async (model) => {
+					return imageResult([{ type: "text", text: pngBytes().toString("base64") }], {
+						provider: model.provider,
+						model: model.id,
+					});
+				},
+			});
+
+			const result = await tool.execute("call-1", { prompt: "draw via raw base64" });
+			const attachments = sink.drain();
+
+			assert.equal(attachments.length, 1);
+			assert.equal(attachments[0]?.mimeType, "image/png");
+			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.doesNotMatch(toolText(result), /iVBOR/);
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("does not surface long text payloads as no-image errors", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gpt-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const longText = "x".repeat(5000);
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model) => {
+					return imageResult([{ type: "text", text: longText }], { provider: model.provider, model: model.id });
+				},
+			});
+
+			await assert.rejects(() => tool.execute("call-1", { prompt: "draw text only" }), {
+				message: "Image generation failed: image generation returned no image output",
+			});
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
 		}
 	});
 

@@ -7,12 +7,14 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
+import { ensureInlineImageDerivative, MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 import { deriveInboundAttachmentText } from "./media-understanding.js";
+
+export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 
 export const MAX_INBOUND_ATTACHMENTS = 4;
 export const MAX_INBOUND_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 export const MAX_INBOUND_TOTAL_BYTES = 24 * 1024 * 1024;
-export const MAX_INLINE_IMAGE_BASE64_BYTES = 4.5 * 1024 * 1024;
 
 type AttachmentSource = "discord" | "web";
 
@@ -240,6 +242,13 @@ export async function materializeInboundAttachments(
 				source: attachment.source,
 				sha256: attachment.sha256,
 			};
+			const derivedImage = await ensureInlineImageDerivative(config, finalAttachment);
+			if (derivedImage) {
+				finalAttachment.derived = {
+					...finalAttachment.derived,
+					image: derivedImage,
+				};
+			}
 			stored.push(finalAttachment);
 		}
 		return await deriveInboundAttachmentText(config, stored);

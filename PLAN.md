@@ -175,6 +175,7 @@ Status: shipped enough for current development. Keep details in git history and 
 - Web access v0: shipped native `web_search` and `web_fetch`, with Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, cache behavior, XML-wrapped untrusted-content warnings, and focused tests.
 - WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
 - Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
+- Stage 6 Image Derivatives: shipped Sharp-backed image resize/re-encode into `derived.image` so oversized uploaded images and workspace `image_gen` references can still be inlined as bounded WebP derivatives.
 - Stage 7-8 Memory and LCM: shipped shared SQLite FTS/vector memory primitives, normalized LCM records and summaries, automatic fresh-tail compaction, prompt-aware eviction, `/new` retention, memory doctor checks, `memory_recall`/`memory_open`, diary markdown indexing, and ambient diary recall injected as `<injected_memory>`.
 - Stage 9 Heartbeat and Cron: shipped in-band heartbeat/cron scheduling through the main agent context, `HEARTBEAT.md`-framed heartbeat prompts, idle-aware and restart-safe heartbeat cadence, durable scheduler state/logs, cron `queue`/`follow_up` delivery, and ambient diary bypass for scheduled prompts.
 
@@ -225,7 +226,6 @@ Status: done. Completed media intake and media understanding work is archived ab
 
 Stage 6 follow-ups (deferred from v0):
 
-- Image resize/re-encode pipeline. `derived.image` is currently a placeholder. Populate it via a Photon-backed (or hand-rolled) resize path so large images can be inlined safely instead of dropped with a `[Image omitted]` note. Cheap dimension hints (parse PNG IHDR / JPEG SOF directly) can land before the full resize stack.
 - Vision-capability gating. Skip image attachments or warn when the active model is non-vision rather than relying on upstream errors. Consider model-aware composer disable.
 - Multipart body parsing efficiency. `readMultipartBody` converts the raw upload to a latin1 string for `String.split`. Replace with a byte-wise `buffer.indexOf` scanner (or a small dep like `busboy`) before this sees real upload volume.
 - Discord attachment materialization off the message hot path. `toInboundInput` currently awaits `materializeInboundAttachments` synchronously inside the discord.js message handler. Move the download/disk work into `drainJobs` so the handler stays fast even on multi-attachment uploads.

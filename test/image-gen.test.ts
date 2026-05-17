@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
+import { randomFillSync } from "node:crypto";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
 import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai";
+import sharp from "sharp";
 
 import type { StoredAttachment } from "../src/chat-log.js";
 import { attachmentsDir } from "../src/generated-media.js";
 import { createGeneratedMediaSink, generatedAttachmentsDir } from "../src/generated-media.js";
 import { createImageGenTool, imageExtension, resolveImageModel } from "../src/image-gen.js";
+import { MAX_INLINE_IMAGE_BASE64_BYTES } from "../src/inbound-attachments.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function toolText(result: Awaited<ReturnType<ReturnType<typeof createImageGenTool>["execute"]>>): string {
@@ -28,6 +31,12 @@ function imageResult(output: AssistantImages["output"], overrides: Partial<Assis
 		timestamp: Date.now(),
 		...overrides,
 	};
+}
+
+async function noisyPngBytes(size = 1600): Promise<Buffer> {
+	const raw = Buffer.alloc(size * size * 3);
+	randomFillSync(raw);
+	return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer();
 }
 
 describe("image_gen helpers", () => {
@@ -268,7 +277,54 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("expands workspace reference image folders in stable order", async () => {
+	it("resizes oversized workspace reference images before upstream image context", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const referenceDir = resolve(config.workspacePath, "refs");
+			await mkdir(referenceDir, { recursive: true });
+			const imagePath = resolve(referenceDir, "huge.png");
+			const largeImage = await noisyPngBytes();
+			assert.ok(Buffer.byteLength(largeImage.toString("base64"), "utf8") > MAX_INLINE_IMAGE_BASE64_BYTES);
+			await writeFile(imagePath, largeImage);
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", { prompt: "redraw this", referenceImages: ["refs/huge.png"] });
+
+			assert.equal(capturedContext?.input[1]?.type, "text");
+			if (capturedContext?.input[1]?.type === "text") {
+				assert.match(capturedContext.input[1].text, /huge\.png/);
+				assert.match(capturedContext.input[1].text, /Resized image/);
+			}
+			assert.equal(capturedContext?.input[2]?.type, "image");
+			if (capturedContext?.input[2]?.type === "image") {
+				assert.equal(capturedContext.input[2].mimeType, "image/webp");
+				assert.ok(Buffer.byteLength(capturedContext.input[2].data, "utf8") <= MAX_INLINE_IMAGE_BASE64_BYTES);
+			}
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("rejects workspace reference image folders", async () => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
@@ -281,48 +337,19 @@ describe("image_gen tool", () => {
 				},
 			});
 			const referenceDir = resolve(config.workspacePath, "refs", "style");
-			await mkdir(resolve(referenceDir, "nested"), { recursive: true });
-			await writeFile(resolve(referenceDir, "b.webp"), "second", "utf8");
-			await writeFile(resolve(referenceDir, "a.png"), "first", "utf8");
-			await writeFile(resolve(referenceDir, "notes.txt"), "ignored", "utf8");
-			await writeFile(resolve(referenceDir, "nested", "c.jpg"), "third", "utf8");
-			let capturedContext: ImagesContext | undefined;
+			await mkdir(referenceDir, { recursive: true });
 			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
-				generateImages: async (model, context) => {
-					capturedContext = context;
-					return imageResult(
-						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
-						{ provider: model.provider, model: model.id },
-					);
+				generateImages: async () => {
+					throw new Error("should not call provider");
 				},
 			});
 
-			await tool.execute("call-1", { prompt: "use this style", referenceImages: ["refs/style"] });
-
-			assert.equal(capturedContext?.input.length, 5);
-			assert.deepEqual(capturedContext?.input[1], {
-				type: "text",
-				text: [
-					'<attachment name="a.png" mime="image/png"></attachment>',
-					'<attachment name="b.webp" mime="image/webp"></attachment>',
-					'<attachment name="c.jpg" mime="image/jpeg"></attachment>',
-				].join("\n"),
-			});
-			assert.deepEqual(capturedContext?.input[2], {
-				type: "image",
-				mimeType: "image/png",
-				data: Buffer.from("first").toString("base64"),
-			});
-			assert.deepEqual(capturedContext?.input[3], {
-				type: "image",
-				mimeType: "image/webp",
-				data: Buffer.from("second").toString("base64"),
-			});
-			assert.deepEqual(capturedContext?.input[4], {
-				type: "image",
-				mimeType: "image/jpeg",
-				data: Buffer.from("third").toString("base64"),
-			});
+			await assert.rejects(
+				() => tool.execute("call-1", { prompt: "use this style", referenceImages: ["refs/style"] }),
+				{
+					message: "Reference image path must be a file, not a folder: refs/style",
+				},
+			);
 		} finally {
 			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
 			else process.env.CUSTOM_IMAGE_KEY = previousKey;

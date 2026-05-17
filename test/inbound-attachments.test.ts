@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { randomFillSync } from "node:crypto";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
+import sharp from "sharp";
+
 import {
 	MAX_INBOUND_ATTACHMENTS,
+	MAX_INLINE_IMAGE_BASE64_BYTES,
 	materializeInboundAttachments,
 	promptImagesFromAttachments,
 } from "../src/inbound-attachments.js";
@@ -20,6 +24,12 @@ function pngBytes(): Buffer {
 
 function mp4Bytes(): Buffer {
 	return Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from("ftypmp42", "ascii"), Buffer.alloc(16)]);
+}
+
+async function noisyPngBytes(size = 1600): Promise<Buffer> {
+	const raw = Buffer.alloc(size * size * 3);
+	randomFillSync(raw);
+	return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer();
 }
 
 describe("inbound attachments", () => {
@@ -110,6 +120,36 @@ describe("inbound attachments", () => {
 
 		assert.equal(result.images.length, 1);
 		assert.match(result.promptSuffix, /photo\.png/);
+	});
+
+	it("creates and inlines resized image derivatives for oversized images", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir);
+		const largeImage = await noisyPngBytes();
+		assert.ok(Buffer.byteLength(largeImage.toString("base64"), "utf8") > MAX_INLINE_IMAGE_BASE64_BYTES);
+
+		const [attachment] = await materializeInboundAttachments(config, [
+			{
+				name: "huge.png",
+				mimeType: "image/png",
+				buffer: largeImage,
+				source: "web",
+			},
+		]);
+
+		assert.equal(attachment?.derived?.image?.mimeType, "image/webp");
+		assert.ok(attachment?.derived?.image?.localPath?.startsWith(resolve(attachmentsDir(config), "derived", "image")));
+		assert.ok((attachment?.derived?.image?.size ?? 0) < largeImage.length);
+		assert.ok((attachment?.derived?.image?.width ?? 0) <= 1600);
+		assert.ok((attachment?.derived?.image?.height ?? 0) <= 1600);
+
+		const result = await promptImagesFromAttachments([attachment as NonNullable<typeof attachment>]);
+
+		assert.equal(result.images.length, 1);
+		assert.equal(result.images[0]?.mimeType, "image/webp");
+		assert.ok(Buffer.byteLength(result.images[0]?.data ?? "", "utf8") <= MAX_INLINE_IMAGE_BASE64_BYTES);
+		assert.match(result.promptSuffix, /Resized image/);
+		assert.doesNotMatch(result.promptSuffix, /Image omitted/);
 	});
 
 	it("preserves derived attachment text during materialization", async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, readdir, stat, writeFile } from "node:fs/promises";
+import { lstat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -20,6 +20,7 @@ import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ImageGenApi } from "./config.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
+import { ensureInlineImageDerivative } from "./image-derivatives.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
 import { parseModelRef, type ModelRef } from "./models.js";
 
@@ -164,7 +165,9 @@ function resolveImageModelApiKey(config: Config, model: ImagesModel<any>): strin
 function imageResultError(result: AssistantImages): string | undefined {
 	if (result.stopReason === "error") return result.errorMessage ?? "image generation failed";
 	if (result.stopReason === "aborted") return result.errorMessage ?? "image generation aborted";
-	if (!result.output.some((item) => item.type === "image")) return "image generation returned no image output";
+	if (!result.output.some((item) => item.type === "image")) {
+		return textOutput(result) || "image generation returned no image output";
+	}
 	return undefined;
 }
 
@@ -195,10 +198,7 @@ async function collectWorkspaceReferenceImages(config: Config, rawRef: string): 
 	if (!pathStat) throw new Error(`Reference image path not found: ${rawRef}`);
 	if (pathStat.isSymbolicLink()) throw new Error(`Reference image path cannot be a symlink: ${rawRef}`);
 	if (pathStat.isDirectory()) {
-		const images: WorkspaceReferenceImage[] = [];
-		await collectWorkspaceReferenceImagesFromDir(path, images);
-		if (!images.length) throw new Error(`Reference image folder does not contain supported images: ${rawRef}`);
-		return images;
+		throw new Error(`Reference image path must be a file, not a folder: ${rawRef}`);
 	}
 	if (!pathStat.isFile()) throw new Error(`Reference image path is not a file or folder: ${rawRef}`);
 	const mimeType = mimeTypeFromPath(path);
@@ -211,30 +211,6 @@ async function collectWorkspaceReferenceImages(config: Config, rawRef: string): 
 			size: pathStat.size,
 		},
 	];
-}
-
-async function collectWorkspaceReferenceImagesFromDir(dir: string, output: WorkspaceReferenceImage[]): Promise<void> {
-	const entries = await readdir(dir, { withFileTypes: true });
-	entries.sort((left, right) => left.name.localeCompare(right.name));
-	for (const entry of entries) {
-		const localPath = resolve(dir, entry.name);
-		if (entry.isSymbolicLink()) {
-			throw new Error(`Reference image path cannot be a symlink: ${localPath}`);
-		}
-		if (entry.isDirectory()) {
-			await collectWorkspaceReferenceImagesFromDir(localPath, output);
-			continue;
-		}
-		if (!entry.isFile()) continue;
-		const mimeType = mimeTypeFromPath(localPath);
-		if (!mimeType) continue;
-		output.push({
-			localPath,
-			name: entry.name,
-			mimeType,
-			size: (await stat(localPath)).size,
-		});
-	}
 }
 
 function splitReferenceImages(
@@ -274,15 +250,30 @@ function splitReferenceImages(
 	return { attachments: selected, workspaceRefs };
 }
 
-function workspaceReferenceAttachments(images: WorkspaceReferenceImage[]): StoredAttachment[] {
-	return images.map((image) => ({
-		id: `workspace:${image.localPath}`,
-		name: image.name,
-		kind: "image",
-		mimeType: image.mimeType,
-		size: image.size,
-		localPath: image.localPath,
-	}));
+async function workspaceReferenceAttachments(
+	config: Config,
+	images: WorkspaceReferenceImage[],
+): Promise<StoredAttachment[]> {
+	const attachments: StoredAttachment[] = [];
+	for (const image of images) {
+		const attachment: StoredAttachment = {
+			id: `workspace:${image.localPath}`,
+			name: image.name,
+			kind: "image",
+			mimeType: image.mimeType,
+			size: image.size,
+			localPath: image.localPath,
+		};
+		const derivedImage = await ensureInlineImageDerivative(config, attachment);
+		if (derivedImage) {
+			attachment.derived = {
+				...attachment.derived,
+				image: derivedImage,
+			};
+		}
+		attachments.push(attachment);
+	}
+	return attachments;
 }
 
 async function buildImageContext(
@@ -310,7 +301,7 @@ async function buildImageContext(
 	}
 	const promptImages = await promptImagesFromAttachments([
 		...references,
-		...workspaceReferenceAttachments(workspaceImages),
+		...(await workspaceReferenceAttachments(config, workspaceImages)),
 	]);
 	if (promptImages.promptSuffix) input.push({ type: "text", text: promptImages.promptSuffix });
 	input.push(...promptImages.images);
@@ -439,7 +430,21 @@ export function createImageGenTool(
 					);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
-					if (message.includes("does not support reference images") && (ref !== fallbackRef || !fallbackRef)) {
+					let baseUrl = "";
+					try {
+						baseUrl = resolveImageModel(config, ref).baseUrl;
+					} catch {
+						baseUrl = "";
+					}
+					attempts.push({
+						provider: ref.provider,
+						model: ref.id,
+						api: config.imageGen.api,
+						baseUrl,
+						stopReason: "error",
+						errorMessage: message,
+					});
+					if (message.includes("does not support reference images") && ref === primaryRef && fallbackRef) {
 						selectedError = message;
 						continue;
 					}

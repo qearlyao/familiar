@@ -40,7 +40,7 @@ const imageGenSchema = Type.Object(
 		referenceImages: Type.Optional(
 			Type.Array(Type.String(), {
 				description:
-					"Optional uploaded image attachment IDs or exact names, or workspace-relative image file/folder paths, to use as visual references. Use IDs from the attachment tags when available.",
+					"Optional. Image attachment IDs or names, or workspace-relative image file paths, to use as visual references. Prefer IDs from the attachment tags when available.",
 			}),
 		),
 	},
@@ -196,7 +196,7 @@ function imageMimeTypeFromBytes(buffer: Buffer): string | undefined {
 	return undefined;
 }
 
-function recoveredImageFromBase64(value: string, mimeType?: string): RecoveredImage | undefined {
+function recoveredImageFromBase64(value: string): RecoveredImage | undefined {
 	const data = value.trim();
 	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length % 4 !== 0) return undefined;
 	const buffer = Buffer.from(data, "base64");
@@ -212,10 +212,10 @@ function recoveredImageFromBase64(value: string, mimeType?: string): RecoveredIm
 function recoveredImageFromText(text: string): RecoveredImage | undefined {
 	const trimmed = text.trim();
 	const dataUrlMatch = trimmed.match(/^data:(image\/[^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
-	if (dataUrlMatch) return recoveredImageFromBase64(dataUrlMatch[2] ?? "", dataUrlMatch[1]);
+	if (dataUrlMatch) return recoveredImageFromBase64(dataUrlMatch[2] ?? "");
 	const embeddedDataUrlMatch = text.match(/data:(image\/[^;)\]\s]+);base64,([A-Za-z0-9+/]+={0,2})/);
 	if (embeddedDataUrlMatch) {
-		return recoveredImageFromBase64(embeddedDataUrlMatch[2] ?? "", embeddedDataUrlMatch[1]);
+		return recoveredImageFromBase64(embeddedDataUrlMatch[2] ?? "");
 	}
 	return recoveredImageFromBase64(trimmed);
 }
@@ -449,9 +449,9 @@ export function createImageGenTool(
 ): AgentTool<typeof imageGenSchema, ImageGenToolDetails> {
 	return {
 		name: "image_gen",
-		label: "image_gen",
+		label: "Image Gen",
 		description:
-			"generate an image from a prompt. use for drawing, rendering, visual concepts, edits described in text, or when an image attachment would be more useful than prose. returns generated image attachments.",
+			"make an image from a prompt. pass referenceImages to riff on existing pictures.",
 		parameters: imageGenSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: ImageGenToolInput, signal?: AbortSignal) {

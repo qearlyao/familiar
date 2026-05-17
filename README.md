@@ -116,14 +116,13 @@ not verify Tailscale identity yet.
 ## Optional Browser Backends
 
 The `browser` tool is disabled by default. To use it, install one or both helper
-CLIs and enable `[browser].enabled = true` in `config.toml`.
-
-```sh
-npm install -g @jackwener/opencli browser-harness
-```
+CLIs from their upstream repositories and enable `[browser].enabled = true` in
+`config.toml`.
 
 - `browser-harness` is best for attaching to your already-running Chrome via CDP.
 - OpenCLI is best for site adapters, owned sessions, and unattended Browser Bridge flows.
+- OpenCLI: [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)
+- browser-harness: [browser-use/browser-harness](https://github.com/browser-use/browser-harness)
 
 Familiar stores browser screenshots under the active workspace data directory:
 `<workspace>/data/attachments/screenshot`.

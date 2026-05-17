@@ -231,19 +231,8 @@ function stringArg(value: unknown): string | undefined {
 	return text ? text : undefined;
 }
 
-function boolArg(value: unknown): string | undefined {
-	if (typeof value === "boolean") return value ? "true" : "false";
-	if (typeof value === "string" && value.trim()) return value.trim();
-	return undefined;
-}
-
 function pushOptionalFlag(args: string[], flag: string, value: unknown): void {
 	const read = stringArg(value);
-	if (read !== undefined) args.push(flag, read);
-}
-
-function pushOptionalBoolFlag(args: string[], flag: string, value: unknown): void {
-	const read = boolArg(value);
 	if (read !== undefined) args.push(flag, read);
 }
 

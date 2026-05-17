@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
-import { generatedAttachmentsDir } from "../src/generated-media.js";
+import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/generated-media.js";
 import { serveAttachment } from "../src/web-static.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
@@ -58,7 +57,7 @@ describe("serveAttachment", () => {
 	it("serves browser screenshot files", async () => {
 		const root = await createTempDataDir();
 		const config = await configWithDataDir(root);
-		const dir = resolve(homedir(), ".familiar", "data", "attachments", "screenshot");
+		const dir = browserScreenshotsDir(config);
 		await rm(dir, { recursive: true, force: true });
 		await mkdir(dir, { recursive: true });
 		await writeFile(resolve(dir, "screen.png"), "png", "utf8");

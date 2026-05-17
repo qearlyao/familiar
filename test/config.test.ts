@@ -342,10 +342,35 @@ api = "native-gemini"
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.agent.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.agent.cacheRetention, "short");
 		assert.equal(config.discord.chunkMode, "newline");
-		assert.equal(config.heartbeat.enabled, false);
+		assert.deepEqual(config.browser, {
+			enabled: false,
+			backend: "browser-harness",
+			opencliCommand: "opencli",
+			harnessCommand: "browser-harness",
+			session: "familiar",
+			profile: undefined,
+			windowMode: "foreground",
+			timeoutMs: 60_000,
+			maxOutputChars: 12_000,
+			readWrite: true,
+			allowedSites: config.browser.allowedSites,
+		});
+		assert.equal(config.heartbeat.enabled, true);
+		assert.equal(config.models.baseUrls.link, "https://api.linkapi.ai/v1");
+		assert.equal(config.models.apiKeyEnvs.link, "LINK_API_KEY");
+		assert.deepEqual(config.imageGen, {
+			enabled: true,
+			model: "link/gpt-image-2-c",
+			fallbackModel: "link/gemini-3-pro-image-preview",
+			api: "openrouter-images",
+			timeoutMs: 120000,
+		});
 		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-7");
-		assert.ok(config.models.allow.includes(config.memory.lcm.model));
+		for (const model of [config.agent.model, config.memory.lcm.model, config.imageGen.model, config.imageGen.fallbackModel]) {
+			assert.ok(model === undefined || config.models.allow.includes(model));
+		}
 	});
 
 	it("loads heartbeat settings", async () => {

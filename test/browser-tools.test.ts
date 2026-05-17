@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { mkdir, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -10,7 +9,7 @@ import {
 	type BrowserCommandResult,
 	type BrowserRunSpec,
 } from "../src/browser-tools.js";
-import { createGeneratedMediaSink } from "../src/generated-media.js";
+import { browserScreenshotsDir, createGeneratedMediaSink } from "../src/generated-media.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function textFrom(result: Awaited<ReturnType<ReturnType<typeof createBrowserTools>[number]["execute"]>>): string {
@@ -338,7 +337,7 @@ describe("browser tools", () => {
 		const attachment = sink.drain()[0];
 
 		assert.ok(attachment?.localPath);
-		assert.ok(attachment.localPath.startsWith(resolve(homedir(), ".familiar", "data", "attachments", "screenshot")));
+		assert.ok(attachment.localPath.startsWith(browserScreenshotsDir(config)));
 		assert.equal((await stat(attachment.localPath)).isFile(), true);
 		assert.equal(result.details?.attachmentName, basename(attachment.localPath));
 		assert.doesNotMatch(textFrom(result), /model-picked/);
@@ -370,7 +369,7 @@ describe("browser tools", () => {
 		const attachment = sink.drain()[0];
 
 		assert.ok(attachment?.localPath);
-		assert.ok(attachment.localPath.startsWith(resolve(homedir(), ".familiar", "data", "attachments", "screenshot")));
+		assert.ok(attachment.localPath.startsWith(browserScreenshotsDir(config)));
 		assert.equal(result.details?.backend, "browser-harness");
 		assert.equal(result.details?.attachmentName, basename(attachment.localPath));
 	});

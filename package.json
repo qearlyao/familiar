@@ -19,6 +19,7 @@
 		"USER.md",
 		"MEMORY.md",
 		"HEARTBEAT.md",
+		"skills/**",
 		"README.md",
 		"LICENSE"
 	],

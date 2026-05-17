@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, cp, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,6 +61,15 @@ async function ensureWorkspaceDirs(dirs: WorkspaceDirs): Promise<void> {
 	]);
 }
 
+async function copyDefaultSkills(workspacePath: string): Promise<void> {
+	const sourcePath = resolve(PROJECT_ROOT, "skills");
+	if (!existsSync(sourcePath)) return;
+	await cp(sourcePath, resolve(workspacePath, "skills"), {
+		recursive: true,
+		force: false,
+	});
+}
+
 function resolveWorkspaceInput(workspaceInput?: string): string {
 	return workspaceInput ? resolve(workspaceInput) : DEFAULT_WORKSPACE_PATH;
 }
@@ -95,6 +104,7 @@ async function initWorkspace(workspaceInput?: string): Promise<void> {
 	await copyFile(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
 	await copyFile(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
 	await copyFile(resolve(PROJECT_ROOT, "HEARTBEAT.md"), resolve(workspacePath, "HEARTBEAT.md"));
+	await copyDefaultSkills(workspacePath);
 	await ensureWorkspaceDirs(defaultWorkspaceDirs(workspacePath));
 	console.log(`Initialized familiar workspace at ${workspacePath}`);
 }

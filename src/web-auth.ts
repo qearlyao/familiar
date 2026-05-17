@@ -26,7 +26,10 @@ function parseCookies(header: string | undefined): Record<string, string> {
 }
 
 function decodeTotpSecret(secret: string): Buffer {
-	const normalized = secret.replace(/\s+/g, "").replace(/=+$/g, "").toUpperCase();
+	const normalized = secret
+		.replace(/\s/g, "")
+		.replace(/={1,8}$/, "")
+		.toUpperCase();
 	if (!/^[A-Z2-7]+$/.test(normalized)) return Buffer.from(secret, "utf8");
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 	let bits = "";
@@ -66,7 +69,7 @@ export function verifyTotp(secret: string, token: string, now = Date.now()): boo
 function readBearerToken(request: IncomingMessage): string | undefined {
 	const header = request.headers.authorization;
 	if (!header) return undefined;
-	const match = header.match(/^Bearer\s+(.+)$/i);
+	const match = header.match(/^Bearer (.+)$/i);
 	return match?.[1];
 }
 

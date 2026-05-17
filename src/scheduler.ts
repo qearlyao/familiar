@@ -264,7 +264,11 @@ export function isHeartbeatDue(options: {
 	const idleDurationMs = options.now - options.lastUserInteractionAt;
 	if (idleDurationMs < options.idleThresholdMs) return false;
 	const lastHeartbeatAt = options.lastHeartbeatAt ? Date.parse(options.lastHeartbeatAt) : undefined;
-	if (lastHeartbeatAt == null || !Number.isFinite(lastHeartbeatAt) || lastHeartbeatAt <= options.lastUserInteractionAt) {
+	if (
+		lastHeartbeatAt == null ||
+		!Number.isFinite(lastHeartbeatAt) ||
+		lastHeartbeatAt <= options.lastUserInteractionAt
+	) {
 		return true;
 	}
 	return options.now - lastHeartbeatAt >= Math.max(0, options.intervalMs);

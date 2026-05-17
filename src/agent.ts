@@ -5,10 +5,9 @@ import { dirname, resolve } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
-
+import { createBrowserTools } from "./browser-tools.js";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ThinkingLevel } from "./config.js";
-import { createBrowserTools } from "./browser-tools.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import { createImageGenTool } from "./image-gen.js";
 import type { MemoryService } from "./memory/service.js";

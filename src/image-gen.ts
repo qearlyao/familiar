@@ -4,12 +4,12 @@ import { basename, extname, isAbsolute, relative, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+	type AssistantImages,
 	findEnvKeys,
 	generateImages,
 	getEnvApiKey,
 	getImageModels,
 	getImageProviders,
-	type AssistantImages,
 	type ImagesContext,
 	type ImagesFunction,
 	type ImagesModel,
@@ -22,7 +22,7 @@ import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 import { ensureInlineImageDerivative } from "./image-derivatives.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
-import { parseModelRef, type ModelRef } from "./models.js";
+import { type ModelRef, parseModelRef } from "./models.js";
 
 const IMAGE_GEN_NOTICE_PREFIX = "Generated image attachment:";
 const OPENROUTER_IMAGE_BASE_URL = "https://openrouter.ai/api/v1";
@@ -450,8 +450,7 @@ export function createImageGenTool(
 	return {
 		name: "image_gen",
 		label: "Image Gen",
-		description:
-			"make an image from a prompt. pass referenceImages to riff on existing pictures.",
+		description: "make an image from a prompt. pass referenceImages to riff on existing pictures.",
 		parameters: imageGenSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: ImageGenToolInput, signal?: AbortSignal) {

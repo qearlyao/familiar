@@ -192,10 +192,9 @@ Status: TTS v0 and skills v0 are done. Remaining work is image generation and We
 
 Image-generation tool:
 
-- Implement `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation once it is published to npm.
-- Upstream status: local `earendil-works/pi` main has a new image-generation API after `v0.74.0`: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support. npm `0.74.0` still does not include this API.
-- Strategy: do not invent a parallel provider abstraction while upstream image APIs are close to release. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
-- If implementation must happen before upstream publishes image APIs, make the provider layer intentionally thin and easy to replace with upstream `generateImages()`.
+- Implement `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation.
+- Upstream status: `@earendil-works/pi-ai@0.74.1` publishes the image-generation API: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support.
+- Strategy: do not invent a parallel provider abstraction. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
 - Initial Familiar provider target is qearl's custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
 - Treat upstream's OpenRouter image implementation as an API-shape/reference implementation only, not the default provider choice.
 - Config shape should distinguish chat models from image models, e.g. provider/model/base URL/API shape for image generation, because upstream uses `ImagesModel`, not normal `Model`.
@@ -354,7 +353,7 @@ Provider/cache refs:
 - `/Users/qearl/pi-mono/packages/ai/src/providers/openai-responses.ts`
   - session/cache headers
 - `/Users/qearl/pi-mono/packages/ai/src/images.ts`
-  - upstream `generateImages()` entry point on main; not in npm `0.74.0` yet
+  - upstream `generateImages()` entry point, published in `@earendil-works/pi-ai@0.74.1`
 - `/Users/qearl/pi-mono/packages/ai/src/image-models.ts`
   - upstream image model discovery on main: `getImageModel`, `getImageModels`, `getImageProviders`
 - `/Users/qearl/pi-mono/packages/ai/src/providers/images/openrouter.ts`

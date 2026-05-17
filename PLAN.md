@@ -192,7 +192,7 @@ Status: TTS v0 and skills v0 are done. Remaining work is image generation and We
 
 Image-generation tool:
 
-- Implement `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation.
+- Implemented `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation.
 - Upstream status: `@earendil-works/pi-ai@0.74.1` publishes the image-generation API: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support.
 - Strategy: do not invent a parallel provider abstraction. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
 - Initial Familiar provider target is qearl's custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
@@ -200,7 +200,9 @@ Image-generation tool:
 - Config shape should distinguish chat models from image models, e.g. provider/model/base URL/API shape for image generation, because upstream uses `ImagesModel`, not normal `Model`.
 - Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, WebUI live/history attachment plumbing, and retention cleanup from TTS.
 - Store prompt, provider, model, response id when available, mime type, size, local path, public attachment path, and any text side-output in durable metadata.
-- Add tests for image config defaults, generated attachment registration, public path safety, and Discord/Web attachment serialization.
+- Supports reference images by uploaded attachment id/name or workspace image file/folder path for models whose upstream `ImagesModel.input` includes `image`.
+- Add image generation args later: OpenRouter/Gemini `image_config.aspect_ratio` and `image_config.image_size`; OpenAI-style `size`, `quality`, `output_format`, `output_compression`, `background`, `moderation`, and `n` via upstream `onPayload` or a future native image provider.
+- Add tests for any new image args plus Discord/Web attachment serialization edge cases.
 - Keep media tools simple and direct; do not route generation through subagents.
 - Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
 - Add a manual generated-media cleanup command later if startup retention is not enough.

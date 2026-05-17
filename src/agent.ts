@@ -6,6 +6,7 @@ import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@eare
 import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
 
+import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ThinkingLevel } from "./config.js";
 import { createBrowserTools } from "./browser-tools.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
@@ -36,6 +37,7 @@ export interface FamiliarAgentReply {
 
 export interface FamiliarPromptOptions {
 	skipAmbient?: boolean;
+	referenceAttachments?: StoredAttachment[];
 }
 
 export interface FamiliarAgent {
@@ -44,6 +46,7 @@ export interface FamiliarAgent {
 		input: string,
 		images?: ImageContent[],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		options?: FamiliarPromptOptions,
 	): Promise<FamiliarAgentReply>;
 	promptMessage(
 		sessionKey: string,
@@ -71,6 +74,7 @@ interface FamiliarAgentSession {
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;
 	mediaSink: GeneratedMediaSink;
+	referenceAttachments: StoredAttachment[];
 	promptQueue: Promise<void>;
 }
 
@@ -319,6 +323,7 @@ function userTextMessage(text: string, timestamp = Date.now()): AgentMessage {
 function createFamiliarTools(
 	config: Config,
 	mediaSink: GeneratedMediaSink,
+	referenceAttachments: () => readonly StoredAttachment[] = () => [],
 	memoryService?: MemoryService,
 ): AgentTool<any>[] {
 	const bashTool = createBashTool(config.workspacePath);
@@ -335,11 +340,15 @@ function createFamiliarTools(
 		writeTool,
 		editTool,
 		createTtsTool(config, mediaSink),
-		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink)] : []),
+		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
 		...createWebTools(config),
 		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),
 	];
+}
+
+function setReferenceAttachments(session: FamiliarAgentSession, attachments: readonly StoredAttachment[] = []): void {
+	session.referenceAttachments.splice(0, session.referenceAttachments.length, ...attachments);
 }
 
 export async function createFamiliarAgent(
@@ -389,6 +398,7 @@ export async function createFamiliarAgent(
 		const { model } = resolveChannelModel(sessionKey);
 		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
 		const mediaSink = createGeneratedMediaSink();
+		const referenceAttachments: StoredAttachment[] = [];
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
 		let agent!: Agent;
 		agent = new Agent({
@@ -396,7 +406,7 @@ export async function createFamiliarAgent(
 				systemPrompt,
 				model,
 				messages,
-				tools: createFamiliarTools(config, mediaSink, memoryService),
+				tools: createFamiliarTools(config, mediaSink, () => referenceAttachments, memoryService),
 				thinkingLevel,
 			},
 			sessionId,
@@ -461,6 +471,7 @@ export async function createFamiliarAgent(
 			model,
 			thinkingLevel,
 			mediaSink,
+			referenceAttachments,
 			promptQueue: Promise.resolve(),
 		};
 	};
@@ -489,7 +500,13 @@ export async function createFamiliarAgent(
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
 		session.mediaSink.drain();
-		session.agent.state.tools = createFamiliarTools(config, session.mediaSink, memoryService);
+		setReferenceAttachments(session);
+		session.agent.state.tools = createFamiliarTools(
+			config,
+			session.mediaSink,
+			() => session.referenceAttachments,
+			memoryService,
+		);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
@@ -501,7 +518,12 @@ export async function createFamiliarAgent(
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = model;
 		session.agent.state.thinkingLevel = thinkingLevel;
-		session.agent.state.tools = createFamiliarTools(config, session.mediaSink, memoryService);
+		session.agent.state.tools = createFamiliarTools(
+			config,
+			session.mediaSink,
+			() => session.referenceAttachments,
+			memoryService,
+		);
 	};
 
 	return {
@@ -603,16 +625,19 @@ export async function createFamiliarAgent(
 			input: string,
 			imagesOrOnEvent?: ImageContent[] | ((event: AgentEvent) => void | Promise<void>),
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
+			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			const session = await getSession(sessionKey);
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
 			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
 			const run = session.promptQueue.then(async () => {
 				session.mediaSink.drain();
+				setReferenceAttachments(session, options.referenceAttachments);
 				const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
 				try {
 					await session.agent.prompt(input, images);
 				} finally {
+					setReferenceAttachments(session);
 					unsubscribe?.();
 				}
 				return {
@@ -635,6 +660,7 @@ export async function createFamiliarAgent(
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
 				session.mediaSink.drain();
+				setReferenceAttachments(session, options.referenceAttachments);
 				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
 				const previousOptions = activePromptOptions.get(sessionKey);
 				activePromptOptions.set(sessionKey, options);
@@ -642,6 +668,7 @@ export async function createFamiliarAgent(
 				try {
 					await session.agent.prompt(message);
 				} finally {
+					setReferenceAttachments(session);
 					if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
 					else activePromptOptions.delete(sessionKey);
 					unsubscribe?.();

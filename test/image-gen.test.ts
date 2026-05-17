@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
+import { resolve } from "node:path";
 
 import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai";
 
+import type { StoredAttachment } from "../src/chat-log.js";
+import { attachmentsDir } from "../src/generated-media.js";
 import { createGeneratedMediaSink, generatedAttachmentsDir } from "../src/generated-media.js";
 import { createImageGenTool, imageExtension, resolveImageModel } from "../src/image-gen.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
@@ -163,6 +166,227 @@ describe("image_gen tool", () => {
 			else process.env.PRIMARY_IMAGE_KEY = previousPrimary;
 			if (previousFallback === undefined) delete process.env.FALLBACK_IMAGE_KEY;
 			else process.env.FALLBACK_IMAGE_KEY = previousFallback;
+		}
+	});
+
+	it("passes selected reference image attachments into upstream image context", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const imageDir = resolve(attachmentsDir(config), "inbound", "web");
+			await mkdir(imageDir, { recursive: true });
+			const imagePath = resolve(imageDir, "moon.png");
+			await writeFile(imagePath, "reference-image", "utf8");
+			const reference: StoredAttachment = {
+				id: "att-1",
+				name: "moon.png",
+				kind: "image",
+				mimeType: "image/png",
+				size: 15,
+				localPath: imagePath,
+				source: "web",
+			};
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				referenceAttachments: () => [reference],
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", { prompt: "redraw this", referenceImages: ["att-1"] });
+
+			assert.equal(capturedContext?.input[0]?.type, "text");
+			assert.deepEqual(capturedContext?.input[1], {
+				type: "text",
+				text: '<attachment name="moon.png" mime="image/png"></attachment>',
+			});
+			assert.deepEqual(capturedContext?.input[2], {
+				type: "image",
+				mimeType: "image/png",
+				data: Buffer.from("reference-image").toString("base64"),
+			});
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("passes workspace reference image paths into upstream image context", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const referenceDir = resolve(config.workspacePath, "refs");
+			await mkdir(referenceDir, { recursive: true });
+			const imagePath = resolve(referenceDir, "moon.png");
+			await writeFile(imagePath, "workspace-image", "utf8");
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", { prompt: "redraw this", referenceImages: ["refs/moon.png"] });
+
+			assert.deepEqual(capturedContext?.input[1], {
+				type: "text",
+				text: '<attachment name="moon.png" mime="image/png"></attachment>',
+			});
+			assert.deepEqual(capturedContext?.input[2], {
+				type: "image",
+				mimeType: "image/png",
+				data: Buffer.from("workspace-image").toString("base64"),
+			});
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("expands workspace reference image folders in stable order", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const referenceDir = resolve(config.workspacePath, "refs", "style");
+			await mkdir(resolve(referenceDir, "nested"), { recursive: true });
+			await writeFile(resolve(referenceDir, "b.webp"), "second", "utf8");
+			await writeFile(resolve(referenceDir, "a.png"), "first", "utf8");
+			await writeFile(resolve(referenceDir, "notes.txt"), "ignored", "utf8");
+			await writeFile(resolve(referenceDir, "nested", "c.jpg"), "third", "utf8");
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", { prompt: "use this style", referenceImages: ["refs/style"] });
+
+			assert.equal(capturedContext?.input.length, 5);
+			assert.deepEqual(capturedContext?.input[1], {
+				type: "text",
+				text: [
+					'<attachment name="a.png" mime="image/png"></attachment>',
+					'<attachment name="b.webp" mime="image/webp"></attachment>',
+					'<attachment name="c.jpg" mime="image/jpeg"></attachment>',
+				].join("\n"),
+			});
+			assert.deepEqual(capturedContext?.input[2], {
+				type: "image",
+				mimeType: "image/png",
+				data: Buffer.from("first").toString("base64"),
+			});
+			assert.deepEqual(capturedContext?.input[3], {
+				type: "image",
+				mimeType: "image/webp",
+				data: Buffer.from("second").toString("base64"),
+			});
+			assert.deepEqual(capturedContext?.input[4], {
+				type: "image",
+				mimeType: "image/jpeg",
+				data: Buffer.from("third").toString("base64"),
+			});
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("rejects workspace reference image paths outside the workspace", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async () => {
+					throw new Error("should not call provider");
+				},
+			});
+
+			await assert.rejects(
+				() => tool.execute("call-1", { prompt: "redraw this", referenceImages: ["../outside.png"] }),
+				/must be inside the workspace/,
+			);
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("rejects workspace reference image symlinks", async () => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir();
+			const config = await configWithDataDir(dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const referenceDir = resolve(config.workspacePath, "refs");
+			await mkdir(referenceDir, { recursive: true });
+			const outsidePath = resolve(dataDir, "outside.png");
+			await writeFile(outsidePath, "outside", "utf8");
+			await symlink(outsidePath, resolve(referenceDir, "link.png"));
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async () => {
+					throw new Error("should not call provider");
+				},
+			});
+
+			await assert.rejects(
+				() => tool.execute("call-1", { prompt: "redraw this", referenceImages: ["refs/link.png"] }),
+				/cannot be a symlink/,
+			);
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
 		}
 	});
 

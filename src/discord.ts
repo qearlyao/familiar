@@ -767,7 +767,9 @@ export async function startDiscordDaemon(
 			try {
 				const promptImages = await promptImagesFromAttachments(attachments);
 				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
-				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent);
+				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent, {
+					referenceAttachments: attachments,
+				});
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
 			} finally {
@@ -980,14 +982,7 @@ export async function startDiscordDaemon(
 			const now = Date.now();
 			if (heartbeatRuntime.hasLiveWork()) return;
 			const lastUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
-			if (
-				!heartbeatStillDue(
-					config,
-					now,
-					lastUserInteractionAt,
-					schedulerState.heartbeat?.lastFiredAt,
-				)
-			) {
+			if (!heartbeatStillDue(config, now, lastUserInteractionAt, schedulerState.heartbeat?.lastFiredAt)) {
 				return;
 			}
 
@@ -1101,7 +1096,9 @@ export async function startDiscordDaemon(
 				deliveryMode: job.deliveryMode,
 			});
 			await markCronSlotStarted(job, slot);
-			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), { skipAmbient: true });
+			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), {
+				skipAmbient: true,
+			});
 			await completeCronSlot(job, slot);
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_completed",

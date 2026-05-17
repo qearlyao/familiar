@@ -20,7 +20,7 @@ are comfortable editing a config file and running a long-lived Node process.
 After the npm package is published:
 
 ```sh
-npm install -g @qearl/familiar@latest
+npm install -g @qearlyao/familiar@latest
 ```
 
 From a source checkout:

@@ -104,6 +104,15 @@ style = 0
 speed = 1
 use_speaker_boost = true
 
+[image_gen]
+enabled = true
+# Uses upstream pi-ai image generation. OpenRouter image models work out of the box;
+# custom OpenRouter-compatible proxies can use provider/model refs plus [models.*] overrides.
+model = "openrouter/google/gemini-2.5-flash-image"
+# fallback_model = "openrouter/openai/gpt-5-image"
+api = "openrouter-images"
+timeout_ms = 120000
+
 [media.generated]
 retention_days = 30
 

@@ -35,6 +35,13 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.modelId, "eleven_multilingual_v2");
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
+		assert.deepEqual(config.imageGen, {
+			enabled: true,
+			model: "openrouter/google/gemini-2.5-flash-image",
+			fallbackModel: undefined,
+			api: "openrouter-images",
+			timeoutMs: 120000,
+		});
 		assert.equal(config.media.generatedRetentionDays, 30);
 		assert.deepEqual(config.data, {
 			chat: { retentionDays: 0 },
@@ -219,6 +226,42 @@ retention_days = 7
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.media.generatedRetentionDays, 7);
+	});
+
+	it("loads image generation settings", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[image_gen]
+enabled = false
+model = "custom/gemini-image"
+fallback_model = "openrouter/openai/gpt-5-image"
+api = "openrouter-images"
+timeout_ms = 90000
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.imageGen, {
+			enabled: false,
+			model: "custom/gemini-image",
+			fallbackModel: "openrouter/openai/gpt-5-image",
+			api: "openrouter-images",
+			timeoutMs: 90000,
+		});
+	});
+
+	it("rejects unsupported image generation API shapes", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+[image_gen]
+api = "native-gemini"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /image_gen\.api/);
 	});
 
 	it("loads media understanding defaults", async () => {

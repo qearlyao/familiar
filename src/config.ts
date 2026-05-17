@@ -14,6 +14,7 @@ export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs";
+export type ImageGenApi = "openrouter-images";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
@@ -114,6 +115,13 @@ export interface Config {
 		outputFormat: string;
 		maxInputChars: number;
 		voiceSettings: TtsVoiceSettings;
+	};
+	imageGen: {
+		enabled: boolean;
+		model: string;
+		fallbackModel?: string;
+		api: ImageGenApi;
+		timeoutMs: number;
 	};
 	mediaUnderstanding: {
 		audio: {
@@ -330,6 +338,11 @@ function readWebAuthMode(value: unknown): WebAuthMode {
 function readTtsProvider(value: unknown): TtsProvider {
 	if (value === "elevenlabs") return value;
 	throw new Error('Config value tts.provider must be "elevenlabs"');
+}
+
+function readImageGenApi(value: unknown): ImageGenApi {
+	if (value === "openrouter-images") return value;
+	throw new Error('Config value image_gen.api must be "openrouter-images"');
 }
 
 function readMediaUnderstandingProvider(value: unknown): MediaUnderstandingProvider {
@@ -699,6 +712,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
+	const imageGen = (parsed.image_gen ?? {}) as Record<string, unknown>;
 	const media = (parsed.media ?? {}) as Record<string, unknown>;
 	const generatedMedia = (media.generated ?? {}) as Record<string, unknown>;
 	const data = (parsed.data ?? {}) as Record<string, unknown>;
@@ -928,6 +942,13 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					"tts.voice_settings.use_speaker_boost",
 				),
 			},
+		},
+		imageGen: {
+			enabled: readBoolean(imageGen.enabled, true, "image_gen.enabled"),
+			model: readConfigString(imageGen.model, "openrouter/google/gemini-2.5-flash-image", "image_gen.model"),
+			fallbackModel: readOptionalConfigString(imageGen.fallback_model, "image_gen.fallback_model"),
+			api: readImageGenApi(readOptionalString(imageGen.api, "openrouter-images")),
+			timeoutMs: readInteger(imageGen.timeout_ms, 120_000, "image_gen.timeout_ms", 1),
 		},
 		mediaUnderstanding: {
 			audio: {

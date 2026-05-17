@@ -5,7 +5,9 @@ import { resolve } from "node:path";
 import { type Config, loadConfig } from "../src/config.js";
 
 type ConfigOverrides = Partial<{
-	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser">]: Partial<Config[K]>;
+	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser" | "imageGen">]: Partial<
+		Config[K]
+	>;
 }> & {
 	data?: {
 		chat?: Partial<Config["data"]["chat"]>;
@@ -15,6 +17,7 @@ type ConfigOverrides = Partial<{
 	heartbeat?: Partial<Config["heartbeat"]>;
 	cron?: Partial<Config["cron"]>;
 	browser?: Partial<Config["browser"]>;
+	imageGen?: Partial<Config["imageGen"]>;
 	memory?: Omit<Partial<Config["memory"]>, "embedding" | "lcm"> & {
 		embedding?: Partial<Config["memory"]["embedding"]>;
 		lcm?: Partial<Config["memory"]["lcm"]>;
@@ -71,6 +74,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			cron: { ...config.cron, ...overrides.cron },
 			models: { ...config.models, ...overrides.models },
 			tts: { ...config.tts, ...overrides.tts },
+			imageGen: { ...config.imageGen, ...overrides.imageGen },
 			mediaUnderstanding: {
 				audio: { ...config.mediaUnderstanding.audio, ...overrides.mediaUnderstanding?.audio },
 				video: { ...config.mediaUnderstanding.video, ...overrides.mediaUnderstanding?.video },

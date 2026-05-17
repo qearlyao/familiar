@@ -9,6 +9,7 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool } from 
 import type { Config, ThinkingLevel } from "./config.js";
 import { createBrowserTools } from "./browser-tools.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
+import { createImageGenTool } from "./image-gen.js";
 import type { MemoryService } from "./memory/service.js";
 import {
 	assertModelCanAuthenticate,
@@ -334,6 +335,7 @@ function createFamiliarTools(
 		writeTool,
 		editTool,
 		createTtsTool(config, mediaSink),
+		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink)] : []),
 		...createWebTools(config),
 		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),

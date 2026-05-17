@@ -39,7 +39,7 @@
 		"@earendil-works/pi-agent-core": "^0.74.1",
 		"@earendil-works/pi-ai": "^0.74.1",
 		"@earendil-works/pi-coding-agent": "^0.74.1",
-		"better-sqlite3": "^12.9.0",
+		"better-sqlite3": "^12.10.0",
 		"discord.js": "^14.26.3",
 		"dotenv": "^16.4.5",
 		"sharp": "^0.34.5",
@@ -48,10 +48,10 @@
 		"typebox": "^1.1.38"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.3.5",
+		"@biomejs/biome": "2.4.15",
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.3.0",
-		"tsx": "^4.20.3",
+		"tsx": "^4.22.1",
 		"typescript": "^5.9.2"
 	},
 	"engines": {

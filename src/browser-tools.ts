@@ -313,8 +313,8 @@ function pageBackend(input: BrowserToolInput, config: Config): Config["browser"]
 	return input.backend ?? config.browser.backend;
 }
 
-async function defaultScreenshotPath(): Promise<string> {
-	const dir = await ensureBrowserScreenshotsDir();
+async function defaultScreenshotPath(config: Config): Promise<string> {
+	const dir = await ensureBrowserScreenshotsDir(config);
 	return resolve(dir, `browser_${randomUUID()}.png`);
 }
 
@@ -432,7 +432,7 @@ async function buildPageArgs(input: BrowserToolInput, config: Config): Promise<s
 		}
 		case "screenshot":
 			args.push("screenshot");
-			args.push(await defaultScreenshotPath());
+			args.push(await defaultScreenshotPath(config));
 			break;
 		case "tab": {
 			const kind = stringArg(input.kind) ?? "list";
@@ -520,7 +520,7 @@ async function buildHarnessSpec(input: BrowserToolInput, config: Config): Promis
 			);
 		}
 		case "screenshot": {
-			const path = await defaultScreenshotPath();
+			const path = await defaultScreenshotPath(config);
 			return harnessSpec(
 				input,
 				config,

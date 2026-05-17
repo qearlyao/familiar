@@ -56,7 +56,7 @@ export async function serveAttachment(config: Config, response: ServerResponse, 
 	const candidates = [
 		{ root: generatedAttachmentsDir(config), relativePath },
 		{ root: attachmentsDir(config), relativePath },
-		{ root: browserScreenshotsDir(), relativePath: relativePath.replace(/^screenshot[\\/]/, "") },
+		{ root: browserScreenshotsDir(config), relativePath: relativePath.replace(/^screenshot[\\/]/, "") },
 	];
 	for (const { root, relativePath: candidateRelativePath } of candidates) {
 		const rootRealPath = await realpath(root).catch(() => undefined);

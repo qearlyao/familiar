@@ -43,7 +43,7 @@ describe("generated media", () => {
 
 	it("creates public URLs for browser screenshots", async () => {
 		const config = await configWithDataDir("/workspace/data");
-		const localPath = resolve(browserScreenshotsDir(), "screen one.png");
+		const localPath = resolve(browserScreenshotsDir(config), "screen one.png");
 
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/screenshot/screen%20one.png");
 	});

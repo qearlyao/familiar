@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
@@ -35,8 +34,8 @@ export function attachmentsDir(config: Config): string {
 	return resolve(config.workspace.dataDir, "attachments");
 }
 
-export function browserScreenshotsDir(): string {
-	return resolve(homedir(), ".familiar", "data", "attachments", "screenshot");
+export function browserScreenshotsDir(config: Config): string {
+	return resolve(config.workspace.dataDir, "attachments", "screenshot");
 }
 
 export async function ensureGeneratedAttachmentsDir(config: Config): Promise<string> {
@@ -45,8 +44,8 @@ export async function ensureGeneratedAttachmentsDir(config: Config): Promise<str
 	return dir;
 }
 
-export async function ensureBrowserScreenshotsDir(): Promise<string> {
-	const dir = browserScreenshotsDir();
+export async function ensureBrowserScreenshotsDir(config: Config): Promise<string> {
+	const dir = browserScreenshotsDir(config);
 	await mkdir(dir, { recursive: true });
 	return dir;
 }
@@ -85,7 +84,7 @@ export function publicAttachmentPath(config: Config, localPath: string): string 
 			.map(encodeURIComponent)
 			.join("/")}`;
 	}
-	const screenshotRelativePath = relative(browserScreenshotsDir(), absolutePath);
+	const screenshotRelativePath = relative(browserScreenshotsDir(config), absolutePath);
 	if (screenshotRelativePath && !screenshotRelativePath.startsWith("..") && !isAbsolute(screenshotRelativePath)) {
 		return `/api/web/attachments/screenshot/${screenshotRelativePath
 			.split(/[\\/]+/)

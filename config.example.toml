@@ -20,16 +20,16 @@ bind_address = "127.0.0.1"
 # Real-browser control. Use OpenCLI for site adapters/owned sessions, or
 # browser-harness when you want Familiar to attach to your already-running Chrome.
 enabled = false
-backend = "opencli" # opencli | browser-harness
+backend = "browser-harness" # opencli | browser-harness
 opencli_command = "opencli"
 harness_command = "browser-harness"
 session = "familiar"
 # profile = "work"
-window = "background" # foreground | background
+window = "foreground" # foreground | background
 timeout_ms = 60000
 max_output_chars = 12000
 # Keep false until you explicitly want the agent to click/type/close sessions or run write adapters.
-read_write = false
+read_write = true
 
 # By default Familiar exposes a read-only allowlist for twitter/x, xiaohongshu,
 # rednote, reddit, bilibili, youtube, tiktok, douyin, and spotify.
@@ -40,11 +40,11 @@ read_write = false
 
 [agent]
 model = "anthropic/claude-opus-4-7"
-cache_retention = "long"
+cache_retention = "short"
 thinking_level = "medium"
 
 [heartbeat]
-enabled = false
+enabled = true
 # Before enabling, replace the placeholder HEARTBEAT.md in the workspace.
 # The first heartbeat can fire once idle time reaches idle_threshold_minutes.
 # Later heartbeats repeat every interval_minutes while the DM remains idle.
@@ -72,13 +72,16 @@ allow = [
 	"openai/gpt-5.5",
 	"google-vertex/gemini-3.1-pro-preview",
 	"google-vertex/gemini-3-flash-preview",
+	"link/gpt-image-2-c",
+    "link/gemini-3-pro-image-preview",
 ]
 
 [models.base_urls]
-# anthropic = "https://api.anthropic.com"
-# google = "https://generativelanguage.googleapis.com/v1beta"
-# openai = "https://api.openai.com/v1"
+# anthropic = "https://api.linkapi.ai"
+# google = "https://api.linkapi.ai/v1beta"
+# openai = "https://api.linkapi.ai/v1"
 # google-vertex = "https://{location}-aiplatform.googleapis.com"
+link = "https://api.linkapi.ai/v1"
 
 [models.api_key_envs]
 # anthropic = "ANTHROPIC_API_KEY"
@@ -87,6 +90,7 @@ allow = [
 # google-vertex is optional: pi-ai also supports Vertex ADC via gcloud ADC or
 # GOOGLE_APPLICATION_CREDENTIALS, plus GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION in .env.
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
+link = "LINK_API_KEY"
 
 [tts]
 provider = "elevenlabs"
@@ -106,11 +110,9 @@ use_speaker_boost = true
 
 [image_gen]
 enabled = true
-# Uses upstream pi-ai image generation. OpenRouter image models work out of the box;
-# custom OpenRouter-compatible proxies can use provider/model refs plus [models.*] overrides.
-model = "openrouter/google/gemini-2.5-flash-image"
-# fallback_model = "openrouter/openai/gpt-5-image"
 api = "openrouter-images"
+model = "link/gpt-image-2-c"
+fallback_model = "link/gemini-3-pro-image-preview"
 timeout_ms = 120000
 
 [media.generated]
@@ -177,7 +179,7 @@ weight_intensity = 0.1
 enabled = true
 
 # Omit model to inherit [agent].model, or set an explicit provider/model ref.
-# model = "anthropic/claude-opus-4-7"
+# model = "google/gemini-3-flash-preview"
 
 # Connection settings inherit from [models.base_urls] and [models.api_key_envs].
 context_threshold = 0.75

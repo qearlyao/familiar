@@ -204,10 +204,6 @@ capability map.
 
 ### Release And Packaging
 
-- Publish 0.1.1 after final checks.
-- After tagging 0.1.1, consider changing README one-line install URLs from
-  `main` to the tagged script path. This is the remaining supply-chain hardening
-  item; current behavior intentionally tracks `main`.
 - Installer tests are intentionally light for now. Shell `--help` is covered;
   PowerShell is not locally tested because this is not a Windows development
   environment.
@@ -245,8 +241,6 @@ capability map.
 - Add nginx/public-2fa deployment example after public-2fa UI is complete.
 - Add richer WebUI panes for memory, diary, transcript, payload, scheduler, and
   service-status inspection.
-- Add a visible `/new` divider in WebUI history when runtime reset events arrive.
-  Do not clear prior messages; signal the boundary.
 - Virtualize or trim the WebUI message list only after real long-tab jank shows
   up. `react-virtuoso` is the likely fix for dynamic-height bubbles.
 - Add playable-audio-first TTS rendering polish and a transcript/text toggle

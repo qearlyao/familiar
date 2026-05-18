@@ -32,6 +32,7 @@ import {
 import type { InboundChatRecord, StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
 import type { Config } from "./config.js";
+import type { RestartHandler } from "./control.js";
 import { materializeInboundAttachments, promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
 import { ConversationRuntime, type InboundMessageInput } from "./runtime.js";
@@ -55,8 +56,6 @@ const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 const CRON_SKIPPED = Symbol("cron-skipped");
-
-export type RestartHandler = () => string | Promise<string>;
 
 export interface DiscordDaemon {
 	client: Client<true>;

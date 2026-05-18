@@ -293,7 +293,7 @@ Installer v0.1.1:
 - Install `@qearlyao/familiar@latest` globally.
 - Run `familiar init` automatically when the target workspace has no `config.toml`.
 - Leave existing workspaces untouched; `familiar init` only fills missing default files and directories.
-- Offer `--with-browser` / `-WithBrowser` to install optional `@jackwener/opencli` and `browser-harness`.
+- Offer `--with-browser` / `-WithBrowser` to install optional `@jackwener/opencli` and browser-harness; require `git`, `uv`, and Python 3.11+ for browser-harness.
 - Print clear next steps for editing `.env`, editing `config.toml`, and running `familiar run`.
 
 Service v0.2:

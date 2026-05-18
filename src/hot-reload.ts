@@ -106,9 +106,12 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 		const dirPath = resolve(path);
 		if (closed || watchers.has(dirPath)) return;
 		try {
-			const watcher = watchFn(dirPath, { persistent: true }, (_eventType, filename) => {
+			const watcher = watchFn(dirPath, { persistent: true }, (eventType, filename) => {
 				const changedPath = filename ? resolve(dirPath, String(filename)) : dirPath;
-				if (basename(dirPath) === SKILLS_DIR || relative(workspacePath, dirPath).startsWith(`${SKILLS_DIR}${sep}`)) {
+				if (
+					eventType === "rename" &&
+					(basename(dirPath) === SKILLS_DIR || relative(workspacePath, dirPath).startsWith(`${SKILLS_DIR}${sep}`))
+				) {
 					void refreshSkillWatchers();
 				}
 				if (!filename || shouldReloadForPath(workspacePath, changedPath) || shouldReloadForPath(workspacePath, dirPath)) {

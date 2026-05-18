@@ -386,6 +386,7 @@ export async function createFamiliarAgent(
 	// tags message identities so followUpMessage's fire-and-forget path also opts out.
 	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
 	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
+	let reloadInProgress: Promise<void> | undefined;
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
 		const override = settings.getChannelModel(sessionKey);
@@ -518,6 +519,7 @@ export async function createFamiliarAgent(
 	};
 
 	const getSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
+		while (reloadInProgress) await reloadInProgress;
 		const existing = sessions.get(sessionKey);
 		if (existing) return existing;
 		const sessionPromise = createSession(sessionKey);
@@ -624,34 +626,44 @@ export async function createFamiliarAgent(
 			resetSession(session);
 		},
 		async reload(): Promise<string> {
-			const previousModel = formatModel(defaultModel);
-			const next = await prepareReload();
-			const reloadedSessions = await prepareReloadedSessions(next);
-			Object.assign(config, next.config);
-			persona = next.persona;
-			skillsResult = next.skillsResult;
-			logSkillDiagnostics(skillsResult);
-			systemPrompt = next.systemPrompt;
-			defaultModel = next.defaultModel;
-			for (const nextSession of reloadedSessions) {
-				nextSession.session.model = nextSession.model;
-				nextSession.session.thinkingLevel = nextSession.thinkingLevel;
-				nextSession.session.agent.state.systemPrompt = systemPrompt;
-				nextSession.session.agent.state.model = nextSession.model;
-				nextSession.session.agent.state.thinkingLevel = nextSession.thinkingLevel;
-				nextSession.session.agent.state.tools = nextSession.tools;
+			while (reloadInProgress) await reloadInProgress;
+			let releaseReload: (() => void) | undefined;
+			reloadInProgress = new Promise<void>((resolveReload) => {
+				releaseReload = resolveReload;
+			});
+			try {
+				const previousModel = formatModel(defaultModel);
+				const next = await prepareReload();
+				const reloadedSessions = await prepareReloadedSessions(next);
+				Object.assign(config, next.config);
+				persona = next.persona;
+				skillsResult = next.skillsResult;
+				logSkillDiagnostics(skillsResult);
+				systemPrompt = next.systemPrompt;
+				defaultModel = next.defaultModel;
+				for (const nextSession of reloadedSessions) {
+					nextSession.session.model = nextSession.model;
+					nextSession.session.thinkingLevel = nextSession.thinkingLevel;
+					nextSession.session.agent.state.systemPrompt = systemPrompt;
+					nextSession.session.agent.state.model = nextSession.model;
+					nextSession.session.agent.state.thinkingLevel = nextSession.thinkingLevel;
+					nextSession.session.agent.state.tools = nextSession.tools;
+				}
+				const modelLine =
+					previousModel === formatModel(defaultModel)
+						? `default_model: ${previousModel}`
+						: `default_model: ${previousModel} -> ${formatModel(defaultModel)}`;
+				return [
+					"Reloaded persona prompt, skills, and live agent settings.",
+					modelLine,
+					`skills: ${skillsResult.skills.length} loaded${skillsResult.diagnostics.length ? ` (${skillsResult.diagnostics.length} warnings)` : ""}`,
+					`active_sessions: ${reloadedSessions.length}`,
+					"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
+				].join("\n");
+			} finally {
+				releaseReload?.();
+				reloadInProgress = undefined;
 			}
-			const modelLine =
-				previousModel === formatModel(defaultModel)
-					? `default_model: ${previousModel}`
-					: `default_model: ${previousModel} -> ${formatModel(defaultModel)}`;
-			return [
-				"Reloaded persona prompt, skills, and live agent settings.",
-				modelLine,
-				`skills: ${skillsResult.skills.length} loaded${skillsResult.diagnostics.length ? ` (${skillsResult.diagnostics.length} warnings)` : ""}`,
-				`active_sessions: ${reloadedSessions.length}`,
-				"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
-			].join("\n");
 		},
 		resolveChannelModel,
 		getModel(sessionKey: string): EffectiveSetting<string> {

@@ -13,6 +13,7 @@ import {
 } from "./agent-events.js";
 import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
+import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
@@ -34,8 +35,6 @@ import {
 	type WebStreamEvent,
 	type WebToolEvent,
 } from "./web-types.js";
-
-export type RestartHandler = () => string | Promise<string>;
 
 function toUnixMs(ts: string | undefined): number {
 	const parsed = ts ? Date.parse(ts) : NaN;

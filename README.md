@@ -149,6 +149,7 @@ Windows PowerShell:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser
 ```
 
+- `--with-browser` installs OpenCLI with npm and browser-harness from its upstream repo with `uv`; it requires `git`, `uv`, and Python 3.11+.
 - `browser-harness` is best for attaching to your already-running Chrome via CDP.
 - OpenCLI is best for site adapters, owned sessions, and unattended Browser Bridge flows.
 - OpenCLI: [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)

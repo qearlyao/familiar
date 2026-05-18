@@ -22,6 +22,7 @@ const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
 const DEFAULT_WORKSPACE_PATH = resolve(homedir(), ".familiar");
 const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "backfill", "prune", "backup", "help", "--help"]);
+const RESTART_EXIT_DELAY_MS = 1500;
 
 interface WorkspaceDirs {
 	dataDir: string;
@@ -155,7 +156,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	};
 	const requestRestart = (): string => {
 		console.log("Restart requested");
-		setTimeout(() => void stop(75), 0);
+		setTimeout(() => void stop(75), RESTART_EXIT_DELAY_MS);
 		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
 	};
 	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, { restart: requestRestart });

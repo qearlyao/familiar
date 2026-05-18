@@ -127,12 +127,8 @@ if ! command -v familiar >/dev/null 2>&1; then
 fi
 
 if [ "$SKIP_INIT" -eq 0 ]; then
-	if [ -f "${WORKSPACE}/config.toml" ]; then
-		echo "Workspace already exists at ${WORKSPACE}; leaving files unchanged."
-	else
-		echo "Initializing workspace at ${WORKSPACE}..."
-		familiar init "$WORKSPACE"
-	fi
+	echo "Initializing or refreshing workspace defaults at ${WORKSPACE}..."
+	familiar init "$WORKSPACE"
 fi
 
 cat <<EOF

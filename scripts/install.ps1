@@ -105,15 +105,10 @@ if (-not (Get-Command familiar -ErrorAction SilentlyContinue)) {
 }
 
 if (-not $SkipInit) {
-	$configPath = Join-Path $Workspace "config.toml"
-	if (Test-Path $configPath) {
-		Write-Host "Workspace already exists at $Workspace; leaving files unchanged."
-	} else {
-		Write-Host "Initializing workspace at $Workspace..."
-		& familiar init $Workspace
-		if ($LASTEXITCODE -ne 0) {
-			throw "familiar init failed."
-		}
+	Write-Host "Initializing or refreshing workspace defaults at $Workspace..."
+	& familiar init $Workspace
+	if ($LASTEXITCODE -ne 0) {
+		throw "familiar init failed."
 	}
 }
 

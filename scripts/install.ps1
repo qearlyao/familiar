@@ -3,6 +3,7 @@ param(
 	[string]$Package = "@qearlyao/familiar@latest",
 	[string]$BrowserHarnessDir = (Join-Path (Join-Path $HOME "Developer") "browser-harness"),
 	[switch]$WithBrowser,
+	[switch]$InstallBrowserDeps,
 	[switch]$SkipInit
 )
 
@@ -12,6 +13,47 @@ function Require-Command($Name) {
 	if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
 		throw "Missing required command: $Name"
 	}
+}
+
+function Update-BrowserDepPath {
+	$candidates = @((Join-Path $HOME ".local\bin"), (Join-Path $HOME ".cargo\bin"))
+	foreach ($candidate in $candidates) {
+		if ((Test-Path $candidate) -and (($env:PATH -split [IO.Path]::PathSeparator) -notcontains $candidate)) {
+			$env:PATH = "$candidate$([IO.Path]::PathSeparator)$env:PATH"
+		}
+	}
+}
+
+function Confirm-BrowserDepInstall($Message) {
+	if ($InstallBrowserDeps) {
+		return $true
+	}
+	try {
+		$answer = Read-Host "$Message Install it now? [y/N]"
+		return $answer -match '^(y|yes)$'
+	} catch {
+		return $false
+	}
+}
+
+function Install-Uv {
+	Write-Host "Installing uv for browser-harness..."
+	irm https://astral.sh/uv/install.ps1 | iex
+	Update-BrowserDepPath
+	if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+		throw "uv installer finished, but uv is not on PATH. Open a new terminal or add $HOME\.local\bin to PATH."
+	}
+}
+
+function Ensure-Uv {
+	if (Get-Command uv -ErrorAction SilentlyContinue) {
+		return
+	}
+	if (Confirm-BrowserDepInstall "uv is required for browser-harness but was not found.") {
+		Install-Uv
+		return
+	}
+	throw "Missing required command: uv. Rerun with -WithBrowser -InstallBrowserDeps to install uv and Python 3.11 automatically."
 }
 
 function Test-Python311($Command, $PythonArgs = @()) {
@@ -32,15 +74,31 @@ function Resolve-Python311 {
 	if ($py -and (Test-Python311 $py.Source @("-3.11"))) {
 		return @{ Command = $py.Source; Args = @("-3.11"); UvPython = "3.11" }
 	}
-	throw "browser-harness requires Python 3.11 or newer. Install Python 3.11+ and rerun with -WithBrowser."
+	return $null
+}
+
+function Ensure-Python311 {
+	$python311 = Resolve-Python311
+	if ($python311) {
+		return $python311
+	}
+	if (Confirm-BrowserDepInstall "Python 3.11+ is required for browser-harness but was not found.") {
+		Write-Host "Installing Python 3.11 with uv for browser-harness..."
+		& uv python install 3.11
+		if ($LASTEXITCODE -ne 0) {
+			throw "Python 3.11 install failed."
+		}
+		return @{ Command = "uv"; Args = @("python", "find", "3.11"); UvPython = "3.11" }
+	}
+	throw "browser-harness requires Python 3.11 or newer. Rerun with -WithBrowser -InstallBrowserDeps to install uv-managed Python 3.11 automatically."
 }
 
 Require-Command node
 Require-Command npm
 if ($WithBrowser) {
 	Require-Command git
-	Require-Command uv
-	$Python311 = Resolve-Python311
+	Ensure-Uv
+	$Python311 = Ensure-Python311
 }
 
 $nodeVersion = (& node -p "process.versions.node").Trim()

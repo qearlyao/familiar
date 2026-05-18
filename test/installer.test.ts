@@ -15,6 +15,7 @@ describe("install scripts", () => {
 
 		assert.match(stdout, /Usage: install\.sh/);
 		assert.match(stdout, /--package <spec>/);
+		assert.match(stdout, /--install-browser-deps/);
 		assert.match(stdout, /trusted specs only/);
 	});
 

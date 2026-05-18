@@ -30,7 +30,13 @@ irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1
 ```
 
 The installer checks Node/npm, installs Familiar globally, and initializes
-`~/.familiar` when no workspace exists yet.
+or refreshes missing default files in `~/.familiar`.
+
+Installer options:
+
+- macOS/Linux: `--workspace <path>`, `--with-browser`, `--install-browser-deps`, `--skip-init`, `--package <spec>`.
+- Windows PowerShell: `-Workspace <path>`, `-WithBrowser`, `-InstallBrowserDeps`, `-SkipInit`, `-Package <spec>`, `-BrowserHarnessDir <path>`.
+- `--package` / `-Package` installs the exact npm package spec you provide. Use trusted specs only.
 
 Manual npm install:
 
@@ -171,7 +177,8 @@ Windows PowerShell:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser
 ```
 
-- `--with-browser` installs OpenCLI with npm and browser-harness from its upstream repo with `uv`; it requires `git`, `uv`, and Python 3.11+.
+- `--with-browser` / `-WithBrowser` installs OpenCLI with npm and browser-harness from its upstream repo with `uv`; it requires `git`, `uv`, and Python 3.11+.
+- If `uv` or Python 3.11+ is missing, the installer asks whether to install the missing browser dependency. Use `--install-browser-deps` / `-InstallBrowserDeps` for non-interactive installs.
 - `browser-harness` is best for attaching to your already-running Chrome via CDP.
 - OpenCLI is best for site adapters, owned sessions, and unattended Browser Bridge flows.
 - OpenCLI: [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)

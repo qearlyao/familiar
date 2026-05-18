@@ -609,11 +609,3 @@ nice-to-have rather than blocking — Stage 9 work can start without them.
   derived text notes. If a provider/model with supported multimodal embeddings
   is selected, add explicit image/audio index inputs, source metadata, hashing,
   and tests instead of assuming text chunking covers media.
-
-## Open Questions
-
-- Whether to pin the default embedding model to official `gemini-embedding-2`
-  or a preview alias if Google exposes one through the configured endpoint.
-- Whether primer ships in v0 or waits until ambient diary recall feels right.
-- Final user-facing wording for factual memory blocks and tool results, since
-  agent tools use `memory_` names even when the backing corpus is LCM.

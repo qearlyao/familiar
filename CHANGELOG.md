@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 - 2026-05-18
+
+### Changed
+
+- Refresh missing workspace defaults during installer runs, so existing workspaces can receive newly bundled skills without overwriting local files.
+- Make optional browser-helper setup friendlier by prompting to install missing `uv` or Python 3.11+ dependencies, with non-interactive install flags for scripted setup.
+- Document supported installer options for macOS/Linux and Windows PowerShell.
+
 ## 0.1.1 - 2026-05-18
 
 ### Added

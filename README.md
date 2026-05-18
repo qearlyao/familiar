@@ -20,13 +20,13 @@ are comfortable editing a config file and running a long-lived Node process.
 One-line install for macOS/Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/v0.1.1/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/qearlyao/familiar/v0.1.1/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1 | iex
 ```
 
 The installer checks Node/npm, installs Familiar globally, and initializes
@@ -162,13 +162,13 @@ CLIs from their upstream repositories and enable `[browser].enabled = true` in
 To install Familiar plus the optional browser helpers:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/v0.1.1/scripts/install.sh | sh -s -- --with-browser
+curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh -s -- --with-browser
 ```
 
 Windows PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/v0.1.1/scripts/install.ps1))) -WithBrowser
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser
 ```
 
 - `--with-browser` installs OpenCLI with npm and browser-harness from its upstream repo with `uv`; it requires `git`, `uv`, and Python 3.11+.

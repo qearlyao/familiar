@@ -13,7 +13,7 @@ Implemented or recently added:
 - Stage 7-8 memory foundation is shipped: shared memory index, LCM context compaction, memory recall/open tools, diary indexing, and ambient diary recall.
 - Stage 9 heartbeat/cron scheduling is shipped: in-band scheduled prompts, durable scheduler state/logs, restart-safe heartbeat cadence, and ambient-recall bypass for scheduled messages.
 - Stage 5 `image_gen` and WebUI TTS polish remain active.
-- `familiar install-service`, `familiar status`, and `familiar upgrade` are still not implemented.
+- Stage 13 installer/service/reload work is active: install scripts are first, service management and deeper reloads follow.
 
 Next step checkpoint:
 
@@ -22,7 +22,7 @@ Next step checkpoint:
 Remaining short-term to-dos:
 
 - Add public-2fa login UI when the frontend pass resumes.
-- Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
+- Finish Stage 13 installer/service/status/upgrade/reload work.
 
 Important caution:
 
@@ -282,19 +282,53 @@ Done when:
 
 - Familiar can inspect and operate the configured real browser from Discord or WebUI.
 
-### Stage 13: Install, Service, and Docs
+### Stage 13: Installer, Service, Status, and Reload
 
-- `familiar init [workspace]`.
-- `familiar run [workspace]`.
-- `familiar install-service <workspace>`.
-- systemd unit.
-- launchd plist where useful.
-- nginx/public-2fa deployment example.
-- deploy README.
+Status: first public npm package is released. Stage 13 is the adoption and operations track.
+
+Installer v0.1.1:
+
+- Add `scripts/install.sh` for macOS/Linux and `scripts/install.ps1` for Windows PowerShell.
+- Detect Node/npm before installing. Support Node.js 22+, but recommend Node.js 24 LTS as the smoothest/tested runtime.
+- Install `@qearlyao/familiar@latest` globally.
+- Run `familiar init` automatically when the target workspace has no `config.toml`.
+- Leave existing workspaces untouched; `familiar init` only fills missing default files and directories.
+- Offer `--with-browser` / `-WithBrowser` to install optional `@jackwener/opencli` and `browser-harness`.
+- Print clear next steps for editing `.env`, editing `config.toml`, and running `familiar run`.
+
+Service v0.2:
+
+- Implement `familiar install-service [workspace]`.
+- Implement `familiar uninstall-service [workspace]`.
+- Implement `familiar status [workspace]`.
+- macOS: install a user `launchd` plist under `~/Library/LaunchAgents`.
+- Linux: install a user `systemd` unit when systemd is available.
+- Windows: defer until we choose the least-surprising path: Task Scheduler, WinSW, or a documented terminal-run mode.
+- Capture logs in a predictable workspace-local location.
+- Include service health: running pid/process, workspace path, version, WebUI URL, last reload time/error, and Discord connection status when available.
+
+Upgrade:
+
+- Implement `familiar upgrade` as a thin wrapper around `npm install -g @qearlyao/familiar@latest` plus version reporting.
+- Add an explicit workspace refresh path later for bundled default skills/templates. Do not silently overwrite existing workspace files during `init`.
+
+Reload:
+
+- Build a single reload pipeline used by Discord `/familiar reload`, WebUI controls, future CLI `familiar reload`, and file watchers.
+- Hot-reload safe surfaces first: `SOUL.md`, `USER.md`, `MEMORY.md`, `INNER.md`, `HEARTBEAT.md`, skills, model/thinking overrides, browser config, web tool provider config, and scheduler cron jobs.
+- Watch `<workspace>/config.toml`, `.env`, persona files, `skills/`, and `HEARTBEAT.md` with debounce.
+- On reload failure, keep the previous working config and surface the error.
+- Mark restart-required fields explicitly: WebUI port/bind address, Discord token, workspace/data directories, database paths/schema-affecting config, and package upgrades.
+
+Deployment docs:
+
+- Keep README install path focused on npm + init + terminal-run.
+- Add a deploy guide after service commands exist.
+- Add nginx/public-2fa deployment example after public-2fa UI is complete.
 
 Done when:
 
-- A fresh Debian VPS can run Familiar in under 10 minutes after secrets are provided.
+- A new user can install, initialize, configure, run, and later service-manage Familiar without reading source-oriented roadmap notes.
 
 ### Future Optimizations (optional, defer until pain shows up)
 

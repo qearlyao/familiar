@@ -1,6 +1,6 @@
 {
 	"name": "@qearlyao/familiar",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"license": "MIT",
 	"type": "module",
 	"repository": {
@@ -20,6 +20,8 @@
 		"MEMORY.md",
 		"HEARTBEAT.md",
 		"skills/**",
+		"scripts/install.sh",
+		"scripts/install.ps1",
 		"README.md",
 		"LICENSE"
 	],

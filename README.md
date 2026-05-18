@@ -10,14 +10,29 @@ are comfortable editing a config file and running a long-lived Node process.
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22 or newer. Node.js 24 LTS is recommended and is the primary tested runtime.
 - A Discord bot token
 - At least one configured LLM API key
 - Optional: ElevenLabs, Groq, web search/fetch, image, and browser-backend credentials
 
 ## Install
 
-After the npm package is published:
+One-line install for macOS/Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1 | iex
+```
+
+The installer checks Node/npm, installs Familiar globally, and initializes
+`~/.familiar` when no workspace exists yet.
+
+Manual npm install:
 
 ```sh
 npm install -g @qearlyao/familiar@latest
@@ -31,6 +46,8 @@ npm run build
 ```
 
 ## Initialize A Workspace
+
+Skip this step if you used the installer and accepted the default workspace.
 
 ```sh
 familiar init
@@ -119,6 +136,18 @@ not verify Tailscale identity yet.
 The `browser` tool is disabled by default. To use it, install one or both helper
 CLIs from their upstream repositories and enable `[browser].enabled = true` in
 `config.toml`.
+
+To install Familiar plus the optional browser helpers:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh -s -- --with-browser
+```
+
+Windows PowerShell:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser
+```
 
 - `browser-harness` is best for attaching to your already-running Chrome via CDP.
 - OpenCLI is best for site adapters, owned sessions, and unattended Browser Bridge flows.

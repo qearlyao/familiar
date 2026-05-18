@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 - 2026-05-18
+
+### Added
+
+- Add macOS/Linux and Windows installer scripts that check Node/npm, install `@qearlyao/familiar@latest`, and initialize the default workspace.
+- Document the one-line installer path and optional browser-helper install mode.
+- Add Stage 13 roadmap details for installer, service management, status, upgrade, and reload work.
+
+### Changed
+
+- `familiar init` now fills missing default files and directories without overwriting existing workspace files.
+- Node.js 22 remains supported, while Node.js 24 is documented as the recommended and primary tested runtime.
+
 ## 0.1.0 - 2026-05-17
 
 First public release of Familiar.

@@ -70,6 +70,11 @@ async function copyDefaultSkills(workspacePath: string): Promise<void> {
 	});
 }
 
+async function copyIfMissing(sourcePath: string, targetPath: string): Promise<void> {
+	if (existsSync(targetPath)) return;
+	await copyFile(sourcePath, targetPath);
+}
+
 function resolveWorkspaceInput(workspaceInput?: string): string {
 	return workspaceInput ? resolve(workspaceInput) : DEFAULT_WORKSPACE_PATH;
 }
@@ -95,15 +100,12 @@ function isMemoryHelp(args: string[]): boolean {
 async function initWorkspace(workspaceInput?: string): Promise<void> {
 	const workspacePath = resolveWorkspaceInput(workspaceInput);
 	await mkdir(workspacePath, { recursive: true });
-	const envPath = resolve(workspacePath, ".env");
-	if (!existsSync(envPath)) {
-		await copyFile(resolve(PROJECT_ROOT, ".env.example"), envPath);
-	}
-	await copyFile(resolve(PROJECT_ROOT, "config.example.toml"), resolve(workspacePath, "config.toml"));
-	await copyFile(resolve(PROJECT_ROOT, "SOUL.md"), resolve(workspacePath, "SOUL.md"));
-	await copyFile(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
-	await copyFile(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
-	await copyFile(resolve(PROJECT_ROOT, "HEARTBEAT.md"), resolve(workspacePath, "HEARTBEAT.md"));
+	await copyIfMissing(resolve(PROJECT_ROOT, ".env.example"), resolve(workspacePath, ".env"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "config.example.toml"), resolve(workspacePath, "config.toml"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "SOUL.md"), resolve(workspacePath, "SOUL.md"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "HEARTBEAT.md"), resolve(workspacePath, "HEARTBEAT.md"));
 	await copyDefaultSkills(workspacePath);
 	await ensureWorkspaceDirs(defaultWorkspaceDirs(workspacePath));
 	console.log(`Initialized familiar workspace at ${workspacePath}`);

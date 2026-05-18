@@ -241,6 +241,11 @@ capability map.
 - Add nginx/public-2fa deployment example after public-2fa UI is complete.
 - Add richer WebUI panes for memory, diary, transcript, payload, scheduler, and
   service-status inspection.
+- Rework live agent-event rendering so streamed assistant text is preserved
+  across subsequent thinking/tool calls instead of being cleared by the next
+  tool event. Aim for a coherent step timeline like Codex for VS Code, or a
+  closer-to-current Claude web-style transcript with durable intermediate text,
+  tool cards, and final text in one readable flow.
 - Virtualize or trim the WebUI message list only after real long-tab jank shows
   up. `react-virtuoso` is the likely fix for dynamic-height bubbles.
 - Add playable-audio-first TTS rendering polish and a transcript/text toggle

@@ -69,7 +69,7 @@ export interface Config {
 		timeoutMs: number;
 		maxOutputChars: number;
 		readWrite: boolean;
-		allowedSites: Record<string, { read: string[]; write: string[] }>;
+		allowedSites: Record<string, true>;
 	};
 	agent: {
 		model: string;
@@ -568,128 +568,23 @@ function readBrowserAllowedSites(browser: Record<string, unknown>): Config["brow
 			throw new Error(`Config value browser.sites.${siteName} must be a table`);
 		}
 		const site = rawSite as Record<string, unknown>;
-		assertKnownKeys(site, `browser.sites.${siteName}`, ["read", "write"]);
-		const read = readStringArray(site.read, `browser.sites.${siteName}.read`);
-		const write = readStringArray(site.write, `browser.sites.${siteName}.write`);
-		sites[siteName] = { read, write };
+		assertKnownKeys(site, `browser.sites.${siteName}`, []);
+		sites[siteName] = true;
 	}
 	return sites;
 }
 
 function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {
 	return {
-		twitter: {
-			read: [
-				"article",
-				"bookmark-folders",
-				"bookmarks",
-				"following",
-				"likes",
-				"list-tweets",
-				"lists",
-				"notifications",
-				"profile",
-				"search",
-				"thread",
-				"timeline",
-				"trending",
-				"tweets",
-			],
-			write: [],
-		},
-		xiaohongshu: {
-			read: [
-				"comments",
-				"creator-note-detail",
-				"creator-notes",
-				"creator-notes-summary",
-				"creator-profile",
-				"creator-stats",
-				"feed",
-				"note",
-				"notifications",
-				"search",
-				"user",
-			],
-			write: [],
-		},
-		rednote: {
-			read: ["comments", "feed", "note", "notifications", "search", "user"],
-			write: [],
-		},
-		reddit: {
-			read: [
-				"frontpage",
-				"home",
-				"hot",
-				"popular",
-				"read",
-				"saved",
-				"search",
-				"subreddit",
-				"subreddit-info",
-				"upvoted",
-				"user",
-				"user-comments",
-				"user-posts",
-				"whoami",
-			],
-			write: [],
-		},
-		bilibili: {
-			read: [
-				"comments",
-				"dynamic",
-				"feed",
-				"following",
-				"history",
-				"hot",
-				"me",
-				"ranking",
-				"search",
-				"subtitle",
-				"user-videos",
-				"video",
-			],
-			write: [],
-		},
-		youtube: {
-			read: [
-				"channel",
-				"comments",
-				"feed",
-				"history",
-				"playlist",
-				"search",
-				"subscriptions",
-				"transcript",
-				"video",
-				"watch-later",
-			],
-			write: [],
-		},
-		tiktok: {
-			read: ["explore", "friends", "live", "notifications", "profile", "search", "user"],
-			write: [],
-		},
-		douyin: {
-			read: [
-				"activities",
-				"collections",
-				"drafts",
-				"hashtag",
-				"location",
-				"profile",
-				"stats",
-				"user-videos",
-				"videos",
-			],
-			write: [],
-		},
-		spotify: {
-			read: ["search", "status"],
-			write: [],
-		},
+		twitter: true,
+		xiaohongshu: true,
+		rednote: true,
+		reddit: true,
+		bilibili: true,
+		youtube: true,
+		tiktok: true,
+		douyin: true,
+		spotify: true,
 	};
 }
 

@@ -161,8 +161,6 @@ stability = 1.1
 	read_write = true
 
 	[browser.sites.twitter]
-	read = ["timeline"]
-	write = ["post"]
 	`),
 		);
 
@@ -178,7 +176,7 @@ stability = 1.1
 		assert.equal(config.browser.timeoutMs, 120000);
 		assert.equal(config.browser.maxOutputChars, 9000);
 		assert.equal(config.browser.readWrite, true);
-		assert.deepEqual(config.browser.allowedSites, { twitter: { read: ["timeline"], write: ["post"] } });
+		assert.deepEqual(config.browser.allowedSites, { twitter: true });
 	});
 
 	it("loads browser-harness browser backend settings", async () => {
@@ -211,6 +209,18 @@ stability = 1.1
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /browser\.backend/);
+	});
+
+	it("rejects browser site command filters", async () => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			minimalConfigToml(`
+	[browser.sites.twitter]
+	read = ["timeline"]
+	`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /browser\.sites\.twitter\.read/);
 	});
 
 	it("loads generated media retention settings", async () => {

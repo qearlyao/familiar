@@ -17,6 +17,13 @@ function textFrom(result: Awaited<ReturnType<ReturnType<typeof createBrowserTool
 	return part?.type === "text" ? part.text : "";
 }
 
+function siteHelp(site: string, commands: Array<{ name: string; access: string; description?: string }> = []) {
+	return {
+		site,
+		commands: commands.map((command) => ({ ...command, usage: `opencli ${site} ${command.name}` })),
+	};
+}
+
 describe("browser tools", () => {
 	it("does not register when disabled", async () => {
 		const dataDir = await createTempDataDir();
@@ -39,9 +46,10 @@ describe("browser tools", () => {
 		assert.equal(config.browser.session, "familiar");
 		assert.equal(config.browser.windowMode, "background");
 		assert.equal(config.browser.readWrite, false);
-		assert.ok(config.browser.allowedSites.twitter.read.includes("timeline"));
-		assert.ok(config.browser.allowedSites.reddit.read.includes("saved"));
-		assert.ok(config.browser.allowedSites.spotify.read.includes("status"));
+		assert.equal(config.browser.allowedSites.twitter, true);
+		assert.equal(config.browser.allowedSites.reddit, true);
+		assert.equal(config.browser.allowedSites.youtube, true);
+		assert.equal(config.browser.allowedSites.spotify, true);
 	});
 
 	it("builds OpenCLI page args with positional session", async () => {
@@ -68,6 +76,34 @@ describe("browser tools", () => {
 			"foreground",
 			"state",
 		]);
+	});
+
+	it("passes browser timeout through to OpenCLI internals", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir, {
+			browser: {
+				enabled: true,
+				timeoutMs: 120_000,
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "opencli",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await tool.execute("call-1", { mode: "page", action: "state" });
+
+		assert.equal(calls[0]?.env?.OPENCLI_BROWSER_COMMAND_TIMEOUT, "120");
 	});
 
 	it("builds read-only browser tab inspection args", async () => {
@@ -159,15 +195,56 @@ describe("browser tools", () => {
 			__browserToolsTest.buildSiteArgs(
 				{ mode: "site", site: "reddit", command: "saved", args: { limit: 5 } },
 				config,
+				{ name: "saved", access: "read" },
 			),
-			["reddit", "saved", "--limit", "5", "-f", "json"],
+			["reddit", "saved", "--window", "background", "--limit", "5", "-f", "json"],
 		);
 		assert.throws(
-			() => __browserToolsTest.buildSiteArgs({ mode: "site", site: "reddit", command: "upvote" }, config),
-			/not allowlisted/,
+			() =>
+				__browserToolsTest.buildSiteArgs({ mode: "site", site: "reddit", command: "upvote" }, config, {
+					name: "upvote",
+					access: "write",
+				}),
+			/browser\.read_write/,
 		);
 		assert.throws(
-			() => __browserToolsTest.buildSiteArgs({ mode: "site", site: "reddit", command: "saved", args: { limit: "-1" } }, config),
+			() =>
+				__browserToolsTest.buildSiteArgs(
+					{ mode: "site", site: "reddit", command: "saved", args: { limit: "-1" } },
+					config,
+					{ name: "saved", access: "read" },
+				),
+			/may not start/,
+		);
+	});
+
+	it("allows site write adapter commands and positional args when read_write is enabled", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir, {
+			browser: { enabled: true, readWrite: true, windowMode: "foreground" },
+		});
+
+		assert.deepEqual(
+			__browserToolsTest.buildSiteArgs(
+				{
+					mode: "site",
+					site: "reddit",
+					command: "comment",
+					positional: ["1abc123", "Looks good"],
+					args: { "keep-tab": true },
+				},
+				config,
+				{ name: "comment", access: "write" },
+			),
+			["reddit", "comment", "--window", "foreground", "1abc123", "Looks good", "--keep-tab", "-f", "json"],
+		);
+		assert.throws(
+			() =>
+				__browserToolsTest.buildSiteArgs(
+					{ mode: "site", site: "reddit", command: "comment", positional: ["-not-safe", "text"] },
+					config,
+					{ name: "comment", access: "write" },
+				),
 			/may not start/,
 		);
 	});
@@ -239,6 +316,19 @@ describe("browser tools", () => {
 		const calls: BrowserRunSpec[] = [];
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			calls.push(spec);
+			if (spec.args.join(" ") === "reddit --help -f json") {
+				const json = siteHelp("reddit", [{ name: "saved", access: "read" }]);
+				return {
+					ok: true,
+					backend: spec.backend,
+					command: [spec.command, ...spec.args],
+					exitCode: 0,
+					stdout: JSON.stringify(json),
+					stderr: "",
+					json,
+					truncated: false,
+				};
+			}
 			return {
 				ok: true,
 				backend: spec.backend,
@@ -260,29 +350,60 @@ describe("browser tools", () => {
 
 		assert.equal(calls[0]?.backend, "opencli");
 		assert.equal(calls[0]?.command, "opencli-dev");
-		assert.deepEqual(calls[0]?.args, ["reddit", "saved", "--limit", "5", "-f", "json"]);
+		assert.deepEqual(calls[0]?.args, ["reddit", "--help", "-f", "json"]);
+		assert.deepEqual(calls[1]?.args, ["reddit", "saved", "--window", "background", "--limit", "5", "-f", "json"]);
 		assert.equal(result.details?.backend, "opencli");
 		assert.match(textFrom(result), /OpenCLI ok/);
 	});
 
-	it("lists configured site commands without shelling out", async () => {
+	it("lists OpenCLI commands for allowed sites from live metadata", async () => {
 		const dataDir = await createTempDataDir();
 		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
-		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
-			throw new Error("runner should not be called");
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			const json = siteHelp("twitter", [
+				{ name: "timeline", access: "read" },
+				{ name: "post", access: "write" },
+				{ name: "sync", access: "admin" },
+			]);
+			return {
+				ok: true,
+				backend: spec.backend,
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: JSON.stringify(json),
+				stderr: "",
+				json,
+				truncated: false,
+			};
 		});
 
 		const result = await tool.execute("call-1", { mode: "list_commands", site: "twitter" });
 
+		assert.deepEqual(calls[0]?.args, ["twitter", "--help", "-f", "json"]);
 		assert.match(textFrom(result), /twitter/);
 		assert.match(textFrom(result), /timeline/);
+		assert.match(textFrom(result), /post/);
+		assert.match(textFrom(result), /admin=\[sync\]/);
 	});
 
 	it("lists all configured site commands without a site filter", async () => {
 		const dataDir = await createTempDataDir();
 		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
-		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
-			throw new Error("runner should not be called");
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			const site = spec.args[0] ?? "unknown";
+			const json = siteHelp(site, [{ name: "read-one", access: "read" }]);
+			return {
+				ok: true,
+				backend: spec.backend,
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: JSON.stringify(json),
+				stderr: "",
+				json,
+				truncated: false,
+			};
 		});
 
 		const result = await tool.execute("call-1", { mode: "list_commands" });
@@ -311,6 +432,52 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /\.\.\.$/);
 		assert.equal(result.details?.ok, false);
 		assert.equal(result.details?.truncated, true);
+	});
+
+	it("hints how to enable OpenCLI traces for failed site commands", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir, { browser: { enabled: true, readWrite: true } });
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			if (spec.args.join(" ") === "twitter --help -f json") {
+				const json = siteHelp("twitter", [{ name: "post", access: "write" }]);
+				return {
+					ok: true,
+					backend: spec.backend,
+					command: [spec.command, ...spec.args],
+					exitCode: 0,
+					stdout: JSON.stringify(json),
+					stderr: "",
+					json,
+					truncated: false,
+				};
+			}
+			return {
+				ok: false,
+				backend: "opencli",
+				command: [spec.command, ...spec.args],
+				exitCode: 1,
+				stdout: "This operation was aborted",
+				stderr: "",
+				truncated: false,
+			};
+		});
+
+		const result = await tool.execute("call-1", {
+			mode: "site",
+			site: "twitter",
+			command: "post",
+			positional: ["hello"],
+			args: { trace: "retain-on-failure" },
+		});
+		assert.doesNotMatch(textFrom(result), /args\.trace/);
+
+		const hinted = await tool.execute("call-2", {
+			mode: "site",
+			site: "twitter",
+			command: "post",
+			positional: ["hello"],
+		});
+		assert.match(textFrom(hinted), /args\.trace="retain-on-failure"/);
 	});
 
 	it("stores screenshots under the Familiar screenshot bucket and adds them to the media sink", async () => {

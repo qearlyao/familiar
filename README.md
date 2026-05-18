@@ -42,6 +42,7 @@ From a source checkout:
 
 ```sh
 npm install
+npm --prefix web install
 npm run build
 ```
 
@@ -130,6 +131,27 @@ unless their channel id is listed in `discord.allowed_channels`.
 The WebUI listens on the configured `[web]` port and bind address. The default
 `tailscale-only` auth mode currently means "trust the network boundary"; it does
 not verify Tailscale identity yet.
+
+## Service Management
+
+macOS and Linux users can install a user-level service after configuring the
+workspace:
+
+```sh
+familiar install-service
+familiar status
+familiar uninstall-service
+```
+
+macOS uses `launchd`; Linux uses user `systemd`. Windows users should run
+`familiar run` in a foreground terminal for now. Service logs are written under
+`<workspace>/logs`.
+
+Upgrade the global npm package with:
+
+```sh
+familiar upgrade
+```
 
 ## Optional Browser Backends
 

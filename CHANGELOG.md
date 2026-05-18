@@ -5,13 +5,25 @@
 ### Added
 
 - Add macOS/Linux and Windows installer scripts that check Node/npm, install `@qearlyao/familiar@latest`, and initialize the default workspace.
-- Document the one-line installer path and optional browser-helper install mode.
-- Add Stage 13 roadmap details for installer, service management, status, upgrade, and reload work.
+- Add optional installer browser-helper setup for OpenCLI and browser-harness. The browser-harness path checks for `git`, `uv`, and Python 3.11+ before cloning and installing from upstream.
+- Add automatic hot reload for workspace config, `.env`, persona files, and skills.
+- Add `/reload` and `/restart` control handling for Discord and WebUI sessions.
+- Add macOS user `launchd` and Linux user `systemd` service management through `familiar install-service`, `familiar uninstall-service`, and `familiar status`.
+- Add `familiar upgrade` for updating the global npm package.
+- Seed the bundled `image-gen` skill during `familiar init`.
 
 ### Changed
 
 - `familiar init` now fills missing default files and directories without overwriting existing workspace files.
 - Node.js 22 remains supported, while Node.js 24 is documented as the recommended and primary tested runtime.
+- Browser screenshots are documented as workspace-scoped generated attachments.
+
+### Fixed
+
+- Avoid exiting too quickly after `/restart`, giving Discord and WebUI acknowledgements time to send.
+- Prevent new sessions from being created against stale config while a reload is in progress.
+- Reduce unnecessary skill-directory watcher refreshes during ordinary file saves.
+- Harden installer packaging and help output, including a warning for custom npm package specs.
 
 ## 0.1.0 - 2026-05-17
 
@@ -33,5 +45,4 @@ First public release of Familiar.
 ### Notes
 
 - The package publishes as `@qearlyao/familiar`; install with `npm install -g @qearlyao/familiar@latest`.
-- Browser helpers are optional and must be installed separately: `@jackwener/opencli` and/or `browser-harness`.
-- `install-service`, `status`, and `upgrade` are reserved CLI commands but are not implemented yet.
+- Browser helpers are optional; the installer can set up OpenCLI and browser-harness with `--with-browser`.

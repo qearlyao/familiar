@@ -32,6 +32,7 @@
 		"clean": "node -e \"const fs=require('node:fs'); for (const p of ['dist','web/dist']) fs.rmSync(p,{recursive:true,force:true});\"",
 		"dev": "tsx watch src/cli.ts run",
 		"build": "npm run clean && tsc -p tsconfig.build.json && npm --prefix web run build",
+		"prepack": "npm run build",
 		"lint": "biome check",
 		"format": "biome format --write",
 		"payload:pretty": "tsx scripts/pretty-payload.ts",

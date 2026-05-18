@@ -15,6 +15,7 @@ import { cleanupGeneratedAttachments } from "./generated-media.js";
 import { startWorkspaceHotReload } from "./hot-reload.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
+import { formatServiceResult, installService, serviceStatus, uninstallService, upgradeFamiliar } from "./service.js";
 import { loadSettingsStore } from "./settings.js";
 import { startWebDaemon } from "./web.js";
 
@@ -176,8 +177,9 @@ function usage(): string {
 		"  familiar init [workspace]",
 		"  familiar run [workspace]",
 		"  familiar memory [workspace] <subcommand>",
-		"  familiar install-service",
-		"  familiar status",
+		"  familiar install-service [workspace]",
+		"  familiar uninstall-service [workspace]",
+		"  familiar status [workspace]",
 		"  familiar upgrade",
 		"",
 		`Default workspace: ${DEFAULT_WORKSPACE_PATH}`,
@@ -209,8 +211,21 @@ async function main(): Promise<void> {
 		await runMemoryOperator(config, args);
 		return;
 	}
-	if (command === "install-service" || command === "status" || command === "upgrade") {
-		console.log("not yet implemented");
+	if (command === "install-service") {
+		console.log(formatServiceResult(await installService(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "uninstall-service") {
+		console.log(formatServiceResult(await uninstallService(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "status") {
+		console.log(formatServiceResult(await serviceStatus(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "upgrade") {
+		console.log("Upgrading @qearlyao/familiar globally...");
+		await upgradeFamiliar();
 		return;
 	}
 	console.error(usage());

@@ -1,90 +1,78 @@
 # familiar plan
 
-Personal companion agent. Discord-first in the early stages, but designed for a first-class WebUI chat surface later. VPS-hosted, always on, single-owner, reactive in v0, with later proactive check-ins and pluggable browser/activity backends.
+Personal companion agent. Discord-first today, WebUI-first over time. Single-owner,
+always-on, workspace-based, reactive in v0, with proactive scheduling and
+pluggable browser/activity backends growing from the same runtime.
 
-This is the session-start operating plan. It keeps only the decisions, stage map, and high-value references needed when Codex starts with no memory. Older investigative detail was intentionally compressed to save context.
+This is the session-start operating plan. Keep it compact: completed work is
+archived by capability, active work stays in one backlog, and detailed history
+lives in git.
 
 ## 0. Current Snapshot
 
-Implemented or recently added:
+Core v0 is largely landed.
 
-- Stages 0-6 are v0-complete: core runtime, WebUI, TTS v0, event dashboard, and media intake.
-- Native `web_search` and `web_fetch` tools are shipped: Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, SSRF-style URL guards, page cache, and XML-wrapped untrusted-content warnings in tool results.
-- Stage 7-8 memory foundation is shipped: shared memory index, LCM context compaction, memory recall/open tools, diary indexing, and ambient diary recall.
-- Stage 9 heartbeat/cron scheduling is shipped: in-band scheduled prompts, durable scheduler state/logs, restart-safe heartbeat cadence, and ambient-recall bypass for scheduled messages.
-- Stage 5 `image_gen` and WebUI TTS polish remain active.
-- Stage 13 installer/service/reload work is active: install scripts are first, service management and deeper reloads follow.
+- Runtime: direct upstream `Agent`, Discord adapter, WebUI adapter, append-only
+  logs, per-channel settings, control commands, payload/transcript logging.
+- Tools: upstream `bash`/`read`/`write`/`edit`; Familiar-owned `web_search`,
+  `web_fetch`, `tts`, `image_gen`, `memory_recall`, `memory_open`, and compact
+  `browser`.
+- Memory: shared SQLite FTS/vector index, LCM context compaction, diary indexing,
+  ambient diary recall, memory doctor/backfill/reindex/prune/backup.
+- Scheduling: heartbeat and cron deliver in-band prompts with durable state.
+- Release: `@qearlyao/familiar@0.1.1` is in release-candidate cleanup. npm
+  packaging now builds before pack/publish so WebUI assets cannot be omitted by
+  accident.
 
-Next step checkpoint:
+Near-term priorities:
 
-- Finish Stage 5 `image_gen` once upstream image APIs land, then pick from the deferred Stage 6 follow-ups as needed.
+- Finish 0.1.1 release checks, commit release notes/package guard, tag, publish.
+- Add public-2fa login UI before any public WebUI deployment guide.
+- Improve reload coverage for scheduler timers and other restart-required config.
+- Continue optimization/extension work from the backlog below.
 
-Remaining short-term to-dos:
+Important posture:
 
-- Add public-2fa login UI when the frontend pass resumes.
-- Finish Stage 13 installer/service/status/upgrade/reload work.
-
-Important caution:
-
-- Stages after Stage 9 are directional, not fixed. Keep foundational code stable, cache-friendly, and extensible enough for changed later stages.
+- Core v0 is feature-complete enough for trusted-friend testing. Most later work
+  should optimize, harden, document, or extend rather than reopen foundations.
+- Windows stays foreground/manual for now. Do not add Task Scheduler or service
+  wrapping until there is real demand.
 
 ## 1. Locked Decisions
 
-- Build on upstream packages. Do not fork or rebuild `pi-agent-core`, `pi-ai`, or `pi-coding-agent` primitives unless upstream cannot support the needed behavior.
-- Keep direct `Agent` as Familiar's runtime. Do not reinstate `AgentSession` just to get skills.
-- Do not use upstream lossy auto-compaction as Familiar's memory system. Familiar owns LCM plus diary RAG through `Agent.transformContext`.
-- Reuse pi's standalone skill loader/formatter for progressive instructions: the agent sees skill name/description/path, then uses `read` to load `SKILL.md` only when needed.
-- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, `MEMORY.md`, and `INNER.md`. Upstream does not know these names. `SOUL.md` and `USER.md` are owner-edited; `MEMORY.md` and `INNER.md` are agent-edited.
-- `MEMORY.md` holds durable load-bearing facts. `INNER.md` holds the agent's current felt interior, updated by the agent on heartbeat fires. Episodic recall belongs in diary RAG.
+- Build on upstream packages. Do not fork or rebuild `pi-agent-core`, `pi-ai`, or
+  `pi-coding-agent` primitives unless upstream cannot support the needed behavior.
+- Keep direct `Agent` as Familiar's runtime. Do not reinstate `AgentSession` just
+  to get skills or compaction.
+- Do not use upstream lossy auto-compaction as Familiar's memory system.
+  Familiar owns LCM plus diary RAG through `Agent.transformContext`.
+- Reuse pi's standalone skill loader/formatter for progressive instructions.
+  Skills are instruction loading, not conversation memory.
+- Persona convention is Familiar-owned: `SOUL.md`, `USER.md`, `MEMORY.md`, and
+  `INNER.md`. `SOUL.md` and `USER.md` are owner-edited; `MEMORY.md` and
+  `INNER.md` are agent-edited.
+- `MEMORY.md` holds durable load-bearing facts. `INNER.md` holds the agent's
+  current carried interior. Episodic recall belongs in diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
-  - Use Familiar-owned `web_search` and `web_fetch` for open-web lookup/reading; keep provider credentials in env.
-  - Avoid bespoke memory/diary wrappers.
-  - Put large, rarely used media/persona/character instructions in skills, not tool descriptions.
-  - Prioritize output/media tools now; postpone `task`/subagent delegation.
-  - Keep one compact `browser` tool with structured actions later.
-- Upstream coding-agent currently does not ship dedicated `web_fetch` or `web_search` tool factories; its built-in factories remain local workspace tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`). Familiar owns server-side web search/fetch unless upstream adds a first-class web tool later.
-- Browser/computer-use is moving quickly across agent providers. Familiar should own the stable `browser` contract and use external browser extensions, CDP bridges, or provider-native computer-use as backend implementations, without exposing the full upstream tool surface to the model.
-- Browser control is backend-pluggable. The agent sees one `browser` capability, not Mac-specific tools. Backend may be local OpenCLI, Mac sidecar, direct HTTPS, reverse connection, Tailscale, CDP/MCP/CLI/native automation, provider computer-use, etc.
-- WebUI starts small but is architecturally first-class beside Discord, not merely a debug side-door. Product direction: WebUI becomes the full information stream and dashboard for messages, reasoning, tool activity, memory, diagnostics, and generated media.
-- Discord remains a clean chat delivery adapter by default: show final assistant text and outbound media only. Do not expose thinking blocks or verbose tool lifecycle details in Discord unless a future explicit debug mode asks for them.
-- Single-owner is locked. Extensibility means tools, channels, providers, triggers, memory adapters, and subagent personas, not multi-user account isolation.
+  - Use Familiar-owned `web_search` and `web_fetch` for server-side open web.
+  - Keep `memory_recall`/`memory_open` as the agent-facing memory tools.
+  - Keep one compact `browser` tool instead of exposing raw backend surfaces.
+  - Put large or rare instructions in skills, not tool descriptions.
+- Browser control is backend-pluggable. The model sees one Familiar `browser`
+  contract; backend may be OpenCLI, browser-harness, sidecar, direct CDP,
+  extension bridge, Tailscale/private HTTP, or future provider computer-use.
+- Discord remains a clean chat delivery adapter by default: final text and media
+  only, no reasoning/tool noise unless an explicit debug mode exists.
+- WebUI is first-class beside Discord, not a debug side-door.
+- Single-owner is locked. Extensibility means tools, channels, providers,
+  triggers, memory adapters, sidecars, and subagent personas, not multi-user
+  account isolation.
 - Secrets stay in env or workspace `.env`, never in `config.toml`.
 
-## 2. Upstream Cheat Sheet
+## 2. Runtime Shape
 
-Use these upstream primitives instead of duplicating functionality:
-
-- `@earendil-works/pi-agent-core`
-  - `Agent`, `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`, event subscription.
-  - `transformContext` is the insertion point for LCM and diary RAG.
-  - Generic tool shape and tool execution lifecycle already exist.
-- `@earendil-works/pi-ai`
-  - Provider/model abstraction, streaming, usage/cost fields, `sessionId`, `cacheRetention`.
-  - Usage includes `cacheRead`, `cacheWrite`, `input`, `output`, `cost`.
-- `@earendil-works/pi-coding-agent`
-  - Tool factories for `bash`, `read`, `write`, `edit`, `grep`, `find`, `ls`.
-  - Skill loader/formatter: `loadSkills()` and `formatSkillsForPrompt()` are reusable without adopting `AgentSession`.
-  - Familiar uses `bash/read/write/edit`; shell `grep` through `bash` is enough.
-  - Compaction/session utilities exist but are coding-session shaped and lossy.
-- `pi-chat` in `/tmp/pi-chat` from `https://github.com/earendil-works/pi-chat`
-  - Good reference for chat adapter/runtime/log shape.
-  - Lift: append-only per-channel log, catch-up then arm, trigger/job slicing, reply-to, typing, chunking, attachment materialization.
-  - Do not copy: two memory files, VM sandbox, extension-only packaging, lack of Familiar's RAG/WebUI/dashboard/generated-media/browser layers.
-  - Its heartbeat is only worker/status snapshots every 15s, not proactive check-ins.
-
-High-value local files:
-
-- `src/agent.ts`: upstream `Agent` wrapper, model/thinking controls, Anthropic payload normalization, transcript/payload logging.
-- `src/runtime.ts`: `ConversationRuntime`, control parsing, trigger/job slicing.
-- `src/discord.ts`: Discord intake, runtime cache, replies, queue draining.
-- `src/chat-log.ts`: channel log paths and append-only chat records.
-- `src/config.ts`, `src/models.ts`: config schema, provider/model/base-url/auth behavior.
-- `scripts/pretty-payload.ts`: current payload inspection tool.
-
-## 3. Architecture
-
-```
+```text
 Discord adapter       WebUI adapter       future event sources
       |                    |                    |
       v                    v                    v
@@ -98,376 +86,343 @@ Discord adapter       WebUI adapter       future event sources
                     |
                     v
             Context and memory layer
-            - Tier 1: SOUL.md + USER.md + MEMORY.md
-            - Tier 2: LCM for today's in-session context
-            - Tier 3: diary RAG for cross-session recall
+            - Tier 1: SOUL.md + USER.md + MEMORY.md + INNER.md
+            - Tier 2: LCM for recent factual continuity
+            - Tier 3: diary RAG for cross-session felt memory
             - injected through Agent.transformContext
                     |
                     v
             upstream Agent + pi-ai + tools
-            - prompt/steer/followUp
-            - per-channel transcripts/sessions before LCM
-            - usage/cache telemetry
-            - bash/read/write/edit
-            - media tools now; task/browser tools later
+            - prompt/steer/followUp/abort
+            - provider/cache/session plumbing
+            - workspace, web, media, memory, browser tools
 
 Browser/activity backend abstraction
   - local backend when browser is on same host
-  - remote sidecar when browser is on the owner's Mac
-  - transport: direct HTTPS, reverse sidecar connection, or Tailscale/private network
-  - implementation choice deferred: Chrome DevTools MCP/CDP, CLI repo, native automation, Playwright only if still best
+  - future Mac sidecar when browser/activity lives on the owner's Mac
+  - transport: direct private HTTP, reverse sidecar connection, SSH tunnel, or Tailscale
 ```
 
 Runtime and packaging:
 
-- Main daemon: one `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, main agent, media workers, memory workers, embeddings, attachment writer, queues. Subagents can be added later.
-- Dev: `familiar run [workspace]` defaults to `~/.familiar`.
-- Prod: `familiar install-service <workspace>` eventually writes systemd or launchd config.
-- Workspace layout: `<workspace>/config.toml`, `.env`, `SOUL.md`, `USER.md`, `MEMORY.md`, `INNER.md`, `memories/`, `data/`, `attachments/`, `logs/`.
-- Prefer npm package first. Single-binary/Docker can be revisited later.
+- One `familiar` process owns Discord gateway, WebUI HTTP/WebSocket, agent,
+  media workers, memory workers, embeddings, attachment writer, and queues.
+- `familiar run [workspace]` defaults to `~/.familiar`.
+- Workspace layout: `<workspace>/config.toml`, `.env`, persona files,
+  `memories/`, `data/`, and `skills/`.
+- npm package remains the primary distribution. Single-binary/Docker can be
+  revisited after service/deploy paths are stable.
 
-## 4. Memory Model
+## 3. Memory Model
 
-Tier 1: stable prompt files in the cached prefix.
+Stable prompt tier:
 
 - `SOUL.md`: persona, owner-edited.
 - `USER.md`: about the owner, owner-edited.
-- `MEMORY.md`: durable load-bearing facts, agent-edited via upstream filesystem tools.
-- `INNER.md`: agent's current felt interior — mood, what it's been carrying, current curiosities, current shape of the relationship. Agent-edited; updated by the agent on heartbeat fires (Stage 9). Load-bearing specifically post-`/new` and at fresh sessions, where it's the difference between "neutral assistant" and "still myself, still carrying yesterday."
-- Failure mode: bloat. Keep all four short.
+- `MEMORY.md`: durable load-bearing facts, agent-edited.
+- `INNER.md`: short current interior, agent-edited.
+- Failure mode is bloat; keep these files short and cache-stable.
 
-Tier 2: LCM, today's lossless-ish context engine.
+LCM tier:
 
-- Source of truth: per-channel append-only chat logs remain the audit log, but they are too noisy to feed directly into LCM. Derive a normalized LCM conversation stream under `memories/lcm/` first: inbound user messages, outbound assistant messages, selected tool/result facts when useful, attachment notes, reset/control boundaries, and provenance pointers back to `data/chat`.
-- Summaries: automatic leaf compaction with a future condensed summary DAG and provenance frontmatter.
-- Index: SQLite metadata plus shared FTS/vector primitives for raw normalized records and summaries. Hybrid semantic recall is the main factual search path; exact grep is fallback/provenance.
-- Assembly: `Agent.transformContext` protects the fresh tail and replaces older raw context with generated summaries when leaf/budget pressure requires it. LCM may build a global companion-brain daily view, but raw source records stay per-channel.
-- Agent access: `memory_recall` and `memory_open` for factual memory; raw logs/summaries remain greppable for debug/provenance.
-- Replaces upstream auto-compaction for Familiar.
+- Purpose: factual conversation continuity and context-window survival.
+- Source of truth remains append-only `data/chat`, but LCM uses normalized
+  records under `memories/lcm/`, not raw noisy chat logs.
+- Keep inbound user text, useful attachment notes, outbound assistant text,
+  selected useful tool/result facts, reset/control boundaries, timestamps, and
+  provenance pointers.
+- `Agent.transformContext` protects the fresh tail and replaces older raw context
+  with generated summaries when leaf/budget pressure requires it.
+- `/new` creates an LCM segment boundary. `newSessionRetainDepth` follows the
+  upstream meaning: `-1` keeps all context, `0` drops raw messages but keeps
+  summaries, positive values keep summaries at that depth or higher.
+- Hybrid semantic/FTS recall is the primary factual search path; exact grep is
+  debug/provenance fallback.
 
-Tier 3: diary RAG, previous days.
+Diary tier:
 
-- Source: `memories/diaries/YYYY-MM-DD.md`. Stage 9 heartbeat instructions own the diary's voice/format/reflection policy. Editable by the owner.
-- Written by the main agent itself when the heartbeat (Stage 9) fires with end-of-day framing. No subagent. Empty entries are valid — the agent has permission to write nothing on quiet days.
-- Index: diary chunks plus atomic facts, embedded in SQLite. Chunks tagged at write time with valence (emotional intensity).
-- Retrieval: ambient, into the volatile region of the user-message envelope each turn. Top-K (3–5) excerpts scored by `similarity + valence + recency`, optional thread-overlap boost. No LLM monitor — the main agent's reasoning is the synthesizer.
-- Durable facts discovered in diary may promote to `MEMORY.md`. Active relational arcs live in `INNER.md`, not a separate threads layer.
+- Purpose: private affective continuity and felt memory.
+- Source: `memories/diaries/YYYY-MM-DD.md`.
+- Stage 9 heartbeat instructions own diary voice/format/reflection policy.
+  Stage 8 only assumes markdown files can be chunked and indexed.
+- Empty or absent diary files are valid.
+- Ambient recall is diary-first, conservative, and injected only into volatile
+  current-turn context. LCM should not be automatically injected as private
+  companion memory.
+- Manual recall defaults to `all` scope so explicit agent searches can find both
+  diary and factual conversation memory.
 
-Turn assembly:
+Shared index semantics:
 
-- Stable block: persona files plus tool index.
-- Volatile block: LCM + diary RAG + current prompt slice.
-- Cache stability matters: keep stable text stable; volatile context should be deterministic and minimally sufficient.
+- Physical reuse is allowed; semantic merging is not. Corpora include
+  `lcm_record`, `lcm_summary`, `diary_chunk`, and future `atomic_fact`.
+- Remote embeddings are primary. Local Transformers.js worker support can be
+  added later from the `pi-lcm-memory` reference.
+- Current Gemini embedding path is real; OpenAI/Voyage-style embedding config is
+  not ready to document as usable until provider adapters are implemented.
 
-## 5. Stage Roadmap
+## 4. Completed v0 Archive
 
-### Completed v0 Archive
+Keep implementation details in source and git history. This archive is only the
+capability map.
 
-Status: shipped enough for current development. Keep details in git history and source, not this roadmap.
+- Core runtime: direct upstream `Agent`, config/env/persona loading, Discord DM
+  path, WebUI HTTP/WebSocket path, append-only logs, replay safety, trigger/job
+  slicing, control commands, per-channel model/thinking/channel-trigger
+  overrides, slash commands, silent response protocol, and payload inspection.
+- Tool foundation: upstream `bash`, `read`, `write`, and `edit`; Familiar-owned
+  web, media, memory, and browser tools.
+- Web access: `web_search`/`web_fetch` with Brave/Tavily/Exa search routing,
+  TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, page
+  cache, and untrusted-content wrapping.
+- WebUI dashboard: session picker, shared Discord/Web runtime, live and durable
+  thinking/tool/text events, generated media playback, and refresh-safe history.
+- Media: Discord/Web attachment intake, image prompt assembly, automatic audio
+  transcription, video understanding, image derivatives, TTS, image generation,
+  generated-media storage/retention, and Discord/Web delivery.
+- Skills: workspace `skills/` discovery, bundled `image-gen` skill seeding,
+  compact available-skills injection, and reload refresh.
+- Memory and LCM: shared memory index, normalized LCM records/summaries,
+  automatic fresh-tail compaction, prompt-aware eviction, `/new` retention,
+  memory operator commands, `memory_recall`/`memory_open`, diary indexing, and
+  ambient diary recall.
+- Scheduling: heartbeat/cron prompts through the main agent context,
+  `HEARTBEAT.md` framing, idle-aware/restart-safe heartbeat cadence, durable
+  scheduler state/logs, cron `queue`/`follow_up`, and ambient diary bypass for
+  scheduled messages.
+- Browser v0: compact browser tool, OpenCLI and browser-harness backends,
+  screenshot attachment storage under workspace data, site-command allowlist,
+  and read/write gating.
+- Installer v0.1.1: macOS/Linux shell script and Windows PowerShell script that
+  check Node/npm, install the npm package, initialize the workspace, optionally
+  install OpenCLI/browser-harness helpers, and leave existing workspaces intact.
+- Service v0.1.1: macOS user `launchd` and Linux user `systemd` install,
+  uninstall, status, and npm-package upgrade commands; service logs under
+  `<workspace>/logs`; Windows remains manual.
 
-- Stage 0: chose direct upstream `Agent`, reused upstream tool factories, and kept usage/cache telemetry.
-- Stage 1: bootstrapped config/env/persona loading, Discord DM path, reply pipeline, and stable session/cache logging.
-- Stage 2: added `ConversationRuntime`, append-only logs, replay safety, control commands, provider/model/thinking controls, Anthropic cache normalization, Discord dispatch modes, per-channel overrides/sessions, slash commands, silent response protocol, and payload inspection.
-- Stage 3: shipped WebUI side-door with HTTP/WebSocket transport, auth scaffolding, session picker, shared Discord/Web runtime, thinking/text streaming, persona label detection, and current frontend baseline.
-- Stage 4: registered upstream `bash`, `read`, `write`, and `edit` tools with YOLO workspace behavior; no memory/diary wrapper tools.
-- Stage 5 TTS v0: shipped ElevenLabs `tts`, generated audio storage/retention, Discord/Web delivery, history replay, and focused tests.
-- Stage 5 Skills v0: shipped workspace `skills/` discovery without `AgentSession`, compact `<available_skills>` injection inside the direct `Agent` system prompt, reload refresh, and focused tests; skills remain instruction loading, not conversation memory.
-- Web access v0: shipped native `web_search` and `web_fetch`, with Brave/Tavily/Exa search routing, TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, cache behavior, XML-wrapped untrusted-content warnings, and focused tests.
-- WebUI Event Dashboard v0: shipped durable/live thinking and tool events, ordered WebUI parts, clean Discord replies, and refresh-safe history replay.
-- Stage 6 Media Intake and Understanding: shipped safe Discord/Web attachment intake, durable metadata/storage, pure-attachment routing, image prompt assembly, automatic audio transcription, video understanding, configurable Groq/Gemini media providers, persisted derived transcript/summary metadata, WebUI media rendering, and focused tests.
-- Stage 6 Image Derivatives: shipped Sharp-backed image resize/re-encode into `derived.image` so oversized uploaded images and workspace `image_gen` references can still be inlined as bounded WebP derivatives.
-- Stage 7-8 Memory and LCM: shipped shared SQLite FTS/vector memory primitives, normalized LCM records and summaries, automatic fresh-tail compaction, prompt-aware eviction, `/new` retention, memory doctor checks, `memory_recall`/`memory_open`, diary markdown indexing, and ambient diary recall injected as `<injected_memory>`.
-- Stage 9 Heartbeat and Cron: shipped in-band heartbeat/cron scheduling through the main agent context, `HEARTBEAT.md`-framed heartbeat prompts, idle-aware and restart-safe heartbeat cadence, durable scheduler state/logs, cron `queue`/`follow_up` delivery, and ambient diary bypass for scheduled prompts.
+## 5. Active Backlog
 
-Still open from completed foundations:
+### Release And Packaging
 
-- Add public-2fa login UI when the frontend pass resumes.
-- Add richer WebUI panes for memory/diary/transcript/payload inspection later.
-- Add per-skill toggles by filtering which loaded skills are passed to `formatFamiliarSkillsForPrompt()`.
-- Add runtime cron management so the user and agent can create, inspect, pause, edit, and delete scheduled jobs without hand-editing `config.toml`; persist those jobs in scheduler state while keeping config-defined jobs as boot defaults.
-- Implement `familiar install-service`, `familiar status`, and `familiar upgrade`.
+- Publish 0.1.1 after final checks.
+- After tagging 0.1.1, consider changing README one-line install URLs from
+  `main` to the tagged script path. This is the remaining supply-chain hardening
+  item; current behavior intentionally tracks `main`.
+- Installer tests are intentionally light for now. Shell `--help` is covered;
+  PowerShell is not locally tested because this is not a Windows development
+  environment.
+- browser-harness has no release tags today. Keep installing from upstream main
+  via clone plus `uv tool install -e .` until upstream publishes stable tags.
 
-### Stage 5: TTS and Image Generation
+### Service, Status, Upgrade
 
-Status: TTS v0 and skills v0 are done. Remaining work is image generation and WebUI TTS polish.
+- Service install/uninstall/status and global npm upgrade are implemented for the
+  0.1.1 release path.
+- Improve `familiar status` with richer live service health: running pid/process,
+  WebUI URL, last reload time/error, and Discord connection state when available.
+- Add deploy docs after trusted-friend service usage shakes out.
+- Keep Windows foreground/manual restart mode until real demand appears.
+- Add an explicit workspace refresh path for bundled default skills/templates.
+  Do not silently overwrite existing workspace files during `init`.
 
-Image-generation tool:
+### Reload And Runtime Config
 
-- Implemented `image_gen` by wrapping upstream `@earendil-works/pi-ai` image generation.
-- Upstream status: `@earendil-works/pi-ai@0.74.1` publishes the image-generation API: `getImageModel()`, `getImageModels()`, `getImageProviders()`, `generateImages()`, `ImagesContext`, `AssistantImages`, and OpenRouter image provider support.
-- Strategy: do not invent a parallel provider abstraction. Keep Familiar's work focused on config, tool wrapper, generated-media storage, Discord/Web delivery, logging, and tests.
-- Initial Familiar provider target is a custom proxy, not OpenRouter. It should support configurable base URLs and auth envs for proxy-backed Gemini, OpenAI, and NovelAI image generation.
-- Treat upstream's OpenRouter image implementation as an API-shape/reference implementation only, not the default provider choice.
-- Config shape should distinguish chat models from image models, e.g. provider/model/base URL/API shape for image generation, because upstream uses `ImagesModel`, not normal `Model`.
-- Reuse the generated-media sink, attachment URL path, chat-log attachment metadata, Discord file delivery, WebUI live/history attachment plumbing, and retention cleanup from TTS.
-- Store prompt, provider, model, response id when available, mime type, size, local path, public attachment path, and any text side-output in durable metadata.
-- Supports reference images by uploaded attachment id/name or workspace image file/folder path for models whose upstream `ImagesModel.input` includes `image`.
-- Add image generation args later: OpenRouter/Gemini `image_config.aspect_ratio` and `image_config.image_size`; OpenAI-style `size`, `quality`, `output_format`, `output_compression`, `background`, `moderation`, and `n` via upstream `onPayload` or a future native image provider.
-- Add tests for any new image args plus Discord/Web attachment serialization edge cases.
-- Keep media tools simple and direct; do not route generation through subagents.
-- Make failures user-visible but quiet: concise tool error text, no broken attachment placeholders.
-- Add a manual generated-media cleanup command later if startup retention is not enough.
+- Automatic reload is implemented for `config.toml`, `.env`, persona files,
+  `skills/`, and `HEARTBEAT.md`.
+- Keep manual `/reload` as a debug fallback.
+- Mark restart-required fields explicitly in operator output/docs: WebUI
+  port/bind address, Discord token, workspace/data directories, database paths
+  or schema-affecting config, and package upgrades.
+- Scheduler timer reload remains open: cron/heartbeat enabled-state and interval
+  changes need a dedicated scheduler reload path or restart.
+- Add runtime cron management so user/agent can create, inspect, pause, edit,
+  and delete scheduled jobs without hand-editing `config.toml`; persist those
+  jobs in scheduler state while keeping config-defined jobs as boot defaults.
 
-WebUI TTS polish:
+### WebUI And Auth
 
-- Coordinate with Claude before frontend changes.
-- Default render should be a playable audio element.
-- Provide a transcript/text toggle using the already logged assistant text.
-- Avoid showing duplicate text beside audio by default.
-
-Done when:
-
-- After upstream image APIs publish: "draw X" returns an image attachment in Discord and WebUI.
-- Generated media paths are logged and survive restart/history replay.
-
-### Stage 6: Media Intake
-
-Status: done. Completed media intake and media understanding work is archived above; deferred follow-ups remain below.
-
-Stage 6 follow-ups (deferred from v0):
-
-- Vision-capability gating. Skip image attachments or warn when the active model is non-vision rather than relying on upstream errors. Consider model-aware composer disable.
-- Multipart body parsing efficiency. `readMultipartBody` converts the raw upload to a latin1 string for `String.split`. Replace with a byte-wise `buffer.indexOf` scanner (or a small dep like `busboy`) before this sees real upload volume.
-- Discord attachment materialization off the message hot path. `toInboundInput` currently awaits `materializeInboundAttachments` synchronously inside the discord.js message handler. Move the download/disk work into `drainJobs` so the handler stays fast even on multi-attachment uploads.
-- Auth coverage audit on `/api/web/attachments/*`. Verify the static attachment route runs through the same auth middleware as `/api/web/send` in bearer and public-2fa modes; tailscale-only mode is fine.
-- Broader Stage 6 tests. Current coverage: canonical extension + path-traversal containment, partial-write rollback, count cap, non-image filter for prompt images. Add: each magic-byte sniff path, total-bytes cap (vs per-attachment cap), pure-attachment message routing through queue/drain, oversize-base64 drop in `promptImagesFromAttachments`.
-
-### Stage 10: Subagent Delegation Tool
-
-- Revisit the deferred `task` tool after media output, LCM/diary, and proactive scheduling have enough shape to justify delegation.
-- Subagent remains a fresh upstream `Agent` with focused system prompt, scoped tools, isolated transcript, same provider/cache plumbing.
-- Arguments: `goal`, `context`, `allowedTools`, `timeoutMs`, `maxSteps`, `maxToolCalls`, `returnShape`, `allowMemory`, `allowRag`, `attachmentPolicy`.
-- Mirror subagent events to the current channel log.
-- Enforce depth/time/tool/output guards and cancellation.
-
-Done when:
-
-- Main agent can delegate a bounded task, show what happened, receive structured result, and continue.
-
-### Stage 11: Browser/Activity Backend and Mac Sidecar
-
-- Define browser/activity backend contract, not Mac-specific.
-- Keep the backend adapter thin and swappable; do not bake any one third-party browser toolkit into Familiar's model-facing API.
-- First backend candidate: extension/daemon bridge such as OpenCLI Browser Bridge for unattended Mac control, especially where raw CDP would require per-session browser consent.
-- Also track direct CDP and provider/upstream computer-use extensions as replaceable backends.
-- Preserve room for OpenCLI adapter surfaces beyond generic browser control: site adapters now, desktop app adapters and CLI Hub later. Familiar should adapt these through allowlisted backend commands rather than exposing OpenCLI wholesale.
-- Local backend for Windows/Linux/macOS installs where browser is on same host.
-- Optional `familiar-mac` sidecar for the owner's Mac.
-- Current remote-browser bridge: keep Chrome, OpenCLI extension, and OpenCLI daemon on the Mac; use an SSH reverse tunnel so VPS-local `127.0.0.1:19825` reaches the Mac daemon. Remote VPS OpenCLI cannot bootstrap the Mac daemon.
-- Future `familiar-mac` sidecar should own Mac-local dependencies and permissions: OpenCLI, Chrome extension, desktop adapters, AppleScript/Accessibility, screen/camera capture, and computer-use primitives.
-- Transport options: SSH reverse tunnel for current OpenCLI daemon forwarding; later authenticated sidecar transport via reverse connection to VPS, direct private HTTP, or Tailscale.
-- Implementation engine remains undecided until build time: OpenCLI-style extension bridge, Chrome DevTools MCP/CDP, mature CLI repos, native automation, provider computer-use, Playwright only if best.
-- Activity signals can include foreground app/window, idle/lock state, screen summary, and safe user-defined automation events.
-- Do not expose raw CDP, OpenCLI daemon ports, or browser extension control endpoints publicly; require private networking, reverse tunnel/sidecar connection, or equivalent auth.
-
-Done when:
-
-- Same browser/activity interface works against local backend or the owner's Mac sidecar.
-
-### Stage 12: Browser Tool Client
-
-- One `browser` tool with structured actions like `navigate`, `eval`, `read_visible`, `screenshot`, `screen_read`, `activity`.
-- Prefer one tool with actions over many narrow browser tools.
-- Expose only Familiar-curated actions and bounded outputs, even if the backend supports much more.
-- Add a curated `site_command` path for high-value OpenCLI adapters, with read commands enabled separately from write commands.
-- Initial recurring-site allowlist candidates: `twitter`/X, `xiaohongshu`/`rednote`, `reddit`, `bilibili`, `youtube`, `tiktok`, `douyin`, and `spotify`.
-- Make the allowlist data-driven so adding a new OpenCLI site/command later is a config or small adapter-table change, not a redesign.
-- Backend adapters for local host mode and remote sidecar mode.
-- Near-term implementation may shell out to local `opencli`; sidecar mode later should move command execution onto the Mac while keeping the same Familiar-facing `browser` schema and allowlist.
-- Keep real browser control separate from the already-shipped server-side `web_search`/`web_fetch` tools.
-- Activity reads for Stage 9 should usually be scheduler context, but may be exposed through the compact `browser` surface if useful.
-- Conservative truncation and attachment handling.
-
-Done when:
-
-- Familiar can inspect and operate the configured real browser from Discord or WebUI.
-
-### Stage 13: Installer, Service, Status, and Reload
-
-Status: first public npm package is released. Installer v0.1.1 is committed; automatic hot reload and restart plumbing are implemented locally; service management remains next.
-
-Installer v0.1.1:
-
-- Add `scripts/install.sh` for macOS/Linux and `scripts/install.ps1` for Windows PowerShell.
-- Detect Node/npm before installing. Support Node.js 22+, but recommend Node.js 24 LTS as the smoothest/tested runtime.
-- Install `@qearlyao/familiar@latest` globally.
-- Run `familiar init` automatically when the target workspace has no `config.toml`.
-- Leave existing workspaces untouched; `familiar init` only fills missing default files and directories.
-- Offer `--with-browser` / `-WithBrowser` to install optional `@jackwener/opencli` and browser-harness; require `git`, `uv`, and Python 3.11+ for browser-harness.
-- Print clear next steps for editing `.env`, editing `config.toml`, and running `familiar run`.
-
-Service v0.2:
-
-- Implement `familiar install-service [workspace]`.
-- Implement `familiar uninstall-service [workspace]`.
-- Implement `familiar status [workspace]`.
-- macOS: install a user `launchd` plist under `~/Library/LaunchAgents`.
-- Linux: install a user `systemd` unit when systemd is available.
-- Windows: keep documented foreground/manual restart mode for now; do not add Task Scheduler or service wrapping yet.
-- Capture logs in a predictable workspace-local location.
-- Include service health: running pid/process, workspace path, version, WebUI URL, last reload time/error, and Discord connection status when available.
-- `/restart` exits cleanly for supervisor-managed macOS/Linux installs; foreground Windows/manual runs should restart by rerunning `familiar run`.
-
-Upgrade:
-
-- Implement `familiar upgrade` as a thin wrapper around `npm install -g @qearlyao/familiar@latest` plus version reporting.
-- Add an explicit workspace refresh path later for bundled default skills/templates. Do not silently overwrite existing workspace files during `init`.
-
-Reload:
-
-- Automatic file-watcher reload is implemented for `<workspace>/config.toml`, `.env`, persona files, `skills/`, and `HEARTBEAT.md`.
-- Reload now validates the next config/persona/skills/model/session tool state before committing it.
-- Keep manual `/reload` as a debug fallback, but normal users should not need it after editing hot-reloadable files.
-- Mark restart-required fields explicitly: WebUI port/bind address, Discord token, workspace/data directories, database paths/schema-affecting config, and package upgrades.
-- Scheduler timer reload remains follow-up: cron/heartbeat enabled-state and interval changes still need a dedicated scheduler reload path or restart.
-
-Deployment docs:
-
-- Keep README install path focused on npm + init + terminal-run.
-- Add a deploy guide after service commands exist.
+- Add public-2fa login UI.
 - Add nginx/public-2fa deployment example after public-2fa UI is complete.
+- Add richer WebUI panes for memory, diary, transcript, payload, scheduler, and
+  service-status inspection.
+- Add a visible `/new` divider in WebUI history when runtime reset events arrive.
+  Do not clear prior messages; signal the boundary.
+- Virtualize or trim the WebUI message list only after real long-tab jank shows
+  up. `react-virtuoso` is the likely fix for dynamic-height bubbles.
+- Add playable-audio-first TTS rendering polish and a transcript/text toggle
+  without duplicating assistant text by default.
 
-Done when:
+### Media Follow-Ups
 
-- A new user can install, initialize, configure, run, and later service-manage Familiar without reading source-oriented roadmap notes.
+- Add model capability gating for image attachments; skip or warn for non-vision
+  active models instead of relying on upstream errors.
+- Replace multipart upload string splitting with byte-wise scanning or a small
+  parser before real upload volume.
+- Move Discord attachment materialization off the message hot path into job
+  draining.
+- Audit auth coverage for `/api/web/attachments/*` in bearer and public-2fa
+  modes.
+- Broaden media tests: magic-byte sniff paths, total-byte cap, pure-attachment
+  queue/drain routing, and oversize-base64 drop behavior.
+- Add a manual generated-media cleanup command if startup retention is not
+  enough.
 
-### Future Optimizations (optional, defer until pain shows up)
+### Memory And LCM Follow-Ups
 
-These aren't blocking any stage. Keep in mind, address when boot time, browser jank, or RAM actually start to hurt.
+- Add optional age-based LCM segment backstop for segments that never cross a
+  later `/new` boundary.
+- Cascade-delete shared-index rows when LCM records or diary chunks are deleted
+  through ad-hoc paths outside retention.
+- Add deeper `memory_open` expansion, `memory_expand`, or `memory_similar` once
+  summary DAG compression needs deterministic drill-down.
+- Add a lightweight tool-output reference path if tool results need to become
+  searchable. Index concise placeholders/summaries, not raw giant outputs.
+- Tune the diary-writing prompt toward memory-shaped markdown: dated files,
+  topical headings, and short bullet items that chunk naturally.
+- Re-evaluate heartbeat-triggered LCM compaction before building more machinery;
+  keep it only if usage proves value.
+- Render deterministic retained-summary headers from metadata: covered date range
+  and generated time, with model-generated summary text as the body.
+- Document and assert the cache-boundary contract for ambient injection: ambient
+  text mutates only the current user turn, never the assistant tail.
+- Add a doctor finding for sqlite-vec capability gaps where `memory_vec` rows lag
+  behind `memory_chunks`.
+- Implement non-Gemini embedding provider adapters before documenting those
+  formats as usable.
+- Revisit multimodal memory indexing. Today attachments enter memory through
+  derived text notes; real multimodal embeddings need explicit media inputs,
+  metadata, hashing, and tests.
+- Fix `/new` transcript reset marker persistence so a reset marker can be written
+  even before an agent session is loaded in memory.
+- Add bounded in-memory chat-log windows or cold archive once months of logs make
+  startup/RAM noticeably scale.
 
-**WebUI message list — virtualize before it gets long.**
-`web/src/components/MessageList.tsx` is a flat `messages.map(...)` with no virtualization, plus a smooth `scrollIntoView` on every `messages` change. Initial load is paginated (server caps at 50, max 200) and the frontend has no "load more", so cold open is always fast. The risk is accumulation within a single long-lived tab (many `/new` cycles, lots of streamed deltas). Rough thresholds: 100s fine, ~1k noticeable jank, 10k+ visibly bad.
-Fix when needed: drop in `react-virtuoso` (handles dynamic-height bubbles and stick-to-bottom natively). Avoid both virtualization and a client-side trim — pick one.
+### Browser And Activity Expansion
 
-**Chat log — bounded in-memory window for old days.**
-`src/chat-log.ts:206` partitions logs by calendar date (`chat/{channelKey}/{YYYY-MM-DD}.jsonl`), so no single file grows forever. But on startup `createChatLog` loads *every* `.jsonl` in the channel dir into the in-memory `records` array, so boot time, RAM, and runtime hot paths all scale with total lifetime history. Months-of-use territory before this matters; worth knowing the shape.
-Fix when needed, in increasing invasiveness:
-1. Cold-storage: move files older than N days into an `archive/` subdir not loaded at startup; remain queryable on demand.
-2. In-memory window: load only the last N days into `records`; keep older on disk. Most consumers (`buildPrompt`, web pagination) only inspect recent records anyway.
-3. Post-compaction pruning: after `/compact`, drop pre-compaction inbound records once the summary covers them.
+- Preserve the model-facing compact `browser` contract while swapping backend
+  implementations underneath.
+- Keep OpenCLI for site adapters, owned sessions, and unattended Browser Bridge.
+- Keep browser-harness for attaching to the already-running local Chrome via CDP.
+- Current remote-browser bridge: Chrome, OpenCLI extension, and OpenCLI daemon
+  live on the Mac; use an SSH reverse tunnel so VPS-local `127.0.0.1:19825`
+  reaches the Mac daemon. Remote VPS OpenCLI cannot bootstrap the Mac daemon.
+- Future `familiar-mac` sidecar owns Mac-local dependencies and permissions:
+  OpenCLI, Chrome extension, desktop adapters, AppleScript/Accessibility,
+  screen/camera capture, and computer-use primitives.
+- Do not expose raw CDP, OpenCLI daemon ports, or browser extension endpoints
+  publicly; require private networking, reverse tunnel, sidecar connection, or
+  equivalent auth.
+- Add local/remote backend adapters without changing the Familiar-facing browser
+  schema.
+- Preserve room for OpenCLI desktop app adapters and CLI Hub later through
+  allowlisted backend commands, not wholesale OpenCLI exposure.
+- Activity signals can include foreground app/window, idle/lock state, screen
+  summary, and safe user-defined automation events.
 
-**`/new` reset boundary in WebUI — visual divider, not clear.**
-Today `/new` resets agent context (`armedAfterRecordId` in `src/runtime.ts:514`) but leaves prior messages visible in the WebUI, which can feel like nothing happened. Lightest fix: when the WebSocket sees a `runtime/reset` event, insert a `── new conversation ──` separator in the message list. Don't actually clear — let the user scroll back to prior turns. Cheap, signals the boundary, no state migration.
+### Subagent Delegation
 
-**`/new` transcript reset marker — persist even before agent load.**
-Today `familiarAgent.reset(sessionKey)` returns early when the agent session is not already loaded in memory, so `/new` can reset the chat runtime without writing an agent transcript reset marker. That can let an agent created later replay old pre-`/new` transcript messages after a process restart or fresh session.
-Fix when needed: make reset marker writing independent from the in-memory `Agent` instance, then reset live agent state only when a session is already loaded.
+- Revisit the deferred `task` tool only after media, memory, scheduling, and
+  browser workflows show concrete delegation pressure.
+- Subagent should be a fresh upstream `Agent` with focused system prompt, scoped
+  tools, isolated transcript, same provider/cache plumbing, and mirrored events.
+- Guardrails: depth, time, allowed tools, output shape, cancellation, and memory
+  access policy.
 
 ## 6. Reference Index
 
 Use `rg` first. Open only the target file/range you need.
 
-Upstream package roots:
+Local Familiar files:
 
-- `/path/to/pi-mono` is a local reference clone of `https://github.com/earendil-works/pi` (directory name is historical).
-- `/path/to/pi-mono/packages/agent`
-- `/path/to/pi-mono/packages/ai`
-- `/path/to/pi-mono/packages/coding-agent`
-- `/tmp/pi-chat` is a local reference clone of `https://github.com/earendil-works/pi-chat`.
-- `/path/to/familiar-research` holds local research clones for LCM-adjacent projects:
-  - `/path/to/familiar-research/lossless-claw`
-  - `/path/to/familiar-research/pi-lcm`
-  - `/path/to/familiar-research/pi-lcm-memory`
-
-Agent/runtime refs:
-
-- `/path/to/pi-mono/packages/agent/src/agent.ts`
-  - constructor/state/options: search `constructor`
-  - `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`
-- `/path/to/pi-mono/packages/agent/src/agent-loop.ts`
-  - `transformContext`
-  - tool execution
-  - steering/follow-up timing
-- `/path/to/pi-mono/packages/agent/src/types.ts`
-  - `AgentMessage`, tool shape, events, usage-bearing messages
-
-Provider/cache refs:
-
-- `/path/to/pi-mono/packages/ai/src/types.ts`
-  - `cacheRetention`, usage fields, image-generation types on main (`ImagesModel`, `ImagesContext`, `AssistantImages`)
-- `/path/to/pi-mono/packages/ai/src/providers/anthropic.ts`
-  - upstream `cache_control` behavior
-- `/path/to/pi-mono/packages/ai/src/providers/openai-responses.ts`
-  - session/cache headers
-- `/path/to/pi-mono/packages/ai/src/images.ts`
-  - upstream `generateImages()` entry point, published in `@earendil-works/pi-ai@0.74.1`
-- `/path/to/pi-mono/packages/ai/src/image-models.ts`
-  - upstream image model discovery on main: `getImageModel`, `getImageModels`, `getImageProviders`
-- `/path/to/pi-mono/packages/ai/src/providers/images/openrouter.ts`
-  - first upstream image provider implementation on main, returns base64 `ImageContent` plus optional text
-- `/path/to/pi-mono/.pi/extensions/tps.ts`
-  - cache read/write usage reporting pattern
-
-Tool refs:
-
-- `/path/to/pi-mono/packages/coding-agent/src/core/tools/index.ts`
-  - confirms current upstream built-ins are workspace/local tools, not web fetch/search tools
-- `/path/to/pi-mono/packages/coding-agent/src/core/tools/bash.ts`
-- `/path/to/pi-mono/packages/coding-agent/src/core/tools/read.ts`
-  - image read path returns text note plus `ImageContent`; warns for non-vision models
-- `/path/to/pi-mono/packages/coding-agent/src/core/tools/write.ts`
-- `/path/to/pi-mono/packages/coding-agent/src/cli/file-processor.ts`
-  - `@file` argument handling: local image detection, resize, dimension note, `ImageContent[]`
-- `/path/to/pi-mono/packages/coding-agent/src/utils/mime.ts`
-  - magic-byte supported image MIME detection for jpg/png/gif/webp
-- `/path/to/pi-mono/packages/coding-agent/src/utils/image-resize.ts`
-  - Photon-backed resize/re-encode and max inline image payload policy
-
-Compaction/session refs:
-
-- `/path/to/pi-mono/packages/coding-agent/src/core/agent-session.ts`
-- `/path/to/pi-mono/packages/coding-agent/src/core/session-manager.ts`
-- `/path/to/pi-mono/packages/coding-agent/src/core/compaction/compaction.ts`
-
-pi-chat refs:
-
-- `/tmp/pi-chat/src/core/runtime-types.ts`: chat runtime/log record types.
-- `/tmp/pi-chat/src/runtime.ts`: runtime state machine, trigger slicing.
-  - attachment transcript formatting is path-based; it does not convert inbound files to direct `ImageContent`
-- `/tmp/pi-chat/src/log.ts`: append JSONL, locks, timestamps, attachment materialization.
-- `/tmp/pi-chat/src/live/types.ts`: small live adapter interface.
-- `/tmp/pi-chat/src/live/discord.ts`: Discord catch-up, mentions, reply-to, attachments.
-- `/tmp/pi-chat/src/live/common.ts`: shared live-adapter helpers, including remote attachment download.
-- `/tmp/pi-chat/src/live/telegram.ts`: richer inbound media reference for photos/documents/videos/audio plus outbound photo/document sending.
-- `/tmp/pi-chat/src/render/chunking.ts`: outbound chunking.
-- `/tmp/pi-chat/src/services/discord.ts`: Discord service setup and lifecycle wiring.
-- `/tmp/pi-chat/src/services/index.ts`: service entry aggregation.
-
-Upstream WebUI/media refs:
-
-- `/path/to/pi-mono/packages/web-ui/src/utils/attachment-utils.ts`
-  - browser-side attachment loading and document text extraction helper; useful frontend reference, not Familiar backend storage policy
-- `/path/to/pi-mono/packages/web-ui/src/tools/extract-document.ts`
-  - document fetch/extract tool with size guard pattern and collapsible renderer reference
-
-Local refs:
-
-- `STAGE7-8-ROADMAP.md`: detailed implementation roadmap for shared index primitives, LCM, diary, Ambient Recall, and upstream refs.
-- `src/agent.ts`: Familiar agent wrapper, cache normalization, transcript/payload logging.
-- `src/web-tools.ts`: Familiar-owned `web_search` and `web_fetch` providers, URL/domain validation, page cache, and web-content tool-result warning.
-- `src/runtime.ts`: conversation runtime, control parser, trigger records.
-- `src/discord.ts`: Discord glue, runtime promise cache, replies, queue draining.
-- `src/chat-log.ts`: channel log layout.
-- `src/config.ts`: config schema and defaults.
-- `src/models.ts`: model/provider auth/base-url mapping.
+- `src/agent.ts`: direct `Agent` wrapper, model/thinking controls, reload,
+  transcript/payload logging, `transformContext` integration.
+- `src/runtime.ts`: `ConversationRuntime`, control parsing, trigger/job slicing.
+- `src/discord.ts`: Discord intake, runtime cache, replies, queue draining.
+- `src/web.ts`, `web/src/`: WebUI API/WebSocket and frontend.
+- `src/chat-log.ts`: append-only channel log paths and records.
+- `src/config.ts`, `src/models.ts`: config schema, provider/model/base-url/auth.
+- `src/hot-reload.ts`: workspace file watcher and reload debounce.
+- `src/web-tools.ts`: server-side web search/fetch providers and cache.
+- `src/browser-tools.ts`: compact browser tool and OpenCLI/browser-harness
+  adapters.
+- `src/memory/**`: shared index, LCM, diary, memory service and operator tools.
+- `scripts/install.sh`, `scripts/install.ps1`: npm installer entrypoints.
 - `scripts/pretty-payload.ts`: payload inspection.
 
-Useful local commands:
+Upstream package roots:
+
+- `/path/to/pi-mono`: local reference clone of `earendil-works/pi`.
+- `/path/to/pi-mono/packages/agent/src/agent.ts`: `Agent`, state/options,
+  `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`.
+- `/path/to/pi-mono/packages/agent/src/agent-loop.ts`: `transformContext`, tool
+  execution, steering/follow-up timing.
+- `/path/to/pi-mono/packages/agent/src/types.ts`: `AgentMessage`, tool shape,
+  events, usage-bearing messages.
+- `/path/to/pi-mono/packages/ai/src/types.ts`: provider/cache/image-generation
+  types.
+- `/path/to/pi-mono/packages/ai/src/images.ts` and `image-models.ts`: upstream
+  image-generation entry points.
+- `/path/to/pi-mono/packages/ai/src/providers/images/openrouter.ts`: first
+  upstream image provider reference.
+- `/path/to/pi-mono/packages/coding-agent/src/core/tools/*`: upstream local tool
+  factories.
+- `/path/to/pi-mono/packages/coding-agent/src/utils/mime.ts` and
+  `image-resize.ts`: media sniff/resize references.
+- `/tmp/pi-chat`: local reference clone of `earendil-works/pi-chat`; useful for
+  runtime/log/adapter patterns, not memory/WebUI/browser design.
+
+Research refs:
+
+- `/path/to/familiar-research/lossless-claw`: primary LCM architecture reference.
+  Use for ordered context items, fresh-tail protection, summary DAG metadata,
+  prompt-aware eviction, deferred compaction debt, pruning, doctor/backup, and
+  expansion concepts.
+- `/path/to/familiar-research/pi-lcm`: lightweight Pi LCM reference.
+- `/path/to/familiar-research/pi-lcm-memory`: primary indexing/retrieval
+  reference. Use for batched embeddings, content-hash dedupe, sqlite-vec
+  soft-fail, hybrid retrieval/RRF, diagnostics, benchmarks, optional local
+  Transformers.js worker, primer/auto-recall ideas. Do not copy its regex
+  auto-recall injection into Familiar v0.
+
+High-value research files:
+
+- `lossless-claw/docs/architecture.md`
+- `lossless-claw/src/assembler.ts`
+- `lossless-claw/src/engine.ts`
+- `lossless-claw/src/compaction.ts`
+- `lossless-claw/src/store/conversation-store.ts`
+- `lossless-claw/src/store/summary-store.ts`
+- `lossless-claw/src/prune.ts`
+- `lossless-claw/src/retrieval.ts`
+- `lossless-claw/src/plugin/lcm-command.ts`
+- `pi-lcm-memory/src/db/schema.ts`
+- `pi-lcm-memory/src/db/store.ts`
+- `pi-lcm-memory/src/db/vec.ts`
+- `pi-lcm-memory/src/indexer.ts`
+- `pi-lcm-memory/src/retrieval.ts`
+- `pi-lcm-memory/src/embeddings/*`
+- `pi-lcm-memory/src/primer.ts`
+- `pi-lcm-memory/src/auto-recall.ts`
+
+Useful commands:
 
 ```sh
 npm test
 npm run typecheck
 npm run lint
 npm run build
+npm pack --dry-run
 npm run payload:pretty -- --messages 12
 npm run payload:pretty -- --full
 ```
 
 ## 7. Maintenance Posture
 
-- Pin pi packages with normal semver ranges; on upgrade, run typecheck/build, send a known-good prompt, and verify cache telemetry.
-- Node test suite exists under `test/` using `tsx --test`; run `npm test`.
-- Write tests for runtime state machine, dispatch modes, media attachment delivery, LCM assembly/scoring, subagent guards when revived, and browser backend adapters. Skip thin wrappers over upstream.
-- Use Biome formatting.
+- Before feature work, check upstream status when it may have changed. Reuse the
+  existing local reference clones; do not create duplicate upstream clones.
+- On pi package upgrades, run typecheck/build/tests, send a known-good prompt,
+  and verify cache telemetry.
+- Write tests for behavioral contracts and risky adapters. Skip thin wrappers
+  over upstream.
 - Keep commits atomic and explain why.
-- Log token usage and cost per turn; aggregate daily later. No external telemetry sink.
+- Keep README/CHANGELOG user-facing. Do not add development plan logs there.

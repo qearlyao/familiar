@@ -553,30 +553,11 @@ export async function createFamiliarAgent(
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
-	const refreshSession = (session: FamiliarAgentSession, sessionKey: string): void => {
-		const { model } = resolveChannelModel(sessionKey);
-		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
-		session.model = model;
-		session.thinkingLevel = thinkingLevel;
-		session.agent.state.systemPrompt = systemPrompt;
-		session.agent.state.model = model;
-		session.agent.state.thinkingLevel = thinkingLevel;
-		session.agent.state.tools = createFamiliarTools(
-			config,
-			session.mediaSink,
-			() => session.referenceAttachments,
-			memoryService,
-		);
-	};
-
 	const prepareReload = async (): Promise<ReloadSnapshot> => {
 		const nextConfig = (await options.reloadConfig?.()) ?? config;
 		const nextPersona = await loadPersona(nextConfig);
 		const nextSkillsResult = loadFamiliarSkills(nextConfig);
-		const nextSystemPrompt = buildSystemPrompt(
-			nextPersona,
-			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
-		);
+		const nextSystemPrompt = buildSystemPrompt(nextPersona, formatFamiliarSkillsForPrompt(nextSkillsResult.skills));
 		const nextDefaultModel = createConfiguredModel(nextConfig);
 		getRequestApiKey(nextConfig, nextDefaultModel);
 		return {

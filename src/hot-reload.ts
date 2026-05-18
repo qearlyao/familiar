@@ -114,7 +114,11 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 				) {
 					void refreshSkillWatchers();
 				}
-				if (!filename || shouldReloadForPath(workspacePath, changedPath) || shouldReloadForPath(workspacePath, dirPath)) {
+				if (
+					!filename ||
+					shouldReloadForPath(workspacePath, changedPath) ||
+					shouldReloadForPath(workspacePath, dirPath)
+				) {
 					scheduleReload(relative(workspacePath, changedPath) || relative(workspacePath, dirPath) || ".");
 				}
 			});

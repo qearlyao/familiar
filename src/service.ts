@@ -209,7 +209,10 @@ function unsupported(platformName: string): ServiceCommandResult {
 	};
 }
 
-export async function installService(workspacePath: string, options: ServiceOptions = {}): Promise<ServiceCommandResult> {
+export async function installService(
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
 	const spec = buildSpec(workspacePath, options);
 	if (spec.platform !== "darwin" && spec.platform !== "linux") return unsupported(spec.platform);
 
@@ -245,7 +248,10 @@ export async function installService(workspacePath: string, options: ServiceOpti
 	};
 }
 
-export async function uninstallService(workspacePath: string, options: ServiceOptions = {}): Promise<ServiceCommandResult> {
+export async function uninstallService(
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
 	const spec = buildSpec(workspacePath, options);
 	if (spec.platform !== "darwin" && spec.platform !== "linux") return unsupported(spec.platform);
 
@@ -267,7 +273,10 @@ export async function uninstallService(workspacePath: string, options: ServiceOp
 	};
 }
 
-export async function serviceStatus(workspacePath: string, options: ServiceOptions = {}): Promise<ServiceCommandResult> {
+export async function serviceStatus(
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
 	const spec = buildSpec(workspacePath, options);
 	if (spec.platform !== "darwin" && spec.platform !== "linux") return unsupported(spec.platform);
 

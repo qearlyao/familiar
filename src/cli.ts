@@ -160,7 +160,9 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		setTimeout(() => void stop(75), RESTART_EXIT_DELAY_MS);
 		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
 	};
-	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, { restart: requestRestart });
+	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, {
+		restart: requestRestart,
+	});
 	webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon, { restart: requestRestart });
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");

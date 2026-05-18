@@ -53,6 +53,7 @@ node dist/cli.js init
 - `HEARTBEAT.md`
 - `data/`
 - `memories/`
+- `skills/`
 
 You can choose another workspace:
 

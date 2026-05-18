@@ -56,6 +56,8 @@ const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 const CRON_SKIPPED = Symbol("cron-skipped");
 
+export type RestartHandler = () => string | Promise<string>;
+
 export interface DiscordDaemon {
 	client: Client<true>;
 	getWebSessions(): Promise<DiscordWebSession[]>;
@@ -146,6 +148,11 @@ function getFamiliarApplicationCommand(): ApplicationCommandData {
 			{
 				name: "reload",
 				description: "Reload persona prompt files and live agent settings",
+				type: ApplicationCommandOptionType.Subcommand,
+			},
+			{
+				name: "restart",
+				description: "Restart Familiar if this runtime has a restart handler",
 				type: ApplicationCommandOptionType.Subcommand,
 			},
 			{
@@ -631,8 +638,9 @@ async function applyControlCommand(options: {
 	channelTrigger: EffectiveSetting<Config["discord"]["channelTrigger"]>;
 	isDm: boolean;
 	activeAgentOwner: string | undefined;
+	restart?: RestartHandler;
 }): Promise<string> {
-	const { control, runtime, familiarAgent, settings, channelTrigger, isDm, activeAgentOwner } = options;
+	const { control, runtime, familiarAgent, settings, channelTrigger, isDm, activeAgentOwner, restart } = options;
 	if (control.command === "stop") {
 		if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
 		await runtime.resetConversation("stop requested");
@@ -645,6 +653,11 @@ async function applyControlCommand(options: {
 	}
 	if (control.command === "reload") {
 		return familiarAgent.reload();
+	}
+	if (control.command === "restart") {
+		return restart
+			? await restart()
+			: "Restart requested, but no restart handler is configured. Please restart the Familiar process manually.";
 	}
 	if (control.command === "model") {
 		return control.args
@@ -741,6 +754,7 @@ export async function startDiscordDaemon(
 	familiarAgent: FamiliarAgent,
 	settings: SettingsStore,
 	memoryService?: MemoryService,
+	options: { restart?: RestartHandler } = {},
 ): Promise<DiscordDaemon> {
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
@@ -1250,6 +1264,7 @@ export async function startDiscordDaemon(
 					channelTrigger,
 					isDm,
 					activeAgentOwner,
+					restart: options.restart,
 				});
 				const messageIds = await sendReply(config, message, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
@@ -1325,6 +1340,7 @@ export async function startDiscordDaemon(
 				channelTrigger,
 				isDm,
 				activeAgentOwner,
+				restart: options.restart,
 			});
 			const messageIds = await replyEphemeral(interaction, text);
 			await runtime.noteOutbound({ text, messageIds, control: control.command });

@@ -15,6 +15,7 @@ export {
 } from "./chat-log.js";
 export { type CacheRetention, type Config, loadConfig } from "./config.js";
 export { type DiscordDaemon, startDiscordDaemon } from "./discord.js";
+export { startWorkspaceHotReload, type HotReloadWatcher } from "./hot-reload.js";
 export {
 	clampConfiguredThinkingLevel,
 	createConfiguredModel,

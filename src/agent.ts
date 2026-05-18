@@ -81,6 +81,21 @@ export interface FamiliarAgentOptions {
 	reloadConfig?: () => Promise<Config>;
 }
 
+interface ReloadSnapshot {
+	config: Config;
+	persona: Awaited<ReturnType<typeof loadPersona>>;
+	skillsResult: ReturnType<typeof loadFamiliarSkills>;
+	systemPrompt: string;
+	defaultModel: Model<any>;
+}
+
+interface ReloadedSession {
+	session: FamiliarAgentSession;
+	model: Model<any>;
+	thinkingLevel: ThinkingLevel;
+	tools: AgentTool<any>[];
+}
+
 const BASH_DESCRIPTION =
 	"run a bash command. defaults to the workspace; absolute paths and `~/...` reach anywhere else. returns stdout and stderr. output truncates to the last 2000 lines or 50KB, whichever hits first; full output lands in a temp file if cut. timeout in seconds optional.";
 
@@ -391,6 +406,33 @@ export async function createFamiliarAgent(
 		};
 	};
 
+	const resolveChannelModelForConfig = (
+		nextConfig: Config,
+		nextDefaultModel: Model<any>,
+		sessionKey: string,
+	): { model: Model<any>; source: "config" | "override" } => {
+		const override = settings.getChannelModel(sessionKey);
+		const modelName = resolveModelName(override.value, nextDefaultModel);
+		const ref = parseModelRef(modelName);
+		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
+		if (override.value) assertModelAllowed(nextConfig, ref);
+		const model = override.value ? resolveModel(ref, nextConfig) : nextDefaultModel;
+		getRequestApiKey(nextConfig, model);
+		return { model, source: override.source };
+	};
+
+	const resolveChannelThinkingLevelForConfig = (
+		nextConfig: Config,
+		sessionKey: string,
+		model: Model<any>,
+	): EffectiveSetting<ThinkingLevel> => {
+		const setting = settings.getChannelThinkingLevel(sessionKey, nextConfig.agent.thinkingLevel);
+		return {
+			value: clampConfiguredThinkingLevel(model, setting.value),
+			source: setting.source,
+		};
+	};
+
 	const createSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
 		const sessionId = deriveSessionId(config.workspacePath, sessionKey);
 		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
@@ -525,6 +567,46 @@ export async function createFamiliarAgent(
 		);
 	};
 
+	const prepareReload = async (): Promise<ReloadSnapshot> => {
+		const nextConfig = (await options.reloadConfig?.()) ?? config;
+		const nextPersona = await loadPersona(nextConfig);
+		const nextSkillsResult = loadFamiliarSkills(nextConfig);
+		const nextSystemPrompt = buildSystemPrompt(
+			nextPersona,
+			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
+		);
+		const nextDefaultModel = createConfiguredModel(nextConfig);
+		getRequestApiKey(nextConfig, nextDefaultModel);
+		return {
+			config: nextConfig,
+			persona: nextPersona,
+			skillsResult: nextSkillsResult,
+			systemPrompt: nextSystemPrompt,
+			defaultModel: nextDefaultModel,
+		};
+	};
+
+	const prepareReloadedSessions = async (next: ReloadSnapshot): Promise<ReloadedSession[]> => {
+		return Promise.all(
+			[...sessions.entries()].map(async ([sessionKey, sessionPromise]) => {
+				const session = await sessionPromise;
+				const { model } = resolveChannelModelForConfig(next.config, next.defaultModel, sessionKey);
+				const thinkingLevel = resolveChannelThinkingLevelForConfig(next.config, sessionKey, model).value;
+				return {
+					session,
+					model,
+					thinkingLevel,
+					tools: createFamiliarTools(
+						next.config,
+						session.mediaSink,
+						() => session.referenceAttachments,
+						memoryService,
+					),
+				};
+			}),
+		);
+	};
+
 	return {
 		abort(sessionKey: string): void {
 			const session = sessions.get(sessionKey);
@@ -543,23 +625,22 @@ export async function createFamiliarAgent(
 		},
 		async reload(): Promise<string> {
 			const previousModel = formatModel(defaultModel);
-			const nextConfig = await options.reloadConfig?.();
-			if (nextConfig) Object.assign(config, nextConfig);
-			persona = await loadPersona(config);
-			skillsResult = loadFamiliarSkills(config);
+			const next = await prepareReload();
+			const reloadedSessions = await prepareReloadedSessions(next);
+			Object.assign(config, next.config);
+			persona = next.persona;
+			skillsResult = next.skillsResult;
 			logSkillDiagnostics(skillsResult);
-			systemPrompt = buildSystemPrompt(persona, formatFamiliarSkillsForPrompt(skillsResult.skills));
-			defaultModel = createConfiguredModel(config);
-			getRequestApiKey(config, defaultModel);
-			const settledSessions = await Promise.allSettled(
-				[...sessions.entries()].map(async ([sessionKey, sessionPromise]) => {
-					const session = await sessionPromise;
-					refreshSession(session, sessionKey);
-					return sessionKey;
-				}),
-			);
-			const refreshed = settledSessions.filter((result) => result.status === "fulfilled").length;
-			const failed = settledSessions.length - refreshed;
+			systemPrompt = next.systemPrompt;
+			defaultModel = next.defaultModel;
+			for (const nextSession of reloadedSessions) {
+				nextSession.session.model = nextSession.model;
+				nextSession.session.thinkingLevel = nextSession.thinkingLevel;
+				nextSession.session.agent.state.systemPrompt = systemPrompt;
+				nextSession.session.agent.state.model = nextSession.model;
+				nextSession.session.agent.state.thinkingLevel = nextSession.thinkingLevel;
+				nextSession.session.agent.state.tools = nextSession.tools;
+			}
 			const modelLine =
 				previousModel === formatModel(defaultModel)
 					? `default_model: ${previousModel}`
@@ -568,7 +649,7 @@ export async function createFamiliarAgent(
 				"Reloaded persona prompt, skills, and live agent settings.",
 				modelLine,
 				`skills: ${skillsResult.skills.length} loaded${skillsResult.diagnostics.length ? ` (${skillsResult.diagnostics.length} warnings)` : ""}`,
-				`active_sessions: ${refreshed}${failed ? ` (${failed} failed)` : ""}`,
+				`active_sessions: ${reloadedSessions.length}`,
 				"restart_required_for: Discord/Web listener settings, memory database paths, and long-lived memory internals",
 			].join("\n");
 		},

@@ -126,7 +126,7 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
-	it("parses reload as an owner-only control command", async () => {
+	it("parses reload and restart as owner-only control commands", async () => {
 		const dataDir = await createTempDataDir();
 		const config = await configWithDataDir(dataDir);
 		const runtime = await ConversationRuntime.connect({
@@ -154,10 +154,27 @@ describe("ConversationRuntime", () => {
 				}),
 				{ command: "reload", args: "" },
 			);
+			assert.deepEqual(
+				runtime.parseControlCommand({
+					authorId: "owner",
+					text: "/restart",
+					isBot: false,
+				}),
+				{ command: "restart", args: "" },
+			);
+			assert.deepEqual(
+				runtime.parseControlCommand({
+					authorId: "owner",
+					text: "<@bot> restart",
+					isBot: false,
+					mentionedBot: true,
+				}),
+				{ command: "restart", args: "" },
+			);
 			assert.equal(
 				runtime.parseControlCommand({
 					authorId: "someone-else",
-					text: "/reload",
+					text: "/restart",
 					isBot: false,
 				}),
 				undefined,

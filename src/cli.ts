@@ -12,6 +12,7 @@ import { loadConfig } from "./config.js";
 import { runDataRetention } from "./data-retention.js";
 import { startDiscordDaemon } from "./discord.js";
 import { cleanupGeneratedAttachments } from "./generated-media.js";
+import { startWorkspaceHotReload } from "./hot-reload.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
 import { loadSettingsStore } from "./settings.js";
@@ -139,20 +140,32 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	await memoryService.indexDiaries().catch((error) => console.error("initial diary indexing failed", error));
 	memoryService.watchDiaries();
 	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig });
-	const discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService);
-	const webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon);
+	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
+	let stopping = false;
+	let discordDaemon: Awaited<ReturnType<typeof startDiscordDaemon>> | undefined;
+	let webDaemon: Awaited<ReturnType<typeof startWebDaemon>> | undefined;
+	const stop = async (exitCode = 0) => {
+		if (stopping) return;
+		stopping = true;
+		console.log("Stopping familiar");
+		hotReload.close();
+		await Promise.all([webDaemon?.stop(), discordDaemon?.stop()]);
+		memoryService.close();
+		process.exit(exitCode);
+	};
+	const requestRestart = (): string => {
+		console.log("Restart requested");
+		setTimeout(() => void stop(75), 0);
+		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
+	};
+	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, { restart: requestRestart });
+	webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon, { restart: requestRestart });
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
 	console.log(`settings=${settings.path}`);
 
-	const stop = async () => {
-		console.log("Stopping familiar");
-		await Promise.all([webDaemon.stop(), discordDaemon.stop()]);
-		memoryService.close();
-		process.exit(0);
-	};
-	process.once("SIGINT", () => void stop());
-	process.once("SIGTERM", () => void stop());
+	process.once("SIGINT", () => void stop(0));
+	process.once("SIGTERM", () => void stop(0));
 	await new Promise<void>(() => {});
 }
 

@@ -284,7 +284,7 @@ Done when:
 
 ### Stage 13: Installer, Service, Status, and Reload
 
-Status: first public npm package is released. Stage 13 is the adoption and operations track.
+Status: first public npm package is released. Installer v0.1.1 is committed; automatic hot reload and restart plumbing are implemented locally; service management remains next.
 
 Installer v0.1.1:
 
@@ -303,9 +303,10 @@ Service v0.2:
 - Implement `familiar status [workspace]`.
 - macOS: install a user `launchd` plist under `~/Library/LaunchAgents`.
 - Linux: install a user `systemd` unit when systemd is available.
-- Windows: defer until we choose the least-surprising path: Task Scheduler, WinSW, or a documented terminal-run mode.
+- Windows: keep documented foreground/manual restart mode for now; do not add Task Scheduler or service wrapping yet.
 - Capture logs in a predictable workspace-local location.
 - Include service health: running pid/process, workspace path, version, WebUI URL, last reload time/error, and Discord connection status when available.
+- `/restart` exits cleanly for supervisor-managed macOS/Linux installs; foreground Windows/manual runs should restart by rerunning `familiar run`.
 
 Upgrade:
 
@@ -314,11 +315,11 @@ Upgrade:
 
 Reload:
 
-- Build a single reload pipeline used by Discord `/familiar reload`, WebUI controls, future CLI `familiar reload`, and file watchers.
-- Hot-reload safe surfaces first: `SOUL.md`, `USER.md`, `MEMORY.md`, `INNER.md`, `HEARTBEAT.md`, skills, model/thinking overrides, browser config, web tool provider config, and scheduler cron jobs.
-- Watch `<workspace>/config.toml`, `.env`, persona files, `skills/`, and `HEARTBEAT.md` with debounce.
-- On reload failure, keep the previous working config and surface the error.
+- Automatic file-watcher reload is implemented for `<workspace>/config.toml`, `.env`, persona files, `skills/`, and `HEARTBEAT.md`.
+- Reload now validates the next config/persona/skills/model/session tool state before committing it.
+- Keep manual `/reload` as a debug fallback, but normal users should not need it after editing hot-reloadable files.
 - Mark restart-required fields explicitly: WebUI port/bind address, Discord token, workspace/data directories, database paths/schema-affecting config, and package upgrades.
+- Scheduler timer reload remains follow-up: cron/heartbeat enabled-state and interval changes still need a dedicated scheduler reload path or restart.
 
 Deployment docs:
 

@@ -35,6 +35,8 @@ import {
 	type WebToolEvent,
 } from "./web-types.js";
 
+export type RestartHandler = () => string | Promise<string>;
+
 function toUnixMs(ts: string | undefined): number {
 	const parsed = ts ? Date.parse(ts) : NaN;
 	return Number.isFinite(parsed) ? parsed : Date.now();
@@ -373,6 +375,7 @@ export async function startWebDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
 	discordDaemon: DiscordDaemon,
+	options: { restart?: RestartHandler } = {},
 ): Promise<WebDaemon> {
 	const persona = await loadPersona(config);
 	const personaName = parsePersonaName(persona.soul);
@@ -642,6 +645,11 @@ export async function startWebDaemon(
 		}
 		if (control.command === "reload") {
 			return familiarAgent.reload();
+		}
+		if (control.command === "restart") {
+			return options.restart
+				? await options.restart()
+				: "Restart requested, but no restart handler is configured. Please restart the Familiar process manually.";
 		}
 		if (control.command === "model") {
 			return control.args

@@ -10,6 +10,7 @@ export type ControlCommand =
 	| "status"
 	| "new"
 	| "reload"
+	| "restart"
 	| "compact"
 	| "model"
 	| "thinking"

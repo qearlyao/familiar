@@ -76,9 +76,9 @@ allow = [
 ]
 
 [models.base_urls]
-# anthropic = "https://api.linkapi.ai"
-# google = "https://api.linkapi.ai/v1beta"
-# openai = "https://api.linkapi.ai/v1"
+anthropic = "https://api.linkapi.ai"
+google = "https://api.linkapi.ai/v1beta"
+openai = "https://api.linkapi.ai/v1"
 # google-vertex = "https://{location}-aiplatform.googleapis.com"
 link = "https://api.linkapi.ai/v1"
 

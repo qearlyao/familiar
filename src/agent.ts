@@ -9,6 +9,8 @@ import { setAddedModelsPath } from "./added-models.js";
 import { createBrowserTools } from "./browser-tools.js";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ThinkingLevel } from "./config.js";
+import { setConfigOverridesPath } from "./config-overrides.js";
+import { applyConfigOverridesToConfig } from "./config-registry.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import { createImageGenTool } from "./image-gen.js";
 import type { MemoryService } from "./memory/service.js";
@@ -373,6 +375,8 @@ export async function createFamiliarAgent(
 	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
 	setAddedModelsPath(config.workspace.dataDir);
+	setConfigOverridesPath(config.workspace.dataDir);
+	applyConfigOverridesToConfig(config);
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);

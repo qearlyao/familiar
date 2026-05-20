@@ -70,6 +70,7 @@ export interface DiscordDaemon {
 	): Promise<FamiliarAgentReply>;
 	abortWebRuntime(runtime: ConversationRuntime): void;
 	getActiveRuntimeKey(): string | undefined;
+	rearmHeartbeat(): void;
 	stop(): Promise<void>;
 }
 
@@ -1358,12 +1359,21 @@ export async function startDiscordDaemon(
 		console.warn("Discord websocket closed; discord.js will reconnect when possible", event);
 	});
 	schedulerState = await loadSchedulerState(config.workspace.dataDir);
+	const tickHeartbeat = () => {
+		void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
+	};
+	const rearmHeartbeat = (): void => {
+		if (heartbeatTimer) {
+			clearInterval(heartbeatTimer);
+			heartbeatTimer = undefined;
+		}
+		if (config.heartbeat.enabled) {
+			heartbeatTimer = setInterval(tickHeartbeat, Math.min(config.heartbeat.intervalMs, 60_000));
+		}
+	};
 	if (config.heartbeat.enabled) {
 		await initializeHeartbeatState((await getOwnerDmSession()).runtime);
-		const tickHeartbeat = () => {
-			void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
-		};
-		heartbeatTimer = setInterval(tickHeartbeat, Math.min(config.heartbeat.intervalMs, 60_000));
+		rearmHeartbeat();
 		tickHeartbeat();
 	}
 	if (config.cron.enabled && config.cron.jobs.some((job) => job.enabled)) {
@@ -1385,6 +1395,7 @@ export async function startDiscordDaemon(
 		getActiveRuntimeKey(): string | undefined {
 			return activeAgentOwner;
 		},
+		rearmHeartbeat,
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);

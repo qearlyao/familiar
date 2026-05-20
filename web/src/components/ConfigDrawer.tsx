@@ -10,7 +10,10 @@ import { cn } from "@/lib/utils";
 import { ModelSection } from "./config/ModelSection";
 import { ThinkingSection } from "./config/ThinkingSection";
 import { ThemeSection } from "./config/ThemeSection";
+import { HeartbeatSection } from "./config/HeartbeatSection";
+import { MemorySection } from "./config/MemorySection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
+import { useConfig } from "@/lib/useConfig";
 
 interface ConfigDrawerProps {
   open: boolean;
@@ -55,17 +58,27 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
     data,
     models,
     addedModels,
-    error,
-    isLoading,
-    isMutating,
+    error: agentError,
+    isLoading: agentLoading,
+    isMutating: agentMutating,
     setModel,
     setThinking,
     addModel,
     removeModel,
   } = useAgentSettings(channelKey);
 
-  const ready = Boolean(data);
-  const busy = isLoading || isMutating;
+  const {
+    data: configData,
+    error: configError,
+    isLoading: configLoading,
+    isMutating: configMutating,
+    setConfig,
+    clearConfig,
+  } = useConfig(open);
+
+  const ready = Boolean(data) && Boolean(configData);
+  const busy = agentLoading || agentMutating || configLoading || configMutating;
+  const error = agentError ?? configError;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -104,6 +117,39 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
               supported={data?.supportedThinking ?? []}
               disabled={!ready || busy}
               onChange={(level) => void setThinking(level)}
+            />
+          </Section>
+          <Section
+            title="heartbeat"
+            description="your companion's pulse when you've gone quiet."
+          >
+            <HeartbeatSection
+              enabled={configData?.values["heartbeat.enabled"].value}
+              idleThresholdMs={configData?.values["heartbeat.idleThresholdMs"].value}
+              intervalMs={configData?.values["heartbeat.intervalMs"].value}
+              disabled={!ready || busy}
+              onChange={setConfig}
+            />
+          </Section>
+          <Section
+            title="memory · compaction"
+            description="summarizing older conversation when context fills up."
+          >
+            <MemorySection
+              enabled={configData?.values["memory.lcm.enabled"].value}
+              model={configData?.values["memory.lcm.model"].value}
+              modelSource={configData?.values["memory.lcm.model"].source}
+              models={models}
+              contextThreshold={configData?.values["memory.lcm.contextThreshold"].value}
+              freshTailCount={configData?.values["memory.lcm.freshTailCount"].value}
+              leafChunkTokens={configData?.values["memory.lcm.leafChunkTokens"].value}
+              leafTargetTokens={configData?.values["memory.lcm.leafTargetTokens"].value}
+              condenseGroupSize={configData?.values["memory.lcm.condenseGroupSize"].value}
+              maxSummaryDepth={configData?.values["memory.lcm.maxSummaryDepth"].value}
+              newSessionRetainDepth={configData?.values["memory.lcm.newSessionRetainDepth"].value}
+              disabled={!ready || busy}
+              onChange={setConfig}
+              onClear={clearConfig}
             />
           </Section>
           <Section title="theme" description="light, dark, or follow your system.">

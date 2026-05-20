@@ -17,6 +17,8 @@ import {
 } from "./agent-events.js";
 import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
+import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./config-overrides.js";
+import { CONFIG_KEYS, CONFIG_REGISTRY, type ConfigKey, getConfigDefault, isConfigKey } from "./config-registry.js";
 import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
@@ -586,6 +588,19 @@ export async function startWebDaemon(
 		return { models, added };
 	};
 
+	const getConfigPayload = (): { values: Record<ConfigKey, { value: unknown; source: "config" | "override" }> } => {
+		const overrides = loadConfigOverrides();
+		const values = {} as Record<ConfigKey, { value: unknown; source: "config" | "override" }>;
+		for (const key of CONFIG_KEYS) {
+			const entry = CONFIG_REGISTRY[key];
+			values[key] = {
+				value: entry.read(config),
+				source: key in overrides ? "override" : "config",
+			};
+		}
+		return { values };
+	};
+
 	const parseRequestedModel = (
 		value: unknown,
 	): { ok: true; model: string; ref: ModelRef } | { ok: false; error: string } => {
@@ -815,6 +830,58 @@ export async function startWebDaemon(
 				}
 				await removeModel(parsed.model);
 				sendJson(response, 200, getAgentModelsPayload());
+				return true;
+			}
+			if (request.method === "GET" && url.pathname === "/api/web/config") {
+				sendJson(response, 200, getConfigPayload());
+				return true;
+			}
+			if (request.method === "POST" && url.pathname === "/api/web/config") {
+				const body = await readJsonBody(request);
+				if (!isObject(body) || typeof body.key !== "string") {
+					sendJson(response, 400, { error: "key is required" });
+					return true;
+				}
+				if (!isConfigKey(body.key)) {
+					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+					return true;
+				}
+				const entry = CONFIG_REGISTRY[body.key];
+				try {
+					const validated = entry.validate(body.value, config);
+					entry.write(config, validated);
+					await setConfigOverride(body.key, validated);
+					await entry.apply?.({ config, discordDaemon });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					sendJson(response, 400, { error: message });
+					return true;
+				}
+				sendJson(response, 200, getConfigPayload());
+				return true;
+			}
+			if (request.method === "DELETE" && url.pathname === "/api/web/config") {
+				const body = await readJsonBody(request);
+				if (!isObject(body) || typeof body.key !== "string") {
+					sendJson(response, 400, { error: "key is required" });
+					return true;
+				}
+				if (!isConfigKey(body.key)) {
+					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+					return true;
+				}
+				const entry = CONFIG_REGISTRY[body.key];
+				try {
+					const fallback = getConfigDefault(body.key);
+					entry.write(config, fallback);
+					await clearConfigOverride(body.key);
+					await entry.apply?.({ config, discordDaemon });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					sendJson(response, 400, { error: message });
+					return true;
+				}
+				sendJson(response, 200, getConfigPayload());
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/memes") {

@@ -227,3 +227,71 @@ export async function fetchMemes(): Promise<MemeFamily[]> {
   const body = (await res.json()) as { families: MemeFamily[] };
   return body.families;
 }
+
+export type ConfigKey =
+  | "heartbeat.enabled"
+  | "heartbeat.idleThresholdMs"
+  | "heartbeat.intervalMs"
+  | "memory.lcm.enabled"
+  | "memory.lcm.model"
+  | "memory.lcm.contextThreshold"
+  | "memory.lcm.freshTailCount"
+  | "memory.lcm.leafChunkTokens"
+  | "memory.lcm.leafTargetTokens"
+  | "memory.lcm.condenseGroupSize"
+  | "memory.lcm.maxSummaryDepth"
+  | "memory.lcm.newSessionRetainDepth";
+
+export interface ConfigValue<T = unknown> {
+  value: T;
+  source: SettingSource;
+}
+
+export interface ConfigPayload {
+  values: {
+    "heartbeat.enabled": ConfigValue<boolean>;
+    "heartbeat.idleThresholdMs": ConfigValue<number>;
+    "heartbeat.intervalMs": ConfigValue<number>;
+    "memory.lcm.enabled": ConfigValue<boolean>;
+    "memory.lcm.model": ConfigValue<string>;
+    "memory.lcm.contextThreshold": ConfigValue<number>;
+    "memory.lcm.freshTailCount": ConfigValue<number>;
+    "memory.lcm.leafChunkTokens": ConfigValue<number>;
+    "memory.lcm.leafTargetTokens": ConfigValue<number>;
+    "memory.lcm.condenseGroupSize": ConfigValue<number>;
+    "memory.lcm.maxSummaryDepth": ConfigValue<number>;
+    "memory.lcm.newSessionRetainDepth": ConfigValue<number>;
+  };
+}
+
+export async function fetchConfig(): Promise<ConfigPayload> {
+  const res = await fetch("/api/web/config");
+  if (!res.ok) throw new Error(`config: ${res.status}`);
+  return (await res.json()) as ConfigPayload;
+}
+
+export async function setConfig(key: ConfigKey, value: unknown): Promise<ConfigPayload> {
+  const res = await fetch("/api/web/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, value }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `config: ${res.status}`);
+  }
+  return (await res.json()) as ConfigPayload;
+}
+
+export async function clearConfig(key: ConfigKey): Promise<ConfigPayload> {
+  const res = await fetch("/api/web/config", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `config: ${res.status}`);
+  }
+  return (await res.json()) as ConfigPayload;
+}

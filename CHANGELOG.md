@@ -16,6 +16,9 @@
 ### Fixed
 
 - Include `CONTACT.md` in the published package so fresh installs can initialize workspaces without missing-file errors.
+- Reapply Web UI config overrides after reload, so settings changes survive a base config refresh.
+- Resolve the meme catalog from the workspace path instead of `process.cwd()`, so the meme picker works outside the repo root.
+- Remove the published `browser.sites.*` config shape and reject it as a breaking change instead of carrying legacy compatibility forward.
 
 ### Breaking
 

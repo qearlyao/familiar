@@ -64,7 +64,10 @@ export async function saveAddedModels(models: string[]): Promise<void> {
 	modelsCache = nextModels;
 	loaded = true;
 	const path = addedModelsPath;
-	const run = writeQueue.then(() => persistAddedModels(path, nextModels), () => persistAddedModels(path, nextModels));
+	const run = writeQueue.then(
+		() => persistAddedModels(path, nextModels),
+		() => persistAddedModels(path, nextModels),
+	);
 	writeQueue = run.then(
 		() => undefined,
 		() => undefined,

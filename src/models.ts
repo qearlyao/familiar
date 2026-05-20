@@ -167,7 +167,9 @@ export function describeModelAuth(config: Config, model: Model<any>): string {
 }
 
 export function isAllowedModel(config: Config, ref: ModelRef): boolean {
-	return config.models.allow.length === 0 || config.models.allow.includes(ref.key) || loadAddedModels().includes(ref.key);
+	return (
+		config.models.allow.length === 0 || config.models.allow.includes(ref.key) || loadAddedModels().includes(ref.key)
+	);
 }
 
 export function formatAllowedModels(config: Config): string {

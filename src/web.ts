@@ -21,7 +21,7 @@ import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
-import { PROVIDER_DEFAULTS, parseModelRef, supportedThinkingLevels, type ModelRef } from "./models.js";
+import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef, supportedThinkingLevels } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";

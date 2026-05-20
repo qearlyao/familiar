@@ -148,8 +148,8 @@ stability = 1.1
 
 	it("loads browser settings", async () => {
 		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(
-			minimalConfigToml(`
+	const workspacePath = await createWorkspace(
+		minimalConfigToml(`
 	[browser]
 	enabled = true
 	opencli_command = "opencli-dev"
@@ -159,10 +159,8 @@ stability = 1.1
 	timeout_ms = 120000
 	max_output_chars = 9000
 	read_write = true
-
-	[browser.sites.twitter]
 	`),
-		);
+	);
 
 		const config = await loadConfig(workspacePath);
 
@@ -176,7 +174,10 @@ stability = 1.1
 		assert.equal(config.browser.timeoutMs, 120000);
 		assert.equal(config.browser.maxOutputChars, 9000);
 		assert.equal(config.browser.readWrite, true);
-		assert.deepEqual(config.browser.allowedSites, { twitter: true });
+		assert.equal(config.browser.allowedSites.twitter, true);
+		assert.equal(config.browser.allowedSites.reddit, true);
+		assert.equal(config.browser.allowedSites.youtube, true);
+		assert.equal(config.browser.allowedSites.spotify, true);
 	});
 
 	it("loads browser-harness browser backend settings", async () => {
@@ -211,16 +212,18 @@ stability = 1.1
 		await assert.rejects(() => loadConfig(workspacePath), /browser\.backend/);
 	});
 
-	it("rejects browser site command filters", async () => {
+	it("rejects legacy browser site command filters", async () => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
 			minimalConfigToml(`
 	[browser.sites.twitter]
 	read = ["timeline"]
+	write = ["post"]
+	description = "legacy site config"
 	`),
 		);
 
-		await assert.rejects(() => loadConfig(workspacePath), /browser\.sites\.twitter\.read/);
+		await assert.rejects(() => loadConfig(workspacePath), /browser\.sites/);
 	});
 
 	it("loads generated media retention settings", async () => {

@@ -580,6 +580,8 @@ export async function createFamiliarAgent(
 	const prepareReload = async (): Promise<ReloadSnapshot> => {
 		const nextConfig = (await options.reloadConfig?.()) ?? config;
 		setAddedModelsPath(nextConfig.workspace.dataDir);
+		setConfigOverridesPath(nextConfig.workspace.dataDir);
+		applyConfigOverridesToConfig(nextConfig);
 		const nextPersona = await loadPersona(nextConfig);
 		const nextSkillsResult = loadFamiliarSkills(nextConfig);
 		const nextSystemPrompt = buildSystemPrompt(nextPersona, formatFamiliarSkillsForPrompt(nextSkillsResult.skills));

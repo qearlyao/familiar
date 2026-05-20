@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 - 2026-05-21
+
+### Added
+
+- Add runtime config registry and WebUI controls for heartbeat, memory, image generation, model management, and per-channel overrides, mostly across `3d1246a`, `295db84`, `ae36e65`, and `3db2ea0`.
+- Add contact-note support plus the new memes skill and related WebUI polish, spanning `158b331`, `3ed19ff`, `d7a5680`, and `d662269`.
+
+### Changed
+
+- Expand browser site command handling and model override plumbing, with site-command exposure and OpenCLI trace hints landing in `d01841f` and `538b006`.
+- Refine WebUI layout and streaming behavior for the latest config and media surfaces, including `01ca43e`, `9900f7c`, `73017d2`, `eda2691`, `fe889b6`, and `50b3549`.
+- Tidy release-adjacent config and dependency churn, including `3eb67f6`, `2274591`, and `bfb0010`.
+
+### Fixed
+
+- Include `CONTACT.md` in the published package so fresh installs can initialize workspaces without missing-file errors.
+
+### Breaking
+
+- Remove the legacy `browser.sites.*` config shape entirely; browser site allowlisting now uses the current top-level browser settings only.
+
 ## 0.1.2 - 2026-05-18
 
 ### Changed

@@ -31,12 +31,6 @@ max_output_chars = 12000
 # Keep false until you explicitly want the agent to click/type/close sessions or run write adapters.
 read_write = true
 
-# By default Familiar exposes OpenCLI commands for allowlisted sites: twitter/x,
-# xiaohongshu, rednote, reddit, bilibili, youtube, tiktok, douyin, and spotify.
-# Write commands still require read_write = true before execution. Defining
-# [browser.sites.*] replaces the site allowlist, not OpenCLI's per-site commands.
-# [browser.sites.twitter]
-
 [agent]
 model = "anthropic/claude-opus-4-7"
 cache_retention = "short"

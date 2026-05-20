@@ -97,6 +97,10 @@ function parseMemeCatalog(markdown: string): WebMemeFamily[] {
 	return families;
 }
 
+function memeCatalogPath(config: Config): string {
+	return join(config.workspacePath, "skills", "memes", "SKILL.md");
+}
+
 function isWebUploadAttachment(value: unknown): value is WebUploadAttachment {
 	return !!value && typeof value === "object" && Buffer.isBuffer((value as { buffer?: unknown }).buffer);
 }
@@ -902,7 +906,7 @@ export async function startWebDaemon(
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/memes") {
 				try {
-					const markdown = await readFile(join(process.cwd(), "skills/memes/SKILL.md"), "utf8");
+					const markdown = await readFile(memeCatalogPath(config), "utf8");
 					sendJson(response, 200, { families: parseMemeCatalog(markdown) });
 				} catch {
 					sendJson(response, 500, { error: "memes catalog unavailable" });
@@ -1124,5 +1128,10 @@ export async function startWebDaemon(
 		},
 	};
 }
+
+export const __webTest = {
+	memeCatalogPath,
+	parseMemeCatalog,
+};
 
 export type { WebAuthMode, WebDaemon };

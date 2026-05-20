@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -80,6 +81,40 @@ allow = ["anthropic/claude-sonnet-4-5", "openai/gpt-5.2"]
 					else process.env.DISCORD_TOKEN = previousDiscordToken;
 				}
 			});
+		});
+	});
+
+	it("reapplies config overrides after reload rebuilds the base config", async () => {
+		await withEnv("ANTHROPIC_API_KEY", "test-key", async () => {
+			const previousDiscordToken = process.env.DISCORD_TOKEN;
+			process.env.DISCORD_TOKEN = "discord-token";
+			try {
+				const dataDir = await createTempDataDir();
+				const workspacePath = await createWorkspace(
+					minimalConfigToml(`
+[workspace]
+data_dir = "${dataDir.replaceAll("\\", "\\\\")}"
+`),
+				);
+				await mkdir(resolve(dataDir, "settings"), { recursive: true });
+				await writeFile(
+					resolve(dataDir, "settings", "config-overrides.json"),
+					JSON.stringify({ "heartbeat.enabled": true }, null, 2),
+					"utf8",
+				);
+				const config = await loadConfig(workspacePath);
+				const settings = await loadSettingsStore(config);
+				const agent = await createFamiliarAgent(config, settings, undefined, {
+					reloadConfig: async () => loadConfig(workspacePath),
+				});
+
+				assert.equal(config.heartbeat.enabled, true);
+				await agent.reload();
+				assert.equal(config.heartbeat.enabled, true);
+			} finally {
+				if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
+				else process.env.DISCORD_TOKEN = previousDiscordToken;
+			}
 		});
 	});
 });

@@ -557,24 +557,6 @@ function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
 	});
 }
 
-function readBrowserAllowedSites(browser: Record<string, unknown>): Config["browser"]["allowedSites"] {
-	const rawSites = browser.sites;
-	if (rawSites === undefined) return defaultBrowserAllowedSites();
-	if (!rawSites || typeof rawSites !== "object" || Array.isArray(rawSites)) {
-		throw new Error("Config value browser.sites must be a table");
-	}
-	const sites: Config["browser"]["allowedSites"] = {};
-	for (const [siteName, rawSite] of Object.entries(rawSites)) {
-		if (!rawSite || typeof rawSite !== "object" || Array.isArray(rawSite)) {
-			throw new Error(`Config value browser.sites.${siteName} must be a table`);
-		}
-		const site = rawSite as Record<string, unknown>;
-		assertKnownKeys(site, `browser.sites.${siteName}`, []);
-		sites[siteName] = true;
-	}
-	return sites;
-}
-
 function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {
 	return {
 		twitter: true,
@@ -621,6 +603,18 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 	const memory = (parsed.memory ?? {}) as Record<string, unknown>;
+	assertKnownKeys(browser, "browser", [
+		"enabled",
+		"backend",
+		"opencli_command",
+		"harness_command",
+		"session",
+		"profile",
+		"window",
+		"timeout_ms",
+		"max_output_chars",
+		"read_write",
+	]);
 	const memoryEmbedding = (memory.embedding ?? {}) as Record<string, unknown>;
 	const memoryAmbient = (memory.ambient ?? {}) as Record<string, unknown>;
 	const memoryLcm = (memory.lcm ?? {}) as Record<string, unknown>;
@@ -781,7 +775,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			timeoutMs: readInteger(browser.timeout_ms, 60_000, "browser.timeout_ms", 1),
 			maxOutputChars: readInteger(browser.max_output_chars, 12_000, "browser.max_output_chars", 1000),
 			readWrite: readBoolean(browser.read_write, false, "browser.read_write"),
-			allowedSites: readBrowserAllowedSites(browser),
+			allowedSites: defaultBrowserAllowedSites(),
 		},
 		agent: {
 			model: agentModel,

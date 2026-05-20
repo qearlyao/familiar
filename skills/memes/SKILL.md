@@ -44,7 +44,6 @@ Three style families: **cute** (puppy/girl stickers, very expressive), **general
 - so shy — 2v63qv.jpg
 - wronged — p7imwp.jpeg
 - really want to cry — djtw76.gif
-- clingy puppy — x6bn0z.jpg
 - silly grin — ugfm3g.gif
 - crying sadly — eclqns.gif
 - throwing a tantrum — zmmam6.gif

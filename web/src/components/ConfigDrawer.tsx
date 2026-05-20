@@ -11,6 +11,7 @@ import { ModelSection } from "./config/ModelSection";
 import { ThinkingSection } from "./config/ThinkingSection";
 import { ThemeSection } from "./config/ThemeSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
+import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { useConfig } from "@/lib/useConfig";
@@ -127,6 +128,18 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
               enabled={configData?.values["heartbeat.enabled"].value}
               idleThresholdMs={configData?.values["heartbeat.idleThresholdMs"].value}
               intervalMs={configData?.values["heartbeat.intervalMs"].value}
+              disabled={!ready || busy}
+              onChange={setConfig}
+            />
+          </Section>
+          <Section
+            title="image generation"
+            description="which model your companion uses to paint."
+          >
+            <ImageGenSection
+              enabled={configData?.values["image_gen.enabled"].value}
+              model={configData?.values["image_gen.model"].value}
+              fallbackModel={configData?.values["image_gen.fallback_model"].value}
               disabled={!ready || busy}
               onChange={setConfig}
             />

@@ -248,7 +248,10 @@ export type ConfigKey =
   | "memory.ambient.weightSimilarity"
   | "memory.ambient.weightValence"
   | "memory.ambient.weightRecency"
-  | "memory.ambient.weightIntensity";
+  | "memory.ambient.weightIntensity"
+  | "image_gen.enabled"
+  | "image_gen.model"
+  | "image_gen.fallback_model";
 
 export interface ConfigValue<T = unknown> {
   value: T;
@@ -277,6 +280,9 @@ export interface ConfigPayload {
     "memory.ambient.weightValence": ConfigValue<number>;
     "memory.ambient.weightRecency": ConfigValue<number>;
     "memory.ambient.weightIntensity": ConfigValue<number>;
+    "image_gen.enabled": ConfigValue<boolean>;
+    "image_gen.model": ConfigValue<string>;
+    "image_gen.fallback_model": ConfigValue<string>;
   };
 }
 

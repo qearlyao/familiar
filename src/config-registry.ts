@@ -7,6 +7,9 @@ export type ConfigKey =
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
+	| "image_gen.enabled"
+	| "image_gen.model"
+	| "image_gen.fallback_model"
 	| "memory.lcm.enabled"
 	| "memory.lcm.model"
 	| "memory.lcm.contextThreshold"
@@ -119,6 +122,46 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		},
 		apply: ({ discordDaemon }) => {
 			discordDaemon.rearmHeartbeat();
+		},
+	},
+	"image_gen.enabled": {
+		read: (config) => config.imageGen.enabled,
+		validate: (value) => requireBoolean(value, "image_gen.enabled"),
+		write: (config, value) => {
+			config.imageGen.enabled = value as boolean;
+		},
+	},
+	"image_gen.model": {
+		read: (config) => config.imageGen.model,
+		validate: (value) => {
+			if (typeof value !== "string") throw new Error("image_gen.model must be a string");
+			const ref = parseModelRef(value);
+			if (!ref) throw new Error("image_gen.model: format must be provider/model-id");
+			return ref.key;
+		},
+		write: (config, value) => {
+			const ref = parseModelRef(value as string);
+			if (!ref) return;
+			config.imageGen.model = ref.key;
+		},
+	},
+	"image_gen.fallback_model": {
+		read: (config) => config.imageGen.fallbackModel ?? "",
+		validate: (value) => {
+			if (value == null || value === "") return "";
+			if (typeof value !== "string") throw new Error("image_gen.fallback_model must be a string");
+			const ref = parseModelRef(value);
+			if (!ref) throw new Error("image_gen.fallback_model: format must be provider/model-id");
+			return ref.key;
+		},
+		write: (config, value) => {
+			if (value == null || value === "") {
+				config.imageGen.fallbackModel = undefined;
+				return;
+			}
+			const ref = parseModelRef(value as string);
+			if (!ref) return;
+			config.imageGen.fallbackModel = ref.key;
 		},
 	},
 	"memory.lcm.enabled": {

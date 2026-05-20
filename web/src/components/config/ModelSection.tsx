@@ -65,16 +65,12 @@ export function ModelSection({
   };
 
   return (
-    <section>
-      <h3 className="font-serif text-lg leading-tight tracking-tight text-foreground">model</h3>
-      <p className="mt-1 font-serif text-xs italic text-muted-foreground">
-        which language model carries this conversation.
-      </p>
+    <>
       <RadioGroup
         value={current ?? ""}
         onValueChange={onChange}
         disabled={disabled}
-        className="mt-4 grid gap-1"
+        className="grid gap-1"
       >
         {models.map((model) => {
           const id = `model-${model}`;
@@ -145,6 +141,6 @@ export function ModelSection({
       {addError ? (
         <p className="mt-2 font-serif text-xs italic text-destructive">{addError}</p>
       ) : null}
-    </section>
+    </>
   );
 }

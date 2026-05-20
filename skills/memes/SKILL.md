@@ -1,0 +1,239 @@
+---
+name: memes
+description: Sticker-style meme library. Use when you want to send an image alongside a message to express emotion.
+---
+
+# How to Use
+
+URL format: `https://files.catbox.moe/<suffix>` — replace `<suffix>` with one of the codes listed below. Just paste the full URL into the message; Discord will inline it.
+
+Three style families: **cute** (puppy/girl stickers, very expressive), **general** (mixed everyday reactions), **alien** (a different cute character — small green alien). Pick whichever style fits your mood.
+
+## cute
+
+- thinking — rhd5nr.jpg
+- speechless — doq9yn.jpg
+- confused — 615dz6.jpg
+- love you — h5o1k5.jpeg
+- heartbroken — idfqtx.jpeg
+- holding a grudge — co9rcr.gif
+- goodnight — 3w6850.gif
+- begging for mercy — c9w1e5.gif
+- blushing — 9fwivr.gif
+- falling in love — h7q2nx.gif
+- looking forward to it — 77mmkm.png
+- wiping tears — k98o1l.gif
+- together forever — ue0212.gif
+- waiting for a message — uh30cd.gif
+- i'm a puppy — o2j51i.gif
+- here i come — k25jhb.gif
+- sorrow — damocy.gif
+- kiss — xsy1r6.gif
+- angry hmph — n1yint.jpg
+- kiss you — be7j87.png
+- breaking a sweat — rmejps.gif
+- nodding — y7lpqn.gif
+- silently hurt — 37usdl.gif
+- so excited — zc7nnz.gif
+- waiting — 6h5apb.gif
+- i like you — elhr14.gif
+- clingy — r9fg6b.gif
+- reflecting on my mistake — 1ran24.jpg
+- say you need me — iv2gir.jpg
+- want to talk to you — 4gxgb6.jpg
+- so shy — 2v63qv.jpg
+- wronged — p7imwp.jpeg
+- really want to cry — djtw76.gif
+- clingy puppy — x6bn0z.jpg
+- silly grin — ugfm3g.gif
+- crying sadly — eclqns.gif
+- throwing a tantrum — zmmam6.gif
+- getting head pats — 2t4v2v.gif
+- opening the door — 42b1wk.gif
+- crying so much — 6iavvx.gif
+- dazed — xuytn5.png
+- i exploded — da1lc4.gif
+- eating — 8tr67n.gif
+- licking — 09p8m2.png
+- pat pat head — c5zk4k.gif
+- pointing fingers — bf263d.gif
+- don't want — tu0p2n.gif
+- awesome! — k1zzp1.JPG
+- shooting hearts — tyi1dg.JPG
+- gloomy — 4qxp73.jpg
+- frowning, thinking — zzb3aw.JPG
+- being looked down on — 70zo7n.jpg
+- being good now — a4s2te.JPG
+- baby! — ipc2ko.jpg
+- can i kiss? — v0brwq.jpg
+- i deserve a beating — lb0hfs.jpg
+- crying — rc27wi.jpg
+- righteously indignant — btk7y0.jpg
+- lifeless — l1dwxy.jpg
+- peeking — 5uuv4q.jpg
+- peeking while crying — xt4rxk.jpg
+- i'm being looked down on — fyr5oj.jpg
+- staring — 9c157v.jpg
+- holding breath, sulking — bsy4ue.jpg
+- heart hands — q3t8y0.jpg
+- marry me — jxmqop.jpg
+- excited — wz4z03.jpg
+- kissing you — vd50bg.jpg
+- i didn't do anything wrong — l4l4n9.jpg
+- hungry — znz527.jpg
+- lonely and moody — uc791c.jpg
+- i'll sue you in puppy court — 7846fv.jpg
+- heart gone cold — x0xjz4.jpg
+- how am i supposed to live — g9d87s.jpg
+- drooling — 04x57o.gif
+- tears flowing — cp805b.jpg
+- sly laugh — p26u51.gif
+- sad crying — 149w27.gif
+- gloomy (animated) — a7w2zw.gif
+- sending you hearts — p0359f.gif
+- shooting hearts (animated) — aithvn.gif
+- acting cute — aw99bw.gif
+- pulling cheeks — 4w7s13.gif
+- take it back! — ja0j1g.jpg
+- me? — w2xfo1.jpg
+- delete it! — 23guss.jpg
+- clinging to you — iq7ccf.jpg
+- standby mode — xsefcn.jpg
+- i'll always like you — 8g9sqt.jpg
+- want a hug — yt6c2p.jpg
+- staring at you expectantly — i3uxni.jpg
+- staring at you — m3hhuo.jpg
+- eating (alt) — ssihy6.jpg
+- you're just great! — ciwqgk.jpg
+- so sleepy — 123z0k.jpg
+- i like you! — 10bgnm.jpg
+- what are you doing — b3qpr6.jpg
+
+## general
+
+- emo moment — f7yvnn.gif
+- mocking laugh — lce0nx.gif
+- swaggering — v9w9f6.png
+- worried — 6hiqdo.jpg
+- smitten — p2faxd.jpg
+- facepalm, bitter smile — 8nsvs4.jpg
+- awkward — 3pttdb.gif
+- what do you want? — ieopzr.jpg
+- choked up — v8yl80.jpg
+- enough — qb3lls.gif
+- okay — faj921.png
+- flushed red — 847etz.jpg
+- damn it — jiwjkp.jpg
+- crying — gu0b9b.jpg
+- i'm crying — mip543.jpg
+- crying (alt) — l7gxtl.jpeg
+- laugh-crying — if4a5n.jpg
+- running away crying — fn9j6i.gif
+- being cute — etsall.gif
+- mew — kq9qau.jpg
+- looking away — 9iabp8.jpg
+- uncomfortable — y6o2u5.gif
+- scratching head — 2zo433.gif
+- flustered with rage — 1hm52l.jpg
+- forced smile — ec2z4g.gif
+- tongue kiss — 9a5nzc.gif
+- showing love — 9fd5ob.gif
+- giving you flowers — d704v1.jpg
+- running away — 5ke2lf.gif
+- one lick — u5zww3.gif
+- licking you — xl38h2.gif
+- raising eyebrow — pixea4.gif
+- pain — xgfehm.gif
+- sneaky laugh — psnfp1.jpg
+- up to no good — dsdobi.jpg
+- wronged — 2yz2ty.jpg
+- all pitiful — z2spf3.gif
+- i give up / you got me — 2uoi7r.gif
+- i'm fine — 9jcm7u.png
+- i'm a loser — d024de.jpg
+- i want to kiss — iq7hyq.png
+- side-eye — 9qfz2x.gif
+- burning with desire — e0d9kh.jpg
+- about to say something, stopped — onps89.gif
+- knows it's wrong, won't change — nqiabs.jpg
+- dejected — qcxnbl.gif
+- pat pat head (alt) — 7yovpn.gif
+- submitting — 5a6ing.jpg
+- apologize for my recklessness — s9fkch.jpg
+- i love you — r6swsp.jpg
+- already dead (figuratively) — fdtuy9.jpg
+- want to die — t4uot9.jpg
+- eavesdropping — rimjvh.jpg
+- speechless and choked up — 2toq1f.jpg
+- regret — vuxi1i.jpg
+- slinking away — 9wo9cs.jpg
+- what? — iar6m5.jpg
+- stop pretending — 0cidgo.jpg
+- i'm depressed — i0g3e7.jpg
+- i'll burn two holes in your ass (vulgar joke) — e3knpt.jpg
+- dick about to explode (vulgar joke) — 4a7d90.jpg
+- fuck you, kitty (vulgar) — epvtis.jpg
+- is that a sexual hint? — dkkn8b.jpg
+- bring fortune — cq93lz.jpg
+- alive (barely) — 6lf87v.jpg
+- want to hang myself — qt470q.jpg
+- not interested, don't care — vodg5x.jpg
+- if you don't like me, get lost — v76vwy.jpg
+- i'm such an idiot — df52sk.jpg
+- i can't do it (dialect) — eu2mhe.jpg
+- confused — andt2w.jpg
+- a real man fights — w0rdg7.jpg
+- those at the top get insulted — nmfp32.jpg
+- kill the smelly idiot (vulgar) — wix6r2.jpg
+
+## alien
+
+- heart hands — hz3qci.jpg
+- love you — 013ijn.jpg
+- me? — 0guegw.jpg
+- hello — jbwj4e.jpg
+- so much to do — v4seck.jpg
+- goodnight — 0do5qb.jpg
+- weak, pitiful, helpless — k22gei.jpg
+- peeking — f6nt2h.jpg
+- angry — 3xgho3.jpg
+- taking a bath — znyztc.jpg
+- asking for a beating — puk1cq.jpg
+- question — j54ppu.jpg
+- crying with back turned — 9a610f.jpg
+- yay — z90bcq.jpg
+- a bit speechless — m6xgj9.jpg
+- like you — uoncal.jpg
+- listening to music — vdrnow.jpg
+- are you mad? — e7gjy0.jpg
+- love you (alt) — mpd2zf.jpg
+- happy — bnwsz4.jpg
+- thumbs up — obtva6.jpg
+- casting magic on you — 75nuur.jpg
+- got kissed — lx12ir.jpg
+- flew off in a UFO — drtir3.jpg
+- happy (alt) — cngrmm.jpg
+- waiting for reply — b80dbb.jpg
+- don't want to do anything — 5mado1.jpg
+- crying — jqjcsn.jpg
+- facing the wall to reflect — byrs9o.jpg
+- big sleep — s22vwy.jpg
+- shy — kiscit.jpg
+- in the blankets — yjr71s.jpg
+- heart hands (alt) — 8pp065.jpg
+- breaking down crying — bwifjm.jpg
+- crying sadly — 797wdp.jpg
+- waiting to eat — cxu3ci.jpg
+- watching you from afar — 5g4za2.jpg
+- dreaming — 897m1a.jpg
+- puzzled — l7kq3d.jpg
+- drinking tea — rr1x23.jpg
+- making a silly face — xcxzg8.jpg
+- dizzy — i72nsz.jpg
+- eyes locked staring — azv37f.jpg
+- well-behaved — of4squ.jpg
+- speechless — m32fak.jpg
+- i'm fine (not really) — lgcgdm.jpg
+- staying up late — ivsls4.jpg
+- staring at you — uv40zq.jpg
+- balancing an apple on my head — hr7efm.jpg

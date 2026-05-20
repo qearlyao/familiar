@@ -370,39 +370,6 @@ Upstream package roots:
 - `/tmp/pi-chat`: local reference clone of `earendil-works/pi-chat`; useful for
   runtime/log/adapter patterns, not memory/WebUI/browser design.
 
-Research refs:
-
-- `/path/to/familiar-research/lossless-claw`: primary LCM architecture reference.
-  Use for ordered context items, fresh-tail protection, summary DAG metadata,
-  prompt-aware eviction, deferred compaction debt, pruning, doctor/backup, and
-  expansion concepts.
-- `/path/to/familiar-research/pi-lcm`: lightweight Pi LCM reference.
-- `/path/to/familiar-research/pi-lcm-memory`: primary indexing/retrieval
-  reference. Use for batched embeddings, content-hash dedupe, sqlite-vec
-  soft-fail, hybrid retrieval/RRF, diagnostics, benchmarks, optional local
-  Transformers.js worker, primer/auto-recall ideas. Do not copy its regex
-  auto-recall injection into Familiar v0.
-
-High-value research files:
-
-- `lossless-claw/docs/architecture.md`
-- `lossless-claw/src/assembler.ts`
-- `lossless-claw/src/engine.ts`
-- `lossless-claw/src/compaction.ts`
-- `lossless-claw/src/store/conversation-store.ts`
-- `lossless-claw/src/store/summary-store.ts`
-- `lossless-claw/src/prune.ts`
-- `lossless-claw/src/retrieval.ts`
-- `lossless-claw/src/plugin/lcm-command.ts`
-- `pi-lcm-memory/src/db/schema.ts`
-- `pi-lcm-memory/src/db/store.ts`
-- `pi-lcm-memory/src/db/vec.ts`
-- `pi-lcm-memory/src/indexer.ts`
-- `pi-lcm-memory/src/retrieval.ts`
-- `pi-lcm-memory/src/embeddings/*`
-- `pi-lcm-memory/src/primer.ts`
-- `pi-lcm-memory/src/auto-recall.ts`
-
 Useful commands:
 
 ```sh

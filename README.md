@@ -8,6 +8,16 @@ optional real-browser control in one workspace.
 This project is still early. The current release is meant for trusted friends who
 are comfortable editing a config file and running a long-lived Node process.
 
+## Credits
+
+Familiar builds on the [pi](https://github.com/earendil-works/pi)
+stack, including `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, and
+`@earendil-works/pi-coding-agent`.
+
+It also borrows ideas and structure from
+[lossless-claw](https://github.com/earendil-works/lossless-claw) and
+[pi-lcm-memory](https://github.com/earendil-works/pi-lcm-memory).
+
 ## Requirements
 
 - Node.js 22 or newer. Node.js 24 LTS is recommended and is the primary tested runtime.

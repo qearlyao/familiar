@@ -240,7 +240,15 @@ export type ConfigKey =
   | "memory.lcm.leafTargetTokens"
   | "memory.lcm.condenseGroupSize"
   | "memory.lcm.maxSummaryDepth"
-  | "memory.lcm.newSessionRetainDepth";
+  | "memory.lcm.newSessionRetainDepth"
+  | "memory.ambient.enabled"
+  | "memory.ambient.topK"
+  | "memory.ambient.minQueryLength"
+  | "memory.ambient.throttleSeconds"
+  | "memory.ambient.weightSimilarity"
+  | "memory.ambient.weightValence"
+  | "memory.ambient.weightRecency"
+  | "memory.ambient.weightIntensity";
 
 export interface ConfigValue<T = unknown> {
   value: T;
@@ -261,6 +269,14 @@ export interface ConfigPayload {
     "memory.lcm.condenseGroupSize": ConfigValue<number>;
     "memory.lcm.maxSummaryDepth": ConfigValue<number>;
     "memory.lcm.newSessionRetainDepth": ConfigValue<number>;
+    "memory.ambient.enabled": ConfigValue<boolean>;
+    "memory.ambient.topK": ConfigValue<number>;
+    "memory.ambient.minQueryLength": ConfigValue<number>;
+    "memory.ambient.throttleSeconds": ConfigValue<number>;
+    "memory.ambient.weightSimilarity": ConfigValue<number>;
+    "memory.ambient.weightValence": ConfigValue<number>;
+    "memory.ambient.weightRecency": ConfigValue<number>;
+    "memory.ambient.weightIntensity": ConfigValue<number>;
   };
 }
 

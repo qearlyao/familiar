@@ -15,7 +15,15 @@ export type ConfigKey =
 	| "memory.lcm.leafTargetTokens"
 	| "memory.lcm.condenseGroupSize"
 	| "memory.lcm.maxSummaryDepth"
-	| "memory.lcm.newSessionRetainDepth";
+	| "memory.lcm.newSessionRetainDepth"
+	| "memory.ambient.enabled"
+	| "memory.ambient.topK"
+	| "memory.ambient.minQueryLength"
+	| "memory.ambient.throttleSeconds"
+	| "memory.ambient.weightSimilarity"
+	| "memory.ambient.weightValence"
+	| "memory.ambient.weightRecency"
+	| "memory.ambient.weightIntensity";
 
 export interface RegistryApplyContext {
 	config: Config;
@@ -54,6 +62,22 @@ function requireNumberInRange(value: unknown, key: string, min: number, max: num
 	const n = typeof value === "number" ? value : Number(value);
 	if (!Number.isFinite(n) || n < min || n > max) {
 		throw new Error(`${key} must be a number between ${min} and ${max}`);
+	}
+	return n;
+}
+
+function requireNonNegativeInt(value: unknown, key: string): number {
+	const n = typeof value === "number" ? value : Number(value);
+	if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+		throw new Error(`${key} must be a non-negative integer`);
+	}
+	return n;
+}
+
+function requireNonNegativeNumber(value: unknown, key: string): number {
+	const n = typeof value === "number" ? value : Number(value);
+	if (!Number.isFinite(n) || n < 0) {
+		throw new Error(`${key} must be a number >= 0`);
 	}
 	return n;
 }
@@ -170,6 +194,62 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		validate: (value) => requireInt(value, "memory.lcm.newSessionRetainDepth", -1),
 		write: (config, value) => {
 			config.memory.lcm.newSessionRetainDepth = value as number;
+		},
+	},
+	"memory.ambient.enabled": {
+		read: (config) => config.memory.ambient.enabled,
+		validate: (value) => requireBoolean(value, "memory.ambient.enabled"),
+		write: (config, value) => {
+			config.memory.ambient.enabled = value as boolean;
+		},
+	},
+	"memory.ambient.topK": {
+		read: (config) => config.memory.ambient.topK,
+		validate: (value) => requirePositiveInt(value, "memory.ambient.topK"),
+		write: (config, value) => {
+			config.memory.ambient.topK = value as number;
+		},
+	},
+	"memory.ambient.minQueryLength": {
+		read: (config) => config.memory.ambient.minQueryLength,
+		validate: (value) => requireNonNegativeInt(value, "memory.ambient.minQueryLength"),
+		write: (config, value) => {
+			config.memory.ambient.minQueryLength = value as number;
+		},
+	},
+	"memory.ambient.throttleSeconds": {
+		read: (config) => config.memory.ambient.throttleSeconds,
+		validate: (value) => requireNonNegativeInt(value, "memory.ambient.throttleSeconds"),
+		write: (config, value) => {
+			config.memory.ambient.throttleSeconds = value as number;
+		},
+	},
+	"memory.ambient.weightSimilarity": {
+		read: (config) => config.memory.ambient.weightSimilarity,
+		validate: (value) => requireNonNegativeNumber(value, "memory.ambient.weightSimilarity"),
+		write: (config, value) => {
+			config.memory.ambient.weightSimilarity = value as number;
+		},
+	},
+	"memory.ambient.weightValence": {
+		read: (config) => config.memory.ambient.weightValence,
+		validate: (value) => requireNonNegativeNumber(value, "memory.ambient.weightValence"),
+		write: (config, value) => {
+			config.memory.ambient.weightValence = value as number;
+		},
+	},
+	"memory.ambient.weightRecency": {
+		read: (config) => config.memory.ambient.weightRecency,
+		validate: (value) => requireNonNegativeNumber(value, "memory.ambient.weightRecency"),
+		write: (config, value) => {
+			config.memory.ambient.weightRecency = value as number;
+		},
+	},
+	"memory.ambient.weightIntensity": {
+		read: (config) => config.memory.ambient.weightIntensity,
+		validate: (value) => requireNonNegativeNumber(value, "memory.ambient.weightIntensity"),
+		write: (config, value) => {
+			config.memory.ambient.weightIntensity = value as number;
 		},
 	},
 };

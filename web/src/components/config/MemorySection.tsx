@@ -5,9 +5,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ConfigKey, SettingSource } from "@/lib/api";
 
 interface MemorySectionProps {
-  enabled: boolean | undefined;
-  model: string | undefined;
-  modelSource: SettingSource | undefined;
+  compactionEnabled: boolean | undefined;
+  compactionModel: string | undefined;
+  compactionModelSource: SettingSource | undefined;
   models: string[];
   contextThreshold: number | undefined;
   freshTailCount: number | undefined;
@@ -16,6 +16,14 @@ interface MemorySectionProps {
   condenseGroupSize: number | undefined;
   maxSummaryDepth: number | undefined;
   newSessionRetainDepth: number | undefined;
+  ambientEnabled: boolean | undefined;
+  topK: number | undefined;
+  minQueryLength: number | undefined;
+  throttleSeconds: number | undefined;
+  weightSimilarity: number | undefined;
+  weightValence: number | undefined;
+  weightRecency: number | undefined;
+  weightIntensity: number | undefined;
   disabled: boolean;
   onChange: (key: ConfigKey, value: unknown) => Promise<void>;
   onClear: (key: ConfigKey) => Promise<void>;
@@ -115,18 +123,51 @@ function Row({
   );
 }
 
-function SubLabel({ children }: { children: ReactNode }) {
+function SubBlockLabel({ children }: { children: ReactNode }) {
   return (
-    <h4 className="mb-3 font-serif text-xs italic tracking-wide text-muted-foreground">
+    <h4 className="mb-4 font-serif text-base lowercase tracking-tight text-foreground">
       {children}
     </h4>
   );
 }
 
-export function MemorySection({
+function OnOffToggle({
   enabled,
-  model,
-  modelSource,
+  disabled,
+  ariaPrefix,
+  onChange,
+}: {
+  enabled: boolean | undefined;
+  disabled: boolean;
+  ariaPrefix: string;
+  onChange: (next: boolean) => void;
+}) {
+  const isOn = enabled === true;
+  return (
+    <ToggleGroup
+      type="single"
+      value={enabled === undefined ? "" : isOn ? "on" : "off"}
+      onValueChange={(value) => {
+        if (value) onChange(value === "on");
+      }}
+      disabled={disabled}
+      spacing={1}
+      className="rounded-lg bg-muted/40 p-1"
+    >
+      <ToggleGroupItem value="on" aria-label={`${ariaPrefix} on`} className={toggleClass}>
+        on
+      </ToggleGroupItem>
+      <ToggleGroupItem value="off" aria-label={`${ariaPrefix} off`} className={toggleClass}>
+        off
+      </ToggleGroupItem>
+    </ToggleGroup>
+  );
+}
+
+export function MemorySection({
+  compactionEnabled,
+  compactionModel,
+  compactionModelSource,
   models,
   contextThreshold,
   freshTailCount,
@@ -135,90 +176,82 @@ export function MemorySection({
   condenseGroupSize,
   maxSummaryDepth,
   newSessionRetainDepth,
+  ambientEnabled,
+  topK,
+  minQueryLength,
+  throttleSeconds,
+  weightSimilarity,
+  weightValence,
+  weightRecency,
+  weightIntensity,
   disabled,
   onChange,
   onClear,
 }: MemorySectionProps) {
-  const isOn = enabled === true;
-  const sectionDisabled = disabled || !isOn;
+  const compactionOff = disabled || compactionEnabled !== true;
+  const ambientOff = disabled || ambientEnabled !== true;
+
   return (
     <>
-      <ToggleGroup
-        type="single"
-        value={enabled === undefined ? "" : isOn ? "on" : "off"}
-        onValueChange={(value) => {
-          if (value) void onChange("memory.lcm.enabled", value === "on");
-        }}
-        disabled={disabled}
-        spacing={1}
-        className="rounded-lg bg-muted/40 p-1"
-      >
-        <ToggleGroupItem value="on" aria-label="compaction on" className={toggleClass}>
-          on
-        </ToggleGroupItem>
-        <ToggleGroupItem value="off" aria-label="compaction off" className={toggleClass}>
-          off
-        </ToggleGroupItem>
-      </ToggleGroup>
-
-      <div className="mt-6">
-        <SubLabel>compaction model</SubLabel>
-        <RadioGroup
-          value={model ?? ""}
-          onValueChange={(value) => void onChange("memory.lcm.model", value)}
-          disabled={sectionDisabled}
-          className="grid gap-1"
-        >
-          {models.map((entry) => {
-            const id = `memory-model-${entry}`;
-            const isActive = entry === model;
-            const [provider, ...rest] = entry.split("/");
-            const name = rest.join("/");
-            return (
-              <Label
-                key={entry}
-                htmlFor={id}
-                className="group/row flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-accent has-data-[state=checked]:bg-primary has-data-[state=checked]:text-primary-foreground has-data-[state=checked]:hover:bg-primary"
-              >
-                <RadioGroupItem value={entry} id={id} />
-                <span className="min-w-0 flex-1 font-mono text-sm leading-tight">
-                  <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>{provider}</span>
-                  <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>/</span>
-                  <span className={isActive ? "text-primary-foreground" : "text-muted-foreground group-hover/row:text-foreground"}>{name}</span>
-                </span>
-              </Label>
-            );
-          })}
-        </RadioGroup>
-        {modelSource === "override" ? (
-          <button
-            type="button"
-            onClick={() => void onClear("memory.lcm.model")}
-            disabled={sectionDisabled}
-            className="mt-2 font-serif text-xs italic text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
+      <section>
+        <SubBlockLabel>compaction</SubBlockLabel>
+        <OnOffToggle
+          enabled={compactionEnabled}
+          disabled={disabled}
+          ariaPrefix="compaction"
+          onChange={(next) => void onChange("memory.lcm.enabled", next)}
+        />
+        <div className="mt-4">
+          <RadioGroup
+            value={compactionModel ?? ""}
+            onValueChange={(value) => void onChange("memory.lcm.model", value)}
+            disabled={compactionOff}
+            className="grid gap-1"
           >
-            set just for compaction · use default instead
-          </button>
-        ) : model ? (
-          <p className="mt-2 font-serif text-xs italic text-muted-foreground/70">
-            following your conversation model
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-6">
-        <SubLabel>tuning</SubLabel>
-        <div className="grid gap-4">
-          <Row
-            label="context threshold"
-            description="fraction of context that triggers compaction"
-          >
+            {models.map((entry) => {
+              const id = `memory-model-${entry}`;
+              const isActive = entry === compactionModel;
+              const [provider, ...rest] = entry.split("/");
+              const name = rest.join("/");
+              return (
+                <Label
+                  key={entry}
+                  htmlFor={id}
+                  className="group/row flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-accent has-data-[state=checked]:bg-primary has-data-[state=checked]:text-primary-foreground has-data-[state=checked]:hover:bg-primary"
+                >
+                  <RadioGroupItem value={entry} id={id} />
+                  <span className="min-w-0 flex-1 font-mono text-sm leading-tight">
+                    <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>{provider}</span>
+                    <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>/</span>
+                    <span className={isActive ? "text-primary-foreground" : "text-muted-foreground group-hover/row:text-foreground"}>{name}</span>
+                  </span>
+                </Label>
+              );
+            })}
+          </RadioGroup>
+          {compactionModelSource === "override" ? (
+            <button
+              type="button"
+              onClick={() => void onClear("memory.lcm.model")}
+              disabled={compactionOff}
+              className="mt-2 font-serif text-xs italic text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              set just for compaction · use default instead
+            </button>
+          ) : compactionModel ? (
+            <p className="mt-2 font-serif text-xs italic text-muted-foreground/70">
+              following your conversation model
+            </p>
+          ) : null}
+        </div>
+        <div className="mt-4 grid gap-4">
+          <Row label="context threshold" description="fraction of context that triggers compaction">
             <NumberInput
               value={contextThreshold}
               step={0.05}
               min={0}
               max={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.contextThreshold", v)}
             />
           </Row>
@@ -226,7 +259,7 @@ export function MemorySection({
             <NumberInput
               value={freshTailCount}
               min={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.freshTailCount", v)}
             />
           </Row>
@@ -234,7 +267,7 @@ export function MemorySection({
             <NumberInput
               value={leafChunkTokens}
               min={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.leafChunkTokens", v)}
             />
           </Row>
@@ -242,7 +275,7 @@ export function MemorySection({
             <NumberInput
               value={leafTargetTokens}
               min={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.leafTargetTokens", v)}
             />
           </Row>
@@ -250,7 +283,7 @@ export function MemorySection({
             <NumberInput
               value={condenseGroupSize}
               min={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.condenseGroupSize", v)}
             />
           </Row>
@@ -258,7 +291,7 @@ export function MemorySection({
             <NumberInput
               value={maxSummaryDepth}
               min={1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.maxSummaryDepth", v)}
             />
           </Row>
@@ -269,14 +302,86 @@ export function MemorySection({
             <NumberInput
               value={newSessionRetainDepth}
               min={-1}
-              disabled={sectionDisabled}
+              disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.newSessionRetainDepth", v)}
             />
           </Row>
         </div>
-      </div>
+      </section>
 
-      <p className="mt-6 font-serif text-xs italic text-muted-foreground/60">
+      <section className="mt-8">
+        <SubBlockLabel>ambient</SubBlockLabel>
+        <OnOffToggle
+          enabled={ambientEnabled}
+          disabled={disabled}
+          ariaPrefix="ambient"
+          onChange={(next) => void onChange("memory.ambient.enabled", next)}
+        />
+        <div className="mt-4 grid gap-4">
+          <Row label="top k" description="how many memories to surface per query">
+            <NumberInput
+              value={topK}
+              min={1}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.topK", v)}
+            />
+          </Row>
+          <Row label="min query length" description="minimum query chars before recall fires">
+            <NumberInput
+              value={minQueryLength}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.minQueryLength", v)}
+            />
+          </Row>
+          <Row label="throttle seconds" description="cooldown between recalls">
+            <NumberInput
+              value={throttleSeconds}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.throttleSeconds", v)}
+            />
+          </Row>
+          <Row label="similarity weight" description="semantic match to your query">
+            <NumberInput
+              value={weightSimilarity}
+              step={0.05}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.weightSimilarity", v)}
+            />
+          </Row>
+          <Row label="valence weight" description="emotional charge of the memory">
+            <NumberInput
+              value={weightValence}
+              step={0.05}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.weightValence", v)}
+            />
+          </Row>
+          <Row label="recency weight" description="favors recent memories">
+            <NumberInput
+              value={weightRecency}
+              step={0.05}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.weightRecency", v)}
+            />
+          </Row>
+          <Row label="intensity weight" description="favors strongly-felt memories">
+            <NumberInput
+              value={weightIntensity}
+              step={0.05}
+              min={0}
+              disabled={ambientOff}
+              onCommit={(v) => onChange("memory.ambient.weightIntensity", v)}
+            />
+          </Row>
+        </div>
+      </section>
+
+      <p className="mt-8 font-serif text-xs italic text-muted-foreground/60">
         embedding model lives in config.toml. swapping it invalidates existing memory.
       </p>
     </>

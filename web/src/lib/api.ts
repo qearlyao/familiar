@@ -143,11 +143,44 @@ export async function fetchAgentSettings(channelKey?: string): Promise<AgentSett
   return (await res.json()) as AgentSettings;
 }
 
-export async function fetchAvailableModels(): Promise<string[]> {
+export interface AvailableModels {
+  models: string[];
+  added: string[];
+}
+
+export async function fetchAvailableModels(): Promise<AvailableModels> {
   const res = await fetch("/api/web/agent/models");
   if (!res.ok) throw new Error(`agent/models: ${res.status}`);
-  const body = (await res.json()) as { models: string[] };
-  return body.models;
+  const body = (await res.json()) as AvailableModels;
+  return { models: body.models, added: body.added ?? [] };
+}
+
+export async function addModel(model: string): Promise<AvailableModels> {
+  const res = await fetch("/api/web/agent/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `agent/models: ${res.status}`);
+  }
+  const body = (await res.json()) as AvailableModels;
+  return { models: body.models, added: body.added ?? [] };
+}
+
+export async function removeModel(model: string): Promise<AvailableModels> {
+  const res = await fetch("/api/web/agent/models", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `agent/models: ${res.status}`);
+  }
+  const body = (await res.json()) as AvailableModels;
+  return { models: body.models, added: body.added ?? [] };
 }
 
 export async function updateAgentSettings(

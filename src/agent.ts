@@ -8,6 +8,7 @@ import { createBashTool, createEditTool, createReadTool, createWriteTool } from 
 import { createBrowserTools } from "./browser-tools.js";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ThinkingLevel } from "./config.js";
+import { setAddedModelsPath } from "./added-models.js";
 import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
 import { createImageGenTool } from "./image-gen.js";
 import type { MemoryService } from "./memory/service.js";
@@ -371,6 +372,7 @@ export async function createFamiliarAgent(
 	memoryService?: MemoryService,
 	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
+	setAddedModelsPath(config.workspace.dataDir);
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);
@@ -555,6 +557,7 @@ export async function createFamiliarAgent(
 
 	const prepareReload = async (): Promise<ReloadSnapshot> => {
 		const nextConfig = (await options.reloadConfig?.()) ?? config;
+		setAddedModelsPath(nextConfig.workspace.dataDir);
 		const nextPersona = await loadPersona(nextConfig);
 		const nextSkillsResult = loadFamiliarSkills(nextConfig);
 		const nextSystemPrompt = buildSystemPrompt(nextPersona, formatFamiliarSkillsForPrompt(nextSkillsResult.skills));
@@ -617,6 +620,7 @@ export async function createFamiliarAgent(
 				const next = await prepareReload();
 				const reloadedSessions = await prepareReloadedSessions(next);
 				Object.assign(config, next.config);
+				setAddedModelsPath(config.workspace.dataDir);
 				persona = next.persona;
 				skillsResult = next.skillsResult;
 				logSkillDiagnostics(skillsResult);

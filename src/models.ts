@@ -9,6 +9,7 @@ import {
 	type Provider,
 } from "@earendil-works/pi-ai";
 
+import { loadAddedModels } from "./added-models.js";
 import type { Config, ThinkingLevel } from "./config.js";
 
 export interface ModelRef {
@@ -17,7 +18,7 @@ export interface ModelRef {
 	key: string;
 }
 
-const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }> = {
+export const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }> = {
 	anthropic: {
 		api: "anthropic-messages",
 		baseUrl: "https://api.anthropic.com",
@@ -166,7 +167,7 @@ export function describeModelAuth(config: Config, model: Model<any>): string {
 }
 
 export function isAllowedModel(config: Config, ref: ModelRef): boolean {
-	return config.models.allow.length === 0 || config.models.allow.includes(ref.key);
+	return config.models.allow.length === 0 || config.models.allow.includes(ref.key) || loadAddedModels().includes(ref.key);
 }
 
 export function formatAllowedModels(config: Config): string {

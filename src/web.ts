@@ -5,6 +5,8 @@ import type { Socket } from "node:net";
 import { join } from "node:path";
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { getProviders } from "@earendil-works/pi-ai";
+import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "./added-models.js";
 import type { FamiliarAgent } from "./agent.js";
 import {
 	type AgentEventSummary,
@@ -19,7 +21,7 @@ import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
-import { supportedThinkingLevels } from "./models.js";
+import { PROVIDER_DEFAULTS, parseModelRef, supportedThinkingLevels, type ModelRef } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
@@ -408,6 +410,7 @@ export async function startWebDaemon(
 	discordDaemon: DiscordDaemon,
 	options: { restart?: RestartHandler } = {},
 ): Promise<WebDaemon> {
+	setAddedModelsPath(config.workspace.dataDir);
 	const persona = await loadPersona(config);
 	const personaName = parsePersonaName(persona.soul);
 	const auth = createAuth(config);
@@ -563,6 +566,33 @@ export async function startWebDaemon(
 		if (queryKey) return queryKey;
 		if (isObject(body) && typeof body.channelKey === "string") return body.channelKey;
 		return undefined;
+	};
+
+	const getAgentModelsPayload = (): { models: string[]; added: string[] } => {
+		const models: string[] = [];
+		const added: string[] = [];
+		const seen = new Set<string>();
+		for (const model of config.models.allow) {
+			if (seen.has(model)) continue;
+			seen.add(model);
+			models.push(model);
+		}
+		for (const model of loadAddedModels()) {
+			if (seen.has(model)) continue;
+			seen.add(model);
+			models.push(model);
+			added.push(model);
+		}
+		return { models, added };
+	};
+
+	const parseRequestedModel = (
+		value: unknown,
+	): { ok: true; model: string; ref: ModelRef } | { ok: false; error: string } => {
+		if (typeof value !== "string") return { ok: false, error: "format must be provider/model-id" };
+		const ref = parseModelRef(value);
+		if (!ref) return { ok: false, error: "format must be provider/model-id" };
+		return { ok: true, model: ref.key, ref };
 	};
 
 	const replay = (client: WebSocketClient, channelKey: string, lastEventId: string | null | undefined): void => {
@@ -739,7 +769,52 @@ export async function startWebDaemon(
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/agent/models") {
-				sendJson(response, 200, { models: config.models.allow });
+				sendJson(response, 200, getAgentModelsPayload());
+				return true;
+			}
+			if (request.method === "POST" && url.pathname === "/api/web/agent/models") {
+				const body = await readJsonBody(request);
+				if (!isObject(body)) {
+					sendJson(response, 400, { error: "body is required" });
+					return true;
+				}
+				const parsed = parseRequestedModel(body.model);
+				if (!parsed.ok) {
+					sendJson(response, 400, { error: parsed.error });
+					return true;
+				}
+				if (
+					!Object.hasOwn(PROVIDER_DEFAULTS, parsed.ref.provider) &&
+					!getProviders().includes(parsed.ref.provider as never)
+				) {
+					sendJson(response, 400, { error: `unsupported provider: ${parsed.ref.provider}` });
+					return true;
+				}
+				if (config.models.allow.includes(parsed.model) || loadAddedModels().includes(parsed.model)) {
+					sendJson(response, 200, getAgentModelsPayload());
+					return true;
+				}
+				await addModel(parsed.model);
+				sendJson(response, 200, getAgentModelsPayload());
+				return true;
+			}
+			if (request.method === "DELETE" && url.pathname === "/api/web/agent/models") {
+				const body = await readJsonBody(request);
+				if (!isObject(body)) {
+					sendJson(response, 400, { error: "body is required" });
+					return true;
+				}
+				const parsed = parseRequestedModel(body.model);
+				if (!parsed.ok) {
+					sendJson(response, 400, { error: parsed.error });
+					return true;
+				}
+				if (!loadAddedModels().includes(parsed.model)) {
+					sendJson(response, 400, { error: "model is not user-added" });
+					return true;
+				}
+				await removeModel(parsed.model);
+				sendJson(response, 200, getAgentModelsPayload());
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/memes") {

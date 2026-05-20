@@ -11,8 +11,18 @@ interface ConfigDrawerProps {
 }
 
 export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerProps) {
-  const { data, models, error, isLoading, isMutating, setModel, setThinking } =
-    useAgentSettings(channelKey);
+  const {
+    data,
+    models,
+    addedModels,
+    error,
+    isLoading,
+    isMutating,
+    setModel,
+    setThinking,
+    addModel,
+    removeModel,
+  } = useAgentSettings(channelKey);
 
   const ready = Boolean(data);
   const busy = isLoading || isMutating;
@@ -31,10 +41,13 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
         <div className="flex flex-col gap-9 overflow-y-auto px-6 pt-2 pb-8">
           <ModelSection
             models={models}
+            added={addedModels}
             current={data?.model.value}
             source={data?.model.source}
             disabled={!ready || busy}
             onChange={(model) => void setModel(model)}
+            onAdd={addModel}
+            onRemove={removeModel}
           />
           <ThinkingSection
             current={data?.thinking.value}

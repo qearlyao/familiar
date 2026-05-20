@@ -58,7 +58,7 @@ export function MessageList({
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 px-5 py-6">
+    <div className="mx-auto flex max-w-3xl flex-col gap-12 px-5 py-6">
       {messages.map((m, i) => {
         const prev = messages[i - 1];
         const showGap = prev != null && m.ts - prev.ts >= GAP_MS;

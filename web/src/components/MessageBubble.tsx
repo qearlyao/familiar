@@ -1,6 +1,7 @@
 import type { Message } from "../types";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
+import { AudioPlayer } from "./AudioPlayer";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolBlock } from "./ToolBlock";
 
@@ -22,7 +23,7 @@ export function MessageBubble({ message }: { message: Message }) {
       <span className="text-xs uppercase tracking-wider text-muted-foreground">
         {message.who}
       </span>
-      <div className={cn("flex flex-col", isUser ? "max-w-[85%]" : "max-w-full")}>
+      <div className={cn("flex flex-col", isUser ? "max-w-[85%]" : "w-full")}>
         {showThinking && (
           <ThinkingBlock
             text={message.thinking ?? ""}
@@ -43,15 +44,11 @@ export function MessageBubble({ message }: { message: Message }) {
                   />
                 </a>
               ) : attachment.mimeType?.startsWith("audio/") && attachment.url ? (
-                <audio
+                <AudioPlayer
                   key={attachment.id}
-                  controls
-                  preload="metadata"
                   src={attachment.url}
-                  className="h-9 max-w-full"
-                >
-                  <a href={attachment.url}>{attachment.name}</a>
-                </audio>
+                  name={attachment.name}
+                />
               ) : attachment.url ? (
                 <a
                   key={attachment.id}

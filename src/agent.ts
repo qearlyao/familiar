@@ -40,6 +40,7 @@ export interface FamiliarAgentReply {
 export interface FamiliarPromptOptions {
 	skipAmbient?: boolean;
 	referenceAttachments?: StoredAttachment[];
+	onTurnEnd?: () => void | Promise<void>;
 }
 
 export interface FamiliarAgent {
@@ -61,6 +62,7 @@ export interface FamiliarAgent {
 	steerMessage(sessionKey: string, message: AgentMessage): void;
 	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
 	abort(sessionKey: string): void;
+	requestSoftStop(sessionKey: string): void;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
 	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };
@@ -391,8 +393,23 @@ export async function createFamiliarAgent(
 	// activePromptOptions covers the synchronous promptMessage window; skipAmbientMessages
 	// tags message identities so followUpMessage's fire-and-forget path also opts out.
 	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
+	const softStopRequested = new Map<string, boolean>();
 	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
 	let reloadInProgress: Promise<void> | undefined;
+
+	const installSoftStopHook = (sessionKey: string, agent: Agent): void => {
+		const agentWithLoopConfig = agent as unknown as {
+			createLoopConfig?: (options?: { skipInitialSteeringPoll?: boolean }) => Record<string, unknown>;
+		};
+		const createLoopConfig = agentWithLoopConfig.createLoopConfig?.bind(agent);
+		if (!createLoopConfig) return;
+		agentWithLoopConfig.createLoopConfig = ((options?: { skipInitialSteeringPoll?: boolean }) => {
+			return {
+				...createLoopConfig(options),
+				shouldStopAfterTurn: async () => softStopRequested.get(sessionKey) === true,
+			};
+		}) as typeof agentWithLoopConfig.createLoopConfig;
+	};
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
 		const override = settings.getChannelModel(sessionKey);
@@ -500,6 +517,7 @@ export async function createFamiliarAgent(
 					}
 				: undefined,
 		});
+		installSoftStopHook(sessionKey, agent);
 
 		agent.subscribe((event) => {
 			logUsage(event);
@@ -607,10 +625,14 @@ export async function createFamiliarAgent(
 				})
 				.catch((error) => console.error(`failed to abort familiar session ${sessionKey}`, error));
 		},
+		requestSoftStop(sessionKey: string): void {
+			softStopRequested.set(sessionKey, true);
+		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);
 			if (!existing) return;
 			const session = await existing;
+			softStopRequested.set(sessionKey, false);
 			resetSession(session);
 		},
 		async reload(): Promise<string> {
@@ -712,14 +734,21 @@ export async function createFamiliarAgent(
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
 			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
 			const run = session.promptQueue.then(async () => {
+				softStopRequested.set(sessionKey, false);
 				session.mediaSink.drain();
 				setReferenceAttachments(session, options.referenceAttachments);
 				const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
 				try {
 					await session.agent.prompt(input, images);
 				} finally {
-					setReferenceAttachments(session);
-					unsubscribe?.();
+					try {
+						await options.onTurnEnd?.();
+					} catch (error) {
+						console.error("turn end callback failed", error);
+					} finally {
+						setReferenceAttachments(session);
+						unsubscribe?.();
+					}
 				}
 				return {
 					text: getLastAssistantText(session.agent),
@@ -740,6 +769,7 @@ export async function createFamiliarAgent(
 		): Promise<FamiliarAgentReply> {
 			const session = await getSession(sessionKey);
 			const run = session.promptQueue.then(async () => {
+				softStopRequested.set(sessionKey, false);
 				session.mediaSink.drain();
 				setReferenceAttachments(session, options.referenceAttachments);
 				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
@@ -749,10 +779,16 @@ export async function createFamiliarAgent(
 				try {
 					await session.agent.prompt(message);
 				} finally {
-					setReferenceAttachments(session);
-					if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
-					else activePromptOptions.delete(sessionKey);
-					unsubscribe?.();
+					try {
+						await options.onTurnEnd?.();
+					} catch (error) {
+						console.error("turn end callback failed", error);
+					} finally {
+						setReferenceAttachments(session);
+						if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
+						else activePromptOptions.delete(sessionKey);
+						unsubscribe?.();
+					}
 				}
 				return {
 					text: getLastAssistantText(session.agent),

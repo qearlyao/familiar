@@ -620,6 +620,7 @@ export async function startWebDaemon(
 		jobId: string,
 		prompt: string,
 		attachments: StoredAttachment[] = [],
+		onTurnEnd?: () => void | Promise<void>,
 	): Promise<{
 		text: string;
 		messageId: string;
@@ -635,17 +636,24 @@ export async function startWebDaemon(
 		let started = false;
 		let reply: Awaited<ReturnType<typeof discordDaemon.runPromptForWeb>>;
 		try {
-			reply = await discordDaemon.runPromptForWeb(runtime, jobId, prompt, attachments, async (event: AgentEvent) => {
-				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
-					started = true;
-				}
-				updateAgentEventSummary(summary, event);
-				const storedEvent = storedAgentEventFromAgentEvent(event);
-				if (storedEvent) {
-					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
-					await recorder.record(storedEvent);
-				}
-			});
+			reply = await discordDaemon.runPromptForWeb(
+				runtime,
+				jobId,
+				prompt,
+				attachments,
+				async (event: AgentEvent) => {
+					if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+						started = true;
+					}
+					updateAgentEventSummary(summary, event);
+					const storedEvent = storedAgentEventFromAgentEvent(event);
+					if (storedEvent) {
+						runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+						await recorder.record(storedEvent);
+					}
+				},
+				onTurnEnd,
+			);
 		} finally {
 			await recorder.flush();
 		}
@@ -682,7 +690,19 @@ export async function startWebDaemon(
 			const dispatch = runtime.beginNextJob();
 			if (!dispatch) return;
 			try {
-				const reply = await promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments);
+				const reply = await promptForRuntime(
+					runtime,
+					dispatch.job.jobId,
+					dispatch.prompt,
+					dispatch.attachments,
+					() => {
+						publish({
+							type: "status",
+							channelKey: runtime.channelKey,
+							kind: "idle",
+						});
+					},
+				);
 				await runtime.completeActiveJob({
 					text: reply.text,
 					messageIds: [reply.messageId],
@@ -704,15 +724,8 @@ export async function startWebDaemon(
 
 	const applyControlCommand = async (runtime: ConversationRuntime, control: ParsedControlCommand): Promise<string> => {
 		if (control.command === "stop") {
-			discordDaemon.abortWebRuntime(runtime);
-			await runtime.resetConversation("stop requested");
-			publish({
-				type: "status",
-				channelKey: runtime.channelKey,
-				kind: "idle",
-				detail: "Stopped current work and cleared the chat queue.",
-			});
-			return "Stopped current work and cleared the chat queue.";
+			familiarAgent.requestSoftStop(runtime.channelKey);
+			return "Stopped after current step. Conversation preserved.";
 		}
 		if (control.command === "new") {
 			await familiarAgent.reset(runtime.channelKey);
@@ -1073,14 +1086,7 @@ export async function startWebDaemon(
 					}
 					if (isObject(message) && message.type === "abort") {
 						void getRuntime(client.channelKey).then(async (runtime) => {
-							discordDaemon.abortWebRuntime(runtime);
-							await runtime.resetConversation("web abort requested");
-							publish({
-								type: "error",
-								channelKey: runtime.channelKey,
-								code: "abort",
-								message: "Aborted current work.",
-							});
+							familiarAgent.requestSoftStop(runtime.channelKey);
 						});
 					}
 				}

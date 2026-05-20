@@ -71,14 +71,8 @@ export function useChat(): ChatHook {
 
   const lastEventIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Map<string, PendingMessage>>(new Map());
-  const pendingCountRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
-
-  const bumpPending = useCallback((delta: number) => {
-    pendingCountRef.current = Math.max(0, pendingCountRef.current + delta);
-    setStreaming(pendingCountRef.current > 0);
-  }, []);
 
   const upsertMessage = useCallback(
     (id: string, patch: Partial<Message> & { role?: Message["role"]; who?: string }) => {
@@ -119,7 +113,7 @@ export function useChat(): ChatHook {
         case "message_started": {
           const isUser = event.role === "user";
           pendingRef.current.set(event.messageId, { text: "", thinking: "", isUser });
-          if (!isUser) bumpPending(1);
+          if (!isUser) setStreaming(true);
           upsertMessage(event.messageId, {
             role: isUser ? "user" : "assistant",
             who: event.who,
@@ -163,7 +157,7 @@ export function useChat(): ChatHook {
             ...(event.attachments ? { attachments: event.attachments } : {}),
             ...(event.usage ? { usage: event.usage } : {}),
           });
-          if (pendingRef.current.delete(event.messageId) && !pending?.isUser) bumpPending(-1);
+          pendingRef.current.delete(event.messageId);
           break;
         }
         case "tool_event": {
@@ -182,9 +176,12 @@ export function useChat(): ChatHook {
           );
           break;
         }
+        case "status": {
+          if (event.kind === "idle") setStreaming(false);
+          break;
+        }
         case "error": {
           pendingRef.current.clear();
-          pendingCountRef.current = 0;
           setStreaming(false);
           setMessages((prev) => [
             ...prev,
@@ -206,7 +203,7 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [upsertMessage, activeSessionKey, bumpPending],
+    [upsertMessage, activeSessionKey],
   );
 
   // Bootstrap: load auth/persona name + sessions, pick default
@@ -248,7 +245,6 @@ export function useChat(): ChatHook {
     setMessages([]);
     setHistoryLoaded(false);
     pendingRef.current.clear();
-    pendingCountRef.current = 0;
     setStreaming(false);
     lastEventIdRef.current = null;
 
@@ -307,6 +303,7 @@ export function useChat(): ChatHook {
     sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
+      setStreaming(true);
       await sendMessageApi(trimmed, uid(), activeSessionKey, attachments);
     };
 

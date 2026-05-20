@@ -67,6 +67,7 @@ export interface DiscordDaemon {
 		prompt: string,
 		attachments?: StoredAttachment[],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		onTurnEnd?: () => void | Promise<void>,
 	): Promise<FamiliarAgentReply>;
 	abortWebRuntime(runtime: ConversationRuntime): void;
 	getActiveRuntimeKey(): string | undefined;
@@ -774,6 +775,7 @@ export async function startDiscordDaemon(
 		prompt: string,
 		attachments: StoredAttachment[] = [],
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		onTurnEnd?: () => void | Promise<void>,
 	): Promise<FamiliarAgentReply> => {
 		const run = agentWorkQueue.then(async () => {
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
@@ -783,6 +785,7 @@ export async function startDiscordDaemon(
 				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
 				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent, {
 					referenceAttachments: attachments,
+					onTurnEnd,
 				});
 				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 				return reply;
@@ -1390,7 +1393,7 @@ export async function startDiscordDaemon(
 		getRuntimeForWebChannel,
 		runPromptForWeb: promptForRuntime,
 		abortWebRuntime(runtime: ConversationRuntime): void {
-			if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
+			familiarAgent.requestSoftStop(runtime.channelKey);
 		},
 		getActiveRuntimeKey(): string | undefined {
 			return activeAgentOwner;

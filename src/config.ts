@@ -138,6 +138,7 @@ export interface Config {
 	persona: {
 		soul: string;
 		user: string;
+		contact: string;
 		memory: string;
 		inner: string;
 	};
@@ -860,6 +861,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		persona: {
 			soul: resolveWorkspacePath(workspacePath, readOptionalString(persona.soul, "SOUL.md")),
 			user: resolveWorkspacePath(workspacePath, readOptionalString(persona.user, "USER.md")),
+			contact: resolveWorkspacePath(workspacePath, readOptionalString(persona.contact, "CONTACT.md")),
 			memory: resolveWorkspacePath(workspacePath, readOptionalString(persona.memory, "MEMORY.md")),
 			inner: resolveWorkspacePath(workspacePath, readOptionalString(persona.inner, "INNER.md")),
 		},

@@ -107,6 +107,7 @@ async function initWorkspace(workspaceInput?: string): Promise<void> {
 	await copyIfMissing(resolve(PROJECT_ROOT, "config.example.toml"), resolve(workspacePath, "config.toml"));
 	await copyIfMissing(resolve(PROJECT_ROOT, "SOUL.md"), resolve(workspacePath, "SOUL.md"));
 	await copyIfMissing(resolve(PROJECT_ROOT, "USER.md"), resolve(workspacePath, "USER.md"));
+	await copyIfMissing(resolve(PROJECT_ROOT, "CONTACT.md"), resolve(workspacePath, "CONTACT.md"));
 	await copyIfMissing(resolve(PROJECT_ROOT, "MEMORY.md"), resolve(workspacePath, "MEMORY.md"));
 	await copyIfMissing(resolve(PROJECT_ROOT, "HEARTBEAT.md"), resolve(workspacePath, "HEARTBEAT.md"));
 	await copyDefaultSkills(workspacePath);

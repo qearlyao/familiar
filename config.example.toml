@@ -140,6 +140,7 @@ api_key_env = "GEMINI_API_KEY"
 [persona]
 soul = "SOUL.md"
 user = "USER.md"
+contact = "CONTACT.md"
 memory = "MEMORY.md"
 
 [workspace]

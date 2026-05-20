@@ -19,6 +19,7 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "./chat-l
 import type { Config, WebAuthMode } from "./config.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./config-overrides.js";
 import { CONFIG_KEYS, CONFIG_REGISTRY, type ConfigKey, getConfigDefault, isConfigKey } from "./config-registry.js";
+import { getContactNickname, refreshContactNote, setContactNotePath } from "./contact-note.js";
 import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon, DiscordWebSession } from "./discord.js";
 import { publicAttachmentPath } from "./generated-media.js";
@@ -337,7 +338,7 @@ function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantNa
 		return {
 			id: record.messageId,
 			role: "user",
-			who: record.authorName || WEB_USER_NAME,
+			who: record.authorName || getContactNickname(WEB_USER_NAME),
 			text: [record.text, attachmentText].filter(Boolean).join("\n"),
 			attachments: webAttachments(config, record.attachments),
 			ts: toUnixMs(record.ts),
@@ -413,6 +414,8 @@ export async function startWebDaemon(
 	options: { restart?: RestartHandler } = {},
 ): Promise<WebDaemon> {
 	setAddedModelsPath(config.workspace.dataDir);
+	setContactNotePath(config.persona.contact);
+	await refreshContactNote();
 	const persona = await loadPersona(config);
 	const personaName = parsePersonaName(persona.soul);
 	const auth = createAuth(config);
@@ -499,7 +502,7 @@ export async function startWebDaemon(
 					channelKey: runtime.channelKey,
 					messageId: record.messageId,
 					role: "user",
-					who: record.authorName || WEB_USER_NAME,
+					who: record.authorName || getContactNickname(WEB_USER_NAME),
 					ts: toUnixMs(record.ts),
 				});
 				publishDelta(runtime.channelKey, record.messageId, "text", record.text, toUnixMs(record.ts));
@@ -937,7 +940,7 @@ export async function startWebDaemon(
 				const input: InboundMessageInput = {
 					messageId: id,
 					authorId: config.discord.ownerId,
-					authorName: WEB_USER_NAME,
+					authorName: getContactNickname(WEB_USER_NAME),
 					text: body.text,
 					isBot: false,
 					mentionedBot: true,
@@ -1009,7 +1012,7 @@ export async function startWebDaemon(
 				const input: InboundMessageInput = {
 					messageId: messageId("control"),
 					authorId: config.discord.ownerId,
-					authorName: WEB_USER_NAME,
+					authorName: getContactNickname(WEB_USER_NAME),
 					text: `/${body.command}${args ? ` ${args}` : ""}`,
 					isBot: false,
 					mentionedBot: true,

@@ -3,6 +3,7 @@ import { readdir } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
 import type { FamiliarAgent } from "./agent.js";
+import { refreshContactNote } from "./contact-note.js";
 
 type WatchListener = (eventType: string, filename: string | Buffer | null) => void;
 type WatchHandle = {
@@ -25,7 +26,16 @@ export interface HotReloadOptions {
 	listSkillDirectories?: ListSkillDirectoriesFn;
 }
 
-const ROOT_FILES = new Set(["config.toml", ".env", "SOUL.md", "USER.md", "MEMORY.md", "INNER.md", "HEARTBEAT.md"]);
+const ROOT_FILES = new Set([
+	"config.toml",
+	".env",
+	"SOUL.md",
+	"USER.md",
+	"CONTACT.md",
+	"MEMORY.md",
+	"INNER.md",
+	"HEARTBEAT.md",
+]);
 const SKILLS_DIR = "skills";
 
 function isEnoent(error: unknown): boolean {
@@ -119,7 +129,19 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 					shouldReloadForPath(workspacePath, changedPath) ||
 					shouldReloadForPath(workspacePath, dirPath)
 				) {
-					scheduleReload(relative(workspacePath, changedPath) || relative(workspacePath, dirPath) || ".");
+					const reason = relative(workspacePath, changedPath) || relative(workspacePath, dirPath) || ".";
+					if (reason === "CONTACT.md") {
+						reloadQueue = reloadQueue.then(async () => {
+							try {
+								await refreshContactNote();
+								logger.info(`contact note refresh complete after ${reason}`);
+							} catch (error) {
+								logger.error("contact note refresh failed", error);
+							}
+						});
+					} else {
+						scheduleReload(reason);
+					}
 				}
 			});
 			watcher.on("error", (error) => {

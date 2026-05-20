@@ -57,6 +57,7 @@ ${renderedFiles}
 
 <note_to_self>
 you can edit MEMORY.md when something about her is worth keeping.
+CONTACT.md is what you call her in your contact book — like a nickname only you use. edit it whenever it feels right.
 output [[FAMILIAR_SILENT]] if there's nothing worth saying — quiet's a real choice.
 </note_to_self>
 ${renderedSkillsBlock}

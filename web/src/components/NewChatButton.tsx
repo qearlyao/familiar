@@ -51,7 +51,7 @@ export function NewChatButton({ channelKey, onStarted }: NewChatButtonProps) {
         size="icon"
         aria-label="new chat"
         title="new chat"
-        className="size-8"
+        className="size-8 text-muted-foreground hover:text-foreground"
         onClick={() => setOpen(true)}
       >
         <SquarePen className="size-4" />

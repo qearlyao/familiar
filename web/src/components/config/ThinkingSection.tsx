@@ -26,16 +26,15 @@ export function ThinkingSection({ current, supported, disabled, onChange }: Thin
           if (value) onChange(value as ThinkingLevel);
         }}
         disabled={disabled}
-        variant="outline"
-        size="sm"
-        className="mt-3 w-full"
+        spacing={1}
+        className="mt-4 flex-wrap rounded-lg bg-muted/40 p-1"
       >
         {options.map((level) => (
           <ToggleGroupItem
             key={level}
             value={level}
             aria-label={`thinking ${level}`}
-            className="flex-1 lowercase"
+            className="h-9 rounded-md px-3.5 text-sm lowercase text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary"
           >
             {level}
           </ToggleGroupItem>

@@ -81,7 +81,7 @@ export function Composer({
               autoFocus
               className="min-h-8 flex-1 resize-none bg-transparent leading-8 text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()} aria-label="attach">
+            <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()} aria-label="attach" className="text-muted-foreground hover:text-foreground">
               <Paperclip className="size-4" />
             </Button>
             <MemePicker onPick={insertMeme} />

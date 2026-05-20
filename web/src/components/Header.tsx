@@ -65,7 +65,7 @@ export function Header({
             size="icon"
             aria-label="settings"
             title="settings"
-            className="size-8"
+            className="size-8 text-muted-foreground hover:text-foreground"
             onClick={onOpenConfig}
           >
             <Settings2 className="size-4" />

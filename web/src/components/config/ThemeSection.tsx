@@ -34,9 +34,8 @@ export function ThemeSection() {
         onValueChange={(value) => {
           if (value) setMode(value as ThemeMode);
         }}
-        variant="outline"
-        size="sm"
-        className="mt-3"
+        spacing={1}
+        className="mt-4 rounded-lg bg-muted/40 p-1"
       >
         {ORDER.map((option) => {
           const Icon = ICON[option];
@@ -45,9 +44,9 @@ export function ThemeSection() {
               key={option}
               value={option}
               aria-label={LABEL[option]}
-              className="gap-1.5 px-3 lowercase"
+              className="h-9 gap-2 rounded-md px-3.5 text-sm lowercase text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary"
             >
-              <Icon className="size-3.5" />
+              <Icon className="size-4" />
               <span>{LABEL[option]}</span>
             </ToggleGroupItem>
           );

@@ -21,7 +21,7 @@ export function ModelSection({ models, current, source, disabled, onChange }: Mo
         value={current ?? ""}
         onValueChange={onChange}
         disabled={disabled}
-        className="mt-3 grid gap-1"
+        className="mt-4 grid gap-1"
       >
         {models.map((model) => {
           const id = `model-${model}`;
@@ -33,14 +33,14 @@ export function ModelSection({ models, current, source, disabled, onChange }: Mo
               key={model}
               htmlFor={id}
               className={
-                "flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-accent/60 has-data-[state=checked]:bg-accent/60"
+                "group/row flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-accent has-data-[state=checked]:bg-primary has-data-[state=checked]:text-primary-foreground has-data-[state=checked]:hover:bg-primary"
               }
             >
               <RadioGroupItem value={model} id={id} />
               <span className="font-mono text-sm leading-tight">
-                <span className="text-muted-foreground">{provider}</span>
-                <span className="text-muted-foreground">/</span>
-                <span className={isActive ? "text-foreground" : "text-muted-foreground"}>{name}</span>
+                <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>{provider}</span>
+                <span className={isActive ? "text-primary-foreground/70" : "text-muted-foreground group-hover/row:text-foreground"}>/</span>
+                <span className={isActive ? "text-primary-foreground" : "text-muted-foreground group-hover/row:text-foreground"}>{name}</span>
               </span>
             </Label>
           );

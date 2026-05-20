@@ -1,8 +1,6 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
 import { ModelSection } from "./config/ModelSection";
 import { ThinkingSection } from "./config/ThinkingSection";
-import { PersonaSection } from "./config/PersonaSection";
 import { ThemeSection } from "./config/ThemeSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 
@@ -22,15 +20,15 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        className="w-screen bg-card sm:max-w-md sm:w-md"
+        className="w-screen bg-card shadow-2xl sm:w-md sm:max-w-md sm:rounded-l-2xl"
         side="right"
       >
-        <SheetHeader className="border-b border-border px-5 py-4">
+        <SheetHeader className="px-6 pt-6 pb-2">
           <SheetTitle className="font-serif text-2xl leading-none tracking-tight text-foreground">
             settings
           </SheetTitle>
         </SheetHeader>
-        <div className="flex flex-col gap-6 overflow-y-auto px-5 py-5">
+        <div className="flex flex-col gap-9 overflow-y-auto px-6 pt-2 pb-8">
           <ModelSection
             models={models}
             current={data?.model.value}
@@ -38,16 +36,12 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
             disabled={!ready || busy}
             onChange={(model) => void setModel(model)}
           />
-          <Separator />
           <ThinkingSection
             current={data?.thinking.value}
             supported={data?.supportedThinking ?? []}
             disabled={!ready || busy}
             onChange={(level) => void setThinking(level)}
           />
-          <Separator />
-          <PersonaSection name={data?.persona.name} />
-          <Separator />
           <ThemeSection />
           {error ? (
             <p className="font-serif text-xs italic text-destructive">{error}</p>

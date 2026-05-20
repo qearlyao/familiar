@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, SendHorizontal, X } from "lucide-react";
+import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MemePicker } from "./MemePicker";
 
 export function Composer({
   onSend,
+  onAbort,
+  streaming,
   personaName,
 }: {
   onSend: (text: string, attachments: File[]) => void;
+  onAbort: () => void;
+  streaming: boolean;
   personaName: string;
 }) {
   const [value, setValue] = useState("");
@@ -35,6 +39,8 @@ export function Composer({
     setValue((prev) => (prev.trim() ? `${prev.trimEnd()}\n${token}` : token));
     window.setTimeout(() => ref.current?.focus(), 0);
   };
+
+  const sendDisabled = !streaming && !value.trim() && attachments.length === 0;
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
@@ -66,6 +72,17 @@ export function Composer({
             </div>
           )}
           <div className="flex items-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => fileRef.current?.click()}
+              aria-label="attach"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Paperclip className="size-4" />
+            </Button>
+            <MemePicker onPick={insertMeme} />
             <textarea
               ref={ref}
               value={value}
@@ -81,19 +98,19 @@ export function Composer({
               autoFocus
               className="min-h-8 flex-1 resize-none bg-transparent leading-8 text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()} aria-label="attach" className="text-muted-foreground hover:text-foreground">
-              <Paperclip className="size-4" />
-            </Button>
-            <MemePicker onPick={insertMeme} />
             <Button
               type="button"
               size="sm"
-              onClick={send}
-              disabled={!value.trim() && attachments.length === 0}
-              aria-label="send"
+              onClick={streaming ? onAbort : send}
+              disabled={sendDisabled}
+              aria-label={streaming ? "stop" : "send"}
               className="h-8 px-3"
             >
-              <SendHorizontal className="size-4" />
+              {streaming ? (
+                <Square className="size-3 fill-current" strokeWidth={0} />
+              ) : (
+                <SendHorizontal className="size-4" />
+              )}
             </Button>
           </div>
         </div>

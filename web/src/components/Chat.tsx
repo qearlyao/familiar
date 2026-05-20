@@ -13,8 +13,10 @@ export function Chat() {
     sessions,
     activeSessionKey,
     historyLoaded,
+    streaming,
     selectSession,
     send,
+    abort,
     notifyNewChat,
   } = useChat();
   const [configOpen, setConfigOpen] = useState(false);
@@ -36,6 +38,8 @@ export function Chat() {
       </main>
       <Composer
         onSend={(text, attachments) => void send(text, attachments)}
+        onAbort={abort}
+        streaming={streaming}
         personaName={personaName}
       />
       <ConfigDrawer

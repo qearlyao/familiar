@@ -27,6 +27,7 @@ interface PendingMessage {
   attachments?: Message["attachments"];
   thinkingStartedAt?: number;
   thinkingEndedAt?: number;
+  isUser?: boolean;
 }
 
 function mergeTool(
@@ -52,8 +53,10 @@ export interface ChatHook {
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
   historyLoaded: boolean;
+  streaming: boolean;
   selectSession: (key: string) => void;
   send: (text: string, attachments?: File[]) => Promise<void>;
+  abort: () => void;
   notifyNewChat: () => void;
 }
 
@@ -64,10 +67,18 @@ export function useChat(): ChatHook {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState<string | undefined>(undefined);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [streaming, setStreaming] = useState(false);
 
   const lastEventIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Map<string, PendingMessage>>(new Map());
+  const pendingCountRef = useRef(0);
+  const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
+
+  const bumpPending = useCallback((delta: number) => {
+    pendingCountRef.current = Math.max(0, pendingCountRef.current + delta);
+    setStreaming(pendingCountRef.current > 0);
+  }, []);
 
   const upsertMessage = useCallback(
     (id: string, patch: Partial<Message> & { role?: Message["role"]; who?: string }) => {
@@ -106,9 +117,11 @@ export function useChat(): ChatHook {
 
       switch (event.type) {
         case "message_started": {
-          pendingRef.current.set(event.messageId, { text: "", thinking: "" });
+          const isUser = event.role === "user";
+          pendingRef.current.set(event.messageId, { text: "", thinking: "", isUser });
+          if (!isUser) bumpPending(1);
           upsertMessage(event.messageId, {
-            role: event.role === "user" ? "user" : "assistant",
+            role: isUser ? "user" : "assistant",
             who: event.who,
             text: "",
             ts: event.ts,
@@ -150,7 +163,7 @@ export function useChat(): ChatHook {
             ...(event.attachments ? { attachments: event.attachments } : {}),
             ...(event.usage ? { usage: event.usage } : {}),
           });
-          pendingRef.current.delete(event.messageId);
+          if (pendingRef.current.delete(event.messageId) && !pending?.isUser) bumpPending(-1);
           break;
         }
         case "tool_event": {
@@ -170,6 +183,9 @@ export function useChat(): ChatHook {
           break;
         }
         case "error": {
+          pendingRef.current.clear();
+          pendingCountRef.current = 0;
+          setStreaming(false);
           setMessages((prev) => [
             ...prev,
             {
@@ -190,7 +206,7 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [upsertMessage, activeSessionKey],
+    [upsertMessage, activeSessionKey, bumpPending],
   );
 
   // Bootstrap: load auth/persona name + sessions, pick default
@@ -232,6 +248,8 @@ export function useChat(): ChatHook {
     setMessages([]);
     setHistoryLoaded(false);
     pendingRef.current.clear();
+    pendingCountRef.current = 0;
+    setStreaming(false);
     lastEventIdRef.current = null;
 
     fetchHistory(activeSessionKey)
@@ -250,6 +268,7 @@ export function useChat(): ChatHook {
       setConnection("connecting");
       const socket = new WebSocket(streamUrl(activeSessionKey));
       ws = socket;
+      wsRef.current = socket;
 
       socket.addEventListener("open", () => {
         if (cancelled) return;
@@ -270,6 +289,7 @@ export function useChat(): ChatHook {
 
       socket.addEventListener("close", () => {
         if (cancelled) return;
+        if (wsRef.current === socket) wsRef.current = null;
         setConnection("closed");
         const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempts);
         reconnectAttempts += 1;
@@ -293,12 +313,20 @@ export function useChat(): ChatHook {
     return () => {
       cancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsRef.current === ws) wsRef.current = null;
       ws?.close();
     };
   }, [activeSessionKey, handleEvent]);
 
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
+
+  const abort = useCallback(() => {
+    const sock = wsRef.current;
+    if (sock?.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify({ type: "abort" }));
+    }
+  }, []);
 
   const notifyNewChat = useCallback(() => {
     setMessages((prev) => [
@@ -313,5 +341,5 @@ export function useChat(): ChatHook {
     ]);
   }, []);
 
-  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, selectSession, send, notifyNewChat };
+  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, streaming, selectSession, send, abort, notifyNewChat };
 }

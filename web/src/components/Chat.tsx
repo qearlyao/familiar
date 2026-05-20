@@ -12,6 +12,7 @@ export function Chat() {
     personaName,
     sessions,
     activeSessionKey,
+    historyLoaded,
     selectSession,
     send,
     notifyNewChat,
@@ -31,7 +32,7 @@ export function Chat() {
         onNewChatStarted={notifyNewChat}
       />
       <main className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} />
+        <MessageList messages={messages} personaName={personaName} historyLoaded={historyLoaded} />
       </main>
       <Composer
         onSend={(text, attachments) => void send(text, attachments)}

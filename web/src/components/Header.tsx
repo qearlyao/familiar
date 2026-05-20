@@ -12,6 +12,12 @@ const STATUS_LABEL: Record<ConnectionState, string> = {
   error: "error",
 };
 
+const STATUS_VOICE: Record<Exclude<ConnectionState, "open">, string> = {
+  connecting: "reaching out…",
+  closed: "out of touch · trying again",
+  error: "out of touch · trying again",
+};
+
 export function Header({
   connection,
   personaName,
@@ -45,6 +51,11 @@ export function Header({
           )}
         />
         <span className="font-serif text-lg leading-none tracking-tight">{personaName}</span>
+        {!live && (
+          <span className="font-serif text-xs italic leading-none text-muted-foreground/80">
+            {STATUS_VOICE[connection]}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <SessionPicker sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
           <NewChatButton channelKey={channelKey} onStarted={onNewChatStarted} />

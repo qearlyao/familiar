@@ -1,5 +1,6 @@
 import type { Message } from "../types";
 import { cn } from "@/lib/utils";
+import { renderInlineText } from "@/lib/renderInlineText";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolBlock } from "./ToolBlock";
 
@@ -29,20 +30,16 @@ export function MessageBubble({ message }: { message: Message }) {
           />
         )}
         {!isUser && <ToolBlock tools={message.tools ?? []} />}
-        {message.text && (
-          <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground">
-            {message.text}
-          </div>
-        )}
+        {message.text && renderInlineText(message.text)}
         {attachments.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
             {attachments.map((attachment) =>
               (attachment.kind === "image" || attachment.mimeType?.startsWith("image/")) && attachment.url ? (
-                <a key={attachment.id} href={attachment.url} className="block max-w-[24rem]">
+                <a key={attachment.id} href={attachment.url} className="inline-block">
                   <img
                     src={attachment.url}
                     alt={attachment.name}
-                    className="max-h-72 w-full rounded border border-border object-contain"
+                    className="max-h-72 max-w-[24rem] rounded-md"
                   />
                 </a>
               ) : attachment.mimeType?.startsWith("audio/") && attachment.url ? (

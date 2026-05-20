@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Paperclip, SendHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MemePicker } from "./MemePicker";
 
 export function Composer({
   onSend,
@@ -27,6 +28,12 @@ export function Composer({
     onSend(text, attachments);
     setValue("");
     setAttachments([]);
+  };
+
+  const insertMeme = (meme: { name: string; url: string }) => {
+    const token = `meme: ${meme.name} (${meme.url})`;
+    setValue((prev) => (prev.trim() ? `${prev.trimEnd()}\n${token}` : token));
+    window.setTimeout(() => ref.current?.focus(), 0);
   };
 
   return (
@@ -77,6 +84,7 @@ export function Composer({
             <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()} aria-label="attach">
               <Paperclip className="size-4" />
             </Button>
+            <MemePicker onPick={insertMeme} />
             <Button
               type="button"
               size="sm"

@@ -177,3 +177,20 @@ export async function startNewChat(channelKey: string): Promise<void> {
     throw new Error(body.error ?? `agent/new: ${res.status}`);
   }
 }
+
+export interface Meme {
+  name: string;
+  url: string;
+}
+
+export interface MemeFamily {
+  name: string;
+  memes: Meme[];
+}
+
+export async function fetchMemes(): Promise<MemeFamily[]> {
+  const res = await fetch("/api/web/memes");
+  if (!res.ok) throw new Error(`memes: ${res.status}`);
+  const body = (await res.json()) as { families: MemeFamily[] };
+  return body.families;
+}

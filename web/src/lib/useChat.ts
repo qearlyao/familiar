@@ -51,6 +51,7 @@ export interface ChatHook {
   personaName: string;
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
+  historyLoaded: boolean;
   selectSession: (key: string) => void;
   send: (text: string, attachments?: File[]) => Promise<void>;
   notifyNewChat: () => void;
@@ -62,6 +63,7 @@ export function useChat(): ChatHook {
   const [personaName, setPersonaName] = useState<string>("Familiar");
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState<string | undefined>(undefined);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const lastEventIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Map<string, PendingMessage>>(new Map());
@@ -228,14 +230,20 @@ export function useChat(): ChatHook {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     setMessages([]);
+    setHistoryLoaded(false);
     pendingRef.current.clear();
     lastEventIdRef.current = null;
 
     fetchHistory(activeSessionKey)
       .then((res) => {
-        if (!cancelled) setMessages(res.messages);
+        if (!cancelled) {
+          setMessages(res.messages);
+          setHistoryLoaded(true);
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setHistoryLoaded(true);
+      });
 
     const connect = () => {
       if (cancelled) return;
@@ -305,5 +313,5 @@ export function useChat(): ChatHook {
     ]);
   }, []);
 
-  return { messages, connection, personaName, sessions, activeSessionKey, selectSession, send, notifyNewChat };
+  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, selectSession, send, notifyNewChat };
 }

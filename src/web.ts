@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
+import { join } from "node:path";
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { FamiliarAgent } from "./agent.js";
@@ -58,6 +60,36 @@ interface WebUploadAttachment {
 	mimeType?: string;
 	size?: number;
 	buffer: Buffer;
+}
+
+interface WebMeme {
+	name: string;
+	url: string;
+}
+
+interface WebMemeFamily {
+	name: string;
+	memes: WebMeme[];
+}
+
+function parseMemeCatalog(markdown: string): WebMemeFamily[] {
+	const families: WebMemeFamily[] = [];
+	let currentFamily: WebMemeFamily | undefined;
+	for (const line of markdown.split(/\r?\n/)) {
+		const familyMatch = line.match(/^## (.+)$/);
+		if (familyMatch) {
+			currentFamily = { name: familyMatch[1]?.trim() ?? "", memes: [] };
+			families.push(currentFamily);
+			continue;
+		}
+		if (!currentFamily || !line.startsWith("- ") || !line.includes(" — ")) continue;
+		const separator = line.indexOf(" — ");
+		const name = line.slice(2, separator).trim();
+		const suffix = line.slice(separator + " — ".length).trim();
+		if (!name || !suffix) continue;
+		currentFamily.memes.push({ name, url: `https://files.catbox.moe/${suffix}` });
+	}
+	return families;
 }
 
 function isWebUploadAttachment(value: unknown): value is WebUploadAttachment {
@@ -708,6 +740,15 @@ export async function startWebDaemon(
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/agent/models") {
 				sendJson(response, 200, { models: config.models.allow });
+				return true;
+			}
+			if (request.method === "GET" && url.pathname === "/api/web/memes") {
+				try {
+					const markdown = await readFile(join(process.cwd(), "skills/memes/SKILL.md"), "utf8");
+					sendJson(response, 200, { families: parseMemeCatalog(markdown) });
+				} catch {
+					sendJson(response, 500, { error: "memes catalog unavailable" });
+				}
 				return true;
 			}
 			if (request.method === "POST" && url.pathname === "/api/web/send") {

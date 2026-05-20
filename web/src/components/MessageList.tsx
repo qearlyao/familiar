@@ -32,12 +32,30 @@ function formatGap(ts: number, prevTs: number): string {
   return `${datePart} · ${time}`;
 }
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({
+  messages,
+  personaName,
+  historyLoaded,
+}: {
+  messages: Message[];
+  personaName: string;
+  historyLoaded: boolean;
+}) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
+
+  if (historyLoaded && messages.length === 0) {
+    return (
+      <div className="mx-auto flex h-full max-w-3xl items-center justify-center px-5">
+        <p className="font-serif text-base italic leading-relaxed text-muted-foreground/80">
+          hi, i'm {personaName}. write whenever.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 px-5 py-6">

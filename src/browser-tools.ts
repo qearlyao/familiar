@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { type SpawnOptions, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
+import { platform } from "node:os";
 import { basename, extname, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -171,13 +172,49 @@ type SiteCommandInfo = {
 	usage?: string;
 };
 
+type BrowserSpawnStdio = ["pipe" | "ignore", "pipe", "pipe"];
+
+type BrowserSpawnInvocation = {
+	command: string;
+	args: string[];
+	options: SpawnOptions & { stdio: BrowserSpawnStdio };
+};
+
+function quoteWindowsShellArg(value: string): string {
+	const escaped = value
+		.replace(/%/g, "%%")
+		.replace(/(\\*)"/g, '$1$1\\"')
+		.replace(/(\\+)$/g, "$1$1");
+	return `"${escaped}"`;
+}
+
+function buildSpawnInvocation(
+	spec: BrowserRunSpec,
+	currentPlatform: NodeJS.Platform = platform(),
+	comSpec = process.env.ComSpec ?? "cmd.exe",
+): BrowserSpawnInvocation {
+	const options = {
+		stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"] as BrowserSpawnStdio,
+		env: spec.env,
+	};
+	if (currentPlatform !== "win32") return { command: spec.command, args: spec.args, options };
+
+	const commandLine = [spec.command, ...spec.args].map(quoteWindowsShellArg).join(" ");
+	return {
+		command: comSpec,
+		args: ["/d", "/s", "/c", commandLine],
+		options: {
+			...options,
+			windowsVerbatimArguments: true,
+		},
+	};
+}
+
 function defaultBrowserRunner(): BrowserRunner {
 	return (spec, options) =>
 		new Promise((resolvePromise, reject) => {
-			const child = spawn(spec.command, spec.args, {
-				stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"] as ["pipe" | "ignore", "pipe", "pipe"],
-				env: spec.env,
-			});
+			const invocation = buildSpawnInvocation(spec);
+			const child = spawn(invocation.command, invocation.args, invocation.options);
 			const timeout = setTimeout(() => {
 				child.kill("SIGTERM");
 				reject(new Error(`Browser command timed out after ${options.timeoutMs}ms.`));
@@ -827,6 +864,7 @@ export function createBrowserTools(
 }
 
 export const __browserToolsTest = {
+	buildSpawnInvocation,
 	buildHarnessSpec,
 	buildPageArgs,
 	buildRunSpec,

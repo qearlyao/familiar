@@ -106,6 +106,39 @@ describe("browser tools", () => {
 		assert.equal(calls[0]?.env?.OPENCLI_BROWSER_COMMAND_TIMEOUT, "120");
 	});
 
+	it("spawns browser helpers through cmd.exe on Windows", () => {
+		const spec: BrowserRunSpec = {
+			command: "C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd",
+			args: ["reddit", "saved", "--window", "background", "-f", "json"],
+			backend: "opencli",
+		};
+
+		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32", "C:\\Windows\\System32\\cmd.exe");
+
+		assert.equal(invocation.command, "C:\\Windows\\System32\\cmd.exe");
+		assert.deepEqual(invocation.args, [
+			"/d",
+			"/s",
+			"/c",
+			'"C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd" "reddit" "saved" "--window" "background" "-f" "json"',
+		]);
+		assert.equal(invocation.options.windowsVerbatimArguments, true);
+	});
+
+	it("keeps direct helper spawning on non-Windows platforms", () => {
+		const spec: BrowserRunSpec = {
+			command: "opencli",
+			args: ["browser", "familiar", "state"],
+			backend: "opencli",
+		};
+
+		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "darwin");
+
+		assert.equal(invocation.command, "opencli");
+		assert.deepEqual(invocation.args, ["browser", "familiar", "state"]);
+		assert.equal(invocation.options.windowsVerbatimArguments, undefined);
+	});
+
 	it("builds read-only browser tab inspection args", async () => {
 		const dataDir = await createTempDataDir();
 		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });

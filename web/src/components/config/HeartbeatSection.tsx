@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ConfigKey } from "@/lib/api";
 
@@ -27,10 +27,6 @@ function MinuteInput({
   const minutes = valueMs === undefined ? "" : String(Math.round(valueMs / MS_PER_MIN));
   const [draft, setDraft] = useState<string>(minutes);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setDraft(minutes);
-  }, [minutes]);
 
   const commit = async () => {
     const parsed = Number.parseInt(draft, 10);
@@ -101,6 +97,7 @@ export function HeartbeatSection({
           <div className="flex items-center gap-3">
             <span className="flex-1 font-serif text-sm text-foreground">first wakeup after</span>
             <MinuteInput
+              key={`idle-${idleThresholdMs ?? "default"}`}
               valueMs={idleThresholdMs}
               disabled={disabled || !isOn}
               onCommit={(ms) => onChange("heartbeat.idleThresholdMs", ms)}
@@ -115,6 +112,7 @@ export function HeartbeatSection({
           <div className="flex items-center gap-3">
             <span className="flex-1 font-serif text-sm text-foreground">between wakeups</span>
             <MinuteInput
+              key={`interval-${intervalMs ?? "default"}`}
               valueMs={intervalMs}
               disabled={disabled || !isOn}
               onCommit={(ms) => onChange("heartbeat.intervalMs", ms)}

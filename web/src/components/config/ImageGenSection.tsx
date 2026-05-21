@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ConfigKey } from "@/lib/api";
 
@@ -30,11 +30,6 @@ function ModelRefInput({
   const [draft, setDraft] = useState<string>(live);
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
-
-  useEffect(() => {
-    setDraft(live);
-    setInvalid(false);
-  }, [live]);
 
   const commit = async () => {
     const trimmed = draft.trim();
@@ -125,6 +120,7 @@ export function ImageGenSection({
         <div className="flex flex-col gap-2">
           <span className="font-serif text-sm text-foreground">primary model</span>
           <ModelRefInput
+            key={`model-${model ?? "default"}`}
             value={model}
             placeholder="openrouter/google/gemini-2.5-flash-image"
             allowEmpty={false}
@@ -138,6 +134,7 @@ export function ImageGenSection({
         <div className="flex flex-col gap-2">
           <span className="font-serif text-sm text-foreground">fallback model</span>
           <ModelRefInput
+            key={`fallback-${fallbackModel ?? "default"}`}
             value={fallbackModel}
             placeholder="none"
             allowEmpty

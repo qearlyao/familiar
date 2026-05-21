@@ -242,11 +242,15 @@ export function useChat(): ChatHook {
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    setMessages([]);
-    setHistoryLoaded(false);
     pendingRef.current.clear();
-    setStreaming(false);
     lastEventIdRef.current = null;
+
+    const resetTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      setMessages([]);
+      setHistoryLoaded(false);
+      setStreaming(false);
+    }, 0);
 
     fetchHistory(activeSessionKey)
       .then((res) => {
@@ -309,6 +313,7 @@ export function useChat(): ChatHook {
 
     return () => {
       cancelled = true;
+      clearTimeout(resetTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current === ws) wsRef.current = null;
       ws?.close();

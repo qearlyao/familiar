@@ -48,7 +48,8 @@ export function useConfig(enabled: boolean): UseConfig {
   }, [enabled]);
 
   useEffect(() => {
-    void load();
+    const id = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(id);
   }, [load]);
 
   const setConfig = useCallback(async (key: ConfigKey, value: unknown) => {

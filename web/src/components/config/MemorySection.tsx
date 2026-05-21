@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -50,10 +50,6 @@ function NumberInput({
   const live = value === undefined ? "" : String(value);
   const [draft, setDraft] = useState<string>(live);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setDraft(live);
-  }, [live]);
 
   const commit = async () => {
     const parsed = Number(draft);
@@ -247,6 +243,7 @@ export function MemorySection({
         <div className="mt-4 grid gap-4">
           <Row label="context threshold" description="fraction of context that triggers compaction">
             <NumberInput
+              key={`context-${contextThreshold ?? "default"}`}
               value={contextThreshold}
               step={0.05}
               min={0}
@@ -257,6 +254,7 @@ export function MemorySection({
           </Row>
           <Row label="fresh tail count" description="most recent messages kept raw, never compacted">
             <NumberInput
+              key={`fresh-${freshTailCount ?? "default"}`}
               value={freshTailCount}
               min={1}
               disabled={compactionOff}
@@ -265,6 +263,7 @@ export function MemorySection({
           </Row>
           <Row label="leaf chunk tokens" description="max tokens of input per leaf summary">
             <NumberInput
+              key={`leaf-chunk-${leafChunkTokens ?? "default"}`}
               value={leafChunkTokens}
               min={1}
               disabled={compactionOff}
@@ -273,6 +272,7 @@ export function MemorySection({
           </Row>
           <Row label="leaf target tokens" description="target tokens per leaf summary output">
             <NumberInput
+              key={`leaf-target-${leafTargetTokens ?? "default"}`}
               value={leafTargetTokens}
               min={1}
               disabled={compactionOff}
@@ -281,6 +281,7 @@ export function MemorySection({
           </Row>
           <Row label="condense group size" description="how many summaries combine into one at the next level">
             <NumberInput
+              key={`condense-${condenseGroupSize ?? "default"}`}
               value={condenseGroupSize}
               min={1}
               disabled={compactionOff}
@@ -289,6 +290,7 @@ export function MemorySection({
           </Row>
           <Row label="max summary depth" description="deepest level of recursive summary-of-summaries">
             <NumberInput
+              key={`max-depth-${maxSummaryDepth ?? "default"}`}
               value={maxSummaryDepth}
               min={1}
               disabled={compactionOff}
@@ -300,6 +302,7 @@ export function MemorySection({
             description="lowest summary depth kept after /new. -1 keeps full context, 0 keeps every summary."
           >
             <NumberInput
+              key={`retain-${newSessionRetainDepth ?? "default"}`}
               value={newSessionRetainDepth}
               min={-1}
               disabled={compactionOff}
@@ -320,6 +323,7 @@ export function MemorySection({
         <div className="mt-4 grid gap-4">
           <Row label="top k" description="how many memories to surface per query">
             <NumberInput
+              key={`top-k-${topK ?? "default"}`}
               value={topK}
               min={1}
               disabled={ambientOff}
@@ -328,6 +332,7 @@ export function MemorySection({
           </Row>
           <Row label="min query length" description="minimum query chars before recall fires">
             <NumberInput
+              key={`min-query-${minQueryLength ?? "default"}`}
               value={minQueryLength}
               min={0}
               disabled={ambientOff}
@@ -336,6 +341,7 @@ export function MemorySection({
           </Row>
           <Row label="throttle seconds" description="cooldown between recalls">
             <NumberInput
+              key={`throttle-${throttleSeconds ?? "default"}`}
               value={throttleSeconds}
               min={0}
               disabled={ambientOff}
@@ -344,6 +350,7 @@ export function MemorySection({
           </Row>
           <Row label="similarity weight" description="semantic match to your query">
             <NumberInput
+              key={`weight-similarity-${weightSimilarity ?? "default"}`}
               value={weightSimilarity}
               step={0.05}
               min={0}
@@ -353,6 +360,7 @@ export function MemorySection({
           </Row>
           <Row label="valence weight" description="emotional charge of the memory">
             <NumberInput
+              key={`weight-valence-${weightValence ?? "default"}`}
               value={weightValence}
               step={0.05}
               min={0}
@@ -362,6 +370,7 @@ export function MemorySection({
           </Row>
           <Row label="recency weight" description="favors recent memories">
             <NumberInput
+              key={`weight-recency-${weightRecency ?? "default"}`}
               value={weightRecency}
               step={0.05}
               min={0}
@@ -371,6 +380,7 @@ export function MemorySection({
           </Row>
           <Row label="intensity weight" description="favors strongly-felt memories">
             <NumberInput
+              key={`weight-intensity-${weightIntensity ?? "default"}`}
               value={weightIntensity}
               step={0.05}
               min={0}

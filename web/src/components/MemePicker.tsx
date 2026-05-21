@@ -39,7 +39,8 @@ export function MemePicker({ onPick }: MemePickerProps) {
       const id = window.setTimeout(() => searchRef.current?.focus(), 30);
       return () => window.clearTimeout(id);
     }
-    setQuery("");
+    const id = window.setTimeout(() => setQuery(""), 0);
+    return () => window.clearTimeout(id);
   }, [open]);
 
   const activeFamily = useMemo(() => {

@@ -61,7 +61,8 @@ export function useAgentSettings(channelKey: string | undefined): UseAgentSettin
   }, [channelKey]);
 
   useEffect(() => {
-    void load();
+    const id = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(id);
   }, [load]);
 
   const mutate = useCallback(

@@ -1,56 +1,9 @@
 import type { ReactNode } from "react";
 
-type Segment =
-  | { type: "text"; value: string }
-  | { type: "image"; url: string; alt: string };
-
-const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp)(?:\?[^\s]*)?$/i;
-const PATTERN_RE =
-  /meme:\s+([^\n()]+?)\s+\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)<>"']+/gi;
-
-function parse(text: string): Segment[] {
-  const segments: Segment[] = [];
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-  PATTERN_RE.lastIndex = 0;
-  while ((match = PATTERN_RE.exec(text)) !== null) {
-    const [whole, memeName, memeUrl] = match;
-    const url = memeUrl ?? whole;
-    const isMeme = Boolean(memeName);
-    const isImage = isMeme || IMAGE_EXT_RE.test(url);
-    if (!isImage) continue;
-    if (match.index > cursor) {
-      segments.push({ type: "text", value: text.slice(cursor, match.index) });
-    }
-    segments.push({ type: "image", url, alt: memeName?.trim() ?? "" });
-    cursor = match.index + whole.length;
-  }
-  if (cursor < text.length) {
-    segments.push({ type: "text", value: text.slice(cursor) });
-  }
-  return segments;
-}
-
-function collapse(segments: Segment[]): Segment[] {
-  const out: Segment[] = [];
-  let buffer = "";
-  for (const seg of segments) {
-    if (seg.type === "text") {
-      buffer += seg.value;
-      continue;
-    }
-    const trimmed = buffer.replace(/[ \t]+$/, "").replace(/\n{2,}$/, "\n");
-    if (trimmed.trim()) out.push({ type: "text", value: trimmed });
-    buffer = "";
-    out.push(seg);
-  }
-  const tail = buffer.replace(/^\n+/, "");
-  if (tail.trim()) out.push({ type: "text", value: tail });
-  return out;
-}
+import { collapseInlineSegments, parseInlineSegments } from "@/lib/inlineSegments";
 
 export function renderInlineText(text: string): ReactNode {
-  const items = collapse(parse(text));
+  const items = collapseInlineSegments(parseInlineSegments(text));
   if (items.length === 0) return null;
   if (items.length === 1 && items[0].type === "text") {
     return (

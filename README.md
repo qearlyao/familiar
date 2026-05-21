@@ -15,8 +15,8 @@ stack, including `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, and
 `@earendil-works/pi-coding-agent`.
 
 It also borrows ideas and structure from
-[lossless-claw](https://github.com/earendil-works/lossless-claw) and
-[pi-lcm-memory](https://github.com/earendil-works/pi-lcm-memory).
+[lossless-claw](https://github.com/Martian-Engineering/lossless-claw) and
+[pi-lcm-memory](https://github.com/sharkone/pi-lcm-memory).
 
 ## Requirements
 

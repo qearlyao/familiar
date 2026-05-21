@@ -248,8 +248,6 @@ capability map.
   tool cards, and final text in one readable flow.
 - Virtualize or trim the WebUI message list only after real long-tab jank shows
   up. `react-virtuoso` is the likely fix for dynamic-height bubbles.
-- Add playable-audio-first TTS rendering polish and a transcript/text toggle
-  without duplicating assistant text by default.
 
 ### Media Follow-Ups
 

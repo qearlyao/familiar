@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1 - 2026-05-22
+
+### Changed
+
+- Count provider replay signatures in LCM leaf-compaction pressure while keeping signature metadata out of summary prompts.
+- Improve payload diff inspection for current `<from_earlier>` LCM summaries.
+- Refresh the WebUI favicon.
+
+### Fixed
+
+- Fix browser helper spawning on Windows, including `.cmd` OpenCLI paths.
+- Fix WebUI meme rendering when meme labels contain parentheses.
+- Fix README credits and add upstream memory/LCM references.
+
 ## 0.2.0 - 2026-05-21
 
 ### Added

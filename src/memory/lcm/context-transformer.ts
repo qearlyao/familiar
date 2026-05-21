@@ -788,7 +788,13 @@ function lcmRecordPartsFromAgentMessage(message: AgentMessage): LcmRecordPart[] 
 	if (!Array.isArray(content)) return [];
 	const parts: LcmRecordPart[] = [];
 	for (const item of content) {
-		if (item.type === "text") parts.push({ kind: "text", text: item.text });
+		if (item.type === "text") {
+			parts.push({
+				kind: "text",
+				text: item.text,
+				...(item.textSignature ? { signature: item.textSignature } : {}),
+			});
+		}
 		else if (item.type === "thinking") {
 			parts.push({
 				kind: "thinking",
@@ -796,7 +802,13 @@ function lcmRecordPartsFromAgentMessage(message: AgentMessage): LcmRecordPart[] 
 				...(item.thinkingSignature ? { signature: item.thinkingSignature } : {}),
 			});
 		} else if (item.type === "toolCall") {
-			parts.push({ kind: "tool_call", toolCallId: item.id, toolName: item.name, arguments: item.arguments });
+			parts.push({
+				kind: "tool_call",
+				toolCallId: item.id,
+				toolName: item.name,
+				arguments: item.arguments,
+				...(item.thoughtSignature ? { signature: item.thoughtSignature } : {}),
+			});
 		} else if (item.type === "image") {
 			parts.push({ kind: "text", text: `[image: ${item.mimeType}]` });
 		}

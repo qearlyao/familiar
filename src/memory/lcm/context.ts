@@ -162,11 +162,17 @@ function estimateUserMessageTokens(message: UserMessage): number {
 function estimateAssistantMessageTokens(message: AssistantMessage): number {
 	let tokens = MESSAGE_OVERHEAD_TOKENS;
 	for (const block of message.content) {
-		if (block.type === "text") tokens += estimateTextTokens(block.text);
-		else if (block.type === "thinking") tokens += estimateTextTokens(block.thinking);
+		if (block.type === "text") {
+			tokens += estimateTextTokens(block.text);
+			tokens += estimateTextTokens(block.textSignature ?? "");
+		} else if (block.type === "thinking") {
+			tokens += estimateTextTokens(block.thinking);
+			tokens += estimateTextTokens(block.thinkingSignature ?? "");
+		}
 		else if (block.type === "toolCall") {
 			tokens += estimateTextTokens(block.name);
 			tokens += estimateJsonTokens(block.arguments);
+			tokens += estimateTextTokens(block.thoughtSignature ?? "");
 		}
 	}
 	return tokens;
@@ -383,8 +389,13 @@ function structuredLcmRecordToAgentMessage(record: StoredLcmRecord, timestamp: n
 function structuredAssistantContent(parts: readonly LcmRecordPart[]): AssistantMessage["content"] {
 	const content: AssistantMessage["content"] = [];
 	for (const part of parts) {
-		if (part.kind === "text" && part.text) content.push({ type: "text", text: part.text });
-		else if (part.kind === "thinking" && part.text) {
+		if (part.kind === "text" && part.text) {
+			content.push({
+				type: "text",
+				text: part.text,
+				...(part.signature ? { textSignature: part.signature } : {}),
+			});
+		} else if (part.kind === "thinking" && part.text) {
 			content.push({
 				type: "thinking",
 				thinking: part.text,
@@ -396,6 +407,7 @@ function structuredAssistantContent(parts: readonly LcmRecordPart[]): AssistantM
 				id: part.toolCallId,
 				name: part.toolName,
 				arguments: normalizeToolArguments(part.arguments),
+				...(part.signature ? { thoughtSignature: part.signature } : {}),
 			});
 		}
 	}

@@ -718,6 +718,7 @@ function previewXmlBlock(text: string, args: Args): string {
 function lcmSummaryLocations(payload: Record<string, unknown>): string[] {
 	const locations: string[] = [];
 	findStringLocations(payload, "[retained LCM summary]", "$", locations);
+	findStringLocations(payload, "<from_earlier>", "$", locations);
 	return locations;
 }
 

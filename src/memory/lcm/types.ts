@@ -23,8 +23,8 @@ export interface LcmAttachmentNote {
 }
 
 export type LcmRecordPart =
-	| { kind: "text"; text: string }
-	| { kind: "tool_call"; toolCallId: string; toolName: string; arguments: unknown }
+	| { kind: "text"; text: string; signature?: string }
+	| { kind: "tool_call"; toolCallId: string; toolName: string; arguments: unknown; signature?: string }
 	| { kind: "tool_result"; toolCallId: string; toolName: string; output: unknown; isError?: boolean }
 	| { kind: "thinking"; text: string; signature?: string };
 

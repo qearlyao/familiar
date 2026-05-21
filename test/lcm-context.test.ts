@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 
 import {
 	createAgentMessageFingerprint,
@@ -89,6 +90,27 @@ describe("LCM context helpers", () => {
 		assert.ok(estimateAgentMessageTokens(assistant) > estimateTextTokens("I see it."));
 	});
 
+	it("counts replay signatures on assistant content blocks", () => {
+		const base = assistantMessage([
+			{ type: "text", text: "I see it." },
+			{ type: "thinking", thinking: "check the plan" },
+			{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
+		]);
+		const withSignatures = assistantMessage([
+			{ type: "text", text: "I see it.", textSignature: "sig-text ".repeat(12) },
+			{ type: "thinking", thinking: "check the plan", thinkingSignature: "sig-thinking ".repeat(12) },
+			{
+				type: "toolCall",
+				id: "call-1",
+				name: "read",
+				arguments: { path: "PLAN.md" },
+				thoughtSignature: "sig-thought ".repeat(12),
+			},
+		]);
+
+		assert.ok(estimateAgentMessageTokens(withSignatures) > estimateAgentMessageTokens(base));
+	});
+
 	it("estimates LCM record text with attachment notes", () => {
 		const plain = estimateLcmRecordTokens(record(1, "user", "short"));
 		const withAttachment = estimateLcmRecordTokens({
@@ -117,19 +139,42 @@ describe("LCM context helpers", () => {
 	});
 
 	it("lcmRecordToAgentMessage reconstructs structured content blocks from tool_call parts", () => {
+		const unsigned = lcmRecordToAgentMessage({
+			...record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]"),
+			parts: [
+				{ kind: "text", text: "I'll check." },
+				{ kind: "thinking", text: "Need the current plan." },
+				{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+			],
+		});
 		const message = lcmRecordToAgentMessage({
 			...record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]"),
 			parts: [
-				{ kind: "thinking", text: "Need the current plan." },
-				{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
+				{ kind: "text", text: "I'll check.", signature: "sig-text ".repeat(12) },
+				{ kind: "thinking", text: "Need the current plan.", signature: "sig-thinking ".repeat(12) },
+				{
+					kind: "tool_call",
+					toolCallId: "call-1",
+					toolName: "read",
+					arguments: { path: "PLAN.md" },
+					signature: "sig-thought ".repeat(12),
+				},
 			],
 		});
 
 		assert.equal(message.role, "assistant");
 		assert.deepEqual(message.content, [
-			{ type: "thinking", thinking: "Need the current plan." },
-			{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
+			{ type: "text", text: "I'll check.", textSignature: "sig-text ".repeat(12) },
+			{ type: "thinking", thinking: "Need the current plan.", thinkingSignature: "sig-thinking ".repeat(12) },
+			{
+				type: "toolCall",
+				id: "call-1",
+				name: "read",
+				arguments: { path: "PLAN.md" },
+				thoughtSignature: "sig-thought ".repeat(12),
+			},
 		]);
+		assert.ok(estimateAgentMessageTokens(message) > estimateAgentMessageTokens(unsigned));
 	});
 
 	it("prompt-aware candidate selection preserves tool_call and tool_result pair integrity", () => {
@@ -179,6 +224,63 @@ describe("LCM context helpers", () => {
 			candidate.chunk.map((item) => item.record?.id),
 			[1, 2],
 		);
+	});
+
+	it("signature-aware assistant estimates can affect leaf chunk compaction", () => {
+		const signedAssistantRecord = record(1, "assistant", "structured assistant reply");
+		const signedAssistant = assistantMessage([
+			{ type: "text", text: "structured assistant reply", textSignature: "sig-text ".repeat(20) },
+			{ type: "thinking", thinking: "internal note", thinkingSignature: "sig-thinking ".repeat(20) },
+			{
+				type: "toolCall",
+				id: "call-1",
+				name: "read",
+				arguments: { path: "PLAN.md" },
+				thoughtSignature: "sig-thought ".repeat(20),
+			},
+		]);
+		const userRecord = record(2, "user", "leaf trigger prompt");
+		const items = [
+			rawItem(signedAssistantRecord, signedAssistant),
+			rawItem(userRecord, { role: "user", content: userRecord.text, timestamp: 2 }),
+		];
+
+		const withSignatures = selectLcmCompactionCandidatePromptAware(
+			items,
+			{
+				contextThreshold: 0.9,
+				freshTailCount: 0,
+				leafChunkTokens: 50,
+				promptAwareEvictionEnabled: false,
+			},
+			100,
+			"",
+		);
+		const withoutSignatures = selectLcmCompactionCandidatePromptAware(
+			[
+				rawItem(
+					signedAssistantRecord,
+					assistantMessage([
+						{ type: "text", text: "structured assistant reply" },
+						{ type: "thinking", thinking: "internal note" },
+						{ type: "toolCall", id: "call-1", name: "read", arguments: { path: "PLAN.md" } },
+					]),
+				),
+				rawItem(userRecord, { role: "user", content: userRecord.text, timestamp: 2 }),
+			],
+			{
+				contextThreshold: 0.9,
+				freshTailCount: 0,
+				leafChunkTokens: 50,
+				promptAwareEvictionEnabled: false,
+			},
+			100,
+			"",
+		);
+
+		assert.equal(withoutSignatures.shouldCompact, false);
+		assert.equal(withSignatures.shouldCompact, true);
+		assert.ok(withSignatures.rawTokensOutsideTail > withoutSignatures.rawTokensOutsideTail);
 	});
 
 	it("fresh_tail_max_tokens narrows protected tail instead of expanding it", () => {
@@ -243,6 +345,19 @@ function rawItem(record: StoredLcmRecord, message: AgentMessage) {
 		message,
 		record,
 		tokens: estimateAgentMessageTokens(message),
+	};
+}
+
+function assistantMessage(content: AssistantMessage["content"]): AgentMessage {
+	return {
+		role: "assistant",
+		content,
+		api: "test",
+		provider: "test",
+		model: "test",
+		usage: zeroUsage(),
+		stopReason: "stop",
+		timestamp: 2,
 	};
 }
 

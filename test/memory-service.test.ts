@@ -1640,6 +1640,85 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("strips provider signature metadata from leaf summary input", async () => {
+		const baseConfig = await memoryConfig();
+		const config = {
+			...baseConfig,
+			memory: {
+				...baseConfig.memory,
+				lcm: {
+					...baseConfig.memory.lcm,
+					enabled: true,
+					freshTailCount: 1,
+					leafChunkTokens: 10,
+					leafTargetTokens: 8,
+					maxRounds: 1,
+				},
+			},
+		};
+		let renderedInput = "";
+		const summarizer: LcmSummarizer = {
+			async summarizeLeaf(input) {
+				renderedInput = input.text;
+				return "Files: none\nProvider signature metadata was stripped.\nExpand for details about: visible summary content";
+			},
+		};
+
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer });
+			try {
+				await service.transformContext(
+					[
+						{
+							role: "assistant" as const,
+							content: [
+								{
+									type: "thinking" as const,
+									thinking: "visible planning note",
+									thinkingSignature: "thinkingSignature-secret",
+									textSignature: "textSignature-secret",
+									thoughtSignature: "thoughtSignature-secret",
+									signature: { type: "encrypted", payload: "encrypted-signature-payload-marker" },
+								},
+								{
+									type: "text" as const,
+									text: "visible answer text",
+									textSignature: "textSignature-secret",
+								},
+								{
+									type: "toolCall" as const,
+									id: "call-1",
+									name: "read",
+									arguments: { path: "PLAN.md" },
+									thinkingSignature: "thinkingSignature-secret",
+								},
+							] as any,
+							api: "test",
+							provider: "test",
+							model: "test",
+							usage: zeroUsage(),
+							stopReason: "toolUse" as const,
+							timestamp: 1,
+						},
+						{ role: "user" as const, content: "fresh detail", timestamp: 2 },
+					],
+					undefined,
+					{ sessionKey: "room-provider-signatures", sessionId: "session-signatures", model: { contextWindow: 10_000 } as any },
+				);
+
+				assert.match(renderedInput, /visible answer text/);
+				assert.match(renderedInput, /<tool_call name="read">/);
+				assert.match(renderedInput, /"path": "PLAN\.md"/);
+				assert.equal(renderedInput.includes("thinkingSignature-secret"), false);
+				assert.equal(renderedInput.includes("textSignature-secret"), false);
+				assert.equal(renderedInput.includes("thoughtSignature-secret"), false);
+				assert.equal(renderedInput.includes("encrypted-signature-payload-marker"), false);
+			} finally {
+				service.close();
+			}
+		});
+	});
+
 	it("prompt-aware LCM compaction skips records relevant to the last user message", async () => {
 		const baseConfig = await memoryConfig();
 		const config = {

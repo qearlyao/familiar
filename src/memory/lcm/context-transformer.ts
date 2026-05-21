@@ -794,8 +794,7 @@ function lcmRecordPartsFromAgentMessage(message: AgentMessage): LcmRecordPart[] 
 				text: item.text,
 				...(item.textSignature ? { signature: item.textSignature } : {}),
 			});
-		}
-		else if (item.type === "thinking") {
+		} else if (item.type === "thinking") {
 			parts.push({
 				kind: "thinking",
 				text: item.thinking,

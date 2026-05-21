@@ -168,8 +168,7 @@ function estimateAssistantMessageTokens(message: AssistantMessage): number {
 		} else if (block.type === "thinking") {
 			tokens += estimateTextTokens(block.thinking);
 			tokens += estimateTextTokens(block.thinkingSignature ?? "");
-		}
-		else if (block.type === "toolCall") {
+		} else if (block.type === "toolCall") {
 			tokens += estimateTextTokens(block.name);
 			tokens += estimateJsonTokens(block.arguments);
 			tokens += estimateTextTokens(block.thoughtSignature ?? "");

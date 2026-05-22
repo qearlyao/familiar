@@ -202,6 +202,9 @@ function buildSpawnInvocation(
 	const commandLine = [spec.command, ...spec.args].map(quoteWindowsShellArg).join(" ");
 	return {
 		command: comSpec,
+		// Windows npm shims are .cmd files, so we must cross cmd.exe here.
+		// The caller already validates browser.site/browser.command and individual
+		// args before they reach this shell boundary.
 		// cmd.exe strips one outer quote pair from the /c string. Wrap the whole
 		// already-quoted command so .cmd shims with spaced paths still receive argv.
 		args: ["/d", "/s", "/c", `"${commandLine}"`],

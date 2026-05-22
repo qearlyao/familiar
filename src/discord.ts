@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { readFile } from "node:fs/promises";
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	type ApplicationCommandData,
@@ -397,6 +398,31 @@ function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
+async function discordAttachmentPayload(
+	attachment: StoredAttachment,
+): Promise<{ attachment: Buffer; name: string } | undefined> {
+	if (!attachment.localPath) return undefined;
+	return {
+		attachment: await readFile(attachment.localPath),
+		name: attachment.name,
+	};
+}
+
+async function discordAttachmentPayloads(
+	attachments: StoredAttachment[],
+): Promise<{ attachment: Buffer; name: string }[]> {
+	const payloads: { attachment: Buffer; name: string }[] = [];
+	for (const attachment of attachments) {
+		const payload = await discordAttachmentPayload(attachment);
+		if (payload) payloads.push(payload);
+	}
+	return payloads;
+}
+
+export const __test = {
+	discordAttachmentPayloads,
+};
+
 function parseAgentReply(text: string): { text: string; silent: boolean } {
 	const normalized = text.replace(/\r\n/g, "\n").trim();
 	if (normalized === SILENT_RESPONSE_MARKER) {
@@ -421,8 +447,7 @@ async function sendReply(
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, message.channel);
-		const files =
-			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
+		const files = index === 0 ? await discordAttachmentPayloads(attachments) : [];
 		let sent: Message;
 		if (index === 0 && config.discord.replyMode === "reply") {
 			try {
@@ -461,8 +486,7 @@ async function sendChannelMessage(
 	const sentIds: string[] = [];
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, channel);
-		const files =
-			index === 0 ? attachments.flatMap((attachment) => (attachment.localPath ? [attachment.localPath] : [])) : [];
+		const files = index === 0 ? await discordAttachmentPayloads(attachments) : [];
 		const sent = await channel.send(files.length > 0 ? { content: chunk, files } : chunk);
 		sentIds.push(sent.id);
 	}

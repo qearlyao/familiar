@@ -120,7 +120,25 @@ describe("browser tools", () => {
 			"/d",
 			"/s",
 			"/c",
-			'"C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd" "reddit" "saved" "--window" "background" "-f" "json"',
+			'""C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd" "reddit" "saved" "--window" "background" "-f" "json""',
+		]);
+		assert.equal(invocation.options.windowsVerbatimArguments, true);
+	});
+
+	it("wraps Windows shell invocations so spaced .cmd paths keep argv", () => {
+		const spec: BrowserRunSpec = {
+			command: "C:\\Users\\C\\App Data\\npm\\opencli.cmd",
+			args: ["twitter", "--help", "-f", "json"],
+			backend: "opencli",
+		};
+
+		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32", "cmd.exe");
+
+		assert.deepEqual(invocation.args, [
+			"/d",
+			"/s",
+			"/c",
+			'""C:\\Users\\C\\App Data\\npm\\opencli.cmd" "twitter" "--help" "-f" "json""',
 		]);
 		assert.equal(invocation.options.windowsVerbatimArguments, true);
 	});

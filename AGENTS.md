@@ -24,7 +24,7 @@ For high-value upstream/local file references, check `PLAN.md` section `## 6. Re
 
 ## Project Rules
 
-- For complex code, add concise comments that explain the non-obvious intent, invariants, or failure mode. Do not comment trivial assignments.
+- Add concise comments that explain the non-obvious intent, invariants, or failure mode.
 - Flexibly and proactively utilize the agent team/sub-agents to enhance work efficiency; when necessary, please review the changes made by the sub-agents.
 
 ## Commit Messages

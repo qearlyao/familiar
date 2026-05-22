@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 2026-05-22
+
+### Fixed
+
+- Fix Windows OpenCLI cmd shim spawning for spaced `.cmd` paths.
+
 ## 0.2.1 - 2026-05-22
 
 ### Changed

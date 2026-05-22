@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 - 2026-05-22
+
+### Fixed
+
+- Pre-read Discord attachments to Buffer to fix the Windows TTS hang.
+- Fix Windows OpenCLI cmd shim spawning for spaced `.cmd` paths.
+
 ## 0.2.1 - 2026-05-22
 
 ### Changed

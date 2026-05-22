@@ -85,6 +85,7 @@ node dist/cli.js init
 - `USER.md`
 - `MEMORY.md`
 - `HEARTBEAT.md`
+- `CONTACT.md`
 - `data/`
 - `memories/`
 - `skills/`
@@ -296,18 +297,6 @@ without reading raw JSONL.
 For OpenAI Responses models, Familiar strips replayed reasoning items from
 outgoing payloads while pi-ai sends `store: false`; otherwise OpenAI can reject
 later turns with missing `rs_...` item references.
-
-## Release Checks
-
-Before publishing:
-
-```sh
-npm run build
-npm pack --dry-run
-```
-
-The npm package is intentionally published from built output plus workspace
-templates, not the full source tree.
 
 ## License
 

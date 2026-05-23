@@ -26,10 +26,7 @@ export function createSilentFilterState(): SilentFilterState {
 	return { accumulated: "", buffered: "", silent: false, carryCR: false };
 }
 
-export type SilentFilterResult =
-	| { kind: "emit"; text: string }
-	| { kind: "buffer" }
-	| { kind: "silent" };
+export type SilentFilterResult = { kind: "emit"; text: string } | { kind: "buffer" } | { kind: "silent" };
 
 function normalizeStreamingChunk(state: SilentFilterState, chunk: string): string {
 	let working = chunk;
@@ -44,10 +41,7 @@ function normalizeStreamingChunk(state: SilentFilterState, chunk: string): strin
 	return working.replace(/\r\n/g, "\n");
 }
 
-export function consumeSilentDelta(
-	state: SilentFilterState,
-	delta: string,
-): SilentFilterResult {
+export function consumeSilentDelta(state: SilentFilterState, delta: string): SilentFilterResult {
 	if (state.silent) return { kind: "silent" };
 	const normalized = normalizeStreamingChunk(state, delta);
 	state.accumulated += normalized;
@@ -65,9 +59,7 @@ export function consumeSilentDelta(
 	return emit ? { kind: "emit", text: emit } : { kind: "buffer" };
 }
 
-export function finalizeSilentFilter(
-	state: SilentFilterState,
-): { silent: boolean; flush: string } {
+export function finalizeSilentFilter(state: SilentFilterState): { silent: boolean; flush: string } {
 	if (state.carryCR) {
 		state.buffered += "\r";
 		state.accumulated += "\r";

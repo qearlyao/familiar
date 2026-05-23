@@ -28,12 +28,7 @@ import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef, supportedThinkingLevel
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
-import {
-	consumeSilentDelta,
-	createSilentFilterState,
-	finalizeSilentFilter,
-	parseAgentReply,
-} from "./silent-marker.js";
+import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter, parseAgentReply } from "./silent-marker.js";
 import { createAuth, sessionCookie, verifyTotp } from "./web-auth.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web-events.js";
 import { isObject, readJsonBody, sendJson, sendText } from "./web-http.js";

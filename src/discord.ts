@@ -49,9 +49,7 @@ import {
 	saveSchedulerState,
 } from "./scheduler.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
-import {
-	parseAgentReply as parseSilentMarker,
-} from "./silent-marker.js";
+import { parseAgentReply as parseSilentMarker } from "./silent-marker.js";
 
 const FAMILIAR_COMMAND_NAME = "familiar";
 const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;

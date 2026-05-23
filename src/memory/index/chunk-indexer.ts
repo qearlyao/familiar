@@ -35,6 +35,12 @@ interface PreparedChunk {
 	embedding?: Float32Array;
 }
 
+interface ReplaceSourceWrite {
+	corpus: string;
+	sourceId: string;
+	keepMappings: { contentHash: string; chunkIndex: number }[];
+}
+
 export class ChunkIndexer {
 	private readonly store: MemoryIndexStore;
 	private readonly embeddingProvider: EmbeddingProvider;
@@ -58,8 +64,11 @@ export class ChunkIndexer {
 	): Promise<ChunkIndexResult> {
 		const prepared = this.prepare(inputs.map((input) => ({ ...input, corpus, sourceId })));
 		const keepMappings = prepared.map((item) => ({ contentHash: item.contentHash, chunkIndex: item.chunkIndex }));
-		this.store.deleteBySourceExceptMappings(corpus, sourceId, keepMappings);
-		const result = await this.insertPrepared(prepared, inputs.length - prepared.length, signal);
+		const result = await this.insertPrepared(prepared, inputs.length - prepared.length, signal, {
+			corpus,
+			sourceId,
+			keepMappings,
+		});
 		return result;
 	}
 
@@ -95,9 +104,15 @@ export class ChunkIndexer {
 		prepared: PreparedChunk[],
 		skipped: number,
 		signal?: AbortSignal,
+		replaceSource?: ReplaceSourceWrite,
 	): Promise<ChunkIndexResult> {
 		const startedAt = Date.now();
-		if (prepared.length === 0) return { ids: [], embedded: 0, reused: 0, skipped };
+		if (prepared.length === 0) {
+			if (replaceSource) {
+				this.store.deleteBySourceExceptMappings(replaceSource.corpus, replaceSource.sourceId, []);
+			}
+			return { ids: [], embedded: 0, reused: 0, skipped };
+		}
 
 		const present = this.store.whichHashesPresent(prepared.map((item) => item.contentHash));
 		for (const item of prepared) item.existingId = present.get(item.contentHash) ?? null;
@@ -181,8 +196,20 @@ export class ChunkIndexer {
 			});
 		}
 
-		this.store.recordSourceMappings(existingMappings);
-		const insertedIds = this.store.insertChunks(toInsert);
+		let insertedIds: number[] = [];
+		const writeChunks = () => {
+			if (replaceSource) {
+				this.store.deleteBySourceExceptMappings(
+					replaceSource.corpus,
+					replaceSource.sourceId,
+					replaceSource.keepMappings,
+				);
+			}
+			this.store.recordSourceMappings(existingMappings);
+			insertedIds = this.store.insertChunks(toInsert);
+		};
+		if (replaceSource && !this.store.db.inTransaction) this.store.db.transaction(writeChunks).immediate();
+		else writeChunks();
 		for (let index = 0; index < insertPositions.length; index++) {
 			ids[insertPositions[index] as number] = insertedIds[index] as number;
 		}

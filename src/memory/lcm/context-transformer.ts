@@ -267,19 +267,15 @@ export class LcmContextTransformer {
 				},
 				input.signal,
 			);
-			const summaryId = `${input.sessionKey}:summary-${++state.summaryCounter}`;
 			const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(summaryText), this.now());
 			const summaryItem: CompactedLcmItem = {
 				type: "summary",
-				id: summaryId,
+				id: "",
 				sourceIds: chunkItems.map((item) => item.id),
 				depth: 1,
 				message,
 				tokens: estimateAgentMessageTokens(message),
 			};
-			state.items.splice(startIndex, removeCount, summaryItem);
-			compacted = true;
-			tokensSaved = Math.max(0, candidate.chunkTokens - summaryItem.tokens);
 			const persisted = await this.persistRuntimeSummary({
 				text: summaryText,
 				sourceItems: chunkItems,
@@ -287,7 +283,11 @@ export class LcmContextTransformer {
 				sessionId: input.sessionId,
 				signal: input.signal,
 			});
+			summaryItem.id = `${input.sessionKey}:summary-${++state.summaryCounter}`;
 			if (persisted?.summaryId !== undefined) summaryItem.persistedSummaryId = persisted.summaryId;
+			state.items.splice(startIndex, removeCount, summaryItem);
+			compacted = true;
+			tokensSaved = Math.max(0, candidate.chunkTokens - summaryItem.tokens);
 			await this.condenseRuntimeSummaries({ state, sessionKey: input.sessionKey, signal: input.signal });
 		};
 

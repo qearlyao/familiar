@@ -181,6 +181,7 @@ export class ConversationRuntime {
 		const queuedJobs: QueuedJob[] = [];
 		for (const record of this.records) {
 			if (record.type === "job_completed" || record.type === "job_failed") terminalJobIds.add(record.jobId);
+			if (record.type === "outbound" && record.jobId) terminalJobIds.add(record.jobId);
 			if (record.type === "job_queued") {
 				queuedJobs.push({
 					jobId: record.jobId,
@@ -283,8 +284,14 @@ export class ConversationRuntime {
 
 	private getLastCompletedTriggerRecordId(): number {
 		let last = 0;
+		const queuedTriggerRecordIds = new Map<string, number>();
 		for (const record of this.records) {
+			if (record.type === "job_queued") queuedTriggerRecordIds.set(record.jobId, record.triggerRecordId);
 			if (record.type === "job_completed") last = Math.max(last, record.triggerRecordId);
+			if (record.type === "outbound" && record.jobId) {
+				const triggerRecordId = queuedTriggerRecordIds.get(record.jobId);
+				if (triggerRecordId !== undefined) last = Math.max(last, triggerRecordId);
+			}
 		}
 		return last;
 	}

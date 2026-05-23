@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 
 import type { ImageContent } from "@earendil-works/pi-ai";
@@ -223,6 +223,7 @@ export async function materializeInboundAttachments(
 	}
 	const stored: StoredAttachment[] = [];
 	const writtenPaths: string[] = [];
+	const existingDerivedPaths = await knownDerivedImagePaths(config);
 	try {
 		for (const attachment of prepared) {
 			const dir = resolve(attachmentsDir(config), "inbound", attachment.source);
@@ -244,6 +245,10 @@ export async function materializeInboundAttachments(
 			};
 			const derivedImage = await ensureInlineImageDerivative(config, finalAttachment);
 			if (derivedImage) {
+				if (derivedImage.localPath && !existingDerivedPaths.has(derivedImage.localPath)) {
+					writtenPaths.push(derivedImage.localPath);
+					existingDerivedPaths.add(derivedImage.localPath);
+				}
 				finalAttachment.derived = {
 					...finalAttachment.derived,
 					image: derivedImage,
@@ -256,6 +261,12 @@ export async function materializeInboundAttachments(
 		await Promise.all(writtenPaths.map((path) => unlink(path).catch(() => undefined)));
 		throw error;
 	}
+}
+
+async function knownDerivedImagePaths(config: Config): Promise<Set<string>> {
+	const dir = resolve(attachmentsDir(config), "derived", "image");
+	const entries = await readdir(dir).catch(() => []);
+	return new Set(entries.map((entry) => resolve(dir, entry)));
 }
 
 export async function promptImagesFromAttachments(attachments: StoredAttachment[]): Promise<PromptImages> {

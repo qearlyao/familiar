@@ -251,36 +251,12 @@ async function prune(
 		console.log("Prune cancelled");
 		return;
 	}
-	const activeSegments = service.lcmStore.listSegments().filter((segment) => segment.status === "active");
-	const activeSegmentId = activeSegments.at(-1)?.id ?? null;
-	const runClose = () => {
-		for (const segment of activeSegments) {
-			if (segment.id !== activeSegmentId) service.lcmStore.closeSegment(segment.id);
-		}
-	};
-	if (service.lcmStore.db.inTransaction) runClose();
-	else service.lcmStore.db.transaction(runClose).immediate();
-
 	const report = service.lcmStore.applyNewSessionRetention({
 		newSessionRetainDepth: options.retainDepth,
-		activeSegmentId,
+		activeSegmentId: null,
 		vacuum: options.vacuum,
 	});
 	for (const ref of report.indexDeletes) service.memoryStore.deleteBySource(ref.corpus, ref.sourceId);
-	const closedActive = activeSegments.filter((segment) => segment.id !== activeSegmentId);
-	if (closedActive.length > 0) {
-		const runReopen = () => {
-			for (const segment of closedActive) {
-				service.lcmStore.db
-					.prepare(
-						"UPDATE lcm_segments SET status = 'active', closed_at = NULL, updated_at = unixepoch() WHERE id = ?",
-					)
-					.run(segment.id);
-			}
-		};
-		if (service.lcmStore.db.inTransaction) runReopen();
-		else service.lcmStore.db.transaction(runReopen).immediate();
-	}
 	console.log(
 		`Pruned ${report.rawRecordsDeleted} raw record(s), ${report.summariesDeleted} summary row(s), ` +
 			`${report.affectedSegments.length} closed segment(s) scanned`,

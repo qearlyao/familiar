@@ -151,7 +151,7 @@ A few patterns worth flagging:
 
 ## Recommended order of attack
 
-1. **Atomicity bugs (HIGH #1-5)** — clearest data-loss/replay risk. Codex's recommended starting point: `runtime.ts` job recovery and LCM retention.
+[x]1. **Atomicity bugs (HIGH #1-5)** — clearest data-loss/replay risk. Codex's recommended starting point: `runtime.ts` job recovery and LCM retention.
 2. **Web correctness bugs (HIGH #13-16)** — TTL bug, WebSocket race, message-state leaks, cookie DoS. Small fixes, real impact.
 3. **Memory hot-path fixes (HIGH #6-12)** — these run per turn; biggest perf wins. Worth a focused branch.
 4. **Test hygiene — tmp-dir cleanup sweep (HIGH #18-21)** — easy, large blast radius, will reveal latent flakiness.

@@ -38,6 +38,7 @@ export type StreamEvent =
       messageId: string;
       thinkingMs?: number;
       attachments?: Message["attachments"];
+      silent?: boolean;
       usage?: {
         input: number;
         output: number;

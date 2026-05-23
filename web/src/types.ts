@@ -10,6 +10,7 @@ export interface Message {
   thinkingMs?: number;
   tools?: ToolEvent[];
   usage?: Usage;
+  silent?: boolean;
   ts: number;
 }
 

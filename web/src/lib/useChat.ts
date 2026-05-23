@@ -156,6 +156,7 @@ export function useChat(): ChatHook {
             thinkingMs: computedThinkingMs,
             ...(event.attachments ? { attachments: event.attachments } : {}),
             ...(event.usage ? { usage: event.usage } : {}),
+            ...(event.silent ? { silent: true, text: "" } : {}),
           });
           pendingRef.current.delete(event.messageId);
           break;

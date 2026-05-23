@@ -49,12 +49,14 @@ import {
 	saveSchedulerState,
 } from "./scheduler.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
+import {
+	parseAgentReply as parseSilentMarker,
+} from "./silent-marker.js";
 
 const FAMILIAR_COMMAND_NAME = "familiar";
 const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
-const SILENT_RESPONSE_MARKER = "[[FAMILIAR_SILENT]]";
 const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 const CRON_SKIPPED = Symbol("cron-skipped");
 
@@ -424,15 +426,9 @@ export const __test = {
 };
 
 function parseAgentReply(text: string): { text: string; silent: boolean } {
-	const normalized = text.replace(/\r\n/g, "\n").trim();
-	if (normalized === SILENT_RESPONSE_MARKER) {
-		return { text: "", silent: true };
-	}
-	if (normalized.startsWith(`${SILENT_RESPONSE_MARKER}\n`)) {
-		const reason = normalized.slice(SILENT_RESPONSE_MARKER.length).trim();
-		return { text: reason, silent: true };
-	}
-	return { text: normalizeOutboundText(text), silent: false };
+	const parsed = parseSilentMarker(text);
+	if (parsed.silent) return parsed;
+	return { text: normalizeOutboundText(parsed.text), silent: false };
 }
 
 async function sendReply(

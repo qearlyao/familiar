@@ -18,6 +18,26 @@ export function MessageBubble({ message }: { message: Message }) {
   const showThinking = !isUser && (message.thinking || message.thinkingMs != null);
   const attachments = message.attachments ?? [];
 
+  if (message.silent) {
+    const tools = message.tools ?? [];
+    return (
+      <div className="flex flex-col items-start gap-3">
+        {showThinking && (
+          <ThinkingBlock
+            text={message.thinking ?? ""}
+            durationMs={message.thinkingMs}
+          />
+        )}
+        {tools.length > 0 && <ToolBlock tools={tools} />}
+        <div className="flex w-full justify-center">
+          <p className="text-xs italic text-muted-foreground">
+            they kept quiet
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
       <span className="text-xs uppercase tracking-wider text-muted-foreground">

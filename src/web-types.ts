@@ -43,6 +43,7 @@ export type WebMessage = {
 	thinkingMs?: number;
 	tools?: WebToolEvent[];
 	usage?: WebUsage;
+	silent?: boolean;
 	ts: number;
 };
 
@@ -75,6 +76,7 @@ export type WebStreamEvent =
 			thinkingMs?: number;
 			attachments?: WebAttachment[];
 			usage?: WebUsage;
+			silent?: boolean;
 	  }
 	| {
 			type: "tool_event";

@@ -28,6 +28,12 @@ import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef, supportedThinkingLevel
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import type { EffectiveSetting } from "./settings.js";
+import {
+	consumeSilentDelta,
+	createSilentFilterState,
+	finalizeSilentFilter,
+	parseAgentReply,
+} from "./silent-marker.js";
 import { createAuth, sessionCookie, verifyTotp } from "./web-auth.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web-events.js";
 import { isObject, readJsonBody, sendJson, sendText } from "./web-http.js";
@@ -357,6 +363,7 @@ function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantNa
 			attachments: webAttachments(config, record.attachments),
 			thinking: record.thinking,
 			thinkingMs: record.thinkingMs,
+			silent: record.silent || undefined,
 			ts: toUnixMs(record.ts),
 		};
 	}
@@ -427,6 +434,8 @@ export async function startWebDaemon(
 	const eventsByChannel = new Map<string, WebStreamEvent[]>();
 	const runtimeSubscriptions = new Map<string, () => void>();
 	const locallyStreamedOutboundIds = new Set<string>();
+	const silentFilters = new Map<string, ReturnType<typeof createSilentFilterState>>();
+	const pendingMessageStarts = new Map<string, number | undefined>();
 
 	const publish = (event: WebPublishEvent): WebStreamEvent => {
 		const fullEvent = { ...event, eventId: eventId(), ts: event.ts ?? Date.now() } as WebStreamEvent;
@@ -466,30 +475,70 @@ export async function startWebDaemon(
 	): void => {
 		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
 			locallyStreamedOutboundIds.add(messageIdValue);
+			silentFilters.set(messageIdValue, createSilentFilterState());
+			pendingMessageStarts.set(messageIdValue, ts);
+		}
+		const startedSilentMessage = (): boolean => {
+			if (!pendingMessageStarts.has(messageIdValue)) return false;
+			const startTs = pendingMessageStarts.get(messageIdValue);
+			pendingMessageStarts.delete(messageIdValue);
 			publish({
 				type: "message_started",
 				channelKey,
 				messageId: messageIdValue,
 				role: "assistant",
 				who: personaName,
-				ts,
+				ts: startTs,
 			});
-		}
+			return true;
+		};
 		if (storedEvent.type === "message_update") {
 			const assistantEvent = storedEvent.assistantMessageEvent;
 			if (assistantEvent.type === "thinking_delta") {
+				startedSilentMessage();
 				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
 			}
 			if (assistantEvent.type === "text_delta") {
-				publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
+				const filter = silentFilters.get(messageIdValue);
+				if (!filter) {
+					startedSilentMessage();
+					publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
+				} else {
+					const result = consumeSilentDelta(filter, assistantEvent.delta);
+					if (result.kind === "emit" && result.text) {
+						startedSilentMessage();
+						publishDelta(channelKey, messageIdValue, "text", result.text, ts);
+					}
+				}
 			}
 		}
+		if (storedEvent.type === "tool_execution_start") {
+			startedSilentMessage();
+		}
 		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
+			const filter = silentFilters.get(messageIdValue);
+			let silent = false;
+			if (filter) {
+				const final = finalizeSilentFilter(filter);
+				silent = final.silent;
+				if (!silent) {
+					startedSilentMessage();
+					if (final.flush) {
+						publishDelta(channelKey, messageIdValue, "text", final.flush, ts);
+					}
+				} else {
+					pendingMessageStarts.delete(messageIdValue);
+				}
+				silentFilters.delete(messageIdValue);
+			} else {
+				startedSilentMessage();
+			}
 			publish({
 				type: "message_completed",
 				channelKey,
 				messageId: messageIdValue,
 				usage: storedEvent.usage,
+				silent: silent || undefined,
 				ts,
 			});
 		}
@@ -525,23 +574,26 @@ export async function startWebDaemon(
 					messageId: outboundId,
 					thinkingMs: record.thinkingMs,
 					attachments: webAttachments(config, record.attachments),
+					silent: record.silent || undefined,
 					ts: toUnixMs(record.ts),
 				};
 				if (locallyStreamedOutboundIds.delete(outboundId)) {
 					publish(completion);
 					return;
 				}
-				publish({
-					type: "message_started",
-					channelKey: runtime.channelKey,
-					messageId: outboundId,
-					role: "assistant",
-					who: personaName,
-					ts: toUnixMs(record.ts),
-				});
-				if (record.thinking)
-					publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
-				if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
+				if (!record.silent) {
+					publish({
+						type: "message_started",
+						channelKey: runtime.channelKey,
+						messageId: outboundId,
+						role: "assistant",
+						who: personaName,
+						ts: toUnixMs(record.ts),
+					});
+					if (record.thinking)
+						publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
+					if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
+				}
 				publish(completion);
 			}
 		});
@@ -634,6 +686,7 @@ export async function startWebDaemon(
 		thinking: string;
 		thinkingMs?: number;
 		attachments?: StoredAttachment[];
+		silent?: boolean;
 	}> => {
 		const assistantMessageId = messageId();
 		const summary: AgentEventSummary = { thinking: "" };
@@ -664,7 +717,9 @@ export async function startWebDaemon(
 		} finally {
 			await recorder.flush();
 		}
-		if (!started) {
+		const parsed = parseAgentReply(reply.text);
+		const finalText = parsed.silent ? "" : reply.text;
+		if (!started && !parsed.silent) {
 			publish({
 				type: "message_started",
 				channelKey: runtime.channelKey,
@@ -672,7 +727,9 @@ export async function startWebDaemon(
 				role: "assistant",
 				who: personaName,
 			});
-			publishDelta(runtime.channelKey, assistantMessageId, "text", reply.text);
+			if (finalText) {
+				publishDelta(runtime.channelKey, assistantMessageId, "text", finalText);
+			}
 		}
 		const thinkingMs = thinkingDurationMs(summary);
 		publish({
@@ -681,14 +738,16 @@ export async function startWebDaemon(
 			messageId: assistantMessageId,
 			thinkingMs,
 			attachments: webAttachments(config, reply.attachments),
+			silent: parsed.silent || undefined,
 		});
 		locallyStreamedOutboundIds.add(assistantMessageId);
 		return {
-			text: reply.text,
+			text: finalText,
 			messageId: assistantMessageId,
 			thinking: summary.thinking,
 			thinkingMs,
 			attachments: reply.attachments,
+			silent: parsed.silent,
 		};
 	};
 
@@ -717,6 +776,7 @@ export async function startWebDaemon(
 					attachments: reply.attachments,
 					thinking: reply.thinking,
 					thinkingMs: reply.thinkingMs,
+					silent: reply.silent,
 					replyToMessageId: dispatch.triggerMessageId,
 				});
 			} catch (error) {

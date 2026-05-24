@@ -20,7 +20,11 @@ function parseCookies(header: string | undefined): Record<string, string> {
 	for (const part of (header ?? "").split(";")) {
 		const [name, ...valueParts] = part.trim().split("=");
 		if (!name) continue;
-		cookies[name] = decodeURIComponent(valueParts.join("="));
+		try {
+			cookies[name] = decodeURIComponent(valueParts.join("="));
+		} catch {
+			continue;
+		}
 	}
 	return cookies;
 }

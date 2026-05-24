@@ -111,15 +111,18 @@ describe("web tools", () => {
 		);
 	});
 
-	it("keeps page cache entries hot on repeated reads", () => {
+	it("preserves fetchedAt across reads so TTL still expires entries", async () => {
 		const cache = new __webToolsTest.PageCache({ ttlMs: 100, capacity: 2 });
 		cache.set("https://example.com/a", "a", "tinyfish");
 		const firstFetchedAt = cache.entries.get("https://example.com/a")?.fetchedAt ?? 0;
+		const firstLastAccessed = cache.entries.get("https://example.com/a")?.lastAccessed ?? 0;
 
+		await new Promise((resolve) => setTimeout(resolve, 5));
 		const entry = cache.get("https://example.com/a");
 
 		assert.equal(entry?.content, "a");
-		assert.ok((cache.entries.get("https://example.com/a")?.fetchedAt ?? 0) >= firstFetchedAt);
+		assert.equal(cache.entries.get("https://example.com/a")?.fetchedAt, firstFetchedAt);
+		assert.ok((cache.entries.get("https://example.com/a")?.lastAccessed ?? 0) >= firstLastAccessed);
 	});
 
 	it("paginates content and reports offsets past the end", () => {

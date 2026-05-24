@@ -428,9 +428,36 @@ export async function startWebDaemon(
 	const clients = new Set<WebSocketClient>();
 	const eventsByChannel = new Map<string, WebStreamEvent[]>();
 	const runtimeSubscriptions = new Map<string, () => void>();
-	const locallyStreamedOutboundIds = new Set<string>();
-	const silentFilters = new Map<string, ReturnType<typeof createSilentFilterState>>();
-	const pendingMessageStarts = new Map<string, number | undefined>();
+	type InFlightMessage = {
+		silentFilter?: ReturnType<typeof createSilentFilterState>;
+		pendingStartTs?: number;
+		locallyStreamed: boolean;
+		startedSilent: boolean;
+		lastActiveAt: number;
+	};
+	const IN_FLIGHT_TTL_MS = 10 * 60 * 1000;
+	const inFlightMessages = new Map<string, InFlightMessage>();
+	const getOrCreateInFlight = (messageIdValue: string): InFlightMessage => {
+		let entry = inFlightMessages.get(messageIdValue);
+		if (!entry) {
+			entry = { locallyStreamed: false, startedSilent: false, lastActiveAt: Date.now() };
+			inFlightMessages.set(messageIdValue, entry);
+		} else {
+			entry.lastActiveAt = Date.now();
+		}
+		return entry;
+	};
+	const touchInFlight = (messageIdValue: string): void => {
+		const entry = inFlightMessages.get(messageIdValue);
+		if (entry) entry.lastActiveAt = Date.now();
+	};
+	const inFlightGcTimer = setInterval(() => {
+		const cutoff = Date.now() - IN_FLIGHT_TTL_MS;
+		for (const [id, entry] of inFlightMessages) {
+			if (entry.lastActiveAt < cutoff) inFlightMessages.delete(id);
+		}
+	}, 60 * 1000);
+	inFlightGcTimer.unref?.();
 
 	const publish = (event: WebPublishEvent): WebStreamEvent => {
 		const fullEvent = { ...event, eventId: eventId(), ts: event.ts ?? Date.now() } as WebStreamEvent;
@@ -468,15 +495,20 @@ export async function startWebDaemon(
 		storedEvent: StoredAgentEvent,
 		ts?: number,
 	): void => {
+		touchInFlight(messageIdValue);
 		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
-			locallyStreamedOutboundIds.add(messageIdValue);
-			silentFilters.set(messageIdValue, createSilentFilterState());
-			pendingMessageStarts.set(messageIdValue, ts);
+			const entry = getOrCreateInFlight(messageIdValue);
+			entry.locallyStreamed = true;
+			entry.silentFilter = createSilentFilterState();
+			entry.pendingStartTs = ts;
+			entry.startedSilent = false;
 		}
 		const startedSilentMessage = (): boolean => {
-			if (!pendingMessageStarts.has(messageIdValue)) return false;
-			const startTs = pendingMessageStarts.get(messageIdValue);
-			pendingMessageStarts.delete(messageIdValue);
+			const entry = inFlightMessages.get(messageIdValue);
+			if (!entry || entry.startedSilent) return false;
+			const startTs = entry.pendingStartTs;
+			entry.pendingStartTs = undefined;
+			entry.startedSilent = true;
 			publish({
 				type: "message_started",
 				channelKey,
@@ -494,7 +526,7 @@ export async function startWebDaemon(
 				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
 			}
 			if (assistantEvent.type === "text_delta") {
-				const filter = silentFilters.get(messageIdValue);
+				const filter = inFlightMessages.get(messageIdValue)?.silentFilter;
 				if (!filter) {
 					startedSilentMessage();
 					publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
@@ -511,9 +543,10 @@ export async function startWebDaemon(
 			startedSilentMessage();
 		}
 		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
-			const filter = silentFilters.get(messageIdValue);
+			const entry = inFlightMessages.get(messageIdValue);
+			const filter = entry?.silentFilter;
 			let silent = false;
-			if (filter) {
+			if (filter && entry) {
 				const final = finalizeSilentFilter(filter);
 				silent = final.silent;
 				if (!silent) {
@@ -522,9 +555,10 @@ export async function startWebDaemon(
 						publishDelta(channelKey, messageIdValue, "text", final.flush, ts);
 					}
 				} else {
-					pendingMessageStarts.delete(messageIdValue);
+					entry.startedSilent = true;
+					entry.pendingStartTs = undefined;
 				}
-				silentFilters.delete(messageIdValue);
+				entry.silentFilter = undefined;
 			} else {
 				startedSilentMessage();
 			}
@@ -572,7 +606,8 @@ export async function startWebDaemon(
 					silent: record.silent || undefined,
 					ts: toUnixMs(record.ts),
 				};
-				if (locallyStreamedOutboundIds.delete(outboundId)) {
+				if (inFlightMessages.get(outboundId)?.locallyStreamed) {
+					inFlightMessages.delete(outboundId);
 					publish(completion);
 					return;
 				}
@@ -735,7 +770,8 @@ export async function startWebDaemon(
 			attachments: webAttachments(config, reply.attachments),
 			silent: parsed.silent || undefined,
 		});
-		locallyStreamedOutboundIds.add(assistantMessageId);
+		const entry = getOrCreateInFlight(assistantMessageId);
+		entry.locallyStreamed = true;
 		return {
 			text: finalText,
 			messageId: assistantMessageId,
@@ -1116,49 +1152,52 @@ export async function startWebDaemon(
 			netSocket.destroy();
 			return;
 		}
-		if (!acceptWebSocket(request, netSocket)) return;
-		netSocket.setNoDelay(true);
 		const requestedChannelKey = url.searchParams.get("channelKey") || undefined;
-		const client: WebSocketClient = { socket: netSocket, channelKey: requestedChannelKey, authed: false };
-		clients.add(client);
-		let frameBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 		void getRuntime(requestedChannelKey)
 			.then((runtime) => {
-				client.channelKey = runtime.channelKey;
+				if (netSocket.destroyed) return;
+				if (!acceptWebSocket(request, netSocket)) return;
+				netSocket.setNoDelay(true);
+				const client: WebSocketClient = { socket: netSocket, channelKey: runtime.channelKey, authed: false };
+				clients.add(client);
+				let frameBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+				netSocket.on("data", (chunk: Buffer) => {
+					try {
+						frameBuffer = Buffer.concat([frameBuffer, chunk]);
+						const decoded = decodeFrames(frameBuffer);
+						frameBuffer = decoded.remaining;
+						if (decoded.close) netSocket.destroy();
+						for (const raw of decoded.messages) {
+							const message = JSON.parse(raw) as unknown;
+							if (isObject(message) && message.type === "hello") {
+								if (!client.channelKey) continue;
+								replay(
+									client,
+									client.channelKey,
+									typeof message.lastEventId === "string" ? message.lastEventId : null,
+								);
+							}
+							if (isObject(message) && message.type === "abort") {
+								void getRuntime(client.channelKey).then(async (runtime) => {
+									familiarAgent.requestSoftStop(runtime.channelKey);
+								});
+							}
+						}
+					} catch (error) {
+						console.error("WebSocket frame handling failed", error);
+						netSocket.destroy();
+					}
+				});
+				netSocket.on("close", () => clients.delete(client));
+				netSocket.on("error", () => clients.delete(client));
 			})
 			.catch((error) => {
 				console.error("WebSocket runtime lookup failed", error);
-				netSocket.destroy();
-			});
-		netSocket.on("data", (chunk: Buffer) => {
-			try {
-				frameBuffer = Buffer.concat([frameBuffer, chunk]);
-				const decoded = decodeFrames(frameBuffer);
-				frameBuffer = decoded.remaining;
-				if (decoded.close) netSocket.destroy();
-				for (const raw of decoded.messages) {
-					const message = JSON.parse(raw) as unknown;
-					if (isObject(message) && message.type === "hello") {
-						if (!client.channelKey) continue;
-						replay(
-							client,
-							client.channelKey,
-							typeof message.lastEventId === "string" ? message.lastEventId : null,
-						);
-					}
-					if (isObject(message) && message.type === "abort") {
-						void getRuntime(client.channelKey).then(async (runtime) => {
-							familiarAgent.requestSoftStop(runtime.channelKey);
-						});
-					}
+				if (!netSocket.destroyed) {
+					netSocket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+					netSocket.destroy();
 				}
-			} catch (error) {
-				console.error("WebSocket frame handling failed", error);
-				netSocket.destroy();
-			}
-		});
-		netSocket.on("close", () => clients.delete(client));
-		netSocket.on("error", () => clients.delete(client));
+			});
 	});
 
 	await new Promise<void>((resolveListen, rejectListen) => {
@@ -1173,6 +1212,7 @@ export async function startWebDaemon(
 	return {
 		server,
 		async stop(): Promise<void> {
+			clearInterval(inFlightGcTimer);
 			for (const client of clients) client.socket.destroy();
 			clients.clear();
 			for (const unsubscribe of runtimeSubscriptions.values()) unsubscribe();

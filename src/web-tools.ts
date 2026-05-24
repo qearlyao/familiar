@@ -122,6 +122,7 @@ type PageCacheEntry = {
 	content: string;
 	provider: FetchProviderName;
 	fetchedAt: number;
+	lastAccessed: number;
 };
 
 class ProviderError extends Error {
@@ -155,19 +156,22 @@ class PageCache {
 			this.entries.delete(url);
 			return undefined;
 		}
-		entry.fetchedAt = Date.now();
+		entry.lastAccessed = Date.now();
 		this.entries.delete(url);
 		this.entries.set(url, entry);
 		return entry;
 	}
 
+
 	set(url: string, content: string, provider: FetchProviderName): void {
 		if (content.length > MAX_CACHE_CHARS_PER_PAGE) return;
 		if (this.entries.has(url)) this.entries.delete(url);
+		const now = Date.now();
 		this.entries.set(url, {
 			content,
 			provider,
-			fetchedAt: Date.now(),
+			fetchedAt: now,
+			lastAccessed: now,
 		});
 		while (this.entries.size > this.capacity) {
 			const oldest = this.entries.keys().next().value as string | undefined;

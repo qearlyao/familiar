@@ -406,10 +406,13 @@ function fallbackMimeType(name: string): string {
 
 async function discordAttachmentPayload(
 	attachment: StoredAttachment,
-): Promise<{ attachment: Buffer; name: string; mimeType: string } | undefined> {
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string; mimeType: string } | undefined> {
 	if (!attachment.localPath) return undefined;
+	const data = await readFile(attachment.localPath);
+	const bytes = new Uint8Array(data.byteLength);
+	bytes.set(data);
 	return {
-		attachment: await readFile(attachment.localPath),
+		bytes,
 		name: attachment.name,
 		mimeType: attachment.mimeType || fallbackMimeType(attachment.name),
 	};
@@ -417,8 +420,8 @@ async function discordAttachmentPayload(
 
 async function discordAttachmentPayloads(
 	attachments: StoredAttachment[],
-): Promise<{ attachment: Buffer; name: string; mimeType: string }[]> {
-	const payloads: { attachment: Buffer; name: string; mimeType: string }[] = [];
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string; mimeType: string }[]> {
+	const payloads: { bytes: Uint8Array<ArrayBuffer>; name: string; mimeType: string }[] = [];
 	for (const attachment of attachments) {
 		const payload = await discordAttachmentPayload(attachment);
 		if (payload) payloads.push(payload);
@@ -436,8 +439,7 @@ async function postDiscordAttachments(
 	const form = new FormData();
 	form.set("payload_json", JSON.stringify({}));
 	for (const [index, file] of files.entries()) {
-		const bytes = new Uint8Array(file.attachment);
-		form.set(`files[${index}]`, new Blob([bytes], { type: file.mimeType }), file.name);
+		form.set(`files[${index}]`, new Blob([file.bytes], { type: file.mimeType }), file.name);
 	}
 	const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
 		method: "POST",
@@ -457,7 +459,6 @@ async function withDiscordSendTimeout<T>(
 	let timeout: NodeJS.Timeout | undefined;
 	const timeoutPromise = new Promise<never>((_, reject) => {
 		timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-		timeout.unref?.();
 	});
 	try {
 		return await Promise.race([operation, timeoutPromise]);

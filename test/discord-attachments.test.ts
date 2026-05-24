@@ -24,8 +24,8 @@ describe("discord attachment payloads", () => {
 
 		assert.equal(payload.length, 1);
 		assert.equal(payload[0].name, "tts_test.mp3");
-		assert.ok(Buffer.isBuffer(payload[0].attachment));
-		assert.equal(payload[0].attachment.toString("utf8"), "fake audio");
+		assert.ok(payload[0].bytes instanceof Uint8Array);
+		assert.equal(Buffer.from(payload[0].bytes).toString("utf8"), "fake audio");
 		void config;
 	});
 

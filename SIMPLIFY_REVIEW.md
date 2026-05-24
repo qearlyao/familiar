@@ -161,3 +161,11 @@ A few patterns worth flagging:
 8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75)** — meaningful for re-render perf.
 
 Suggest small, scoped commits per category with regression testing after each — not one mega-PR.
+
+---
+
+## Addendum — newer commits (2026-05-24)
+
+Findings from a follow-up `/simplify` pass over commits `c01dafa`, `8461431`, `fdc737e`. Smaller items (O(n²) mime lookup, triple-ternary in `AttachmentList`, single-use `resolveForOptions` wrapper) were fixed in place. One real reuse win was left as-is because it touches the test mocks:
+
+- **[src/discord.ts:424-448](src/discord.ts#L424-L448) — `postDiscordAttachments` hand-rolls Discord REST.** The function `fetch`es `https://discord.com/api/v10/channels/{id}/messages` with a manual `Authorization: Bot ${token}` header and a hand-built `FormData`. The same module already holds a live `Client<true>` (used for `client.channels.fetch`, `channel.send`, command registration). discord.js exposes `client.rest` — a pre-authenticated `REST` instance that handles the base URL, token, API version, ratelimit, retries, and multipart bodies via `RawFile[]`. Refactor to `client.rest.post(Routes.channelMessages(channelId), { files, body: {} })`. Drops the v10 pin, the manual auth header, the bespoke 200/`id` parsing, and removes a leaky abstraction. Touches [test/discord-attachments.test.ts:41-81](test/discord-attachments.test.ts#L41-L81) — the test currently stubs `globalThis.fetch`, would need to mock the REST manager instead. Severity: MED.

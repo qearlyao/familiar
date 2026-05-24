@@ -43,10 +43,6 @@ interface ServiceOptions {
 	captureCommand?: (command: string, args: string[]) => Promise<string>;
 }
 
-function resolveForOptions(options: ServiceOptions): (...paths: string[]) => string {
-	return options.resolvePath ?? resolve;
-}
-
 function servicePaths(
 	workspacePath: string,
 	input: { platform: ServicePlatform; homeDir: string; resolvePath: (...paths: string[]) => string },
@@ -66,7 +62,7 @@ function servicePaths(
 function buildSpec(workspacePath: string, options: ServiceOptions = {}): ServiceSpec {
 	const currentPlatform = options.platform ?? platform();
 	const cliPath = options.cliPath ?? currentCliPath();
-	const resolvePath = resolveForOptions(options);
+	const resolvePath = options.resolvePath ?? resolve;
 	const resolvedWorkspacePath = resolvePath(workspacePath);
 	return {
 		platform: currentPlatform,

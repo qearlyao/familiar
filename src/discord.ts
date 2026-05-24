@@ -400,20 +400,25 @@ function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 
+function fallbackMimeType(name: string): string {
+	return extname(name).toLowerCase() === ".mp3" ? "audio/mpeg" : "application/octet-stream";
+}
+
 async function discordAttachmentPayload(
 	attachment: StoredAttachment,
-): Promise<{ attachment: Buffer; name: string } | undefined> {
+): Promise<{ attachment: Buffer; name: string; mimeType: string } | undefined> {
 	if (!attachment.localPath) return undefined;
 	return {
 		attachment: await readFile(attachment.localPath),
 		name: attachment.name,
+		mimeType: attachment.mimeType || fallbackMimeType(attachment.name),
 	};
 }
 
 async function discordAttachmentPayloads(
 	attachments: StoredAttachment[],
-): Promise<{ attachment: Buffer; name: string }[]> {
-	const payloads: { attachment: Buffer; name: string }[] = [];
+): Promise<{ attachment: Buffer; name: string; mimeType: string }[]> {
+	const payloads: { attachment: Buffer; name: string; mimeType: string }[] = [];
 	for (const attachment of attachments) {
 		const payload = await discordAttachmentPayload(attachment);
 		if (payload) payloads.push(payload);
@@ -431,11 +436,8 @@ async function postDiscordAttachments(
 	const form = new FormData();
 	form.set("payload_json", JSON.stringify({}));
 	for (const [index, file] of files.entries()) {
-		const mimeType =
-			attachments.find((attachment) => attachment.name === file.name)?.mimeType ||
-			(extname(file.name).toLowerCase() === ".mp3" ? "audio/mpeg" : "application/octet-stream");
 		const bytes = new Uint8Array(file.attachment);
-		form.set(`files[${index}]`, new Blob([bytes], { type: mimeType }), file.name);
+		form.set(`files[${index}]`, new Blob([bytes], { type: file.mimeType }), file.name);
 	}
 	const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
 		method: "POST",

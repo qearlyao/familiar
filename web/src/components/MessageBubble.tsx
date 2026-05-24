@@ -5,35 +5,36 @@ import { AudioPlayer } from "./AudioPlayer";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolBlock } from "./ToolBlock";
 
+function AttachmentItem({ attachment }: { attachment: NonNullable<Message["attachments"]>[number] }) {
+  if (!attachment.url) return null;
+  const isImage = attachment.kind === "image" || attachment.mimeType?.startsWith("image/");
+  if (isImage) {
+    return (
+      <a href={attachment.url} className="inline-block">
+        <img src={attachment.url} alt={attachment.name} className="max-h-72 max-w-[24rem] rounded-md" />
+      </a>
+    );
+  }
+  if (attachment.mimeType?.startsWith("audio/")) {
+    return <AudioPlayer src={attachment.url} name={attachment.name} />;
+  }
+  return (
+    <a
+      href={attachment.url}
+      className="text-sm italic text-muted-foreground underline-offset-4 hover:underline"
+    >
+      {attachment.name}
+    </a>
+  );
+}
+
 function AttachmentList({ attachments }: { attachments: NonNullable<Message["attachments"]> }) {
   if (attachments.length === 0) return null;
   return (
     <div className="mt-3 flex flex-col gap-2">
-      {attachments.map((attachment) =>
-        (attachment.kind === "image" || attachment.mimeType?.startsWith("image/")) && attachment.url ? (
-          <a key={attachment.id} href={attachment.url} className="inline-block">
-            <img
-              src={attachment.url}
-              alt={attachment.name}
-              className="max-h-72 max-w-[24rem] rounded-md"
-            />
-          </a>
-        ) : attachment.mimeType?.startsWith("audio/") && attachment.url ? (
-          <AudioPlayer
-            key={attachment.id}
-            src={attachment.url}
-            name={attachment.name}
-          />
-        ) : attachment.url ? (
-          <a
-            key={attachment.id}
-            href={attachment.url}
-            className="text-sm italic text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {attachment.name}
-          </a>
-        ) : null,
-      )}
+      {attachments.map((attachment) => (
+        <AttachmentItem key={attachment.id} attachment={attachment} />
+      ))}
     </div>
   );
 }

@@ -78,6 +78,60 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("does not redispatch a job with a durable outbound but missing job_completed", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir);
+		const channel = { service: "web", scope: "web", channelId: "owner" } as const;
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, channel),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound({
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "qearlyao",
+				text: "hello",
+				remoteTimestamp: "2026-05-09T03:34:16.881Z",
+			});
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			await runtime.noteOutbound({
+				text: "hi",
+				messageIds: ["message-2"],
+				jobId: dispatch.job.jobId,
+			});
+		} finally {
+			await runtime.disconnect();
+		}
+
+		const recovered = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, channel),
+			ownerId: "owner",
+		});
+		try {
+			assert.equal(recovered.beginNextJob(), undefined);
+			await recovered.armAfterCurrentTail();
+			await recovered.ingestInbound({
+				messageId: "message-3",
+				authorId: "owner",
+				authorName: "qearlyao",
+				text: "next",
+				remoteTimestamp: "2026-05-09T03:35:16.881Z",
+			});
+			const next = recovered.beginNextJob();
+			assert.ok(next);
+			assert.match(next.prompt, /next/);
+			assert.doesNotMatch(next.prompt, /hello/);
+		} finally {
+			await recovered.disconnect();
+		}
+	});
+
 	it("tracks last heartbeat-reset interaction from owner inbound records only", async () => {
 		const dataDir = await createTempDataDir();
 		const config = await configWithDataDir(dataDir);

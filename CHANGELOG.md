@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 - 2026-05-24
+
+### Changed
+
+- Pin the pi dependency set to `0.75.5` and publish `npm-shrinkwrap.json` so global upgrades use the tested dependency graph.
+- Send Discord generated audio attachments through direct REST multipart delivery while keeping the text reply path unblocked.
+- Render silent WebUI replies as real silent turns instead of showing the marker text.
+
+### Fixed
+
+- Fix Windows Discord TTS delivery with pi `0.75.5`; generated audio now reaches Discord without leaving the agent stuck typing.
+- Preserve recovery from jobs that wrote an outbound record before a crash but did not append `job_completed`.
+- Add byte-range support for served WebUI attachments so generated audio metadata requests work reliably.
+
 ## 0.2.2 - 2026-05-22
 
 ### Fixed

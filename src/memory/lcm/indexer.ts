@@ -41,10 +41,7 @@ export async function projectNormalizedLcmBatch(
 
 	const storedRecords: StoredLcmRecord[] = [];
 	for (const record of options.batch.records) {
-		const id = options.lcmStore.insertRecord(record);
-		const stored = options.lcmStore.getRecord(id);
-		if (!stored) throw new Error(`Failed to read projected LCM record: ${id}`);
-		storedRecords.push(stored);
+		storedRecords.push(options.lcmStore.insertRecordReturningStored(record).record);
 	}
 
 	return {

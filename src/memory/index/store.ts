@@ -175,23 +175,33 @@ export class MemoryIndexStore {
 		return this.insertChunks([input])[0] as number;
 	}
 
-	insertChunks(inputs: MemoryChunkInput[]): number[] {
+	insertChunks(
+		inputs: MemoryChunkInput[],
+		preloadedIds?: ReadonlyMap<string, number>,
+		knownMissingHashes?: ReadonlySet<string>,
+	): number[] {
 		if (inputs.length === 0) return [];
 		const rows = inputs.map((input) => this.normalizeInput(input));
+		const knownIds = new Map(preloadedIds);
 		const out: number[] = [];
 		const insert = this.db.transaction((items: NormalizedChunkInput[]) => {
-			for (const item of items) out.push(this.insertNormalized(item));
+			for (const item of items) out.push(this.insertNormalized(item, knownIds, knownMissingHashes));
 		});
 		insert.immediate(rows);
 		return out;
 	}
 
-	recordSourceMappings(inputs: MemoryChunkInput[]): void {
+	recordSourceMappings(inputs: MemoryChunkInput[], preloadedIds?: ReadonlyMap<string, number>): void {
 		if (inputs.length === 0) return;
 		const rows = inputs.map((input) => this.normalizeInput(input));
 		this.db
 			.transaction((items: NormalizedChunkInput[]) => {
 				for (const item of items) {
+					const preloadedId = preloadedIds?.get(item.contentHash);
+					if (preloadedId !== undefined) {
+						this.insertSourceMapping(preloadedId, item);
+						continue;
+					}
 					const existing = this.db
 						.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?")
 						.get(item.contentHash) as { id: number } | undefined;
@@ -206,7 +216,8 @@ export class MemoryIndexStore {
 		const out: number[] = [];
 		const replace = this.db.transaction(() => {
 			this.deleteBySourceInternal(corpus, sourceId);
-			for (const item of rows) out.push(this.insertNormalized(item));
+			const knownIds = new Map<string, number>();
+			for (const item of rows) out.push(this.insertNormalized(item, knownIds));
 		});
 		replace.immediate();
 		return out;
@@ -293,21 +304,23 @@ export class MemoryIndexStore {
 		query: Float32Array,
 		normalized: { limit: number; corpus?: string },
 	): MemorySearchHit[] {
-		const rows = this.db
-			.prepare(
-				normalized.corpus
-					? `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c WHERE c.corpus = ?`
-					: `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c`,
-			)
-			.all(...(normalized.corpus ? [normalized.corpus] : [])) as MemoryChunkRow[];
-		return rows
-			.map((row) => ({
+		const stmt = this.db.prepare(
+			normalized.corpus
+				? `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c WHERE c.corpus = ?`
+				: `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c`,
+		);
+		const best: MemorySearchHit[] = [];
+		for (const row of stmt.iterate(
+			...(normalized.corpus ? [normalized.corpus] : []),
+		) as IterableIterator<MemoryChunkRow>) {
+			const hit = {
 				id: row.id,
 				score: cosineDistance(query, decodeVector(row.embedding, row.embedding_dimensions)),
 				chunk: rowToChunk(row),
-			}))
-			.sort((a, b) => a.score - b.score)
-			.slice(0, normalized.limit);
+			};
+			insertBoundedHit(best, hit, normalized.limit);
+		}
+		return best;
 	}
 
 	deleteChunk(id: number): void {
@@ -400,6 +413,7 @@ export class MemoryIndexStore {
 			return;
 		}
 
+		const keptHashes = new Set(kept.map((item) => item.contentHash));
 		this.db
 			.transaction(() => {
 				const rows = this.db
@@ -423,7 +437,7 @@ export class MemoryIndexStore {
 					this.db
 						.prepare("DELETE FROM memory_index_sources WHERE corpus = ? AND source_id = ? AND chunk_index = ?")
 						.run(corpus, sourceId, row.chunk_index);
-					this.deleteOrphanChunk(row.id);
+					if (!keptHashes.has(row.content_hash)) this.deleteOrphanChunk(row.id);
 				}
 			})
 			.immediate();
@@ -536,11 +550,22 @@ export class MemoryIndexStore {
 		};
 	}
 
-	private insertNormalized(item: NormalizedChunkInput): number {
-		const existing = this.db.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?").get(item.contentHash) as
-			| { id: number }
-			| undefined;
+	private insertNormalized(
+		item: NormalizedChunkInput,
+		knownIds: Map<string, number>,
+		knownMissingHashes?: ReadonlySet<string>,
+	): number {
+		const knownId = knownIds.get(item.contentHash);
+		const existing =
+			knownId !== undefined
+				? { id: knownId }
+				: knownMissingHashes?.has(item.contentHash)
+					? undefined
+					: (this.db.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?").get(item.contentHash) as
+							| { id: number }
+							| undefined);
 		if (existing) {
+			knownIds.set(item.contentHash, existing.id);
 			this.insertSourceMapping(existing.id, item);
 			return existing.id;
 		}
@@ -572,6 +597,7 @@ export class MemoryIndexStore {
 				.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
 				.run(id, encodeVector(item.embedding));
 		}
+		knownIds.set(item.contentHash, id);
 		this.insertSourceMapping(id, item);
 		return id;
 	}
@@ -650,6 +676,15 @@ function normalizeSearchOptions(options: number | MemorySearchOptions): { limit:
 		limit: options.limit ?? 10,
 		corpus: options.corpus,
 	};
+}
+
+function insertBoundedHit(best: MemorySearchHit[], hit: MemorySearchHit, limit: number): void {
+	if (limit <= 0) return;
+	let index = best.findIndex((candidate) => hit.score < candidate.score);
+	if (index < 0) index = best.length;
+	if (index >= limit) return;
+	best.splice(index, 0, hit);
+	if (best.length > limit) best.length = limit;
 }
 
 function sourcesJsonSelect(chunkIdExpr: string): string {

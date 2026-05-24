@@ -8,7 +8,7 @@ import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { indexLcmRecords } from "./indexer.js";
 import { normalizeChatRecords } from "./normalize.js";
-import { computeLcmRecordKey, type LcmStore } from "./store.js";
+import type { LcmStore } from "./store.js";
 import type { LcmRecordInput, StoredLcmRecord } from "./types.js";
 
 export interface BackfillDeps {
@@ -119,14 +119,12 @@ export async function backfillFromChatLogs(deps: BackfillDeps, options: Backfill
 				}
 				const inserted: StoredLcmRecord[] = [];
 				for (const record of batch.records) {
-					if (recordExists(deps.lcmStore, record)) {
+					const result = deps.lcmStore.insertRecordReturningStored(record);
+					if (!result.inserted) {
 						report.recordsSkippedDuplicate += 1;
 						continue;
 					}
-					const id = deps.lcmStore.insertRecord(record);
-					const stored = deps.lcmStore.getRecord(id);
-					if (!stored) throw new Error(`Failed to read backfilled LCM record: ${id}`);
-					inserted.push(stored);
+					inserted.push(result.record);
 					report.recordsInserted += 1;
 					if (inserted.length >= INDEX_BATCH_SIZE) {
 						report.indexedChunks += (
@@ -281,17 +279,22 @@ function countMissingSegments(lcmStore: LcmStore, segmentIds: readonly string[])
 }
 
 function countExistingRecords(lcmStore: LcmStore, records: readonly LcmRecordInput[]): number {
-	let existing = 0;
-	for (const record of records) {
-		if (recordExists(lcmStore, record)) existing += 1;
+	if (records.length === 0) return 0;
+	const keys = records.map((record) => lcmStore.computeRecordKey(record));
+	const existingKeys = new Set<string>();
+	for (const chunk of chunks([...new Set(keys)], 256)) {
+		const rows = lcmStore.db
+			.prepare(`SELECT record_key FROM lcm_records WHERE record_key IN (${chunk.map(() => "?").join(",")})`)
+			.all(...chunk) as { record_key: string }[];
+		for (const row of rows) existingKeys.add(row.record_key);
 	}
-	return existing;
+	return keys.reduce((total, key) => total + (existingKeys.has(key) ? 1 : 0), 0);
 }
 
-function recordExists(lcmStore: LcmStore, record: LcmRecordInput): boolean {
-	return !!lcmStore.db
-		.prepare("SELECT 1 FROM lcm_records WHERE record_key = ? LIMIT 1")
-		.get(computeLcmRecordKey(record));
+function chunks<T>(items: readonly T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let index = 0; index < items.length; index += size) out.push(items.slice(index, index + size));
+	return out;
 }
 
 function errorCode(error: unknown): string | undefined {

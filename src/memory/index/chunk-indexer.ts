@@ -163,10 +163,13 @@ export class ChunkIndexer {
 		const toInsert: MemoryChunkInput[] = [];
 		const insertPositions: number[] = [];
 		const existingMappings: MemoryChunkInput[] = [];
+		const existingMappingIds = new Map<string, number>();
+		const insertKnownMissing = new Set<string>();
 		for (let resultIndex = 0; resultIndex < prepared.length; resultIndex++) {
 			const item = prepared[resultIndex] as PreparedChunk;
 			if (item.existingId !== null) {
 				ids[resultIndex] = item.existingId;
+				existingMappingIds.set(item.contentHash, item.existingId);
 				existingMappings.push({
 					corpus: item.input.corpus,
 					sourceId: item.sourceId,
@@ -183,6 +186,7 @@ export class ChunkIndexer {
 			const embedding = item.embedding ?? embeddedByHash.get(item.contentHash);
 			if (!embedding) throw new Error("Missing embedding for memory chunk");
 			insertPositions.push(resultIndex);
+			insertKnownMissing.add(item.contentHash);
 			toInsert.push({
 				corpus: item.input.corpus,
 				sourceId: item.sourceId,
@@ -205,8 +209,8 @@ export class ChunkIndexer {
 					replaceSource.keepMappings,
 				);
 			}
-			this.store.recordSourceMappings(existingMappings);
-			insertedIds = this.store.insertChunks(toInsert);
+			this.store.recordSourceMappings(existingMappings, existingMappingIds);
+			insertedIds = this.store.insertChunks(toInsert, undefined, insertKnownMissing);
 		};
 		if (replaceSource && !this.store.db.inTransaction) this.store.db.transaction(writeChunks).immediate();
 		else writeChunks();

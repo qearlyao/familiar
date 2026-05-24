@@ -77,6 +77,12 @@ interface LcmContextState {
 	rehydrated: boolean;
 }
 
+interface CompactionPressure {
+	candidate: ReturnType<typeof selectLcmCompactionCandidate>;
+	pressureScore: number;
+	thresholdOverflowTokens: number;
+}
+
 export class LcmContextTransformer {
 	private readonly settings: LcmContextTransformerOptions["settings"];
 	private readonly lcmStore: LcmStore;
@@ -129,6 +135,7 @@ export class LcmContextTransformer {
 					signal,
 					model: options.model,
 					promptText,
+					initialPressure: pressure,
 				});
 			}
 		} catch (error) {
@@ -168,9 +175,13 @@ export class LcmContextTransformer {
 		signal?: AbortSignal;
 		model?: Model<any>;
 		promptText?: string;
+		initialPressure?: CompactionPressure;
 	}): Promise<void> {
 		for (let round = 0; input.state.compactionDebt > 0 && round < this.settings.maxRounds; round += 1) {
-			const pressure = this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
+			const pressure =
+				round === 0 && input.initialPressure
+					? input.initialPressure
+					: this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
 			if (!pressure.candidate.shouldCompact) {
 				if (pressure.thresholdOverflowTokens > 0) {
 					const condensed = await this.condenseRuntimeSummaries({
@@ -205,11 +216,7 @@ export class LcmContextTransformer {
 		state: LcmContextState,
 		model: Model<any> | undefined,
 		promptText = "",
-	): {
-		candidate: ReturnType<typeof selectLcmCompactionCandidate>;
-		pressureScore: number;
-		thresholdOverflowTokens: number;
-	} {
+	): CompactionPressure {
 		const rawItems = state.items.filter((item): item is RawLcmItem => item.type === "raw");
 		const summaryTokens = state.items
 			.filter((item): item is CompactedLcmItem => item.type === "summary")
@@ -392,8 +399,9 @@ export class LcmContextTransformer {
 		this.lcmStore.db
 			.transaction(() => {
 				for (const insert of inserts) {
-					insert.item.recordId = this.lcmStore.insertRecord(insert.input);
-					insert.item.record = this.lcmStore.getRecord(insert.item.recordId);
+					const result = this.lcmStore.insertRecordReturningStored(insert.input);
+					insert.item.recordId = result.record.id;
+					insert.item.record = result.record;
 				}
 			})
 			.immediate();
@@ -703,9 +711,10 @@ function assembleWithinBudget(
 	const selected = new Set<LcmContextItem>(freshTail);
 	let tokens = sumItemTokens(freshTail);
 
+	const originalIndexes = new Map(state.items.map((item, index) => [item, index]));
 	const summaries = state.items
 		.filter((item): item is CompactedLcmItem => item.type === "summary" && !selected.has(item))
-		.sort((a, b) => b.depth - a.depth || state.items.indexOf(b) - state.items.indexOf(a));
+		.sort((a, b) => b.depth - a.depth || (originalIndexes.get(b) ?? 0) - (originalIndexes.get(a) ?? 0));
 	for (const item of summaries) {
 		if (tokens + item.tokens > budget && selected.size > 0) continue;
 		selected.add(item);

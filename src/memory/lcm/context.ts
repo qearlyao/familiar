@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Provider, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
-import { scoreEvictable, tokenBag } from "./eviction-score.js";
+import { buildEvictionScoreContext, scoreEvictable, tokenBag } from "./eviction-score.js";
 import type { LcmAttachmentNote, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export interface LcmContextCompactionConfig {
@@ -220,10 +220,12 @@ function selectLeafChunk(
 	const targetRanges = ranges.filter((range) => range.tokens >= leafChunkTokens);
 	const records = items.map((item) => item.record).filter((record): record is StoredLcmRecord => !!record);
 	if (records.length === 0) return selectOldestLeafChunk(items, leafChunkTokens);
+	const scoreContext = buildEvictionScoreContext(promptText, records);
+	if (!scoreContext) return selectOldestLeafChunk(items, leafChunkTokens);
 	const scored = targetRanges.map((range) => ({
 		...range,
 		score: range.items.reduce(
-			(total, item) => total + (item.record ? scoreEvictable(item.record, promptText, records) : 0),
+			(total, item) => total + (item.record ? scoreEvictable(item.record, promptText, records, scoreContext) : 0),
 			0,
 		),
 	}));
@@ -238,7 +240,7 @@ function createValidLeafRanges(
 	const ranges: Array<{ startIndex: number; items: LcmContextRawItem[]; tokens: number }> = [];
 	for (let startIndex = 0; startIndex < items.length; startIndex += 1) {
 		if (isToolResultContinuingPreviousToolCall(items, startIndex)) continue;
-		const chunk = selectOldestLeafChunk(items.slice(startIndex), leafChunkTokens);
+		const chunk = selectOldestLeafChunkFromIndex(items, startIndex, leafChunkTokens);
 		if (chunk.length === 0) continue;
 		const chunkTokens = chunk.reduce((total, item) => total + item.tokens, 0);
 		const endIndex = startIndex + chunk.length - 1;
@@ -251,9 +253,17 @@ function createValidLeafRanges(
 }
 
 function selectOldestLeafChunk(items: readonly LcmContextRawItem[], leafChunkTokens: number): LcmContextRawItem[] {
+	return selectOldestLeafChunkFromIndex(items, 0, leafChunkTokens);
+}
+
+function selectOldestLeafChunkFromIndex(
+	items: readonly LcmContextRawItem[],
+	startIndex: number,
+	leafChunkTokens: number,
+): LcmContextRawItem[] {
 	const chunk: LcmContextRawItem[] = [];
 	let tokens = 0;
-	for (let index = 0; index < items.length; index += 1) {
+	for (let index = startIndex; index < items.length; index += 1) {
 		const item = items[index];
 		if (!item) continue;
 		if (chunk.length > 0 && tokens + item.tokens > leafChunkTokens && !continuesSelectedToolCall(chunk, item)) {

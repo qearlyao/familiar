@@ -122,6 +122,11 @@ interface LcmSessionStateRow {
 	updated_at: number | null;
 }
 
+export interface LcmRecordInsertResult {
+	record: StoredLcmRecord;
+	inserted: boolean;
+}
+
 export class LcmStore {
 	readonly db: Database.Database;
 	private readonly ownsDb: boolean;
@@ -152,6 +157,10 @@ export class LcmStore {
 	schemaVersion(): number | null {
 		const raw = readMeta(this.db, "schema_version");
 		return raw ? Number(raw) : null;
+	}
+
+	computeRecordKey(input: LcmRecordInput): string {
+		return computeLcmRecordKey(input);
 	}
 
 	ensureSegment(input: LcmSegmentInput): StoredLcmSegment {
@@ -202,6 +211,10 @@ export class LcmStore {
 	}
 
 	insertRecord(input: LcmRecordInput): number {
+		return this.insertRecordReturningStored(input).record.id;
+	}
+
+	insertRecordReturningStored(input: LcmRecordInput): LcmRecordInsertResult {
 		const normalized = normalizeRecordInput(input);
 		const runInsert = () => {
 			this.ensureSegment({
@@ -210,11 +223,12 @@ export class LcmStore {
 				channelKey: normalized.channelKey,
 				startedAt: normalized.happenedAt,
 			});
-			const existing = this.db
-				.prepare("SELECT id FROM lcm_records WHERE record_key = ?")
-				.get(normalized.recordKey) as { id: number } | undefined;
-			if (existing) return existing.id;
-			return insertRecordPrepared(this.db, normalized);
+			const existing = this.db.prepare("SELECT * FROM lcm_records WHERE record_key = ?").get(normalized.recordKey) as
+				| LcmRecordRow
+				| undefined;
+			if (existing) return { record: recordFromRow(existing), inserted: false };
+			const inserted = insertRecordPrepared(this.db, normalized);
+			return { record: recordFromRow(inserted), inserted: true };
 		};
 		return this.db.inTransaction ? runInsert() : this.db.transaction(runInsert).immediate();
 	}
@@ -431,8 +445,16 @@ export class LcmStore {
 						.all(segmentId, retainDepth) as { id: number }[];
 					for (const summary of summaries) {
 						report.indexDeletes.push({ corpus: "lcm_summary", sourceId: lcmSummaryIndexSourceId(summary.id) });
-						report.summaryFtsRowsDeleted += this.deleteSummaryFtsRow(summary.id);
 					}
+					report.summaryFtsRowsDeleted += this.db
+						.prepare(
+							`DELETE FROM lcm_summaries_fts
+							 WHERE rowid IN (
+								SELECT id FROM lcm_summaries
+								WHERE segment_id = ? AND pinned = 0 AND depth < ?
+							 )`,
+						)
+						.run(segmentId, retainDepth).changes;
 					report.summariesDeleted += this.db
 						.prepare("DELETE FROM lcm_summaries WHERE segment_id = ? AND pinned = 0 AND depth < ?")
 						.run(segmentId, retainDepth).changes;
@@ -446,8 +468,10 @@ export class LcmStore {
 				}[];
 				for (const record of records) {
 					report.indexDeletes.push({ corpus: "lcm_record", sourceId: lcmRecordIndexSourceId(record.id) });
-					report.recordFtsRowsDeleted += this.deleteRecordFtsRow(record.id);
 				}
+				report.recordFtsRowsDeleted += this.db
+					.prepare("DELETE FROM lcm_records_fts WHERE rowid IN (SELECT id FROM lcm_records WHERE segment_id = ?)")
+					.run(segmentId).changes;
 				report.rawRecordsDeleted += this.db
 					.prepare("DELETE FROM lcm_records WHERE segment_id = ?")
 					.run(segmentId).changes;
@@ -516,24 +540,6 @@ export class LcmStore {
 			map.set(row.summary_id, parents);
 		}
 		return map;
-	}
-
-	private deleteRecordFtsRow(id: number): number {
-		const row = this.db.prepare("SELECT text_full FROM lcm_records WHERE id = ?").get(id) as
-			| { text_full: string }
-			| undefined;
-		if (!row) return 0;
-		this.db.prepare("DELETE FROM lcm_records_fts WHERE rowid = ?").run(id);
-		return 1;
-	}
-
-	private deleteSummaryFtsRow(id: number): number {
-		const row = this.db.prepare("SELECT text_full FROM lcm_summaries WHERE id = ?").get(id) as
-			| { text_full: string }
-			| undefined;
-		if (!row) return 0;
-		this.db.prepare("DELETE FROM lcm_summaries_fts WHERE rowid = ?").run(id);
-		return 1;
 	}
 
 	private snapshotSummariesForPrunedRecords(segmentId: string): void {
@@ -627,7 +633,7 @@ function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
 	};
 }
 
-function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecordInput): number {
+function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecordInput): LcmRecordRow {
 	const inserted = db
 		.prepare(
 			`INSERT INTO lcm_records (
@@ -660,7 +666,9 @@ function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecor
 	if (normalized.kind !== "boundary") {
 		db.prepare("INSERT INTO lcm_records_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
 	}
-	return id;
+	const row = db.prepare("SELECT * FROM lcm_records WHERE id = ?").get(id) as LcmRecordRow | undefined;
+	if (!row) throw new Error(`Failed to read inserted LCM record: ${id}`);
+	return row;
 }
 
 function normalizeSummaryInput(input: LcmSummaryInput): NormalizedSummaryInput {

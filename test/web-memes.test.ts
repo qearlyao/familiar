@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { chdir, cwd } from "node:process";
 import { describe, it } from "node:test";
 
@@ -15,7 +16,7 @@ describe("web meme catalog pathing", () => {
 
 			assert.equal(
 				__webTest.memeCatalogPath(config),
-				`${config.workspacePath}/skills/memes/SKILL.md`,
+				resolve(config.workspacePath, "skills", "memes", "SKILL.md"),
 			);
 		} finally {
 			chdir(previousCwd);

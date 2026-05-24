@@ -566,8 +566,8 @@ describe("browser tools", () => {
 		const config = await configWithDataDir(dataDir, { browser: { enabled: true, backend: "browser-harness" } });
 		const sink = createGeneratedMediaSink();
 		const [tool] = createBrowserTools(config, sink, async (spec) => {
-			const match = spec.stdin?.match(/capture_screenshot\("([^"]+)"/);
-			const screenshotPath = match?.[1];
+			const match = spec.stdin?.match(/capture_screenshot\(("(?:[^"\\]|\\.)+")/);
+			const screenshotPath = match ? (JSON.parse(match[1] ?? "\"\"") as string) : undefined;
 			assert.ok(screenshotPath);
 			await mkdir(resolve(screenshotPath, ".."), { recursive: true });
 			await writeFile(screenshotPath, "png");

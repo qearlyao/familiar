@@ -26,7 +26,8 @@ describe("workspace hot reload", () => {
 	it("debounces watched workspace changes into one reload", async () => {
 		const watched = new Map<string, (eventType: string, filename: string | Buffer | null) => void>();
 		const reloads: string[] = [];
-		const workspacePath = "/workspace";
+		const workspacePath = resolve(tmpdir(), "familiar-hot-reload-workspace");
+		const skillPath = resolve(workspacePath, "skills", "image-style");
 		const hotReload = startWorkspaceHotReload({
 			workspacePath,
 			debounceMs: 5,
@@ -41,21 +42,22 @@ describe("workspace hot reload", () => {
 				return Object.assign(new EventEmitter(), { close() {} });
 			},
 			async listSkillDirectories() {
-				return ["/workspace/skills/image-style"];
+				return [skillPath];
 			},
 			logger: { info() {}, warn() {}, error() {} },
 		});
 
+		await delay(0);
 		watched.get(workspacePath)?.("change", "config.toml");
 		watched.get(workspacePath)?.("change", ".env");
-		watched.get("/workspace/skills/image-style")?.("change", "SKILL.md");
+		watched.get(skillPath)?.("change", "SKILL.md");
 		await delay(30);
 		hotReload.close();
 
 		assert.equal(reloads.length, 1);
-		assert.ok(watched.has("/workspace"));
-		assert.ok(watched.has("/workspace/skills"));
-		assert.ok(watched.has("/workspace/skills/image-style"));
+		assert.ok(watched.has(workspacePath));
+		assert.ok(watched.has(resolve(workspacePath, "skills")));
+		assert.ok(watched.has(skillPath));
 	});
 
 	it("lists immediate skill directories and ignores missing skills dir", async () => {

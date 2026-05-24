@@ -36,28 +36,38 @@ interface ServiceOptions {
 	homeDir?: string;
 	nodePath?: string;
 	cliPath?: string;
+	resolvePath?: (...paths: string[]) => string;
+	userId?: number;
 	commandExists?: (command: string) => Promise<boolean>;
 	runCommand?: (command: string, args: string[]) => Promise<void>;
 	captureCommand?: (command: string, args: string[]) => Promise<string>;
 }
 
-function servicePaths(workspacePath: string, input: { platform: ServicePlatform; homeDir: string }): ServicePaths {
-	const logDir = resolve(workspacePath, "logs");
+function resolveForOptions(options: ServiceOptions): (...paths: string[]) => string {
+	return options.resolvePath ?? resolve;
+}
+
+function servicePaths(
+	workspacePath: string,
+	input: { platform: ServicePlatform; homeDir: string; resolvePath: (...paths: string[]) => string },
+): ServicePaths {
+	const logDir = input.resolvePath(workspacePath, "logs");
 	return {
 		servicePath:
 			input.platform === "darwin"
-				? resolve(input.homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`)
-				: resolve(input.homeDir, ".config", "systemd", "user", SYSTEMD_SERVICE),
+				? input.resolvePath(input.homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`)
+				: input.resolvePath(input.homeDir, ".config", "systemd", "user", SYSTEMD_SERVICE),
 		logDir,
-		stdoutPath: resolve(logDir, "familiar.out.log"),
-		stderrPath: resolve(logDir, "familiar.err.log"),
+		stdoutPath: input.resolvePath(logDir, "familiar.out.log"),
+		stderrPath: input.resolvePath(logDir, "familiar.err.log"),
 	};
 }
 
 function buildSpec(workspacePath: string, options: ServiceOptions = {}): ServiceSpec {
 	const currentPlatform = options.platform ?? platform();
 	const cliPath = options.cliPath ?? currentCliPath();
-	const resolvedWorkspacePath = resolve(workspacePath);
+	const resolvePath = resolveForOptions(options);
+	const resolvedWorkspacePath = resolvePath(workspacePath);
 	return {
 		platform: currentPlatform,
 		workspacePath: resolvedWorkspacePath,
@@ -66,6 +76,7 @@ function buildSpec(workspacePath: string, options: ServiceOptions = {}): Service
 		paths: servicePaths(resolvedWorkspacePath, {
 			platform: currentPlatform,
 			homeDir: options.homeDir ?? homedir(),
+			resolvePath,
 		}),
 	};
 }
@@ -195,8 +206,8 @@ async function runOptional(command: string, args: string[], options: ServiceOpti
 	}
 }
 
-function guiDomain(): string {
-	return `gui/${userInfo().uid}`;
+function guiDomain(options: ServiceOptions = {}): string {
+	return `gui/${options.userId ?? userInfo().uid}`;
 }
 
 function unsupported(platformName: string): ServiceCommandResult {
@@ -222,9 +233,9 @@ export async function installService(
 	await writeFile(spec.paths.servicePath, serviceText, "utf8");
 
 	if (spec.platform === "darwin") {
-		await runOptional("launchctl", ["bootout", guiDomain(), spec.paths.servicePath], options);
-		await run("launchctl", ["bootstrap", guiDomain(), spec.paths.servicePath], options);
-		await run("launchctl", ["kickstart", "-k", `${guiDomain()}/${SERVICE_LABEL}`], options);
+		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.servicePath], options);
+		await run("launchctl", ["bootstrap", guiDomain(options), spec.paths.servicePath], options);
+		await run("launchctl", ["kickstart", "-k", `${guiDomain(options)}/${SERVICE_LABEL}`], options);
 	} else {
 		if (!(await hasCommand("systemctl", options))) {
 			throw new Error("systemctl is required to install the Linux user service.");
@@ -256,7 +267,7 @@ export async function uninstallService(
 	if (spec.platform !== "darwin" && spec.platform !== "linux") return unsupported(spec.platform);
 
 	if (spec.platform === "darwin") {
-		await runOptional("launchctl", ["bootout", guiDomain(), spec.paths.servicePath], options);
+		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.servicePath], options);
 	} else {
 		if (await hasCommand("systemctl", options)) {
 			await runOptional("systemctl", ["--user", "disable", "--now", SYSTEMD_SERVICE], options);
@@ -300,7 +311,7 @@ export async function serviceStatus(
 async function supervisorState(spec: ServiceSpec, options: ServiceOptions): Promise<string> {
 	try {
 		if (spec.platform === "darwin") {
-			await capture("launchctl", ["print", `${guiDomain()}/${SERVICE_LABEL}`], options);
+			await capture("launchctl", ["print", `${guiDomain(options)}/${SERVICE_LABEL}`], options);
 			return "loaded";
 		}
 		const state = (await capture("systemctl", ["--user", "is-active", SYSTEMD_SERVICE], options)).trim();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import type { Config } from "../src/config.js";
@@ -68,7 +68,7 @@ describe("diary file indexer", () => {
 
 		const config = configFor(diariesDir);
 		assert.deepEqual(
-			(await listDiaryMarkdownFiles(config)).map((path) => path.replace(`${diariesDir}/`, "")),
+			(await listDiaryMarkdownFiles(config)).map((path) => basename(path)),
 			["2026-05-09.md", "2026-05-10.md"],
 		);
 

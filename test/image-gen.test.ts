@@ -553,7 +553,12 @@ describe("image_gen tool", () => {
 			await mkdir(referenceDir, { recursive: true });
 			const outsidePath = resolve(dataDir, "outside.png");
 			await writeFile(outsidePath, "outside", "utf8");
-			await symlink(outsidePath, resolve(referenceDir, "link.png"));
+			try {
+				await symlink(outsidePath, resolve(referenceDir, "link.png"));
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+				throw error;
+			}
 			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
 				generateImages: async () => {
 					throw new Error("should not call provider");

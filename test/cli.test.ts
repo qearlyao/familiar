@@ -17,9 +17,10 @@ describe("CLI init", () => {
 		});
 
 		const skill = await readFile(resolve(workspacePath, "skills", "image-gen", "SKILL.md"), "utf8");
+		const normalizedSkill = skill.replace(/\r\n/g, "\n");
 
-		assert.match(skill, /^---\nname: image-gen/m);
-		assert.match(skill, /Read this skill before using the image_gen tool/);
+		assert.match(normalizedSkill, /^---\nname: image-gen/m);
+		assert.match(normalizedSkill, /Read this skill before using the image_gen tool/);
 	});
 
 	it("does not overwrite existing workspace files", async () => {

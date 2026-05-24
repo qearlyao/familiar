@@ -9,6 +9,10 @@ import { describe, it } from "node:test";
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(import.meta.dirname, "..");
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("install scripts", () => {
 	it("keeps the publishable shrinkwrap aligned with the source lock", async () => {
 		const [sourceLock, shrinkwrap] = await Promise.all([
@@ -62,6 +66,6 @@ describe("install scripts", () => {
 		);
 
 		assert.match(stdout, /Initializing or refreshing workspace defaults/);
-		assert.match(await readFile(resolve(root, "familiar-args.log"), "utf8"), new RegExp(`init ${workspace}`));
+		assert.match(await readFile(resolve(root, "familiar-args.log"), "utf8"), new RegExp(`init ${escapeRegExp(workspace)}`));
 	});
 });

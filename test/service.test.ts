@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { posix, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import { __serviceTest, installService, serviceStatus, uninstallService } from "../src/service.js";
@@ -14,6 +14,7 @@ describe("service management", () => {
 			homeDir: "/Users/test",
 			nodePath: "/opt/node",
 			cliPath: "/tmp/familiar/dist/cli.js",
+			resolvePath: posix.resolve,
 		});
 
 		const plist = __serviceTest.launchdPlist(spec);
@@ -32,6 +33,7 @@ describe("service management", () => {
 			homeDir: "/home/test",
 			nodePath: "/usr/bin/node",
 			cliPath: "/home/test/familiar/dist/cli.js",
+			resolvePath: posix.resolve,
 		});
 
 		const unit = __serviceTest.systemdUnit(spec);
@@ -60,6 +62,7 @@ describe("service management", () => {
 			homeDir,
 			nodePath: "/usr/bin/node",
 			cliPath: "/usr/local/bin/familiar",
+			userId: 501,
 			runCommand: async (command, args) => {
 				calls.push([command, ...args].join(" "));
 			},
@@ -84,6 +87,7 @@ describe("service management", () => {
 		const uninstalled = await uninstallService(workspacePath, {
 			platform: "darwin",
 			homeDir,
+			userId: 501,
 			runCommand: async (command, args) => {
 				calls.push([command, ...args].join(" "));
 			},
@@ -156,6 +160,7 @@ describe("service management", () => {
 			homeDir: "/Users/test",
 			nodePath: "/Users/test/.nvm/versions/node/v24/bin/node",
 			cliPath: "/Users/test/.nvm/versions/node/v24/bin/familiar",
+			resolvePath: posix.resolve,
 		});
 
 		assert.match(__serviceTest.versionManagedPathWarning(spec) ?? "", /version-manager/);

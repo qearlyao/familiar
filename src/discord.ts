@@ -538,12 +538,11 @@ async function sendChannelMessage(
 
 function sendDiscordAttachmentsInBackground(config: Config, channelId: string, attachments: StoredAttachment[]): void {
 	if (attachments.length === 0) return;
-	void withDiscordSendTimeout(
-		postDiscordAttachments(config, channelId, attachments),
-		"Discord attachment send",
-	).catch((error) => {
-		console.error("Discord attachment send failed", error);
-	});
+	void withDiscordSendTimeout(postDiscordAttachments(config, channelId, attachments), "Discord attachment send").catch(
+		(error) => {
+			console.error("Discord attachment send failed", error);
+		},
+	);
 }
 
 type DiscordInteractionChannel = NonNullable<

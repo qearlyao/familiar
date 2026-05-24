@@ -162,7 +162,6 @@ class PageCache {
 		return entry;
 	}
 
-
 	set(url: string, content: string, provider: FetchProviderName): void {
 		if (content.length > MAX_CACHE_CHARS_PER_PAGE) return;
 		if (this.entries.has(url)) this.entries.delete(url);

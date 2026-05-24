@@ -22,9 +22,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
 		if (!name) continue;
 		try {
 			cookies[name] = decodeURIComponent(valueParts.join("="));
-		} catch {
-			continue;
-		}
+		} catch {}
 	}
 	return cookies;
 }

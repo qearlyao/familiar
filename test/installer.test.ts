@@ -10,6 +10,15 @@ const execFileAsync = promisify(execFile);
 const repoRoot = resolve(import.meta.dirname, "..");
 
 describe("install scripts", () => {
+	it("keeps the publishable shrinkwrap aligned with the source lock", async () => {
+		const [sourceLock, shrinkwrap] = await Promise.all([
+			readFile(resolve(repoRoot, "package-lock.json"), "utf8"),
+			readFile(resolve(repoRoot, "npm-shrinkwrap.json"), "utf8"),
+		]);
+
+		assert.equal(shrinkwrap, sourceLock);
+	});
+
 	it("prints shell installer help", async () => {
 		const { stdout } = await execFileAsync("sh", ["scripts/install.sh", "--help"], { cwd: repoRoot });
 

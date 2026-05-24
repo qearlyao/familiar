@@ -28,4 +28,13 @@ describe("discord attachment payloads", () => {
 		assert.equal(payload[0].attachment.toString("utf8"), "fake audio");
 		void config;
 	});
+
+	it("bounds Discord attachment send hangs", async () => {
+		const module = await import("../src/discord.js");
+
+		await assert.rejects(
+			module.__test.withDiscordSendTimeout(new Promise(() => undefined), "test attachment send", 1),
+			/timed out after 1ms/,
+		);
+	});
 });

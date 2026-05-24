@@ -57,6 +57,7 @@ const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 const CRON_SKIPPED = Symbol("cron-skipped");
+const DISCORD_ATTACHMENT_SEND_TIMEOUT_MS = 20_000;
 
 export interface DiscordDaemon {
 	client: Client<true>;
@@ -419,8 +420,26 @@ async function discordAttachmentPayloads(
 	return payloads;
 }
 
+async function withDiscordSendTimeout<T>(
+	operation: Promise<T>,
+	label: string,
+	timeoutMs = DISCORD_ATTACHMENT_SEND_TIMEOUT_MS,
+): Promise<T> {
+	let timeout: NodeJS.Timeout | undefined;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeout = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+		timeout.unref?.();
+	});
+	try {
+		return await Promise.race([operation, timeoutPromise]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
+
 export const __test = {
 	discordAttachmentPayloads,
+	withDiscordSendTimeout,
 };
 
 function parseAgentReply(text: string): { text: string; silent: boolean } {
@@ -439,9 +458,9 @@ async function sendReply(
 	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
+	const files = await discordAttachmentPayloads(attachments);
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, message.channel);
-		const files = index === 0 ? await discordAttachmentPayloads(attachments) : [];
 		let sent: Message;
 		if (index === 0 && config.discord.replyMode === "reply") {
 			try {
@@ -449,7 +468,7 @@ async function sendReply(
 				if (!message.channel.isSendable()) {
 					throw new Error(`Discord channel is not sendable: ${message.channelId}`);
 				}
-				const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget }, files };
+				const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget } };
 				sent = await message.channel.send(options);
 				sentIds.push(sent.id);
 				continue;
@@ -460,8 +479,20 @@ async function sendReply(
 		if (!message.channel.isSendable()) {
 			throw new Error(`Discord channel is not sendable: ${message.channelId}`);
 		}
-		sent = await message.channel.send(files.length > 0 ? { content: chunk, files } : chunk);
+		sent = await message.channel.send(chunk);
 		sentIds.push(sent.id);
+	}
+	if (files.length > 0) {
+		if (!message.channel.isSendable()) {
+			throw new Error(`Discord channel is not sendable: ${message.channelId}`);
+		}
+		try {
+			const sendPromise = message.channel.send({ files }) as Promise<Message<boolean>>;
+			const sent = await withDiscordSendTimeout(sendPromise, "Discord attachment send");
+			sentIds.push(sent.id);
+		} catch (error) {
+			console.error("Discord attachment send failed", error);
+		}
 	}
 	return sentIds;
 }
@@ -478,11 +509,20 @@ async function sendChannelMessage(
 	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
+	const files = await discordAttachmentPayloads(attachments);
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, channel);
-		const files = index === 0 ? await discordAttachmentPayloads(attachments) : [];
-		const sent = await channel.send(files.length > 0 ? { content: chunk, files } : chunk);
+		const sent = await channel.send(chunk);
 		sentIds.push(sent.id);
+	}
+	if (files.length > 0) {
+		try {
+			const sendPromise = channel.send({ files }) as Promise<Message<boolean>>;
+			const sent = await withDiscordSendTimeout(sendPromise, "Discord attachment send");
+			sentIds.push(sent.id);
+		} catch (error) {
+			console.error("Discord attachment send failed", error);
+		}
 	}
 	return sentIds;
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
+import { extname } from "node:path";
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	type ApplicationCommandData,
@@ -420,6 +421,32 @@ async function discordAttachmentPayloads(
 	return payloads;
 }
 
+async function postDiscordAttachments(
+	config: Config,
+	channelId: string,
+	attachments: StoredAttachment[],
+): Promise<string[]> {
+	const files = await discordAttachmentPayloads(attachments);
+	if (files.length === 0) return [];
+	const form = new FormData();
+	form.set("payload_json", JSON.stringify({}));
+	for (const [index, file] of files.entries()) {
+		const mimeType =
+			attachments.find((attachment) => attachment.name === file.name)?.mimeType ||
+			(extname(file.name).toLowerCase() === ".mp3" ? "audio/mpeg" : "application/octet-stream");
+		const bytes = new Uint8Array(file.attachment);
+		form.set(`files[${index}]`, new Blob([bytes], { type: mimeType }), file.name);
+	}
+	const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+		method: "POST",
+		headers: { Authorization: `Bot ${config.discord.token}` },
+		body: form,
+	});
+	const data = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
+	if (!response.ok || !data.id) throw new Error(data.message || `Discord attachment send failed (${response.status})`);
+	return [data.id];
+}
+
 async function withDiscordSendTimeout<T>(
 	operation: Promise<T>,
 	label: string,
@@ -439,6 +466,7 @@ async function withDiscordSendTimeout<T>(
 
 export const __test = {
 	discordAttachmentPayloads,
+	postDiscordAttachments,
 	withDiscordSendTimeout,
 };
 
@@ -458,7 +486,6 @@ async function sendReply(
 	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
-	const files = await discordAttachmentPayloads(attachments);
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, message.channel);
 		let sent: Message;
@@ -482,18 +509,7 @@ async function sendReply(
 		sent = await message.channel.send(chunk);
 		sentIds.push(sent.id);
 	}
-	if (files.length > 0) {
-		if (!message.channel.isSendable()) {
-			throw new Error(`Discord channel is not sendable: ${message.channelId}`);
-		}
-		try {
-			const sendPromise = message.channel.send({ files }) as Promise<Message<boolean>>;
-			const sent = await withDiscordSendTimeout(sendPromise, "Discord attachment send");
-			sentIds.push(sent.id);
-		} catch (error) {
-			console.error("Discord attachment send failed", error);
-		}
-	}
+	sendDiscordAttachmentsInBackground(config, message.channelId, attachments);
 	return sentIds;
 }
 
@@ -509,22 +525,23 @@ async function sendChannelMessage(
 	const normalizedText = normalizeOutboundText(text);
 	const chunks = chunkDiscord(config, normalizedText);
 	const sentIds: string[] = [];
-	const files = await discordAttachmentPayloads(attachments);
 	for (const [index, chunk] of chunks.entries()) {
 		if (index > 0) await delayBetweenBurstChunks(config, channel);
 		const sent = await channel.send(chunk);
 		sentIds.push(sent.id);
 	}
-	if (files.length > 0) {
-		try {
-			const sendPromise = channel.send({ files }) as Promise<Message<boolean>>;
-			const sent = await withDiscordSendTimeout(sendPromise, "Discord attachment send");
-			sentIds.push(sent.id);
-		} catch (error) {
-			console.error("Discord attachment send failed", error);
-		}
-	}
+	sendDiscordAttachmentsInBackground(config, channel.id, attachments);
 	return sentIds;
+}
+
+function sendDiscordAttachmentsInBackground(config: Config, channelId: string, attachments: StoredAttachment[]): void {
+	if (attachments.length === 0) return;
+	void withDiscordSendTimeout(
+		postDiscordAttachments(config, channelId, attachments),
+		"Discord attachment send",
+	).catch((error) => {
+		console.error("Discord attachment send failed", error);
+	});
 }
 
 type DiscordInteractionChannel = NonNullable<
@@ -1004,15 +1021,13 @@ export async function startDiscordDaemon(
 					await recorder.flush();
 				}
 				const parsedReply = parseAgentReply(reply.text);
+				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
 				const messageIds = parsedReply.silent
 					? []
-					: await sendReply(
-							config,
-							await fetchMessageAnchor(message, dispatch.triggerMessageId),
-							parsedReply.text,
-							dispatch.triggerMessageId,
-							reply.attachments,
-						);
+					: await sendReply(config, replyAnchor, parsedReply.text, dispatch.triggerMessageId, reply.attachments);
+				if (parsedReply.silent) {
+					sendDiscordAttachmentsInBackground(config, replyAnchor.channelId, reply.attachments);
+				}
 				await runtime.completeActiveJob({
 					text: parsedReply.text,
 					messageIds,
@@ -1110,6 +1125,7 @@ export async function startDiscordDaemon(
 			const messageIds = parsedReply.silent
 				? []
 				: await sendChannelMessage(config, channel, parsedReply.text, reply.attachments);
+			if (parsedReply.silent) sendDiscordAttachmentsInBackground(config, channel.id, reply.attachments);
 			await heartbeatRuntime.noteOutbound({
 				text: parsedReply.text,
 				messageIds,
@@ -1234,6 +1250,7 @@ export async function startDiscordDaemon(
 		const messageIds = parsedReply.silent
 			? []
 			: await sendChannelMessage(config, channel, parsedReply.text, reply.attachments);
+		if (parsedReply.silent) sendDiscordAttachmentsInBackground(config, channel.id, reply.attachments);
 		await runtime.noteOutbound({
 			text: parsedReply.text,
 			messageIds,

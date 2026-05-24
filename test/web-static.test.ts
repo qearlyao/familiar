@@ -52,6 +52,25 @@ describe("serveAttachment", () => {
 		assert.equal(handled, true);
 		assert.equal(response.statusCode, 200);
 		assert.equal(response.headers?.["content-type"], "audio/mpeg");
+		assert.equal(response.headers?.["accept-ranges"], "bytes");
+	});
+
+	it("serves attachment byte ranges for audio metadata requests", async () => {
+		const root = await createTempDataDir();
+		const config = await configWithDataDir(root);
+		const dir = generatedAttachmentsDir(config);
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "voice.mp3"), "0123456789", "utf8");
+		const response = new FakeResponse();
+
+		const handled = await serveAttachment(config, response as any, "/api/web/attachments/voice.mp3", "bytes=2-5");
+
+		assert.equal(handled, true);
+		assert.equal(response.statusCode, 206);
+		assert.equal(response.headers?.["content-type"], "audio/mpeg");
+		assert.equal(response.headers?.["content-length"], "4");
+		assert.equal(response.headers?.["content-range"], "bytes 2-5/10");
+		assert.equal(response.headers?.["accept-ranges"], "bytes");
 	});
 
 	it("serves browser screenshot files", async () => {
@@ -88,7 +107,14 @@ describe("serveAttachment", () => {
 		await mkdir(dir, { recursive: true });
 		const target = join(root, "outside.mp3");
 		await writeFile(target, "outside", "utf8");
-		await symlink(target, join(dir, "link.mp3"));
+		try {
+			await symlink(target, join(dir, "link.mp3"));
+		} catch (error) {
+			if (error && typeof error === "object" && "code" in error && error.code === "EPERM") {
+				return;
+			}
+			throw error;
+		}
 		const response = new FakeResponse();
 
 		await serveAttachment(config, response as any, "/api/web/attachments/link.mp3");

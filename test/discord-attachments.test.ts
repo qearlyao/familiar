@@ -37,4 +37,46 @@ describe("discord attachment payloads", () => {
 			/timed out after 1ms/,
 		);
 	});
+
+	it("posts generated attachments through Discord REST multipart", async () => {
+		const dataDir = resolve("/tmp", "familiar-discord-rest-test");
+		const config = await configWithDataDir(dataDir);
+		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_rest.mp3");
+		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
+		await writeFile(attachmentPath, Buffer.from("fake audio"));
+		const attachment: StoredAttachment = {
+			id: "tts_rest",
+			name: "tts_rest.mp3",
+			mimeType: "audio/mpeg",
+			localPath: attachmentPath,
+		};
+		const previousFetch = globalThis.fetch;
+		let capturedUrl = "";
+		let capturedAuthorization = "";
+		let capturedBody: FormData | undefined;
+		globalThis.fetch = (async (url, init) => {
+			capturedUrl = String(url);
+			capturedAuthorization = String(new Headers(init?.headers).get("authorization"));
+			capturedBody = init?.body as FormData;
+			return new Response(JSON.stringify({ id: "discord-file-message" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}) as typeof fetch;
+		try {
+			const module = await import("../src/discord.js");
+			const ids = await module.__test.postDiscordAttachments(config, "channel-1", [attachment]);
+
+			assert.deepEqual(ids, ["discord-file-message"]);
+			assert.equal(capturedUrl, "https://discord.com/api/v10/channels/channel-1/messages");
+			assert.equal(capturedAuthorization, `Bot ${config.discord.token}`);
+			assert.ok(capturedBody?.get("payload_json"));
+			const file = capturedBody?.get("files[0]") as File;
+			assert.equal(file.name, "tts_rest.mp3");
+			assert.equal(file.type, "audio/mpeg");
+			assert.equal(await file.text(), "fake audio");
+		} finally {
+			globalThis.fetch = previousFetch;
+		}
+	});
 });

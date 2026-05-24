@@ -831,7 +831,7 @@ export async function startWebDaemon(
 		}
 		try {
 			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
-				return serveAttachment(config, response, url.pathname);
+				return serveAttachment(config, response, url.pathname, request.headers.range);
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/auth/mode") {
 				sendJson(response, 200, { mode: config.web.authMode, personaName });

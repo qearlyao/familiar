@@ -47,7 +47,31 @@ export async function serveStatic(response: ServerResponse, requestPath: string)
 	return true;
 }
 
-export async function serveAttachment(config: Config, response: ServerResponse, requestPath: string): Promise<boolean> {
+function parseRangeHeader(rangeHeader: string | undefined, size: number): { start: number; end: number } | undefined {
+	if (!rangeHeader) return undefined;
+	const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+	if (!match) return undefined;
+	const [, rawStart, rawEnd] = match;
+	if (!rawStart && !rawEnd) return undefined;
+	if (!rawStart) {
+		const suffixLength = Number(rawEnd);
+		if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return undefined;
+		return { start: Math.max(0, size - suffixLength), end: size - 1 };
+	}
+	const start = Number(rawStart);
+	const end = rawEnd ? Number(rawEnd) : size - 1;
+	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) {
+		return undefined;
+	}
+	return { start, end: Math.min(end, size - 1) };
+}
+
+export async function serveAttachment(
+	config: Config,
+	response: ServerResponse,
+	requestPath: string,
+	rangeHeader?: string,
+): Promise<boolean> {
 	const relativePath = decodeURIComponent(requestPath.replace(/^\/api\/web\/attachments\/?/, ""));
 	if (!relativePath) {
 		sendText(response, 404, "Not found");
@@ -82,9 +106,22 @@ export async function serveAttachment(config: Config, response: ServerResponse, 
 		}
 		const fileStat = await stat(fileRealPath).catch(() => undefined);
 		if (!fileStat?.isFile()) continue;
+		const range = parseRangeHeader(rangeHeader, fileStat.size);
+		if (range) {
+			response.writeHead(206, {
+				"content-type": mimeType(filePath),
+				"content-length": String(range.end - range.start + 1),
+				"content-range": `bytes ${range.start}-${range.end}/${fileStat.size}`,
+				"accept-ranges": "bytes",
+				"cache-control": "private, max-age=31536000, immutable",
+			});
+			createReadStream(fileRealPath, { start: range.start, end: range.end }).pipe(response);
+			return true;
+		}
 		response.writeHead(200, {
 			"content-type": mimeType(filePath),
 			"content-length": String(fileStat.size),
+			"accept-ranges": "bytes",
 			"cache-control": "private, max-age=31536000, immutable",
 		});
 		createReadStream(fileRealPath).pipe(response);

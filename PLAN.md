@@ -348,24 +348,24 @@ Local Familiar files:
 
 Upstream package roots:
 
-- `/path/to/pi-mono`: local reference clone of `earendil-works/pi`.
-- `/path/to/pi-mono/packages/agent/src/agent.ts`: `Agent`, state/options,
+- `/Users/qearl/pi`: local reference clone of `earendil-works/pi`.
+- `/Users/qearl/pi/packages/agent/src/agent.ts`: `Agent`, state/options,
   `prompt`, `steer`, `followUp`, `abort`, `waitForIdle`.
-- `/path/to/pi-mono/packages/agent/src/agent-loop.ts`: `transformContext`, tool
+- `/Users/qearl/pi/packages/agent/src/agent-loop.ts`: `transformContext`, tool
   execution, steering/follow-up timing.
-- `/path/to/pi-mono/packages/agent/src/types.ts`: `AgentMessage`, tool shape,
+- `/Users/qearl/pi/packages/agent/src/types.ts`: `AgentMessage`, tool shape,
   events, usage-bearing messages.
-- `/path/to/pi-mono/packages/ai/src/types.ts`: provider/cache/image-generation
+- `/Users/qearl/pi/packages/ai/src/types.ts`: provider/cache/image-generation
   types.
-- `/path/to/pi-mono/packages/ai/src/images.ts` and `image-models.ts`: upstream
+- `/Users/qearl/pi/packages/ai/src/images.ts` and `image-models.ts`: upstream
   image-generation entry points.
-- `/path/to/pi-mono/packages/ai/src/providers/images/openrouter.ts`: first
+- `/Users/qearl/pi/packages/ai/src/providers/images/openrouter.ts`: first
   upstream image provider reference.
-- `/path/to/pi-mono/packages/coding-agent/src/core/tools/*`: upstream local tool
+- `/Users/qearl/pi/packages/coding-agent/src/core/tools/*`: upstream local tool
   factories.
-- `/path/to/pi-mono/packages/coding-agent/src/utils/mime.ts` and
+- `/Users/qearl/pi/packages/coding-agent/src/utils/mime.ts` and
   `image-resize.ts`: media sniff/resize references.
-- `/tmp/pi-chat`: local reference clone of `earendil-works/pi-chat`; useful for
+- `/Users/qearl/pi-chat`: local reference clone of `earendil-works/pi-chat`; useful for
   runtime/log/adapter patterns, not memory/WebUI/browser design.
 
 Useful commands:

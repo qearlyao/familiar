@@ -123,8 +123,9 @@ describe("memory tools", () => {
 				/type=conversation/,
 			);
 			assert.doesNotMatch(diaryResult.content[0]?.type === "text" ? diaryResult.content[0].text : "", /metadata:/);
-			assert.deepEqual(diaryResult.details.scope, "diary");
-			assert.deepEqual(diaryResult.details.ids.length, 1);
+			assert.deepEqual(Object.keys(diaryResult.details).sort(), ["ids", "resultCount"]);
+			assert.equal(diaryResult.details.resultCount, 1);
+			assert.equal(diaryResult.details.ids.length, 1);
 
 			const factualRecall = createTools(store, [0, 1, 0]).find((tool) => tool.name === "memory_recall");
 			assert.ok(factualRecall);
@@ -139,8 +140,8 @@ describe("memory tools", () => {
 				assert.doesNotMatch(text, /type=diary/);
 				assert.doesNotMatch(text, /metadata:/);
 				assert.doesNotMatch(text, /source=/);
-				assert.deepEqual(factualResult.details.scope, "factual");
-				assert.equal(factualResult.details.mode, "hybrid");
+				assert.deepEqual(Object.keys(factualResult.details).sort(), ["ids", "resultCount"]);
+				assert.equal(factualResult.details.resultCount, factualResult.details.ids.length);
 		} finally {
 			store.close();
 		}
@@ -184,8 +185,8 @@ describe("memory tools", () => {
 			});
 			const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-			assert.equal(result.details.scope, "all");
-			assert.equal(result.details.mode, "lexical");
+			assert.deepEqual(Object.keys(result.details).sort(), ["ids", "resultCount"]);
+			assert.equal(result.details.resultCount, 2);
 			assert.match(text, /type=fact/);
 			assert.match(text, /type=diary/);
 			assert.match(text, /private diary/);

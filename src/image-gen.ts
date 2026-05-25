@@ -58,25 +58,18 @@ interface ImageGenAttachmentDetails {
 }
 
 interface ImageGenAttemptDetails {
-	provider: string;
 	model: string;
-	api: ImageGenApi;
-	baseUrl: string;
-	responseId?: string;
 	stopReason: AssistantImages["stopReason"];
 	errorMessage?: string;
 }
 
 interface ImageGenToolDetails {
-	provider: string;
 	model: string;
-	api: ImageGenApi;
-	baseUrl: string;
-	prompt: string;
-	responseId?: string;
 	textOutput?: string;
-	attachments: ImageGenAttachmentDetails[];
-	attempts: ImageGenAttemptDetails[];
+	id?: string;
+	localPath?: string;
+	stopReason: AssistantImages["stopReason"];
+	errorMessage?: string;
 }
 
 interface ImageGenDeps {
@@ -432,11 +425,7 @@ async function tryGenerateImages(
 
 function attemptDetails(model: ImagesModel<ImageGenApi>, result: AssistantImages): ImageGenAttemptDetails {
 	return {
-		provider: model.provider,
-		model: model.id,
-		api: model.api,
-		baseUrl: model.baseUrl,
-		...(result.responseId ? { responseId: result.responseId } : {}),
+		model: `${model.provider}/${model.id}`,
 		stopReason: result.stopReason,
 		...(result.errorMessage ? { errorMessage: result.errorMessage } : {}),
 	};
@@ -491,17 +480,8 @@ export function createImageGenTool(
 					);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
-					let baseUrl = "";
-					try {
-						baseUrl = resolveImageModel(config, ref).baseUrl;
-					} catch {
-						baseUrl = "";
-					}
 					attempts.push({
-						provider: ref.provider,
-						model: ref.id,
-						api: config.imageGen.api,
-						baseUrl,
+						model: `${ref.provider}/${ref.id}`,
 						stopReason: "error",
 						errorMessage: message,
 					});
@@ -524,8 +504,10 @@ export function createImageGenTool(
 			if (!selected) throw new Error(`Image generation failed: ${selectedError}`);
 
 			const attachments = await writeGeneratedImages(config, mediaSink, selected.result);
+			const primaryAttachment = attachments[0];
 			const notices = attachments.map((attachment) => formatImageGenNotice(attachment.name));
 			const sideText = textOutput(selected.result);
+			const selectedAttempt = attempts.at(-1);
 			return {
 				content: [
 					{
@@ -534,15 +516,11 @@ export function createImageGenTool(
 					},
 				],
 				details: {
-					provider: selected.model.provider,
-					model: selected.model.id,
-					api: selected.model.api,
-					baseUrl: selected.model.baseUrl,
-					prompt,
-					...(selected.result.responseId ? { responseId: selected.result.responseId } : {}),
+					model: `${selected.model.provider}/${selected.model.id}`,
 					...(sideText ? { textOutput: sideText } : {}),
-					attachments,
-					attempts,
+					...(primaryAttachment ? { id: primaryAttachment.id, localPath: primaryAttachment.localPath } : {}),
+					stopReason: selectedAttempt?.stopReason ?? selected.result.stopReason,
+					...(selectedAttempt?.errorMessage ? { errorMessage: selectedAttempt.errorMessage } : {}),
 				},
 			};
 		},

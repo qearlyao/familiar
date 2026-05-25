@@ -25,13 +25,7 @@ const ttsSchema = Type.Object(
 type TtsToolInput = Static<typeof ttsSchema>;
 
 interface TtsToolDetails {
-	provider: "elevenlabs";
-	voiceId: string;
-	modelId: string;
-	outputFormat: string;
 	localPath: string;
-	mimeType: string;
-	size: number;
 }
 
 interface ElevenLabsVoiceSettingsPayload {
@@ -161,13 +155,7 @@ export function createTtsTool(
 			return {
 				content: [{ type: "text", text: formatTtsNotice(name) }],
 				details: {
-					provider: "elevenlabs",
-					voiceId,
-					modelId: config.tts.modelId,
-					outputFormat,
 					localPath,
-					mimeType,
-					size: buffer.length,
 				},
 			};
 		},

@@ -120,8 +120,12 @@ describe("image_gen tool", () => {
 			assert.equal(await readFile(attachments[0]?.localPath ?? "", "utf8"), "fake-png");
 			assert.match(toolText(result), /Done\./);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
-			assert.equal(result.details.responseId, "img-1");
-			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason", "textOutput"]);
+			assert.equal(result.details.model, "custom/gemini-image");
+			assert.equal(result.details.textOutput, "Done.");
+			assert.equal(result.details.id, attachments[0]?.id);
+			assert.equal(result.details.localPath, attachments[0]?.localPath);
+			assert.equal(result.details.stopReason, "stop");
 		} finally {
 			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
 			else process.env.CUSTOM_IMAGE_KEY = previousKey;
@@ -170,13 +174,15 @@ describe("image_gen tool", () => {
 			});
 
 			const result = await tool.execute("call-1", { prompt: "draw a fallback" });
+			const attachments = sink.drain();
 
 			assert.deepEqual(attempted, ["primary/model-a:primary-key", "fallback/model-b:fallback-key"]);
-			assert.equal(result.details.provider, "fallback");
-			assert.equal(result.details.model, "model-b");
-			assert.equal(result.details.attempts.length, 2);
-			assert.equal(result.details.attempts[0]?.stopReason, "stop");
-			assert.equal(result.details.attachments[0]?.name.endsWith(".webp"), true);
+			assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason"]);
+			assert.equal(result.details.model, "fallback/model-b");
+			assert.equal(result.details.id, attachments[0]?.id);
+			assert.equal(result.details.localPath, attachments[0]?.localPath);
+			assert.equal(result.details.localPath?.endsWith(".webp"), true);
+			assert.equal(result.details.stopReason, "stop");
 		} finally {
 			if (previousPrimary === undefined) delete process.env.PRIMARY_IMAGE_KEY;
 			else process.env.PRIMARY_IMAGE_KEY = previousPrimary;
@@ -217,7 +223,8 @@ describe("image_gen tool", () => {
 
 			assert.equal(attachments.length, 1);
 			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.equal(result.details.id, attachments[0]?.id);
+			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
 		} finally {
@@ -258,7 +265,8 @@ describe("image_gen tool", () => {
 
 			assert.equal(attachments.length, 1);
 			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.equal(result.details.id, attachments[0]?.id);
+			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
 		} finally {
@@ -294,7 +302,8 @@ describe("image_gen tool", () => {
 
 			assert.equal(attachments.length, 1);
 			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.attachments[0]?.name, attachments[0]?.name);
+			assert.equal(result.details.id, attachments[0]?.id);
+			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /iVBOR/);
 		} finally {

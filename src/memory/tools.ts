@@ -64,8 +64,6 @@ const memoryOpenSchema = Type.Object(
 
 type MemoryRecallInput = Static<typeof memoryRecallSchema>;
 type MemoryOpenInput = Static<typeof memoryOpenSchema>;
-type MemoryRecallScope = keyof typeof MEMORY_SCOPE_CORPORA;
-type MemoryRecallMode = "lexical" | "semantic" | "hybrid";
 
 export interface MemoryToolDeps {
 	store: MemoryIndexStore;
@@ -73,10 +71,6 @@ export interface MemoryToolDeps {
 }
 
 interface MemoryRecallDetails {
-	query: string;
-	scope: MemoryRecallScope;
-	mode: MemoryRecallMode;
-	limit: number;
 	resultCount: number;
 	ids: number[];
 }
@@ -123,10 +117,6 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 			return {
 				content: [{ type: "text", text: formatRecallResults(hits) }],
 				details: {
-					query,
-					scope,
-					mode,
-					limit,
 					resultCount: hits.length,
 					ids: hits.map((hit) => hit.id),
 				},

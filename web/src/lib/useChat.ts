@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Message, ToolEvent } from "../types";
+import type { Message, Step, ThinkingStep, ToolEvent, ToolStep, TextStep } from "../types";
 import {
   fetchAuthMode,
   fetchHistory,
@@ -21,19 +21,7 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-interface PendingMessage {
-  text: string;
-  thinking: string;
-  attachments?: Message["attachments"];
-  thinkingStartedAt?: number;
-  thinkingEndedAt?: number;
-  isUser?: boolean;
-}
-
-function mergeTool(
-  existing: ToolEvent | undefined,
-  patch: ToolEvent,
-): ToolEvent {
+function mergeTool(existing: ToolEvent | undefined, patch: ToolEvent): ToolEvent {
   const terminal = patch.status === "completed" || patch.status === "error";
   return {
     ...existing,
@@ -44,6 +32,79 @@ function mergeTool(
     error: patch.error ?? existing?.error,
     startedAt: existing?.startedAt ?? patch.startedAt,
   };
+}
+
+function closeOpenContentSteps(steps: Step[], now: number): Step[] {
+  if (steps.length === 0) return steps;
+  return steps.map((step) => {
+    if (step.kind === "thinking") {
+      if (step.complete) return step;
+      return { ...step, complete: true, endedAt: step.endedAt ?? now };
+    }
+    if (step.kind === "text") {
+      if (step.complete) return step;
+      return { ...step, complete: true };
+    }
+    return step;
+  });
+}
+
+function appendDelta(
+  steps: Step[],
+  part: "thinking" | "text",
+  content: string,
+  now: number,
+): Step[] {
+  const last = steps[steps.length - 1];
+  if (part === "thinking") {
+    if (last && last.kind === "thinking" && !last.complete) {
+      const updated: ThinkingStep = { ...last, text: last.text + content };
+      return [...steps.slice(0, -1), updated];
+    }
+    const closed = closeOpenContentSteps(steps, now);
+    const next: ThinkingStep = {
+      kind: "thinking",
+      id: uid(),
+      text: content,
+      startedAt: now,
+    };
+    return [...closed, next];
+  }
+  if (last && last.kind === "text" && !last.complete) {
+    const updated: TextStep = { ...last, text: last.text + content };
+    return [...steps.slice(0, -1), updated];
+  }
+  const closed = closeOpenContentSteps(steps, now);
+  const next: TextStep = { kind: "text", id: uid(), text: content };
+  return [...closed, next];
+}
+
+function upsertToolStep(steps: Step[], tool: ToolEvent, now: number): Step[] {
+  const idx = steps.findIndex((s) => s.kind === "tool" && s.tool.id === tool.id);
+  if (idx >= 0) {
+    const existing = steps[idx] as ToolStep;
+    const merged: ToolStep = { ...existing, tool: mergeTool(existing.tool, tool) };
+    const next = steps.slice();
+    next[idx] = merged;
+    return next;
+  }
+  const closed = closeOpenContentSteps(steps, now);
+  const next: ToolStep = { kind: "tool", id: tool.id, tool };
+  return [...closed, next];
+}
+
+function closeAllSteps(steps: Step[], now: number): Step[] {
+  return steps.map((step) => {
+    if (step.kind === "thinking") {
+      if (step.complete) return step;
+      return { ...step, complete: true, endedAt: step.endedAt ?? now };
+    }
+    if (step.kind === "text") {
+      if (step.complete) return step;
+      return { ...step, complete: true };
+    }
+    return step;
+  });
 }
 
 export interface ChatHook {
@@ -70,40 +131,8 @@ export function useChat(): ChatHook {
   const [streaming, setStreaming] = useState(false);
 
   const lastEventIdRef = useRef<string | null>(null);
-  const pendingRef = useRef<Map<string, PendingMessage>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
-
-  const upsertMessage = useCallback(
-    (id: string, patch: Partial<Message> & { role?: Message["role"]; who?: string }) => {
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === id);
-        if (idx >= 0) {
-          const next = prev.slice();
-          next[idx] = {
-            ...next[idx],
-            ...patch,
-            attachments: patch.attachments ?? next[idx].attachments,
-            usage: patch.usage ?? next[idx].usage,
-          };
-          return next;
-        }
-        const seed: Message = {
-          id,
-          role: patch.role ?? "assistant",
-          who: patch.who ?? "Familiar",
-          text: patch.text ?? "",
-          thinking: patch.thinking,
-          thinkingMs: patch.thinkingMs,
-          attachments: patch.attachments,
-          usage: patch.usage,
-          ts: patch.ts ?? Date.now(),
-        };
-        return [...prev, seed];
-      });
-    },
-    [],
-  );
 
   const handleEvent = useCallback(
     (event: StreamEvent) => {
@@ -111,78 +140,70 @@ export function useChat(): ChatHook {
 
       switch (event.type) {
         case "message_started": {
-          const isUser = event.role === "user";
-          pendingRef.current.set(event.messageId, { text: "", thinking: "", isUser });
-          if (!isUser) setStreaming(true);
-          upsertMessage(event.messageId, {
-            role: isUser ? "user" : "assistant",
-            who: event.who,
-            text: "",
-            ts: event.ts,
+          if (event.role !== "user") setStreaming(true);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === event.messageId)) return prev;
+            return [
+              ...prev,
+              {
+                id: event.messageId,
+                role: event.role,
+                who: event.who,
+                steps: [],
+                ts: event.ts,
+              },
+            ];
           });
           break;
         }
+
         case "delta": {
-          const pending = pendingRef.current.get(event.messageId) ?? { text: "", thinking: "" };
-          if (event.part === "thinking") {
-            pending.thinking += event.content;
-            pending.thinkingStartedAt ??= Date.now();
-            pending.thinkingEndedAt = Date.now();
-            upsertMessage(event.messageId, { thinking: pending.thinking });
-          } else {
-            if (pending.thinkingStartedAt && !pending.thinkingEndedAt) {
-              pending.thinkingEndedAt = Date.now();
-            }
-            pending.text += event.content;
-            setMessages((prev) =>
-              prev.map((message) =>
-                message.id === event.messageId
-                  ? { ...message, text: pending.text }
-                  : message,
-              ),
-            );
-          }
-          pendingRef.current.set(event.messageId, pending);
-          break;
-        }
-        case "message_completed": {
-          const pending = pendingRef.current.get(event.messageId);
-          const computedThinkingMs =
-            event.thinkingMs ??
-            (pending?.thinkingStartedAt && pending?.thinkingEndedAt
-              ? Math.max(0, pending.thinkingEndedAt - pending.thinkingStartedAt)
-              : undefined);
-          upsertMessage(event.messageId, {
-            thinkingMs: computedThinkingMs,
-            ...(event.attachments ? { attachments: event.attachments } : {}),
-            ...(event.usage ? { usage: event.usage } : {}),
-            ...(event.silent ? { silent: true, text: "" } : {}),
-          });
-          pendingRef.current.delete(event.messageId);
-          break;
-        }
-        case "tool_event": {
+          const now = Date.now();
           setMessages((prev) =>
-            prev.map((message) => {
-              if (message.id !== event.messageId) return message;
-              const tools = message.tools ? [...message.tools] : [];
-              const index = tools.findIndex((tool) => tool.id === event.tool.id);
-              if (index >= 0) {
-                tools[index] = mergeTool(tools[index], event.tool);
-              } else {
-                tools.push(event.tool);
-              }
-              return { ...message, tools };
+            prev.map((m) =>
+              m.id === event.messageId
+                ? { ...m, steps: appendDelta(m.steps, event.part, event.content, now) }
+                : m,
+            ),
+          );
+          break;
+        }
+
+        case "tool_event": {
+          const now = Date.now();
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === event.messageId
+                ? { ...m, steps: upsertToolStep(m.steps, event.tool, now) }
+                : m,
+            ),
+          );
+          break;
+        }
+
+        case "message_completed": {
+          const now = Date.now();
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== event.messageId) return m;
+              return {
+                ...m,
+                steps: closeAllSteps(m.steps, now),
+                attachments: event.attachments ?? m.attachments,
+                usage: event.usage ?? m.usage,
+                silent: event.silent ?? m.silent,
+              };
             }),
           );
           break;
         }
+
         case "status": {
           if (event.kind === "idle") setStreaming(false);
           break;
         }
+
         case "error": {
-          pendingRef.current.clear();
           setStreaming(false);
           setMessages((prev) => [
             ...prev,
@@ -190,12 +211,20 @@ export function useChat(): ChatHook {
               id: uid(),
               role: "system",
               who: "",
-              text: `error · ${event.code}: ${event.message}`,
+              steps: [
+                {
+                  kind: "text",
+                  id: uid(),
+                  text: `error · ${event.code}: ${event.message}`,
+                  complete: true,
+                },
+              ],
               ts: event.ts,
             },
           ]);
           break;
         }
+
         case "replay_window_lost": {
           fetchHistory(activeSessionKey)
             .then((res) => setMessages(res.messages))
@@ -204,10 +233,9 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [upsertMessage, activeSessionKey],
+    [activeSessionKey],
   );
 
-  // Bootstrap: load auth/persona name + sessions, pick default
   useEffect(() => {
     let cancelled = false;
     fetchAuthMode()
@@ -233,7 +261,6 @@ export function useChat(): ChatHook {
     };
   }, []);
 
-  // Per-session: load history + open WebSocket. Re-runs on session change.
   useEffect(() => {
     if (!activeSessionKey) return;
     localStorage.setItem("familiar.activeSession", activeSessionKey);
@@ -243,7 +270,6 @@ export function useChat(): ChatHook {
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    pendingRef.current.clear();
     lastEventIdRef.current = null;
 
     const resetTimer = window.setTimeout(() => {
@@ -338,7 +364,9 @@ export function useChat(): ChatHook {
         id: uid(),
         role: "system",
         who: "",
-        text: "started fresh",
+        steps: [
+          { kind: "text", id: uid(), text: "started fresh", complete: true },
+        ],
         ts: Date.now(),
       },
     ]);

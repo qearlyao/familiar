@@ -1,4 +1,57 @@
-import type { Message } from "../types";
+import type { Attachment, Message, Step, ToolEvent, Usage } from "../types";
+
+interface WireMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  who: string;
+  text?: string;
+  thinking?: string;
+  thinkingMs?: number;
+  tools?: ToolEvent[];
+  attachments?: Attachment[];
+  usage?: Usage;
+  silent?: boolean;
+  ts: number;
+}
+
+function stepId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `step-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function wireToMessage(wire: WireMessage): Message {
+  const steps: Step[] = [];
+  if (wire.thinking || wire.thinkingMs != null) {
+    const endedAt = wire.ts;
+    const startedAt = endedAt - (wire.thinkingMs ?? 0);
+    steps.push({
+      kind: "thinking",
+      id: stepId(),
+      text: wire.thinking ?? "",
+      startedAt,
+      endedAt,
+      complete: true,
+    });
+  }
+  for (const tool of wire.tools ?? []) {
+    steps.push({ kind: "tool", id: tool.id, tool });
+  }
+  if (wire.text) {
+    steps.push({ kind: "text", id: stepId(), text: wire.text, complete: true });
+  }
+  return {
+    id: wire.id,
+    role: wire.role,
+    who: wire.who,
+    steps,
+    attachments: wire.attachments,
+    usage: wire.usage,
+    silent: wire.silent,
+    ts: wire.ts,
+  };
+}
 
 export interface SessionInfo {
   key: string;
@@ -37,7 +90,7 @@ export type StreamEvent =
       channelKey?: string;
       messageId: string;
       thinkingMs?: number;
-      attachments?: Message["attachments"];
+      attachments?: Attachment[];
       silent?: boolean;
       usage?: {
         input: number;
@@ -53,7 +106,7 @@ export type StreamEvent =
       ts: number;
       channelKey?: string;
       messageId: string;
-      tool: NonNullable<Message["tools"]>[number];
+      tool: ToolEvent;
     }
   | {
       type: "status";
@@ -100,7 +153,12 @@ export async function fetchHistory(channelKey?: string, limit = 50): Promise<His
   if (channelKey) params.set("channelKey", channelKey);
   const res = await fetch(`/api/web/history?${params.toString()}`);
   if (!res.ok) throw new Error(`history: ${res.status}`);
-  return (await res.json()) as HistoryResponse;
+  const body = (await res.json()) as { messages: WireMessage[]; hasMore: boolean; channelKey: string };
+  return {
+    messages: body.messages.map(wireToMessage),
+    hasMore: body.hasMore,
+    channelKey: body.channelKey,
+  };
 }
 
 export async function sendMessage(

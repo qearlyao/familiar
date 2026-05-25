@@ -4,14 +4,35 @@ export interface Message {
   id: string;
   role: Role;
   who: string;
-  text: string;
+  steps: Step[];
   attachments?: Attachment[];
-  thinking?: string;
-  thinkingMs?: number;
-  tools?: ToolEvent[];
   usage?: Usage;
   silent?: boolean;
   ts: number;
+}
+
+export type Step = ThinkingStep | ToolStep | TextStep;
+
+export interface ThinkingStep {
+  kind: "thinking";
+  id: string;
+  text: string;
+  startedAt: number;
+  endedAt?: number;
+  complete?: boolean;
+}
+
+export interface ToolStep {
+  kind: "tool";
+  id: string;
+  tool: ToolEvent;
+}
+
+export interface TextStep {
+  kind: "text";
+  id: string;
+  text: string;
+  complete?: boolean;
 }
 
 export interface Attachment {

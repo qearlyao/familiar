@@ -1,11 +1,10 @@
-import type { Message } from "../types";
+import type { Attachment, Message } from "../types";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { ToolBlock } from "./ToolBlock";
+import { TurnView } from "./TurnView";
 
-function AttachmentItem({ attachment }: { attachment: NonNullable<Message["attachments"]>[number] }) {
+function AttachmentItem({ attachment }: { attachment: Attachment }) {
   if (!attachment.url) return null;
   const isImage = attachment.kind === "image" || attachment.mimeType?.startsWith("image/");
   if (isImage) {
@@ -28,10 +27,10 @@ function AttachmentItem({ attachment }: { attachment: NonNullable<Message["attac
   );
 }
 
-function AttachmentList({ attachments }: { attachments: NonNullable<Message["attachments"]> }) {
+function AttachmentList({ attachments, align }: { attachments: Attachment[]; align: "left" | "right" }) {
   if (attachments.length === 0) return null;
   return (
-    <div className="mt-3 flex flex-col gap-2">
+    <div className={cn("mt-2 flex flex-col gap-2", align === "right" && "items-end")}>
       {attachments.map((attachment) => (
         <AttachmentItem key={attachment.id} attachment={attachment} />
       ))}
@@ -39,56 +38,41 @@ function AttachmentList({ attachments }: { attachments: NonNullable<Message["att
   );
 }
 
-export function MessageBubble({ message }: { message: Message }) {
-  if (message.role === "system") {
-    return (
-      <div className="flex justify-center">
-        <p className="text-xs italic text-muted-foreground">{message.text}</p>
-      </div>
-    );
-  }
-
-  const isUser = message.role === "user";
-  const showThinking = !isUser && (message.thinking || message.thinkingMs != null);
-  const attachments = message.attachments ?? [];
-
-  if (message.silent) {
-    const tools = message.tools ?? [];
-    return (
-      <div className="flex flex-col items-start gap-3">
-        {showThinking && (
-          <ThinkingBlock
-            text={message.thinking ?? ""}
-            durationMs={message.thinkingMs}
-          />
-        )}
-        {tools.length > 0 && <ToolBlock tools={tools} />}
-        <AttachmentList attachments={attachments} />
-        <div className="flex w-full justify-center">
-          <p className="text-xs italic text-muted-foreground">
-            they kept quiet
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+function UserTurn({ message }: { message: Message }) {
+  const text = message.steps
+    .filter((s) => s.kind === "text")
+    .map((s) => (s.kind === "text" ? s.text : ""))
+    .join("");
   return (
-    <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+    <div className="flex flex-col items-end gap-1">
       <span className="text-xs uppercase tracking-wider text-muted-foreground">
         {message.who}
       </span>
-      <div className={cn("flex flex-col", isUser ? "max-w-[85%]" : "w-full")}>
-        {showThinking && (
-          <ThinkingBlock
-            text={message.thinking ?? ""}
-            durationMs={message.thinkingMs}
-          />
-        )}
-        {!isUser && <ToolBlock tools={message.tools ?? []} />}
-        {message.text && renderInlineText(message.text)}
-        <AttachmentList attachments={attachments} />
+      <div className="flex max-w-[85%] flex-col items-end">
+        {text && renderInlineText(text)}
+        <AttachmentList attachments={message.attachments ?? []} align="right" />
       </div>
+    </div>
+  );
+}
+
+function SystemTurn({ message }: { message: Message }) {
+  const text = message.steps.find((s) => s.kind === "text");
+  if (!text || text.kind !== "text") return null;
+  return (
+    <div className="flex justify-center">
+      <p className="text-xs italic text-muted-foreground">{text.text}</p>
+    </div>
+  );
+}
+
+export function MessageBubble({ message }: { message: Message }) {
+  if (message.role === "system") return <SystemTurn message={message} />;
+  if (message.role === "user") return <UserTurn message={message} />;
+  return (
+    <div className="flex w-full flex-col">
+      <TurnView message={message} />
+      <AttachmentList attachments={message.attachments ?? []} align="left" />
     </div>
   );
 }

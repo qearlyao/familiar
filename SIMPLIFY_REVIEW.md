@@ -153,7 +153,7 @@ A few patterns worth flagging:
 
 [x]1. **Atomicity bugs (HIGH #1-5)** — clearest data-loss/replay risk. Codex's recommended starting point: `runtime.ts` job recovery and LCM retention.
 [x]2. **Web correctness bugs (HIGH #13-16)** — TTL bug, WebSocket race, message-state leaks, cookie DoS. Small fixes, real impact.
-3. **Memory hot-path fixes (HIGH #6-12)** — these run per turn; biggest perf wins. Worth a focused branch.
+[x]3. **Memory hot-path fixes (HIGH #6-12)** — these run per turn; biggest perf wins. Worth a focused branch.
 4. **Test hygiene — tmp-dir cleanup sweep (HIGH #18-21)** — easy, large blast radius, will reveal latent flakiness.
 5. **Shared utilities sweep (MED #25-36)** — one PR creating `src/util/guards.ts`, `src/util/fs.ts`, `src/memory/util.ts`, plus the `createWriteQueue` + `atomicWriteJson` + `readEnum` helpers. Cascades into every other simplification.
 6. **God-module decomposition (HIGH #17, #24)** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate.

@@ -197,6 +197,7 @@ function webAttachments(config: Config, attachments: StoredAttachment[] | undefi
 }
 
 function attachmentDerivedText(attachment: StoredAttachment): string | undefined {
+	if (attachment.derived?.text?.label === "preview") return undefined;
 	return attachment.derived?.text?.text;
 }
 
@@ -327,24 +328,26 @@ function applyStoredAgentEventToMessage(
 ): void {
 	const event = record.event;
 	const ts = toUnixMs(record.ts);
+	message.steps ??= [];
+	const steps = message.steps;
 	if (event.type === "message_update") {
 		const assistantEvent = event.assistantMessageEvent;
 		if (assistantEvent.type === "text_delta") {
-			appendDeltaStep(message.steps ??= [], message.id, "text", assistantEvent.delta, ts);
+			appendDeltaStep(steps, message.id, "text", assistantEvent.delta, ts);
 			if (options.applyTextDeltas) message.text += assistantEvent.delta;
 		}
 		if (assistantEvent.type === "thinking_delta") {
-			appendDeltaStep(message.steps ??= [], message.id, "thinking", assistantEvent.delta, ts);
+			appendDeltaStep(steps, message.id, "thinking", assistantEvent.delta, ts);
 			if (options.applyThinkingDeltas) message.thinking = `${message.thinking ?? ""}${assistantEvent.delta}`;
 		}
 	}
 	if (event.type === "message_end") {
-		closeOpenContentSteps(message.steps ??= [], ts);
+		closeOpenContentSteps(steps, ts);
 		if (event.usage) message.usage = event.usage;
 	}
 	const tool = toolFromStoredAgentEvent(event, ts);
 	if (tool) {
-		upsertToolStep(message.steps ??= [], tool, ts);
+		upsertToolStep(steps, tool, ts);
 		const tools = message.tools ?? [];
 		const index = tools.findIndex((candidate) => candidate.id === tool.id);
 		if (index >= 0) {

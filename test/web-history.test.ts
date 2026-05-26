@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ChatLogRecord } from "../src/chat-log.js";
+import { materializeInboundAttachments } from "../src/inbound-attachments.js";
 import { __webTest } from "../src/web.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
@@ -94,6 +95,37 @@ function interleavedAssistantRecords(): ChatLogRecord[] {
 }
 
 describe("web history", () => {
+	it("keeps local text attachment previews out of visible user text", async () => {
+		const config = await configWithDataDir(await createTempDataDir());
+		const [attachment] = await materializeInboundAttachments(config, [
+			{
+				name: "config.txt",
+				mimeType: "text/plain",
+				buffer: Buffer.from('model_provider = "linkapi"\nmodel = "gpt-5.5"', "utf8"),
+				source: "web",
+			},
+		]);
+		const records: ChatLogRecord[] = [
+			{
+				type: "inbound",
+				...base(1, "2026-05-26T00:00:00.000Z"),
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "Q",
+				text: "can u see it?",
+				isBot: false,
+				mentionedBot: true,
+				attachments: [attachment as NonNullable<typeof attachment>],
+			},
+		];
+
+		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
+
+		assert.ok(message);
+		assert.equal(message.text, "can u see it?");
+		assert.equal(message.attachments?.[0]?.name, "config.txt");
+	});
+
 	it("preserves interleaved assistant step order from agent events", async () => {
 		const config = await configWithDataDir(await createTempDataDir());
 		const records = interleavedAssistantRecords();

@@ -76,6 +76,10 @@ Items prefixed **[Codex]** came from the Codex pass.
 35. **`db.inTransaction ? runX() : db.transaction(runX).immediate()`** pattern repeats 6+ times across [operator.ts](src/memory/operator.ts) and [doctor.ts](src/memory/doctor.ts).
 36. **Insert-then-re-read N+1** in LCM: [backfill.ts:127](src/memory/lcm/backfill.ts#L127), [indexer.ts:45](src/memory/lcm/indexer.ts#L45), [context-transformer.ts:395-396](src/memory/lcm/context-transformer.ts#L395-L396) — have `insertRecord` return the `StoredLcmRecord`.
 
+### P5 deferred items
+
+- #36: The named LCM N+1 call sites already use `insertRecordReturningStored()` (`backfill`, `indexer`, `context-transformer`). Changing `insertRecord()` itself to return `StoredLcmRecord` would now be mostly API churn across tests and non-hot-path callers, so it is deferred.
+
 ### Backend hot-path inefficiencies
 
 37. [src/runtime.ts:276-290](src/runtime.ts#L276-L290) — `getLastQueuedTriggerRecordId` / `getLastCompletedTriggerRecordId` scan full records array per inbound message. Maintain counters in `appendRecord`.
@@ -156,10 +160,22 @@ A few patterns worth flagging:
 [x]2. **Web correctness bugs (HIGH #13-16)** — TTL bug, WebSocket race, message-state leaks, cookie DoS. Small fixes, real impact.
 [x]3. **Memory hot-path fixes (HIGH #6-12)** — these run per turn; biggest perf wins. Worth a focused branch.
 [x]4. **Test hygiene — tmp-dir cleanup sweep (HIGH #18-21)** — easy, large blast radius, will reveal latent flakiness.
-5. **Shared utilities sweep (MED #25-36)** — one PR creating `src/util/guards.ts`, `src/util/fs.ts`, `src/memory/util.ts`, plus the `createWriteQueue` + `atomicWriteJson` + `readEnum` helpers. Cascades into every other simplification.
-6. **God-module decomposition (HIGH #17, #24)** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate.
+[x]5. **Shared utilities sweep (MED #25-36)** — one PR creating `src/util/guards.ts`, `src/util/fs.ts`, `src/memory/util.ts`, plus the `createWriteQueue` + `atomicWriteJson` + `readEnum` helpers. Cascades into every other simplification.
+6. **God-module decomposition (HIGH #17, #24) + discord attachment cleanup** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate. Fold in the discord attachment findings from the 2026-05-24 + 2026-05-26 addenda, in this order:
+   - **6a.** 2026-05-24 addendum (`postDiscordAttachments` → `client.rest.post(Routes.channelMessages…)`). Doing this first likely makes 6c and 6d moot — discord.js's REST manager already handles timeouts/retries and accepts `RawFile` buffers directly.
+   - **6b.** Follow-up #1 (HIGH, attachment fire-and-forget vs persisted state) — make required attachment delivery part of the awaited send boundary; persist returned message ids alongside text ids.
+   - **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — likely deleted by 6a; if not, add `AbortSignal`.
+   - **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — likely deleted by 6a.
 7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through.
-8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75)** — meaningful for re-render perf.
+8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Fold in:
+   - Follow-up #4 (MED, persona-load tears down WS) — stash `handleEvent` in a ref so the WS effect only depends on `activeSessionKey`.
+   - Follow-up #9 (LOW, `closeOpenContentSteps` vs `closeAllSteps` duplication) — collapse into one helper.
+9. **EventStream + leftover atomicity polish** — small, scoped:
+   - Follow-up #5 (MED, `aria-hidden` over focusable `show more` button) — swap to `inert` while collapsed.
+   - Follow-up #6 (MED, `JSON.stringify` on every render) — `useMemo` keyed by tool id + status.
+   - Follow-up #10 (LOW, `done` check after errored tool) — compute `hasError`, suppress the done row.
+   - Follow-up #3 (MED, config override mutates memory before durable write) — stage + rollback helper in `web.ts`. Unrelated to EventStream but bundles cleanly as a small standalone fix.
+   - Follow-up #8 (LOW, paginated history rebuilds full transcript) — optional; window message ids before folding steps. Defer if transcript size isn't biting yet.
 
 Suggest small, scoped commits per category with regression testing after each — not one mega-PR.
 
@@ -170,3 +186,36 @@ Suggest small, scoped commits per category with regression testing after each �
 Findings from a follow-up `/simplify` pass over commits `c01dafa`, `8461431`, `fdc737e`. Smaller items (O(n²) mime lookup, triple-ternary in `AttachmentList`, single-use `resolveForOptions` wrapper) were fixed in place. One real reuse win was left as-is because it touches the test mocks:
 
 - **[src/discord.ts:424-448](src/discord.ts#L424-L448) — `postDiscordAttachments` hand-rolls Discord REST.** The function `fetch`es `https://discord.com/api/v10/channels/{id}/messages` with a manual `Authorization: Bot ${token}` header and a hand-built `FormData`. The same module already holds a live `Client<true>` (used for `client.channels.fetch`, `channel.send`, command registration). discord.js exposes `client.rest` — a pre-authenticated `REST` instance that handles the base URL, token, API version, ratelimit, retries, and multipart bodies via `RawFile[]`. Refactor to `client.rest.post(Routes.channelMessages(channelId), { files, body: {} })`. Drops the v10 pin, the manual auth header, the bespoke 200/`id` parsing, and removes a leaky abstraction. Touches [test/discord-attachments.test.ts:41-81](test/discord-attachments.test.ts#L41-L81) — the test currently stubs `globalThis.fetch`, would need to mock the REST manager instead. Severity: MED.
+
+## 2026-05-26 Follow-up scan (Codex) -- webui/web.ts/discord.ts deltas
+
+Scope: current code in `src/discord.ts`, `src/web.ts`, `src/web-tools.ts`, `src/web-auth.ts`, and changed `web/src/` React/TS files, against baseline `f4bfa9f`.
+
+### HIGH
+
+1. [src/discord.ts:516-548](src/discord.ts#L516-L548), [src/discord.ts:1028-1043](src/discord.ts#L1028-L1043), [src/discord.ts:1128-1141](src/discord.ts#L1128-L1141), [src/discord.ts:1253-1267](src/discord.ts#L1253-L1267) — Discord attachment delivery now runs in a fire-and-forget background path while `completeActiveJob`/`noteOutbound` persist `reply.attachments`, so upload failure or process exit can leave durable state claiming an attachment exists without a delivered Discord message id. Fix: make required attachment delivery part of the awaited send boundary, include attachment message ids in persisted outbound state, or persist a retryable attachment-delivery failure separately. Lens: BONUS CROSS-WRITE ATOMICITY.
+
+### MED
+
+2. [src/discord.ts:455-468](src/discord.ts#L455-L468), [src/discord.ts:541-547](src/discord.ts#L541-L547) — `withDiscordSendTimeout` races an already-started upload without aborting the underlying fetch, so a timed-out attachment POST can continue consuming resources and may still post late. Fix: pass an `AbortSignal` through `postDiscordAttachments` and enforce the timeout with `AbortController`/`AbortSignal.timeout`. Lens: EFFICIENCY / BONUS CROSS-WRITE ATOMICITY.
+3. [src/web.ts:1064-1067](src/web.ts#L1064-L1067), [src/web.ts:1088-1091](src/web.ts#L1088-L1091) — config override POST/DELETE mutates live `config` before the durable override write/clear and `entry.apply`, so a write/apply failure can leave memory diverged from disk while returning an error. Fix: stage the old value and roll back on failure, or move the mutation behind one helper that commits in memory only after persistence and apply succeed. Lens: BONUS CROSS-WRITE ATOMICITY.
+4. [web/src/lib/useChat.ts:137-253](web/src/lib/useChat.ts#L137-L253), [web/src/lib/useChat.ts:280-364](web/src/lib/useChat.ts#L280-L364) — worsened original #23: the WebSocket session effect still depends on `handleEvent`, and `handleEvent` now also depends on `personaName`, so late auth/persona load can tear down the active socket, reset `lastEventIdRef`, and reconnect the same session. Fix: keep the socket effect keyed to `activeSessionKey` only, with `handleEvent`, `personaName`, and replay/session state behind refs or a stable event callback. Lens: EFFICIENCY / missing cleanup.
+5. [web/src/components/EventStream.tsx:221-228](web/src/components/EventStream.tsx#L221-L228), [web/src/components/EventStream.tsx:328-335](web/src/components/EventStream.tsx#L328-L335) — collapsed event streams set `aria-hidden` on the body while descendant controls such as `show more` remain mounted and focusable inside a zero-height row. Fix: unmount collapsed bodies, use `inert` while closed, or move inner controls outside the hidden subtree. Lens: CODE QUALITY.
+6. [web/src/components/EventStream.tsx:42-59](web/src/components/EventStream.tsx#L42-L59), [web/src/components/EventStream.tsx:166-180](web/src/components/EventStream.tsx#L166-L180) — tool args/results are fully formatted with `JSON.stringify` and line counting on every render, even when the stream is collapsed and only the summary row is visible. Fix: memoize formatted output by tool id/status/update timestamp and defer full body formatting until expansion. Lens: EFFICIENCY.
+
+### LOW
+
+7. [src/discord.ts:412-414](src/discord.ts#L412-L414), [src/discord.ts:438-444](src/discord.ts#L438-L444) — attachment upload reads into a `Buffer`, copies into a new `Uint8Array`, then wraps that in a `Blob`, doubling peak memory per local attachment. Fix: pass the `Buffer` directly as the blob part or create a zero-copy typed-array view. Lens: EFFICIENCY.
+8. [src/web.ts:383-434](src/web.ts#L383-L434) — paginated history rebuilds every `WebMessage` and step timeline before slicing to `limit`, so page loads scale with total transcript size rather than page size. Fix: window records/message ids before folding steps, or maintain a materialized/indexed history view per runtime channel. Lens: EFFICIENCY.
+9. [web/src/lib/useChat.ts:37-50](web/src/lib/useChat.ts#L37-L50), [web/src/lib/useChat.ts:96-108](web/src/lib/useChat.ts#L96-L108) — `closeOpenContentSteps` and `closeAllSteps` duplicate the same step-closing logic under different names. Fix: collapse them into one helper, parameterized only if completion behavior actually diverges. Lens: CODE REUSE / CODE QUALITY.
+10. [web/src/components/EventStream.tsx:270-272](web/src/components/EventStream.tsx#L270-L272), [web/src/components/EventStream.tsx:361-367](web/src/components/EventStream.tsx#L361-L367) — the terminal `done` row appears after failed tool steps because completion only checks inactivity, not success. Fix: compute `hasError`/`allSucceeded` separately and suppress or replace the done row on errors. Lens: CODE QUALITY.
+
+### Original-list items confirmed already fixed
+
+- Original #13 fixed: [src/web-tools.ts:152-174](src/web-tools.ts#L152-L174) keeps `fetchedAt` as the TTL timestamp and updates `lastAccessed` separately.
+- Original #14 fixed: [src/web.ts:1257-1264](src/web.ts#L1257-L1264) resolves the runtime before accepting the WebSocket, removing the hello/channel race.
+- Original #15 fixed: [src/web.ts:532-561](src/web.ts#L532-L561), [src/web.ts:1317](src/web.ts#L1317) consolidate in-flight message state into one TTL-managed map and clear its timer on shutdown.
+- Original #16 fixed: [src/web-auth.ts:18-25](src/web-auth.ts#L18-L25) guards malformed cookie decoding.
+
+Summary: 10 live findings: 1 HIGH, 5 MED, 4 LOW. One new HIGH-severity issue appeared: Discord attachment delivery moved outside the durable outbound/job completion boundary.
+

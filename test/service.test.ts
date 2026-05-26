@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { posix, resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { __serviceTest, installService, serviceStatus, uninstallService } from "../src/service.js";
+import { __serviceTest, installService, serviceStatus, uninstallService, upgradeFamiliar } from "../src/service.js";
 
 describe("service management", () => {
 	it("renders launchd plist with escaped paths", () => {
@@ -176,5 +176,21 @@ describe("service management", () => {
 		});
 
 		assert.match(__serviceTest.versionManagedPathWarning(spec) ?? "", /version-manager/);
+	});
+
+	it("refreshes missing workspace defaults after global upgrade", async () => {
+		const calls: Array<{ command: string; args: string[] }> = [];
+
+		await upgradeFamiliar("/tmp/familiar workspace", {
+			platform: "linux",
+			runCommand: async (command, args) => {
+				calls.push({ command, args });
+			},
+		});
+
+		assert.deepEqual(calls, [
+			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
+			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
+		]);
 	});
 });

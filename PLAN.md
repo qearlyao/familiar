@@ -218,8 +218,8 @@ capability map.
   WebUI URL, last reload time/error, and Discord connection state when available.
 - Add deploy docs after trusted-friend service usage shakes out.
 - Keep Windows foreground/manual restart mode until real demand appears.
-- Add an explicit workspace refresh path for bundled default skills/templates.
-  Do not silently overwrite existing workspace files during `init`.
+- `familiar upgrade [workspace]` refreshes missing bundled defaults after the
+  package update without overwriting existing workspace files.
 
 ### Reload And Runtime Config
 

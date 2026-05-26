@@ -164,11 +164,14 @@ macOS uses `launchd`; Linux uses user `systemd`. Windows users should run
 `familiar run` in a foreground terminal for now. Service logs are written under
 `<workspace>/logs`.
 
-Upgrade the global npm package with:
+Upgrade the global npm package and append missing workspace defaults with:
 
 ```sh
-familiar upgrade
+familiar upgrade [workspace]
 ```
+
+The workspace refresh is non-overwriting: existing config, persona Markdown, and
+skill files are left alone, while newly bundled skill files are added.
 
 ## Optional Browser Backends
 

@@ -188,6 +188,30 @@ async function run(command: string, args: string[], options: ServiceOptions): Pr
 	await execFileAsync(command, args);
 }
 
+async function runInteractive(
+	command: string,
+	args: string[],
+	options: ServiceOptions,
+	errorPrefix: string,
+): Promise<void> {
+	const currentPlatform = options.platform ?? platform();
+	if (options.runCommand) {
+		await options.runCommand(command, args);
+		return;
+	}
+	await new Promise<void>((resolveRun, rejectRun) => {
+		const child = spawn(command, args, {
+			shell: currentPlatform === "win32",
+			stdio: "inherit",
+		});
+		child.on("exit", (code) => {
+			if (code === 0) resolveRun();
+			else rejectRun(new Error(`${errorPrefix} failed with exit code ${code ?? "unknown"}`));
+		});
+		child.on("error", rejectRun);
+	});
+}
+
 async function capture(command: string, args: string[], options: ServiceOptions): Promise<string> {
 	if (options.captureCommand) return options.captureCommand(command, args);
 	const { stdout } = await execFileAsync(command, args);
@@ -317,20 +341,12 @@ async function supervisorState(spec: ServiceSpec, options: ServiceOptions): Prom
 	}
 }
 
-export async function upgradeFamiliar(options: ServiceOptions = {}): Promise<void> {
+export async function upgradeFamiliar(workspacePath: string, options: ServiceOptions = {}): Promise<void> {
 	const currentPlatform = options.platform ?? platform();
 	const npmCommand = currentPlatform === "win32" ? "npm.cmd" : "npm";
-	await new Promise<void>((resolveUpgrade, rejectUpgrade) => {
-		const child = spawn(npmCommand, ["install", "-g", "@qearlyao/familiar@latest"], {
-			shell: currentPlatform === "win32",
-			stdio: "inherit",
-		});
-		child.on("exit", (code) => {
-			if (code === 0) resolveUpgrade();
-			else rejectUpgrade(new Error(`npm upgrade failed with exit code ${code ?? "unknown"}`));
-		});
-		child.on("error", rejectUpgrade);
-	});
+	const familiarCommand = currentPlatform === "win32" ? "familiar.cmd" : "familiar";
+	await runInteractive(npmCommand, ["install", "-g", "@qearlyao/familiar@latest"], options, "npm upgrade");
+	await runInteractive(familiarCommand, ["init", workspacePath], options, "workspace default refresh");
 }
 
 export function formatServiceResult(result: ServiceCommandResult): string {

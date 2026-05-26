@@ -183,7 +183,7 @@ function usage(): string {
 		"  familiar install-service [workspace]",
 		"  familiar uninstall-service [workspace]",
 		"  familiar status [workspace]",
-		"  familiar upgrade",
+		"  familiar upgrade [workspace]",
 		"",
 		`Default workspace: ${DEFAULT_WORKSPACE_PATH}`,
 	].join("\n");
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
 	}
 	if (command === "upgrade") {
 		console.log("Upgrading @qearlyao/familiar globally...");
-		await upgradeFamiliar();
+		await upgradeFamiliar(resolveWorkspaceInput(workspace));
 		return;
 	}
 	console.error(usage());

@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import type { StoredAgentEvent, StoredAssistantMessageEvent } from "./chat-log.js";
+import { isRecord } from "./util/guards.js";
 
 export interface AgentEventSummary {
 	thinking: string;
@@ -13,10 +14,6 @@ type AgentEventWriter = (event: StoredAgentEvent) => Promise<void>;
 export interface AgentEventRecorder {
 	record(event: StoredAgentEvent): Promise<void>;
 	flush(): Promise<void>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeToolArguments(value: unknown): Record<string, unknown> {

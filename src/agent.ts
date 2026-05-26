@@ -30,6 +30,7 @@ import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "./skills.js";
 import { createTtsTool } from "./tts.js";
+import { isRecord } from "./util/guards.js";
 import { createWebTools } from "./web-tools.js";
 
 export interface FamiliarAgentReply {
@@ -143,10 +144,6 @@ function writeTranscriptLog(config: Config, record: Record<string, unknown>): vo
 function clonePayload(payload: unknown): unknown {
 	if (typeof structuredClone === "function") return structuredClone(payload);
 	return JSON.parse(JSON.stringify(payload)) as unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.

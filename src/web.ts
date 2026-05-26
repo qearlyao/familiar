@@ -40,6 +40,7 @@ import {
 	type WebDaemon,
 	type WebMessage,
 	type WebPublishEvent,
+	type WebStep,
 	type WebStreamEvent,
 	type WebToolEvent,
 } from "./web-types.js";
@@ -264,6 +265,61 @@ function mergeToolEvent(existing: WebToolEvent | undefined, patch: WebToolEvent)
 	};
 }
 
+function stepId(messageId: string, kind: string, index: number): string {
+	return `${messageId}-${kind}-${index}`;
+}
+
+function closeOpenContentSteps(steps: WebStep[], now: number): void {
+	for (const step of steps) {
+		if (step.kind === "thinking" && !step.complete) {
+			step.complete = true;
+			step.endedAt ??= now;
+		}
+		if (step.kind === "text" && !step.complete) step.complete = true;
+	}
+}
+
+function appendDeltaStep(
+	steps: WebStep[],
+	messageId: string,
+	part: "thinking" | "text",
+	content: string,
+	now: number,
+): void {
+	const last = steps.at(-1);
+	if (part === "thinking") {
+		if (last?.kind === "thinking" && !last.complete) {
+			last.text += content;
+			return;
+		}
+		closeOpenContentSteps(steps, now);
+		steps.push({
+			kind: "thinking",
+			id: stepId(messageId, "thinking", steps.length),
+			text: content,
+			startedAt: now,
+		});
+		return;
+	}
+	if (last?.kind === "text" && !last.complete) {
+		last.text += content;
+		return;
+	}
+	closeOpenContentSteps(steps, now);
+	steps.push({ kind: "text", id: stepId(messageId, "text", steps.length), text: content });
+}
+
+function upsertToolStep(steps: WebStep[], tool: WebToolEvent, now: number): void {
+	const index = steps.findIndex((step) => step.kind === "tool" && step.tool.id === tool.id);
+	if (index >= 0) {
+		const existing = steps[index];
+		if (existing?.kind === "tool") existing.tool = mergeToolEvent(existing.tool, tool);
+		return;
+	}
+	closeOpenContentSteps(steps, now);
+	steps.push({ kind: "tool", id: tool.id, tool });
+}
+
 function applyStoredAgentEventToMessage(
 	message: WebMessage,
 	record: Extract<ChatLogRecord, { type: "agent_event" }>,
@@ -274,15 +330,21 @@ function applyStoredAgentEventToMessage(
 	if (event.type === "message_update") {
 		const assistantEvent = event.assistantMessageEvent;
 		if (assistantEvent.type === "text_delta") {
+			appendDeltaStep(message.steps ??= [], message.id, "text", assistantEvent.delta, ts);
 			if (options.applyTextDeltas) message.text += assistantEvent.delta;
 		}
-		if (assistantEvent.type === "thinking_delta" && options.applyThinkingDeltas) {
-			message.thinking = `${message.thinking ?? ""}${assistantEvent.delta}`;
+		if (assistantEvent.type === "thinking_delta") {
+			appendDeltaStep(message.steps ??= [], message.id, "thinking", assistantEvent.delta, ts);
+			if (options.applyThinkingDeltas) message.thinking = `${message.thinking ?? ""}${assistantEvent.delta}`;
 		}
 	}
-	if (event.type === "message_end" && event.usage) message.usage = event.usage;
+	if (event.type === "message_end") {
+		closeOpenContentSteps(message.steps ??= [], ts);
+		if (event.usage) message.usage = event.usage;
+	}
 	const tool = toolFromStoredAgentEvent(event, ts);
 	if (tool) {
+		upsertToolStep(message.steps ??= [], tool, ts);
 		const tools = message.tools ?? [];
 		const index = tools.findIndex((candidate) => candidate.id === tool.id);
 		if (index >= 0) {
@@ -292,6 +354,27 @@ function applyStoredAgentEventToMessage(
 		}
 		message.tools = tools;
 	}
+}
+
+function ensureFallbackSteps(message: WebMessage): void {
+	if (message.steps?.length) return;
+	const steps: WebStep[] = [];
+	if (message.thinking || message.thinkingMs != null) {
+		const endedAt = message.ts;
+		steps.push({
+			kind: "thinking",
+			id: stepId(message.id, "thinking", steps.length),
+			text: message.thinking ?? "",
+			startedAt: endedAt - (message.thinkingMs ?? 0),
+			endedAt,
+			complete: true,
+		});
+	}
+	for (const tool of message.tools ?? []) steps.push({ kind: "tool", id: tool.id, tool });
+	if (message.text) {
+		steps.push({ kind: "text", id: stepId(message.id, "text", steps.length), text: message.text, complete: true });
+	}
+	if (steps.length) message.steps = steps;
 }
 
 function webMessagesFromRecords(
@@ -330,7 +413,22 @@ function webMessagesFromRecords(
 			}
 		}
 	}
+	for (const message of messages) ensureFallbackSteps(message);
 	return messages;
+}
+
+function webHistoryPayload(
+	config: Config,
+	records: readonly ChatLogRecord[],
+	assistantName: string,
+	channelKey: string,
+	options: { limit: number; before?: string },
+): { messages: WebMessage[]; hasMore: boolean; channelKey: string } {
+	const messages = webMessagesFromRecords(config, records, assistantName);
+	const end = options.before ? messages.findIndex((message) => message.id === options.before) : messages.length;
+	const safeEnd = end >= 0 ? end : messages.length;
+	const page = messages.slice(Math.max(0, safeEnd - options.limit), safeEnd);
+	return { messages: page, hasMore: safeEnd - options.limit > 0, channelKey };
 }
 
 function webMessageFromRecord(config: Config, record: ChatLogRecord, assistantName: string): WebMessage | undefined {
@@ -882,12 +980,12 @@ export async function startWebDaemon(
 			if (request.method === "GET" && url.pathname === "/api/web/history") {
 				const runtime = await getRuntime(getChannelKeyFromRequest(url));
 				const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
-				const before = url.searchParams.get("before");
-				const messages = webMessagesFromRecords(config, runtime.getRecords(), personaName);
-				const end = before ? messages.findIndex((message) => message.id === before) : messages.length;
-				const safeEnd = end >= 0 ? end : messages.length;
-				const page = messages.slice(Math.max(0, safeEnd - limit), safeEnd);
-				sendJson(response, 200, { messages: page, hasMore: safeEnd - limit > 0, channelKey: runtime.channelKey });
+				const before = url.searchParams.get("before") ?? undefined;
+				sendJson(
+					response,
+					200,
+					webHistoryPayload(config, runtime.getRecords(), personaName, runtime.channelKey, { limit, before }),
+				);
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/agent/settings") {
@@ -1228,6 +1326,8 @@ export async function startWebDaemon(
 export const __webTest = {
 	memeCatalogPath,
 	parseMemeCatalog,
+	webHistoryPayload,
+	webMessagesFromRecords,
 };
 
 export type { WebAuthMode, WebDaemon };

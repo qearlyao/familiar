@@ -4,6 +4,7 @@ interface WireMessage {
   id: string;
   role: "user" | "assistant" | "system";
   who: string;
+  steps?: Step[];
   text?: string;
   thinking?: string;
   thinkingMs?: number;
@@ -22,6 +23,18 @@ function stepId(): string {
 }
 
 function wireToMessage(wire: WireMessage): Message {
+  if (wire.steps) {
+    return {
+      id: wire.id,
+      role: wire.role,
+      who: wire.who,
+      steps: wire.steps,
+      attachments: wire.attachments,
+      usage: wire.usage,
+      silent: wire.silent,
+      ts: wire.ts,
+    };
+  }
   const steps: Step[] = [];
   if (wire.thinking || wire.thinkingMs != null) {
     const endedAt = wire.ts;

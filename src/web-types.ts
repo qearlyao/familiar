@@ -33,11 +33,33 @@ export type WebUsage = {
 	cost: number;
 };
 
+export type WebStep =
+	| {
+			kind: "thinking";
+			id: string;
+			text: string;
+			startedAt: number;
+			endedAt?: number;
+			complete?: boolean;
+	  }
+	| {
+			kind: "tool";
+			id: string;
+			tool: WebToolEvent;
+	  }
+	| {
+			kind: "text";
+			id: string;
+			text: string;
+			complete?: boolean;
+	  };
+
 export type WebMessage = {
 	id: string;
 	role: "user" | "assistant" | "system";
 	who: string;
 	text: string;
+	steps?: WebStep[];
 	attachments?: WebAttachment[];
 	thinking?: string;
 	thinkingMs?: number;

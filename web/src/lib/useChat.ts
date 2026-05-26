@@ -183,8 +183,24 @@ export function useChat(): ChatHook {
 
         case "message_completed": {
           const now = Date.now();
-          setMessages((prev) =>
-            prev.map((m) => {
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === event.messageId);
+            if (!existing) {
+              return [
+                ...prev,
+                {
+                  id: event.messageId,
+                  role: "assistant",
+                  who: personaName,
+                  steps: [],
+                  attachments: event.attachments,
+                  usage: event.usage,
+                  silent: event.silent,
+                  ts: event.ts,
+                },
+              ];
+            }
+            return prev.map((m) => {
               if (m.id !== event.messageId) return m;
               return {
                 ...m,
@@ -193,8 +209,8 @@ export function useChat(): ChatHook {
                 usage: event.usage ?? m.usage,
                 silent: event.silent ?? m.silent,
               };
-            }),
-          );
+            });
+          });
           break;
         }
 
@@ -233,7 +249,7 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [activeSessionKey],
+    [activeSessionKey, personaName],
   );
 
   useEffect(() => {

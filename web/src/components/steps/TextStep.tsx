@@ -1,6 +1,8 @@
 import { renderInlineText } from "@/lib/renderInlineText";
 import type { TextStep as TextStepData } from "../../types";
 
+const SILENT_MARKER = "[[FAMILIAR_SILENT]]";
+
 export function TextStep({
   step,
   who,
@@ -11,6 +13,7 @@ export function TextStep({
   showLabel: boolean;
 }) {
   const active = !step.complete;
+  const isSilent = step.text.startsWith(SILENT_MARKER);
   return (
     <div className="flex w-full flex-col">
       {showLabel && who && (
@@ -18,7 +21,13 @@ export function TextStep({
           {who}
         </span>
       )}
-      {renderInlineText(step.text, { trailingCursor: active })}
+      {isSilent ? (
+        <p className="font-serif italic text-sm leading-relaxed text-muted-foreground/70">
+          they kept quiet.
+        </p>
+      ) : (
+        renderInlineText(step.text, { trailingCursor: active })
+      )}
     </div>
   );
 }

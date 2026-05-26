@@ -1,7 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import type { Config, DiscordChannelTrigger, ThinkingLevel } from "./config.js";
+import { atomicWriteJson, createWriteQueue, readFileOrNull } from "./util/fs.js";
 
 export type SettingSource = "config" | "override";
 
@@ -73,15 +73,8 @@ function normalizeSettingsFile(value: unknown): SettingsFile {
 }
 
 async function readSettingsFile(path: string): Promise<SettingsFile> {
-	try {
-		const raw = await readFile(path, "utf8");
-		return normalizeSettingsFile(JSON.parse(raw) as unknown);
-	} catch (error) {
-		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-			return { version: 1, channels: {} };
-		}
-		throw error;
-	}
+	const raw = await readFileOrNull(path, "utf8");
+	return raw === null ? { version: 1, channels: {} } : normalizeSettingsFile(JSON.parse(raw) as unknown);
 }
 
 function pruneChannel(settings: ChannelSettings): ChannelSettings | undefined {
@@ -95,23 +88,9 @@ function pruneChannel(settings: ChannelSettings): ChannelSettings | undefined {
 export async function loadSettingsStore(config: Config): Promise<SettingsStore> {
 	const path = resolve(config.workspace.dataDir, "settings", "channel-overrides.json");
 	let file = await readSettingsFile(path);
-	let writeQueue = Promise.resolve();
+	const enqueueWrite = createWriteQueue("channel settings");
 
-	const persist = async (): Promise<void> => {
-		await mkdir(dirname(path), { recursive: true });
-		const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-		await writeFile(tmpPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-		await rename(tmpPath, path);
-	};
-
-	const enqueuePersist = (): Promise<void> => {
-		const run = writeQueue.then(persist, () => persist());
-		writeQueue = run.then(
-			() => undefined,
-			() => undefined,
-		);
-		return run;
-	};
+	const enqueuePersist = (): Promise<void> => enqueueWrite(() => atomicWriteJson(path, file));
 
 	const updateChannel = async (channelKey: string, patch: ChannelSettings): Promise<void> => {
 		const next = pruneChannel({ ...file.channels[channelKey], ...patch });

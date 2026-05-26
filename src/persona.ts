@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import type { Config } from "./config.js";
+import { readFileOrNull } from "./util/fs.js";
 
 export interface Persona {
 	soul: string;
@@ -9,25 +10,12 @@ export interface Persona {
 	inner: string | null;
 }
 
-function isMissingFile(error: unknown): boolean {
-	return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
-async function readOptionalPersonaFile(path: string): Promise<string | null> {
-	try {
-		return await readFile(path, "utf8");
-	} catch (error) {
-		if (isMissingFile(error)) return null;
-		throw error;
-	}
-}
-
 export async function loadPersona(config: Config): Promise<Persona> {
 	const [soul, user, memory, inner] = await Promise.all([
 		readFile(config.persona.soul, "utf8"),
 		readFile(config.persona.user, "utf8"),
 		readFile(config.persona.memory, "utf8"),
-		readOptionalPersonaFile(config.persona.inner),
+		readFileOrNull(config.persona.inner, "utf8"),
 	]);
 	return { soul, user, memory, inner };
 }

@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+
+import { atomicWriteJson, createWriteQueue, isEnoent } from "./util/fs.js";
 
 let addedModelsPath = resolve(process.cwd(), "data", "settings", "added-models.json");
 let loaded = false;
 let modelsCache: string[] = [];
-let writeQueue = Promise.resolve();
+const enqueueWrite = createWriteQueue("added models");
 
 interface AddedModelsFile {
 	models: string[];
@@ -32,17 +33,9 @@ function readAddedModelsFile(path: string): string[] {
 		const raw = readFileSync(path, "utf8");
 		return normalizeModels(JSON.parse(raw) as unknown);
 	} catch (error) {
-		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+		if (isEnoent(error)) return [];
 		throw error;
 	}
-}
-
-async function persistAddedModels(path: string, models: string[]): Promise<void> {
-	await mkdir(dirname(path), { recursive: true });
-	const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-	const file: AddedModelsFile = { models };
-	await writeFile(tmpPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-	await rename(tmpPath, path);
 }
 
 export function setAddedModelsPath(dataDir: string): void {
@@ -63,16 +56,8 @@ export async function saveAddedModels(models: string[]): Promise<void> {
 	const nextModels = normalizeModels({ models });
 	modelsCache = nextModels;
 	loaded = true;
-	const path = addedModelsPath;
-	const run = writeQueue.then(
-		() => persistAddedModels(path, nextModels),
-		() => persistAddedModels(path, nextModels),
-	);
-	writeQueue = run.then(
-		() => undefined,
-		() => undefined,
-	);
-	await run;
+	const file: AddedModelsFile = { models: nextModels };
+	await enqueueWrite(() => atomicWriteJson(addedModelsPath, file));
 }
 
 export async function addModel(model: string): Promise<string[]> {

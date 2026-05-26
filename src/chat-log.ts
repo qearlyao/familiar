@@ -2,6 +2,7 @@ import { appendFile, mkdir, open, readdir, readFile, rm } from "node:fs/promises
 import { dirname, resolve } from "node:path";
 
 import type { Config } from "./config.js";
+import { isEnoent, readFileOrNull } from "./util/fs.js";
 
 export type ChatService = "discord" | "web";
 export type ChatScope = "dm" | "channel" | "thread" | "web";
@@ -262,7 +263,7 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 			try {
 				files = await readdir(dir);
 			} catch (error) {
-				if (getErrorCode(error) === "ENOENT") return [];
+				if (isEnoent(error)) return [];
 				throw error;
 			}
 			const records: ChatLogRecord[] = [];
@@ -296,7 +297,7 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 			} catch (error) {
 				if (getErrorCode(error) !== "EEXIST") throw error;
 			}
-			const existingOwner = (await readFile(lockPath, "utf8").catch(() => "")).trim();
+			const existingOwner = (await readFileOrNull(lockPath, "utf8"))?.trim() ?? "";
 			const existingPid = extractOwnerPid(existingOwner);
 			if (existingPid !== undefined && !isPidAlive(existingPid)) {
 				await rm(lockPath, { force: true });

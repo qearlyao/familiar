@@ -30,6 +30,7 @@ import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "./skills.js";
 import { createTtsTool } from "./tts.js";
+import { isEnoent } from "./util/fs.js";
 import { isRecord } from "./util/guards.js";
 import { createWebTools } from "./web-tools.js";
 
@@ -225,7 +226,7 @@ async function loadStoredMessages(dataDir: string, sessionId: string): Promise<A
 	try {
 		files = await readdir(transcriptsDir);
 	} catch (error) {
-		if (error && typeof error === "object" && (error as NodeJS.ErrnoException).code === "ENOENT") return [];
+		if (isEnoent(error)) return [];
 		console.error("transcript history read failed", error);
 		return [];
 	}

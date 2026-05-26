@@ -4,6 +4,7 @@ import { basename, relative, resolve, sep } from "node:path";
 
 import type { FamiliarAgent } from "./agent.js";
 import { refreshContactNote } from "./contact-note.js";
+import { isEnoent } from "./util/fs.js";
 
 type WatchListener = (eventType: string, filename: string | Buffer | null) => void;
 type WatchHandle = {
@@ -37,10 +38,6 @@ const ROOT_FILES = new Set([
 	"HEARTBEAT.md",
 ]);
 const SKILLS_DIR = "skills";
-
-function isEnoent(error: unknown): boolean {
-	return !!error && typeof error === "object" && (error as NodeJS.ErrnoException).code === "ENOENT";
-}
 
 function shouldReloadForPath(workspacePath: string, changedPath: string): boolean {
 	const relativePath = relative(workspacePath, resolve(changedPath));

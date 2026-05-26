@@ -3,6 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
 import type { Config } from "../../config.js";
+import { isEnoent } from "../../util/fs.js";
 import type { ChunkIndexer, ChunkIndexResult } from "../index/chunk-indexer.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { DIARY_CHUNK_CORPUS, indexDiaryMarkdown } from "./chunks.js";
@@ -62,10 +63,6 @@ export async function listDiaryMarkdownFiles(config: Config): Promise<string[]> 
 		.filter((entry) => entry.isFile() && DIARY_INDEX_FILE_RE.test(entry.name))
 		.map((entry) => join(config.memory.diariesDir, entry.name))
 		.sort();
-}
-
-function isEnoent(error: unknown): boolean {
-	return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
 
 export async function indexDiaryFile(options: IndexDiaryFileOptions): Promise<IndexDiaryFileResult> {

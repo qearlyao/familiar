@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
+import { isEnoent } from "./util/fs.js";
 
 export interface GeneratedAttachment extends StoredAttachment {
 	provider?: string;
@@ -59,7 +60,7 @@ export async function cleanupGeneratedAttachments(config: Config, now = Date.now
 	try {
 		entries = await readdir(dir);
 	} catch (error) {
-		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return 0;
+		if (isEnoent(error)) return 0;
 		throw error;
 	}
 	let removed = 0;
@@ -68,7 +69,7 @@ export async function cleanupGeneratedAttachments(config: Config, now = Date.now
 		const fileStat = await lstat(path).catch(() => undefined);
 		if (!fileStat?.isFile() || fileStat.mtimeMs > cutoff) continue;
 		await rm(path).catch((error) => {
-			if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+			if (!isEnoent(error)) throw error;
 		});
 		removed++;
 	}

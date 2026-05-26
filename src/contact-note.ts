@@ -1,12 +1,9 @@
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+
+import { readFileOrNull } from "./util/fs.js";
 
 let contactNotePath = resolve(process.cwd(), "CONTACT.md");
 let cachedNickname: string | null = null;
-
-function isMissingFile(error: unknown): boolean {
-	return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
 
 export function setContactNotePath(path: string): void {
 	contactNotePath = path;
@@ -14,12 +11,7 @@ export function setContactNotePath(path: string): void {
 }
 
 export async function loadContactNote(): Promise<string | null> {
-	try {
-		return await readFile(contactNotePath, "utf8");
-	} catch (error) {
-		if (isMissingFile(error)) return null;
-		throw error;
-	}
+	return readFileOrNull(contactNotePath, "utf8");
 }
 
 export function parseContactNickname(raw: string | null, fallback: string): string {

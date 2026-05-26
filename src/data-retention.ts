@@ -3,6 +3,7 @@ import { lstat, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import type { Config } from "./config.js";
+import { isEnoent } from "./util/fs.js";
 
 export interface DataRetentionReport {
 	chat: number;
@@ -65,8 +66,4 @@ async function listFiles(root: string): Promise<string[]> {
 		}),
 	);
 	return nested.flat();
-}
-
-function isEnoent(error: unknown): boolean {
-	return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }

@@ -1,5 +1,7 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+
+import { readFileOrNull } from "./util/fs.js";
 
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
@@ -212,21 +214,16 @@ export function schedulerLogPath(dataDir: string, now = new Date()): string {
 }
 
 export async function loadSchedulerState(dataDir: string): Promise<SchedulerState> {
-	const path = schedulerStatePath(dataDir);
-	try {
-		const raw = await readFile(path, "utf8");
-		const parsed = JSON.parse(raw) as Partial<SchedulerState>;
-		return {
-			heartbeat:
-				parsed.heartbeat && typeof parsed.heartbeat === "object" && !Array.isArray(parsed.heartbeat)
-					? parsed.heartbeat
-					: undefined,
-			cron: parsed.cron && typeof parsed.cron === "object" && !Array.isArray(parsed.cron) ? parsed.cron : {},
-		};
-	} catch (error) {
-		if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return { cron: {} };
-		throw error;
-	}
+	const raw = await readFileOrNull(schedulerStatePath(dataDir), "utf8");
+	if (raw === null) return { cron: {} };
+	const parsed = JSON.parse(raw) as Partial<SchedulerState>;
+	return {
+		heartbeat:
+			parsed.heartbeat && typeof parsed.heartbeat === "object" && !Array.isArray(parsed.heartbeat)
+				? parsed.heartbeat
+				: undefined,
+		cron: parsed.cron && typeof parsed.cron === "object" && !Array.isArray(parsed.cron) ? parsed.cron : {},
+	};
 }
 
 export async function saveSchedulerState(dataDir: string, state: SchedulerState): Promise<void> {

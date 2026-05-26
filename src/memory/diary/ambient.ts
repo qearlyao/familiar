@@ -6,8 +6,8 @@ import {
 	retrieveMemory,
 } from "../index/retrieval.js";
 import type { StoredMemoryChunk } from "../index/store.js";
+import { positiveIntegerOrDefault } from "../util.js";
 import { DIARY_CHUNK_CORPUS } from "./chunks.js";
-
 export interface AmbientDiaryRecallOptions {
 	query: string;
 	store: MemoryRetrievalStore;
@@ -178,8 +178,4 @@ function normalizeUnit(value: number | null): number {
 	if (value === null) return 0;
 	const absolute = Math.abs(value);
 	return Math.max(0, Math.min(1, absolute > 1 ? absolute / 10 : absolute));
-}
-
-function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
-	return value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
 }

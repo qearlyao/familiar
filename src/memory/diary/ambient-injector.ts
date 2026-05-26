@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-
 import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
+import { positiveIntegerOrDefault } from "../util.js";
 import { retrieveAmbientDiary } from "./ambient.js";
 
 const INJECTED_MEMORY_OPEN = "<injected_memory>";
@@ -81,10 +81,6 @@ export class AmbientDiaryInjector {
 			return messages;
 		}
 	}
-}
-
-function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
-	return value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function nonNegativeIntegerOrDefault(value: number | undefined, fallback: number): number {

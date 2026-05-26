@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 
 import type { Config } from "../../config.js";
 import { normalizeFtsMatchQuery } from "../index/fts-query.js";
+import { runInTransaction } from "../util.js";
 import { readMeta, runLcmMigrations } from "./schema.js";
 import type {
 	LcmContextItemInput,
@@ -230,7 +231,7 @@ export class LcmStore {
 			const inserted = insertRecordPrepared(this.db, normalized);
 			return { record: recordFromRow(inserted), inserted: true };
 		};
-		return this.db.inTransaction ? runInsert() : this.db.transaction(runInsert).immediate();
+		return runInTransaction(this.db, runInsert);
 	}
 
 	getRecord(id: number): StoredLcmRecord | null {
@@ -289,7 +290,7 @@ export class LcmStore {
 				this.insertSummarySources(id, sources);
 				this.insertSummaryParents(id, parents);
 			});
-		const result = this.db.inTransaction ? runInsert() : this.db.transaction(runInsert).immediate();
+		const result = runInTransaction(this.db, runInsert);
 		return result;
 	}
 

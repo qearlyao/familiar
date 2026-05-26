@@ -1,5 +1,6 @@
 import type { MemoryIndexStore } from "./index/store.js";
 import type { LcmStore } from "./lcm/store.js";
+import { runInTransaction } from "./util.js";
 
 export interface DoctorFinding {
 	kind: string;
@@ -59,8 +60,7 @@ export function applyDoctorFixes(stores: DoctorStores, report: DoctorReport): { 
 			fixed += before;
 		}
 	};
-	if (stores.index.db.inTransaction) runIndexFixes();
-	else stores.index.db.transaction(runIndexFixes).immediate();
+	runInTransaction(stores.index.db, runIndexFixes);
 
 	const runLcmFixes = () => {
 		fixed += stores.lcm.db
@@ -93,8 +93,7 @@ export function applyDoctorFixes(stores: DoctorStores, report: DoctorReport): { 
 			}
 		}
 	};
-	if (stores.lcm.db.inTransaction) runLcmFixes();
-	else stores.lcm.db.transaction(runLcmFixes).immediate();
+	runInTransaction(stores.lcm.db, runLcmFixes);
 
 	if (report.findings.some((finding) => finding.kind === "summary_fk_violation")) {
 		warnings.push("summary FK violations were not modified; inspect LCM summary lineage manually");

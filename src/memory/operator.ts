@@ -3,7 +3,6 @@ import { mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
-
 import type { Config as FamiliarConfig } from "../config.js";
 import { indexAllDiaryFiles } from "./diary/indexer.js";
 import { applyDoctorFixes, type DoctorFinding, runDoctor } from "./doctor.js";
@@ -14,6 +13,7 @@ import { type BackfillReport, backfillFromChatLogs } from "./lcm/backfill.js";
 import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
 import { type MemoryOperatorService, MemoryService } from "./service.js";
+import { runInTransaction } from "./util.js";
 
 export async function runMemoryOperator(config: FamiliarConfig, argv: string[]): Promise<void> {
 	const [command, ...args] = argv;
@@ -173,8 +173,7 @@ async function reindex(
 	const runDelete = () => {
 		for (const corpus of corpora) deleteCorpus(service.memoryStore, corpus);
 	};
-	if (service.memoryStore.db.inTransaction) runDelete();
-	else service.memoryStore.db.transaction(runDelete).immediate();
+	runInTransaction(service.memoryStore.db, runDelete);
 
 	const indexer = options.force
 		? new ChunkIndexer({

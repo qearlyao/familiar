@@ -1,6 +1,6 @@
+import { positiveIntegerOrDefault } from "../util.js";
 import type { EmbeddingProvider } from "./embedding-provider.js";
 import type { MemoryChunkSourceRef, MemorySearchHit, StoredMemoryChunk } from "./store.js";
-
 export interface MemoryRetrievalStore {
 	searchLexical(query: string, options?: number | MemoryRetrievalSearchOptions): MemorySearchHit[];
 	searchSemantic(query: Float32Array, options?: number | MemoryRetrievalSearchOptions): MemorySearchHit[];
@@ -326,8 +326,4 @@ function chunkSources(chunk: StoredMemoryChunk): MemoryChunkSourceRef[] {
 
 function uniqueStrings(values: readonly string[] | undefined): string[] {
 	return Array.from(new Set(values?.filter((value) => value.trim()) ?? []));
-}
-
-function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
-	return value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
 }

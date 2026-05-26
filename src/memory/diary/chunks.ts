@@ -1,6 +1,6 @@
 import { basename } from "node:path";
-
 import type { ChunkIndexer, ChunkIndexResult, MemoryChunkIndexInput } from "../index/chunk-indexer.js";
+import { positiveIntegerOrDefault } from "../util.js";
 
 export const DIARY_CHUNK_CORPUS = "diary_chunk";
 
@@ -282,8 +282,4 @@ function stripInlineMarkdown(value: string): string {
 
 function isMarkdownHeading(line: string): boolean {
 	return /^#{1,6}\s+/.test(line);
-}
-
-function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
-	return value !== undefined && Number.isInteger(value) && value > 0 ? value : fallback;
 }

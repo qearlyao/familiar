@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { MemePicker } from "./MemePicker";
 
 export function Composer({
@@ -16,6 +17,7 @@ export function Composer({
 }) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +42,19 @@ export function Composer({
     window.setTimeout(() => ref.current?.focus(), 0);
   };
 
+  const addAttachments = (files: File[]) => {
+    if (files.length === 0) return;
+    setAttachments((prev) => [...prev, ...files]);
+  };
+
+  const droppedFiles = (items: DataTransferItemList, fallback: FileList): File[] => {
+    const files = Array.from(items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file);
+    return files.length > 0 ? files : Array.from(fallback);
+  };
+
   const sendDisabled = !streaming && !value.trim() && attachments.length === 0;
 
   return (
@@ -51,11 +66,33 @@ export function Composer({
           multiple
           className="hidden"
           onChange={(event) => {
-            setAttachments([...(event.target.files ? Array.from(event.target.files) : [])]);
+            addAttachments(event.target.files ? Array.from(event.target.files) : []);
             event.target.value = "";
           }}
         />
-        <div className="flex flex-col gap-2 rounded-md border border-input bg-card px-3 py-2.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+        <div
+          onDragEnter={(event) => {
+            if (event.dataTransfer.types.includes("Files")) {
+              event.preventDefault();
+              setDragging(true);
+            }
+          }}
+          onDragOver={(event) => {
+            if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            addAttachments(droppedFiles(event.dataTransfer.items, event.dataTransfer.files));
+          }}
+          className={cn(
+            "flex flex-col gap-2 rounded-md border border-input bg-card px-3 py-2.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
+            dragging && "border-ring ring-3 ring-ring/30",
+          )}
+        >
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {attachments.map((file, index) => (
@@ -87,6 +124,10 @@ export function Composer({
               ref={ref}
               value={value}
               onChange={(e) => setValue(e.target.value)}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData.files);
+                if (files.length > 0) addAttachments(files);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

@@ -15,6 +15,8 @@ export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 export const MAX_INBOUND_ATTACHMENTS = 4;
 export const MAX_INBOUND_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 export const MAX_INBOUND_TOTAL_BYTES = 24 * 1024 * 1024;
+const TEXT_ATTACHMENT_PREVIEW_LINES = 2;
+const TEXT_ATTACHMENT_PREVIEW_CHARS = 1000;
 
 type AttachmentSource = "discord" | "web";
 
@@ -75,6 +77,16 @@ function kindFromMime(mimeType: string): StoredAttachment["kind"] {
 	if (mimeType.startsWith("audio/")) return "audio";
 	if (mimeType.startsWith("video/")) return "video";
 	return "file";
+}
+
+function textAttachmentPreview(buffer: Buffer, mimeType: string): string | undefined {
+	if (mimeType !== "text/plain") return undefined;
+	const decoded = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+	const normalized = decoded.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+	if (!normalized || normalized.includes("\uFFFD")) return undefined;
+	const lines = normalized.split("\n").slice(0, TEXT_ATTACHMENT_PREVIEW_LINES);
+	const preview = lines.join("\n").slice(0, TEXT_ATTACHMENT_PREVIEW_CHARS).trim();
+	return preview || undefined;
 }
 
 function sniffText(buffer: Buffer): string | undefined {
@@ -243,6 +255,18 @@ export async function materializeInboundAttachments(
 				source: attachment.source,
 				sha256: attachment.sha256,
 			};
+			const textPreview = textAttachmentPreview(attachment.buffer, attachment.mimeType);
+			if (textPreview) {
+				finalAttachment.derived = {
+					...finalAttachment.derived,
+					text: {
+						provider: "local",
+						model: "text-preview",
+						label: "preview",
+						text: textPreview,
+					},
+				};
+			}
 			const derivedImage = await ensureInlineImageDerivative(config, finalAttachment);
 			if (derivedImage) {
 				if (derivedImage.localPath && !existingDerivedPaths.has(derivedImage.localPath)) {
@@ -301,7 +325,16 @@ export async function promptImagesFromAttachments(attachments: StoredAttachment[
 export function promptAttachmentNotes(attachments: StoredAttachment[]): string {
 	return attachments
 		.map((attachment) => {
-			const attrs = `name="${attachment.name}" id="${attachment.id}" kind="${attachment.kind ?? "file"}" mime="${attachment.mimeType ?? "unknown"}" size="${attachment.size ?? "unknown"}"`;
+			const attrs = [
+				`name="${attachment.name}"`,
+				`id="${attachment.id}"`,
+				`kind="${attachment.kind ?? "file"}"`,
+				`mime="${attachment.mimeType ?? "unknown"}"`,
+				`size="${attachment.size ?? "unknown"}"`,
+				attachment.localPath ? `path="${attachment.localPath}"` : undefined,
+			]
+				.filter(Boolean)
+				.join(" ");
 			const derivedText = attachment.derived?.text?.text;
 			if (derivedText) {
 				const label =

@@ -592,6 +592,7 @@ export async function startWebDaemon(
 					type: "message_completed",
 					channelKey: runtime.channelKey,
 					messageId: record.messageId,
+					attachments: webAttachments(config, record.attachments),
 					ts: toUnixMs(record.ts),
 				});
 			}

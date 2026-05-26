@@ -10,6 +10,7 @@ import {
 	MAX_INBOUND_ATTACHMENTS,
 	MAX_INLINE_IMAGE_BASE64_BYTES,
 	materializeInboundAttachments,
+	promptAttachmentNotes,
 	promptImagesFromAttachments,
 } from "../src/inbound-attachments.js";
 import { attachmentsDir } from "../src/generated-media.js";
@@ -120,6 +121,28 @@ describe("inbound attachments", () => {
 
 		assert.equal(result.images.length, 1);
 		assert.match(result.promptSuffix, /photo\.png/);
+	});
+
+	it("includes local paths and text previews in attachment prompt notes", async () => {
+		const dataDir = await createTempDataDir();
+		const config = await configWithDataDir(dataDir);
+		const [attachment] = await materializeInboundAttachments(config, [
+			{
+				name: "message.txt",
+				mimeType: "text/plain",
+				buffer: Buffer.from("first line\nsecond line\nthird line", "utf8"),
+				source: "web",
+			},
+		]);
+		assert.ok(attachment?.localPath);
+
+		const notes = promptAttachmentNotes([attachment as NonNullable<typeof attachment>]);
+
+		assert.match(notes, /name="message\.txt"/);
+		assert.match(notes, /path="/);
+		assert.match(notes, /first line\nsecond line/);
+		assert.doesNotMatch(notes, /third line/);
+		assert.match(notes, /\[preview:/);
 	});
 
 	it("creates and inlines resized image derivatives for oversized images", async () => {

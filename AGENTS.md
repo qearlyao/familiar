@@ -26,6 +26,7 @@ For high-value upstream/local file references, check `PLAN.md` section `## 6. Re
 
 - Add concise comments that explain the non-obvious intent, invariants, or failure mode.
 - Flexibly and proactively utilize the agent team/sub-agents to enhance work efficiency; when necessary, please review the changes made by the sub-agents.
+- Any test that creates temporary files or directories must register cleanup in the same test (`t.after(() => rm(dir, { recursive: true, force: true }))`). Prefer the helpers in `test/helpers.ts` (`createTempDataDir`, `createWorkspace`, `configWithDataDir`) — they self-clean when given the node:test `t` context.
 
 ## Commit Messages
 

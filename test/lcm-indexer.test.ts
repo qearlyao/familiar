@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -26,8 +26,9 @@ const base = {
 	channelId: "room",
 } as const;
 
-async function tempDbPath(name: string, file: string): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }, name: string, file: string): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), name));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, file);
 }
 
@@ -91,9 +92,9 @@ class FakeEmbeddingProvider implements EmbeddingProvider {
 }
 
 describe("LCM indexer", () => {
-	it("projects normalized chat records into LcmStore and MemoryIndexStore while skipping noisy records", async () => {
-		const lcmStore = new LcmStore({ path: await tempDbPath("familiar-lcm-indexer-", "lcm.sqlite") });
-		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-indexer-memory-", "memory.sqlite"));
+	it("projects normalized chat records into LcmStore and MemoryIndexStore while skipping noisy records", async (t) => {
+		const lcmStore = new LcmStore({ path: await tempDbPath(t, "familiar-lcm-indexer-", "lcm.sqlite") });
+		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-indexer-memory-", "memory.sqlite"));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
 		try {
@@ -189,9 +190,9 @@ describe("LCM indexer", () => {
 		}
 	});
 
-	it("indexes ready summaries with LCM summary source ids and skips placeholders", async () => {
-		const lcmStore = new LcmStore({ path: await tempDbPath("familiar-lcm-summary-indexer-", "lcm.sqlite") });
-		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-summary-indexer-memory-", "memory.sqlite"));
+	it("indexes ready summaries with LCM summary source ids and skips placeholders", async (t) => {
+		const lcmStore = new LcmStore({ path: await tempDbPath(t, "familiar-lcm-summary-indexer-", "lcm.sqlite") });
+		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-summary-indexer-memory-", "memory.sqlite"));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
 		try {
@@ -224,8 +225,8 @@ describe("LCM indexer", () => {
 		}
 	});
 
-	it("indexes only memory-facing visible text from noisy LCM records", async () => {
-		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-visible-indexer-memory-", "memory.sqlite"));
+	it("indexes only memory-facing visible text from noisy LCM records", async (t) => {
+		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-visible-indexer-memory-", "memory.sqlite"));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
 		try {
@@ -316,9 +317,9 @@ describe("LCM indexer", () => {
 		}
 	});
 
-	it("indexes LCM record and summary event-time metadata for recall filters", async () => {
-		const lcmStore = new LcmStore({ path: await tempDbPath("familiar-lcm-time-indexer-", "lcm.sqlite") });
-		const memoryStore = openMemoryStore(await tempDbPath("familiar-lcm-time-indexer-memory-", "memory.sqlite"));
+	it("indexes LCM record and summary event-time metadata for recall filters", async (t) => {
+		const lcmStore = new LcmStore({ path: await tempDbPath(t, "familiar-lcm-time-indexer-", "lcm.sqlite") });
+		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-time-indexer-memory-", "memory.sqlite"));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
 		try {

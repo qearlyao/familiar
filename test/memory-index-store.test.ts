@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -9,8 +9,9 @@ import { createMemoryContentHash, MemoryIndexStore } from "../src/memory/index/s
 import { __memoryVecTest } from "../src/memory/index/vec.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 
-async function tempDbPath(): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-memory-index-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memory.sqlite");
 }
 
@@ -41,8 +42,8 @@ describe("MemoryIndexStore", () => {
 		__memoryVecTest.setLoader(null);
 	});
 
-	it("inserts, dedupes, and reads chunks", async () => {
-		const store = openStore(await tempDbPath());
+	it("inserts, dedupes, and reads chunks", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			const first = store.insertChunk({
 				corpus: "diary_chunk",
@@ -73,8 +74,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("searches with FTS and semantic fallback", async () => {
-		const store = openStore(await tempDbPath());
+	it("searches with FTS and semantic fallback", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunks([
 				{
@@ -106,11 +107,11 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("sqlite-vec unavailable soft-fall uses linear scan", async () => {
+	it("sqlite-vec unavailable soft-fall uses linear scan", async (t) => {
 		__memoryVecTest.setLoader(() => {
 			throw new Error("sqlite-vec unavailable in test");
 		});
-		const store = openStore(await tempDbPath());
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunks([
 				{ corpus: "diary_chunk", sourceId: "a", text: "near vector", embedding: vector([1, 0, 0]) },
@@ -134,7 +135,7 @@ describe("MemoryIndexStore", () => {
 			t.skip("sqlite-vec is not installed in this environment");
 			return;
 		}
-		const path = await tempDbPath();
+		const path = await tempDbPath(t);
 		const store = openStore(path);
 		try {
 			const inputs = Array.from({ length: 50 }, (_, index) => {
@@ -164,7 +165,7 @@ describe("MemoryIndexStore", () => {
 		__memoryVecTest.setLoader(() => {
 			throw new Error("sqlite-vec unavailable during initial create");
 		});
-		const path = await tempDbPath();
+		const path = await tempDbPath(t);
 		const firstStore = openStore(path);
 		try {
 			firstStore.insertChunks([
@@ -195,8 +196,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("dedupes identical content across sources and preserves mappings until the last source is deleted", async () => {
-		const store = openStore(await tempDbPath());
+	it("dedupes identical content across sources and preserves mappings until the last source is deleted", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			const ids = store.insertChunks([
 				{ corpus: "diary_chunk", sourceId: "source-a", chunkIndex: 0, text: "X", embedding: vector([1, 0, 0]) },
@@ -226,8 +227,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("replaces a source mapping when the same source chunk index changes content", async () => {
-		const store = openStore(await tempDbPath());
+	it("replaces a source mapping when the same source chunk index changes content", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.replaceSource("diary_chunk", "day.md", [
 				{ corpus: "ignored", sourceId: "ignored", chunkIndex: 0, text: "old indexed text", embedding: vector([1, 0, 0]) },
@@ -244,8 +245,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("quotes natural-language FTS queries with punctuation", async () => {
-		const store = openStore(await tempDbPath());
+	it("quotes natural-language FTS queries with punctuation", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunks([
 				{
@@ -274,8 +275,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("allows trailing-star FTS prefix queries", async () => {
-		const store = openStore(await tempDbPath());
+	it("allows trailing-star FTS prefix queries", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunks([
 				{
@@ -304,8 +305,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("sanitizes prefix query bodies before preserving trailing star", async () => {
-		const store = openStore(await tempDbPath());
+	it("sanitizes prefix query bodies before preserving trailing star", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunk({
 				corpus: "diary_chunk",
@@ -320,8 +321,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("replaces and deletes source chunks transactionally", async () => {
-		const store = openStore(await tempDbPath());
+	it("replaces and deletes source chunks transactionally", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			store.insertChunks([
 				{ corpus: "diary_chunk", sourceId: "day.md", chunkIndex: 0, text: "old one", embedding: vector([1, 0, 0]) },
@@ -346,8 +347,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("deletes stale source rows while preserving selected hashes", async () => {
-		const store = openStore(await tempDbPath());
+	it("deletes stale source rows while preserving selected hashes", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			const ids = store.insertChunks([
 				{ corpus: "diary_chunk", sourceId: "day.md", chunkIndex: 0, text: "keep memory", embedding: vector([1, 0, 0]) },
@@ -368,8 +369,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("finds present hashes and clears stale rows on model changes", async () => {
-		const path = await tempDbPath();
+	it("finds present hashes and clears stale rows on model changes", async (t) => {
+		const path = await tempDbPath(t);
 		const firstStore = openStore(path);
 		let hash: string;
 		try {
@@ -409,8 +410,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("sets requires_reindex after embedding config changes", async () => {
-		const path = await tempDbPath();
+	it("sets requires_reindex after embedding config changes", async (t) => {
+		const path = await tempDbPath(t);
 		const firstStore = openStore(path);
 		try {
 			firstStore.insertChunk({
@@ -436,8 +437,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("drops stale memory_vec rows when embedding dimensions change without sqlite-vec loaded", async () => {
-		const path = await tempDbPath();
+	it("drops stale memory_vec rows when embedding dimensions change without sqlite-vec loaded", async (t) => {
+		const path = await tempDbPath(t);
 		__memoryVecTest.setLoader(() => {
 			throw new Error("sqlite-vec unavailable during initial create");
 		});
@@ -471,9 +472,9 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("doctor reports requires_reindex and clean does not clear it", async () => {
-		const path = await tempDbPath();
-		const lcmPath = await tempDbPath();
+	it("doctor reports requires_reindex and clean does not clear it", async (t) => {
+		const path = await tempDbPath(t);
+		const lcmPath = await tempDbPath(t);
 		const firstStore = openStore(path);
 		try {
 			firstStore.insertChunk({
@@ -503,8 +504,8 @@ describe("MemoryIndexStore", () => {
 		}
 	});
 
-	it("rejects vectors with the wrong dimensionality", async () => {
-		const store = openStore(await tempDbPath());
+	it("rejects vectors with the wrong dimensionality", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		try {
 			assert.throws(
 				() =>

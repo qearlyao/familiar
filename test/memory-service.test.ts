@@ -13,9 +13,15 @@ import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
-async function memoryConfig() {
+async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await createTempDataDir();
 	const memoryRootDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-service-"));
+	t.after(async () => {
+		await Promise.all([
+			rm(dataDir, { recursive: true, force: true }),
+			rm(memoryRootDir, { recursive: true, force: true }),
+		]);
+	});
 	return configWithDataDir(dataDir, {
 		memory: {
 			rootDir: memoryRootDir,
@@ -96,8 +102,8 @@ describe("MemoryService", () => {
 		assert.match(Array.isArray(last?.content) ? (last.content.at(-1) as { text: string }).text : "", /<injected_memory>/);
 	});
 
-	it("recalls indexed diary chunks through transformContext", async () => {
-		const config = await memoryConfig();
+	it("recalls indexed diary chunks through transformContext", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			store.insertChunk({
@@ -128,8 +134,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("skips ambient diary retrieval when requested for a transform", async () => {
-		const config = await memoryConfig();
+	it("skips ambient diary retrieval when requested for a transform", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			store.insertChunk({
@@ -172,8 +178,8 @@ describe("MemoryService", () => {
 		}
 	});
 
-	it("debounces changed diary files into the shared memory index", async () => {
-		const config = await memoryConfig();
+	it("debounces changed diary files into the shared memory index", async (t) => {
+		const config = await memoryConfig(t);
 		await mkdir(config.memory.diariesDir, { recursive: true });
 		await withEmbeddingFetch([1, 0, 0], async () => {
 			const service = createMemoryService(config, { diaryWatchDebounceMs: 20 });
@@ -204,8 +210,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("skips unchanged diary files during repeated startup indexing", async () => {
-		const config = await memoryConfig();
+	it("skips unchanged diary files during repeated startup indexing", async (t) => {
+		const config = await memoryConfig(t);
 		await mkdir(config.memory.diariesDir, { recursive: true });
 		await writeFile(resolve(config.memory.diariesDir, "2026-05-12.md"), "startup diary once", "utf8");
 		let embeddingCalls = 0;
@@ -233,8 +239,8 @@ describe("MemoryService", () => {
 		}
 	});
 
-	it("projects runtime records into LCM and rotates segments on reset", async () => {
-		const baseConfig = await memoryConfig();
+	it("projects runtime records into LCM and rotates segments on reset", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
@@ -277,8 +283,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("clears persisted LCM context items when runtime segment rotates on reset", async () => {
-		const baseConfig = await memoryConfig();
+	it("clears persisted LCM context items when runtime segment rotates on reset", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
@@ -334,8 +340,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("continues segment IDs after restart instead of reusing closed segments", async () => {
-		const baseConfig = await memoryConfig();
+	it("continues segment IDs after restart instead of reusing closed segments", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
@@ -402,8 +408,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("removes pruned LCM records from the shared memory index on reset", async () => {
-		const baseConfig = await memoryConfig();
+	it("removes pruned LCM records from the shared memory index on reset", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
@@ -456,8 +462,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("automatically summarizes old LCM context once it exceeds the leaf trigger", async () => {
-		const baseConfig = await memoryConfig();
+	it("automatically summarizes old LCM context once it exceeds the leaf trigger", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -532,8 +538,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("returns a budget-guarded LCM context when compaction cannot finish", async () => {
-		const baseConfig = await memoryConfig();
+	it("returns a budget-guarded LCM context when compaction cannot finish", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -579,8 +585,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("defers LCM compaction debt while cache is hot", async () => {
-		const baseConfig = await memoryConfig();
+	it("defers LCM compaction debt while cache is hot", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmDebtConfig(baseConfig);
 		let now = 100_000;
 		let calls = 0;
@@ -620,8 +626,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("services LCM compaction debt once cache is cold", async () => {
-		const baseConfig = await memoryConfig();
+	it("services LCM compaction debt once cache is cold", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...lcmDebtConfig(baseConfig),
 			memory: {
@@ -678,8 +684,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("forces LCM compaction during critical overflow even when cache is hot", async () => {
-		const baseConfig = await memoryConfig();
+	it("forces LCM compaction during critical overflow even when cache is hot", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const debtConfig = lcmDebtConfig(baseConfig);
 		const config = {
 			...debtConfig,
@@ -729,8 +735,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("persists deferred LCM compaction debt across restart", async () => {
-		const baseConfig = await memoryConfig();
+	it("persists deferred LCM compaction debt across restart", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...lcmDebtConfig(baseConfig),
 			memory: {
@@ -798,8 +804,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("clears deferred LCM compaction debt when runtime segment rotates on reset", async () => {
-		const baseConfig = await memoryConfig();
+	it("clears deferred LCM compaction debt when runtime segment rotates on reset", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmDebtConfig(baseConfig);
 		let now = 100_000;
 		await withEmbeddingFetch([1, 0, 0], async () => {
@@ -848,8 +854,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("invalidates in-memory LCM state on reset so summaries do not leak into the next segment", async () => {
-		const baseConfig = await memoryConfig();
+	it("invalidates in-memory LCM state on reset so summaries do not leak into the next segment", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
 
@@ -914,8 +920,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("preserves rehydrated raw items through syncContextState on restart", async () => {
-		const baseConfig = await memoryConfig();
+	it("preserves rehydrated raw items through syncContextState on restart", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -979,8 +985,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("services cold-turn compaction debt once after syncContextState", async () => {
-		const baseConfig = await memoryConfig();
+	it("services cold-turn compaction debt once after syncContextState", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1045,8 +1051,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("invalidates in-memory LCM context state when runtime segment rotates", async () => {
-		const baseConfig = await memoryConfig();
+	it("invalidates in-memory LCM context state when runtime segment rotates", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
 		let now = 100_000;
@@ -1106,8 +1112,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("accumulates LCM compaction debt additively and drains it in two rounds", async () => {
-		const baseConfig = await memoryConfig();
+	it("accumulates LCM compaction debt additively and drains it in two rounds", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1172,8 +1178,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("services cold-cache debt once when rehydrated debt meets new pressure", async () => {
-		const baseConfig = await memoryConfig();
+	it("services cold-cache debt once when rehydrated debt meets new pressure", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1236,8 +1242,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("preserves rehydrated raw LCM items after restart when only the fresh tail is replayed", async () => {
-		const baseConfig = await memoryConfig();
+	it("preserves rehydrated raw LCM items after restart when only the fresh tail is replayed", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1298,8 +1304,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("deduplicates insertSummary calls for the same summary key across an interleaved insert", async () => {
-		const config = await memoryConfig();
+	it("deduplicates insertSummary calls for the same summary key across an interleaved insert", async (t) => {
+		const config = await memoryConfig(t);
 		const service: ReturnType<typeof MemoryService.createWithoutRuntime> = MemoryService.createWithoutRuntime(config);
 		const peerStore = LcmStore.open(config);
 		try {
@@ -1321,8 +1327,8 @@ describe("MemoryService", () => {
 		}
 	});
 
-	it("serviceCompactionDebt forces LCM compaction while cache is hot", async () => {
-		const baseConfig = await memoryConfig();
+	it("serviceCompactionDebt forces LCM compaction while cache is hot", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...lcmDebtConfig(baseConfig),
 			memory: {
@@ -1374,8 +1380,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("subtracts serviced leaf tokens from compaction debt across multiple rounds", async () => {
-		const baseConfig = await memoryConfig();
+	it("subtracts serviced leaf tokens from compaction debt across multiple rounds", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...lcmDebtConfig(baseConfig),
 			memory: {
@@ -1472,8 +1478,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("rehydrates persisted LCM summary after restart when runtime sends only the fresh tail", async () => {
-		const baseConfig = await memoryConfig();
+	it("rehydrates persisted LCM summary after restart when runtime sends only the fresh tail", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
 
@@ -1523,8 +1529,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("preserves rehydrated LCM summary before a different fresh tail after restart", async () => {
-		const baseConfig = await memoryConfig();
+	it("preserves rehydrated LCM summary before a different fresh tail after restart", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const summarizer = fixedSummary("The old alpha and beta details were compacted.");
 
@@ -1576,8 +1582,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("summary over span with tool_call record includes tool markers in rendered input", async () => {
-		const baseConfig = await memoryConfig();
+	it("summary over span with tool_call record includes tool markers in rendered input", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1640,8 +1646,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("strips provider signature metadata from leaf summary input", async () => {
-		const baseConfig = await memoryConfig();
+	it("strips provider signature metadata from leaf summary input", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1719,8 +1725,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("prompt-aware LCM compaction skips records relevant to the last user message", async () => {
-		const baseConfig = await memoryConfig();
+	it("prompt-aware LCM compaction skips records relevant to the last user message", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1762,8 +1768,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("falls back to oldest-first LCM compaction when prompt-aware eviction is disabled", async () => {
-		const baseConfig = await memoryConfig();
+	it("falls back to oldest-first LCM compaction when prompt-aware eviction is disabled", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: {
@@ -1805,8 +1811,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("reconciles shared-index rows left behind after LCM retention committed", async () => {
-		const baseConfig = await memoryConfig();
+	it("reconciles shared-index rows left behind after LCM retention committed", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
@@ -1877,8 +1883,8 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("drops persisted LCM raw context item with missing record during rehydrate", async () => {
-		const baseConfig = await memoryConfig();
+	it("drops persisted LCM raw context item with missing record during rehydrate", async (t) => {
+		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const store = LcmStore.open(config);
 		try {

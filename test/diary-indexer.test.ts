@@ -15,8 +15,10 @@ import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 
-async function tempRoot(): Promise<string> {
-	return mkdtemp(resolve(tmpdir(), "familiar-diary-indexer-"));
+async function tempRoot(t: { after(fn: () => Promise<void>): void }): Promise<string> {
+	const dir = await mkdtemp(resolve(tmpdir(), "familiar-diary-indexer-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	return dir;
 }
 
 function configFor(diariesDir: string): Config {
@@ -55,8 +57,8 @@ class FakeEmbeddingProvider implements EmbeddingProvider {
 }
 
 describe("diary file indexer", () => {
-	it("lists and indexes only dated markdown diary files from config.memory.diariesDir", async () => {
-		const root = await tempRoot();
+	it("lists and indexes only dated markdown diary files from config.memory.diariesDir", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		await writeFile(resolve(diariesDir, "2026-05-09.md"), "# Morning\nTea mattered.", "utf8");
@@ -89,8 +91,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("indexes one diary file and clears prior chunks when the file becomes empty", async () => {
-		const root = await tempRoot();
+	it("indexes one diary file and clears prior chunks when the file becomes empty", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		const diaryPath = resolve(diariesDir, "2026-05-10.md");
@@ -119,8 +121,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("skips unchanged diary files when source state already matches", async () => {
-		const root = await tempRoot();
+	it("skips unchanged diary files when source state already matches", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		const diaryPath = resolve(diariesDir, "2026-05-10.md");
@@ -157,8 +159,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("reuses embeddings when source state is unavailable", async () => {
-		const root = await tempRoot();
+	it("reuses embeddings when source state is unavailable", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		await writeFile(resolve(diariesDir, "2026-05-10.md"), "A remembered thing.", "utf8");
@@ -177,8 +179,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("clears indexed chunks for a deleted diary file", async () => {
-		const root = await tempRoot();
+	it("clears indexed chunks for a deleted diary file", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		const diaryPath = resolve(diariesDir, "2026-05-10.md");
@@ -201,8 +203,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("skips invalid single-file requests by default and can fail loudly", async () => {
-		const root = await tempRoot();
+	it("skips invalid single-file requests by default and can fail loudly", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "diaries");
 		await mkdir(diariesDir);
 		await writeFile(resolve(diariesDir, "notes.md"), "not a dated diary", "utf8");
@@ -231,8 +233,8 @@ describe("diary file indexer", () => {
 		}
 	});
 
-	it("indexes zero diary files when the diary directory is missing", async () => {
-		const root = await tempRoot();
+	it("indexes zero diary files when the diary directory is missing", async (t) => {
+		const root = await tempRoot(t);
 		const diariesDir = resolve(root, "missing-diaries");
 		const store = openStore(resolve(root, "memory.sqlite"));
 		const provider = new FakeEmbeddingProvider();

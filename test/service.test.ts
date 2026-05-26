@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { posix, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -52,9 +52,15 @@ describe("service management", () => {
 		assert.equal(__serviceTest.systemdQuote("/tmp/a b/$HOME"), '"/tmp/a b/\\$HOME"');
 	});
 
-	it("installs and uninstalls a macOS launchd service definition", async () => {
+	it("installs and uninstalls a macOS launchd service definition", async (t) => {
 		const homeDir = await mkdtemp(resolve(tmpdir(), "familiar-service-home-"));
 		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-service-workspace-"));
+		t.after(async () => {
+			await Promise.all([
+				rm(homeDir, { recursive: true, force: true }),
+				rm(workspacePath, { recursive: true, force: true }),
+			]);
+		});
 		const calls: string[] = [];
 
 		const installed = await installService(workspacePath, {
@@ -96,9 +102,15 @@ describe("service management", () => {
 		assert.equal(existsSync(resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist")), false);
 	});
 
-	it("installs a Linux user systemd service definition", async () => {
+	it("installs a Linux user systemd service definition", async (t) => {
 		const homeDir = await mkdtemp(resolve(tmpdir(), "familiar-service-home-"));
 		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-service-workspace-"));
+		t.after(async () => {
+			await Promise.all([
+				rm(homeDir, { recursive: true, force: true }),
+				rm(workspacePath, { recursive: true, force: true }),
+			]);
+		});
 		const calls: string[] = [];
 
 		const installed = await installService(workspacePath, {

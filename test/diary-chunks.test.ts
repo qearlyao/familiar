@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -14,8 +14,9 @@ import {
 	indexDiaryMarkdown,
 } from "../src/memory/diary/index.js";
 
-async function tempDbPath(): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-diary-chunks-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memory.sqlite");
 }
 
@@ -155,8 +156,8 @@ A quieter thought arrived after midnight.
 		);
 	});
 
-	it("indexes a diary file through ChunkIndexer.replaceSource", async () => {
-		const store = openStore(await tempDbPath());
+	it("indexes a diary file through ChunkIndexer.replaceSource", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {

@@ -7,8 +7,16 @@ import { describe, it } from "node:test";
 
 import { __hotReloadTest, startWorkspaceHotReload } from "../src/hot-reload.js";
 
-function delay(ms: number): Promise<void> {
-	return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+function waitForReload(timeoutMs = 1000): { promise: Promise<void>; resolve: () => void } {
+	let resolveReload: () => void = () => undefined;
+	const promise = new Promise<void>((resolveWait, rejectWait) => {
+		const timeout = setTimeout(() => rejectWait(new Error("timed out waiting for hot reload")), timeoutMs);
+		resolveReload = () => {
+			clearTimeout(timeout);
+			resolveWait();
+		};
+	});
+	return { promise, resolve: resolveReload };
 }
 
 describe("workspace hot reload", () => {
@@ -26,6 +34,7 @@ describe("workspace hot reload", () => {
 	it("debounces watched workspace changes into one reload", async () => {
 		const watched = new Map<string, (eventType: string, filename: string | Buffer | null) => void>();
 		const reloads: string[] = [];
+		const { promise: reloadPromise, resolve: resolveReload } = waitForReload();
 		const workspacePath = resolve(tmpdir(), "familiar-hot-reload-workspace");
 		const skillPath = resolve(workspacePath, "skills", "image-style");
 		const hotReload = startWorkspaceHotReload({
@@ -34,6 +43,7 @@ describe("workspace hot reload", () => {
 			familiarAgent: {
 				async reload() {
 					reloads.push("reload");
+					resolveReload();
 					return "ok";
 				},
 			},
@@ -47,11 +57,11 @@ describe("workspace hot reload", () => {
 			logger: { info() {}, warn() {}, error() {} },
 		});
 
-		await delay(0);
+		await Promise.resolve();
 		watched.get(workspacePath)?.("change", "config.toml");
 		watched.get(workspacePath)?.("change", ".env");
 		watched.get(skillPath)?.("change", "SKILL.md");
-		await delay(30);
+		await reloadPromise;
 		hotReload.close();
 
 		assert.equal(reloads.length, 1);

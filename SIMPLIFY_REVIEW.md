@@ -46,6 +46,7 @@ Items prefixed **[Codex]** came from the Codex pass.
 19. [test/discord-attachments.test.ts:11](test/discord-attachments.test.ts#L11) — Hardcoded `/tmp/familiar-discord-test`; parallel runs collide, never cleaned up. Switch to `createTempDataDir()`.
 20. [test/installer.test.ts:22-57](test/installer.test.ts#L22-L57), [test/service.test.ts:54-144](test/service.test.ts#L54-L144) — `mkdtemp` without cleanup; chmod'd shell stubs + plist/unit files leak permanently.
 21. [test/hot-reload.test.ts:10-12,52](test/hot-reload.test.ts#L10-L12) — `delay(30)` waiting for 5ms debounce → CI flake risk. Use a promise signaled by the callback.
+21a. **Follow-up to #18 (discovered during P4 commit):** [test/helpers.ts:27-34](test/helpers.ts#L27-L34) — `createWorkspace()` is called inside `configWithDataDir()` and creates a third tmp dir (`familiar-test-*`) that the caller never sees and therefore can't clean up. Re-running the suite post-P4 still leaks ~176 `familiar-test-*` dirs per run (vs. ~63 `familiar-data-*`, which is residual `createTempDataDir` callsites). Fix: have `configWithDataDir` accept the test's `t` and register cleanup for the inner workspace dir. Touches every `configWithDataDir` callsite. Severity: HIGH (biggest remaining leak source).
 
 ### Frontend
 

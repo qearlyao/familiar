@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import type { StoredAttachment } from "../src/chat-log.js";
-import { configWithDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("discord attachment payloads", () => {
-	it("can resolve generated attachments without using local path strings", async () => {
-		const dataDir = resolve("/tmp", "familiar-discord-test");
+	it("can resolve generated attachments without using local path strings", async (t) => {
+		const dataDir = await createTempDataDir();
+		t.after(() => rm(dataDir, { recursive: true, force: true }));
 		const config = await configWithDataDir(dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_test.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
@@ -38,8 +39,9 @@ describe("discord attachment payloads", () => {
 		);
 	});
 
-	it("posts generated attachments through Discord REST multipart", async () => {
-		const dataDir = resolve("/tmp", "familiar-discord-rest-test");
+	it("posts generated attachments through Discord REST multipart", async (t) => {
+		const dataDir = await createTempDataDir();
+		t.after(() => rm(dataDir, { recursive: true, force: true }));
 		const config = await configWithDataDir(dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_rest.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -9,8 +9,9 @@ import Database from "better-sqlite3";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSourceProvenance, LcmSummarySnapshot } from "../src/memory/lcm/types.js";
 
-async function tempDbPath(): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-lcm-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memories", "lcm", "lcm.sqlite");
 }
 
@@ -23,13 +24,13 @@ function source(id: string | number): LcmSourceProvenance {
 	};
 }
 
-async function openStore(): Promise<LcmStore> {
-	return new LcmStore({ path: await tempDbPath() });
+async function openStore(t: { after(fn: () => Promise<void>): void }): Promise<LcmStore> {
+	return new LcmStore({ path: await tempDbPath(t) });
 }
 
 describe("LcmStore", () => {
-	it("creates the normalized source DB and round-trips records with provenance", async () => {
-		const store = await openStore();
+	it("creates the normalized source DB and round-trips records with provenance", async (t) => {
+		const store = await openStore(t);
 		try {
 			assert.equal(store.schemaVersion(), 7);
 			store.ensureSegment({
@@ -82,8 +83,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("round-trips parts_json through insert and getRecord", async () => {
-		const store = await openStore();
+	it("round-trips parts_json through insert and getRecord", async (t) => {
+		const store = await openStore(t);
 		try {
 			const id = store.insertRecord({
 				segmentId: "seg-a",
@@ -102,8 +103,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("stores summary placeholders and provenance edges", async () => {
-		const store = await openStore();
+	it("stores summary placeholders and provenance edges", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertRecord({
 				segmentId: "seg-a",
@@ -150,8 +151,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("sanitizes lexical FTS queries and returns empty operator-only searches", async () => {
-		const store = await openStore();
+	it("sanitizes lexical FTS queries and returns empty operator-only searches", async (t) => {
+		const store = await openStore(t);
 		try {
 			const id = store.insertRecord({
 				segmentId: "seg-a",
@@ -178,8 +179,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("removes contentless FTS rows when segment cascade deletes records", async () => {
-		const store = await openStore();
+	it("removes contentless FTS rows when segment cascade deletes records", async (t) => {
+		const store = await openStore(t);
 		try {
 			store.insertRecord({
 				segmentId: "seg-a",
@@ -204,8 +205,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("keeps contentless FTS rows stable when reopening the store", async () => {
-		const path = await tempDbPath();
+	it("keeps contentless FTS rows stable when reopening the store", async (t) => {
+		const path = await tempDbPath(t);
 		let store = new LcmStore({ path });
 		try {
 			store.insertRecord({
@@ -229,8 +230,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("rolls back implicit segment creation when record insert fails", async () => {
-		const store = await openStore();
+	it("rolls back implicit segment creation when record insert fails", async (t) => {
+		const store = await openStore(t);
 		const originalPrepare = store.db.prepare.bind(store.db);
 		store.db.prepare = ((sourceSql: string) => {
 			if (sourceSql.includes("INSERT INTO lcm_records (")) throw new Error("simulated insert failure");
@@ -255,8 +256,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("deletes summary source rows when retained summaries are pruned", async () => {
-		const store = await storeWithClosedSegments();
+	it("deletes summary source rows when retained summaries are pruned", async (t) => {
+		const store = await storeWithClosedSegments(t);
 		try {
 			assert.ok(store.getSummarySources(1).length > 0);
 
@@ -268,8 +269,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("insertSummary with parents populates lcm_summary_parents and getSummaryParents returns them", async () => {
-		const store = await openStore();
+	it("insertSummary with parents populates lcm_summary_parents and getSummaryParents returns them", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertSummary({
 				segmentId: "seg-parents",
@@ -314,8 +315,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("insertSummary dedupes concurrent summary_key inserts in one transaction path", async () => {
-		const store = await openStore();
+	it("insertSummary dedupes concurrent summary_key inserts in one transaction path", async (t) => {
+		const store = await openStore(t);
 		try {
 			const input = {
 				segmentId: "seg-concurrent",
@@ -333,8 +334,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("deleting a parent summary cascades through lcm_summary_parents", async () => {
-		const store = await openStore();
+	it("deleting a parent summary cascades through lcm_summary_parents", async (t) => {
+		const store = await openStore(t);
 		try {
 			const child = store.insertSummary({
 				segmentId: "seg-cascade-parents",
@@ -362,8 +363,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("does not index boundary records into lexical FTS", async () => {
-		const store = await openStore();
+	it("does not index boundary records into lexical FTS", async (t) => {
+		const store = await openStore(t);
 		try {
 			store.insertRecord({
 				segmentId: "seg-a",
@@ -389,8 +390,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("enables foreign key enforcement on opened store connections", async () => {
-		const path = await tempDbPath();
+	it("enables foreign key enforcement on opened store connections", async (t) => {
+		const path = await tempDbPath(t);
 		await mkdir(resolve(path, ".."), { recursive: true });
 		const raw = new Database(path);
 		try {
@@ -407,8 +408,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("keeps all context for newSessionRetainDepth -1", async () => {
-		const store = await storeWithClosedSegments();
+	it("keeps all context for newSessionRetainDepth -1", async (t) => {
+		const store = await storeWithClosedSegments(t);
 		try {
 			const report = store.applyNewSessionRetention({ newSessionRetainDepth: -1, activeSegmentId: "seg-c" });
 			assert.equal(report.rawRecordsDeleted, 0);
@@ -420,8 +421,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("drops raw records but keeps summaries for newSessionRetainDepth 0", async () => {
-		const store = await storeWithClosedSegments();
+	it("drops raw records but keeps summaries for newSessionRetainDepth 0", async (t) => {
+		const store = await storeWithClosedSegments(t);
 		try {
 			const report = store.applyNewSessionRetention({ newSessionRetainDepth: 0, activeSegmentId: "seg-c" });
 			assert.equal(report.rawRecordsDeleted, 2);
@@ -438,8 +439,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("snapshot_json populated on retainDepth 0", async () => {
-		const store = await openStore();
+	it("snapshot_json populated on retainDepth 0", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertRecord({
 				segmentId: "seg-snapshot",
@@ -522,8 +523,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("only surviving summaries snapshotted on retainDepth 2", async () => {
-		const store = await openStore();
+	it("only surviving summaries snapshotted on retainDepth 2", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertRecord({
 				segmentId: "seg-depth",
@@ -579,8 +580,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("no snapshot written on retainDepth -1", async () => {
-		const store = await openStore();
+	it("no snapshot written on retainDepth -1", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertRecord({
 				segmentId: "seg-keep",
@@ -618,8 +619,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("keeps only retained-depth or pinned summaries for positive newSessionRetainDepth", async () => {
-		const store = await storeWithClosedSegments();
+	it("keeps only retained-depth or pinned summaries for positive newSessionRetainDepth", async (t) => {
+		const store = await storeWithClosedSegments(t);
 		try {
 			const report = store.applyNewSessionRetention({ newSessionRetainDepth: 2, activeSegmentId: "seg-c" });
 			assert.equal(report.rawRecordsDeleted, 2);
@@ -643,8 +644,8 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("replaceContextItems atomically replaces rows with sequential ordinals", async () => {
-		const store = await openStore();
+	it("replaceContextItems atomically replaces rows with sequential ordinals", async (t) => {
+		const store = await openStore(t);
 		try {
 			const first = store.insertRecord({
 				segmentId: "seg-context",
@@ -706,8 +707,8 @@ describe("LcmStore", () => {
 	});
 });
 
-async function storeWithClosedSegments(): Promise<LcmStore> {
-	const store = await openStore();
+async function storeWithClosedSegments(t: { after(fn: () => Promise<void>): void }): Promise<LcmStore> {
+	const store = await openStore(t);
 	store.ensureSegment({ id: "seg-a", startedAt: "2026-05-10T01:00:00.000Z" });
 	store.insertRecord({
 		segmentId: "seg-a",

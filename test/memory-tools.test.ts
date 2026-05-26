@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -11,9 +11,15 @@ import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { createMemoryService } from "../src/memory/service.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
-async function memoryConfig() {
+async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await createTempDataDir();
 	const memoryRootDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-tools-"));
+	t.after(async () => {
+		await Promise.all([
+			rm(dataDir, { recursive: true, force: true }),
+			rm(memoryRootDir, { recursive: true, force: true }),
+		]);
+	});
 	return configWithDataDir(dataDir, {
 		memory: {
 			rootDir: memoryRootDir,
@@ -60,8 +66,8 @@ function createTools(store: MemoryIndexStore, values = [1, 0, 0]) {
 }
 
 describe("memory tools", () => {
-	it("creates memory-prefixed recall and open tools", async () => {
-		const config = await memoryConfig();
+	it("creates memory-prefixed recall and open tools", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			const tools = createTools(store);
@@ -77,8 +83,8 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("recalls scoped memory chunks through the shared index", async () => {
-		const config = await memoryConfig();
+	it("recalls scoped memory chunks through the shared index", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			store.insertChunks([
@@ -147,8 +153,8 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("defaults memory_recall scope to all and supports mode plus time filters", async () => {
-		const config = await memoryConfig();
+	it("defaults memory_recall scope to all and supports mode plus time filters", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			store.insertChunks([
@@ -196,8 +202,8 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("opens a chunk with full text and metadata", async () => {
-		const config = await memoryConfig();
+	it("opens a chunk with full text and metadata", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		let id: number;
 		try {
@@ -242,8 +248,8 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("reports missing chunks without throwing", async () => {
-		const config = await memoryConfig();
+	it("reports missing chunks without throwing", async (t) => {
+		const config = await memoryConfig(t);
 		const store = MemoryIndexStore.open(config);
 		try {
 			const open = createTools(store).find((tool) => tool.name === "memory_open");
@@ -258,8 +264,8 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("MemoryService reuses one memory store across repeated recall tool calls", async () => {
-		const config = await memoryConfig();
+	it("MemoryService reuses one memory store across repeated recall tool calls", async (t) => {
+		const config = await memoryConfig(t);
 		const service = createMemoryService(config);
 		try {
 			const store = serviceMemoryStore(service);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -34,8 +34,9 @@ class FakeEmbeddingProvider implements EmbeddingProvider {
 	}
 }
 
-async function tempConfig() {
+async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-doctor-"));
+	t.after(() => rm(dataDir, { recursive: true, force: true }));
 	return configWithDataDir(dataDir, {
 		memory: {
 			embedding: {
@@ -75,8 +76,8 @@ function indexChunk(service: ReturnType<typeof MemoryService.createWithoutRuntim
 }
 
 describe("memory doctor and operator", () => {
-	it("status output is well-formed as JSON", async () => {
-		const config = await tempConfig();
+	it("status output is well-formed as JSON", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			const recordId = insertRecord(service, "seg-status", "status record");
@@ -102,8 +103,8 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("detects each requested finding type", async () => {
-		const config = await tempConfig();
+	it("detects each requested finding type", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			const staleChunkId = indexChunk(service, LCM_RECORD_CORPUS, "lcm_record:999999");
@@ -156,8 +157,8 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("cleans fixable findings without deleting LCM rows", async () => {
-		const config = await tempConfig();
+	it("cleans fixable findings without deleting LCM rows", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			const recordId = insertRecord(service, "seg-clean", "record to keep");
@@ -189,8 +190,8 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("reindexes LCM records", async () => {
-		const config = await tempConfig();
+	it("reindexes LCM records", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			for (let index = 0; index < 5; index++) insertRecord(service, "seg-reindex", `record ${index}`);
@@ -208,10 +209,11 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("backs up both sqlite databases", async () => {
-		const config = await tempConfig();
+	it("backs up both sqlite databases", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		const outDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-backup-"));
+		t.after(() => rm(outDir, { recursive: true, force: true }));
 		try {
 			insertRecord(service, "seg-backup", "backup record");
 			indexChunk(service, "diary_chunk", "2026-05-10.md");
@@ -232,8 +234,8 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("prunes closed raw records while retaining the active segment", async () => {
-		const config = await tempConfig();
+	it("prunes closed raw records while retaining the active segment", async (t) => {
+		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			insertRecord(service, "seg-closed", "closed raw");

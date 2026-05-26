@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -44,9 +44,15 @@ async function tempDir(prefix: string): Promise<string> {
 	return mkdtemp(resolve(tmpdir(), prefix));
 }
 
-async function createHarness() {
+async function createHarness(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await tempDir("familiar-backfill-data-");
 	const memoryDir = await tempDir("familiar-backfill-memory-");
+	t.after(async () => {
+		await Promise.all([
+			rm(dataDir, { recursive: true, force: true }),
+			rm(memoryDir, { recursive: true, force: true }),
+		]);
+	});
 	const config = await configWithDataDir(dataDir, {
 		memory: {
 			rootDir: memoryDir,
@@ -142,8 +148,8 @@ async function runBackfill(harness: Awaited<ReturnType<typeof createHarness>>, o
 }
 
 describe("memory LCM backfill", () => {
-	it("returns a zero report for an empty data directory", async () => {
-		const harness = await createHarness();
+	it("returns a zero report for an empty data directory", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			const report = await runBackfill(harness);
 			assert.deepEqual(report, {
@@ -161,8 +167,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("ingests basic chat records into LCM and indexes chunks", async () => {
-		const harness = await createHarness();
+	it("ingests basic chat records into LCM and indexes chunks", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(
 				harness.dataDir,
@@ -183,8 +189,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("is idempotent on repeated runs", async () => {
-		const harness = await createHarness();
+	it("is idempotent on repeated runs", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [inbound(1), outbound(2)]);
 			const first = await runBackfill(harness);
@@ -203,8 +209,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("keeps distinct records with matching source coordinates but different text", async () => {
-		const harness = await createHarness();
+	it("keeps distinct records with matching source coordinates but different text", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [
 				inbound(1, "first distinct text", "2026-05-01T01:00:01.000Z"),
@@ -223,8 +229,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("splits segments on control new boundaries", async () => {
-		const harness = await createHarness();
+	it("splits segments on control new boundaries", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [
 				inbound(1),
@@ -243,8 +249,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("honors channel filters", async () => {
-		const harness = await createHarness();
+	it("honors channel filters", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [inbound(1)]);
 			await writeChatFile(harness.dataDir, "other-channel", "2026-05-01", [
@@ -264,8 +270,8 @@ describe("memory LCM backfill", () => {
 		}
 	});
 
-	it("dry-runs without writing LCM rows", async () => {
-		const harness = await createHarness();
+	it("dry-runs without writing LCM rows", async (t) => {
+		const harness = await createHarness(t);
 		try {
 			await writeChatFile(harness.dataDir, "test-channel", "2026-05-01", [inbound(1), outbound(2)]);
 

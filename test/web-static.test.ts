@@ -39,8 +39,9 @@ class FakeResponse {
 }
 
 describe("serveAttachment", () => {
-	it("serves generated audio files", async () => {
+	it("serves generated audio files", async (t) => {
 		const root = await createTempDataDir();
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const config = await configWithDataDir(root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
@@ -55,8 +56,9 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["accept-ranges"], "bytes");
 	});
 
-	it("serves attachment byte ranges for audio metadata requests", async () => {
+	it("serves attachment byte ranges for audio metadata requests", async (t) => {
 		const root = await createTempDataDir();
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const config = await configWithDataDir(root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
@@ -73,8 +75,9 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["accept-ranges"], "bytes");
 	});
 
-	it("serves browser screenshot files", async () => {
+	it("serves browser screenshot files", async (t) => {
 		const root = await createTempDataDir();
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const config = await configWithDataDir(root);
 		const dir = browserScreenshotsDir(config);
 		await rm(dir, { recursive: true, force: true });
@@ -89,8 +92,9 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
-	it("rejects traversal attempts", async () => {
+	it("rejects traversal attempts", async (t) => {
 		const root = await createTempDataDir();
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const config = await configWithDataDir(root);
 		await mkdir(generatedAttachmentsDir(config), { recursive: true });
 		const response = new FakeResponse();
@@ -100,8 +104,9 @@ describe("serveAttachment", () => {
 		assert.equal(response.statusCode, 403);
 	});
 
-	it("rejects symlinks inside the generated attachment directory", async () => {
+	it("rejects symlinks inside the generated attachment directory", async (t) => {
 		const root = await createTempDataDir();
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const config = await configWithDataDir(root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });

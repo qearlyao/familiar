@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -8,8 +8,9 @@ import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 
-async function tempDbPath(): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-chunk-indexer-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memory.sqlite");
 }
 
@@ -52,8 +53,8 @@ class FakeEmbeddingProvider implements EmbeddingProvider {
 }
 
 describe("ChunkIndexer", () => {
-	it("embeds only new unique chunk content and reuses stored hashes", async () => {
-		const store = openStore(await tempDbPath());
+	it("embeds only new unique chunk content and reuses stored hashes", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -83,8 +84,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("maps identical content from different sources to one stored chunk", async () => {
-		const store = openStore(await tempDbPath());
+	it("maps identical content from different sources to one stored chunk", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -105,8 +106,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("dedupes identical text across different metadata roles", async () => {
-		const store = openStore(await tempDbPath());
+	it("dedupes identical text across different metadata roles", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -128,8 +129,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("removes FTS rows when chunks are deleted", async () => {
-		const store = openStore(await tempDbPath());
+	it("removes FTS rows when chunks are deleted", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -146,8 +147,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("replaces source chunks while preserving unchanged rows without re-embedding", async () => {
-		const store = openStore(await tempDbPath());
+	it("replaces source chunks while preserving unchanged rows without re-embedding", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -175,8 +176,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("uses supplied embeddings and leaves dimension validation to the store", async () => {
-		const store = openStore(await tempDbPath());
+	it("uses supplied embeddings and leaves dimension validation to the store", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {
@@ -223,8 +224,8 @@ describe("ChunkIndexer", () => {
 		}
 	});
 
-	it("skips blank chunks and clears a source when replacement has no content", async () => {
-		const store = openStore(await tempDbPath());
+	it("skips blank chunks and clears a source when replacement has no content", async (t) => {
+		const store = openStore(await tempDbPath(t));
 		const provider = new FakeEmbeddingProvider();
 		const indexer = new ChunkIndexer({ store, embeddingProvider: provider });
 		try {

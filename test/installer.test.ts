@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -32,8 +32,9 @@ describe("install scripts", () => {
 		assert.match(stdout, /trusted specs only/);
 	});
 
-	it("runs init even when the workspace already has a config file", async () => {
+	it("runs init even when the workspace already has a config file", async (t) => {
 		const root = await mkdtemp(resolve(tmpdir(), "familiar-installer-"));
+		t.after(() => rm(root, { recursive: true, force: true }));
 		const binDir = resolve(root, "bin");
 		const workspace = resolve(root, "workspace");
 		await mkdir(binDir, { recursive: true });

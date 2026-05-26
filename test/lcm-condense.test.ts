@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -13,8 +13,9 @@ import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import type { LcmSummaryParentSnapshot, LcmSourceProvenance } from "../src/memory/lcm/types.js";
 
-async function tempDbPath(): Promise<string> {
+async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-lcm-condense-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memories", "lcm", "lcm.sqlite");
 }
 
@@ -24,8 +25,8 @@ const source: LcmSourceProvenance = {
 };
 
 describe("LCM condense", () => {
-	it("drives 4 leaf-summary-triggering compactions in one segment; asserts a depth-2 summary is auto-created with 4 leaves as parents and covering range = union of child ranges", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("drives 4 leaf-summary-triggering compactions in one segment; asserts a depth-2 summary is auto-created with 4 leaves as parents and covering range = union of child ranges", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		try {
 			const segmentId = "seg-condense";
 			const leafIds: number[] = [];
@@ -82,8 +83,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("continues condensing parented summaries into deeper DAG levels", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("continues condensing parented summaries into deeper DAG levels", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		try {
 			const segmentId = "seg-deep-condense";
 			for (let index = 0; index < 16; index += 1) {
@@ -131,8 +132,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("passes human-readable time ranges into condensed summary prompts", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("passes human-readable time ranges into condensed summary prompts", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		try {
 			const segmentId = "seg-condense-time-range";
 			for (let index = 0; index < 4; index += 1) {
@@ -175,8 +176,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("rendered context shows depth-2 summary instead of four depth-1 children (no double-count)", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("rendered context shows depth-2 summary instead of four depth-1 children (no double-count)", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		try {
 			const segmentId = "seg-render";
 			const leaves = Array.from({ length: 4 }, (_, index) =>
@@ -208,8 +209,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("newSessionRetainDepth:2 end-to-end: build leaves + condensed depth-2 summary, close segment, retain; depth=2 survives with snapshot_json containing pruned children snapshots collapsed in", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("newSessionRetainDepth:2 end-to-end: build leaves + condensed depth-2 summary, close segment, retain; depth=2 survives with snapshot_json containing pruned children snapshots collapsed in", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		try {
 			const segmentId = "seg-retain";
 			const leaves: number[] = [];
@@ -266,8 +267,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("context transformer condenses after four runtime leaf summaries and renders the promoted summary", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("context transformer condenses after four runtime leaf summaries and renders the promoted summary", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		const segmentManager = new LcmSegmentManager({
 			lcmStore: store,
 			memoryStore: nullMemoryStore(),
@@ -329,8 +330,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("does not persist runtime condensed summaries when live parents are not contiguous", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("does not persist runtime condensed summaries when live parents are not contiguous", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		const segmentManager = new LcmSegmentManager({
 			lcmStore: store,
 			memoryStore: nullMemoryStore(),
@@ -412,8 +413,8 @@ describe("LCM condense", () => {
 		}
 	});
 
-	it("rehydrated condensed summary covers parent raw sources after restart", async () => {
-		const store = new LcmStore({ path: await tempDbPath() });
+	it("rehydrated condensed summary covers parent raw sources after restart", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
 		let now = 100_000;
 		const createTransformer = () =>
 			new LcmContextTransformer({

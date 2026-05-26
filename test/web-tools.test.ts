@@ -4,6 +4,13 @@ import { describe, it } from "node:test";
 import { __webToolsTest, webContentWarning } from "../src/web-tools.js";
 
 describe("web tools", () => {
+	it("exposes reversed tool names to avoid provider-native web tool collisions", () => {
+		assert.deepEqual(
+			__webToolsTest.createWebTools({} as any).map((tool) => tool.name),
+			["search_web", "fetch_web"],
+		);
+	});
+
 	it("warns that web content is untrusted", () => {
 		assert.match(webContentWarning(), /untrusted/);
 		assert.match(webContentWarning(), /open-web content/);
@@ -141,6 +148,20 @@ describe("web tools", () => {
 			totalChars: 3,
 			hasMore: false,
 		});
+	});
+
+	it("points follow-up page reads at fetch_web", () => {
+		const formatted = __webToolsTest.formatFetchContent("https://example.com", "jina", {
+			text: "abc",
+			offset: 0,
+			returnedChars: 3,
+			totalChars: 6,
+			nextOffset: 3,
+			hasMore: true,
+		});
+
+		assert.match(formatted, /fetch_web\(url="https:\/\/example\.com", offset=3\)/);
+		assert.doesNotMatch(formatted, /web_fetch/);
 	});
 
 	it("normalizes provider result payloads", () => {

@@ -14,8 +14,8 @@ Core v0 is largely landed.
 
 - Runtime: direct upstream `Agent`, Discord adapter, WebUI adapter, append-only
   logs, per-channel settings, control commands, payload/transcript logging.
-- Tools: upstream `bash`/`read`/`write`/`edit`; Familiar-owned `web_search`,
-  `web_fetch`, `tts`, `image_gen`, `memory_recall`, `memory_open`, and compact
+- Tools: upstream `bash`/`read`/`write`/`edit`; Familiar-owned `search_web`,
+  `fetch_web`, `tts`, `image_gen`, `memory_recall`, `memory_open`, and compact
   `browser`.
 - Memory: shared SQLite FTS/vector index, LCM context compaction, diary indexing,
   ambient diary recall, memory doctor/backfill/reindex/prune/backup.
@@ -55,7 +55,7 @@ Important posture:
   current carried interior. Episodic recall belongs in diary RAG.
 - Tool surface stays small:
   - Use upstream `bash`, `read`, `write`, `edit`.
-  - Use Familiar-owned `web_search` and `web_fetch` for server-side open web.
+  - Use Familiar-owned `search_web` and `fetch_web` for server-side open web.
   - Keep `memory_recall`/`memory_open` as the agent-facing memory tools.
   - Keep one compact `browser` tool instead of exposing raw backend surfaces.
   - Put large or rare instructions in skills, not tool descriptions.
@@ -172,7 +172,7 @@ capability map.
   overrides, slash commands, silent response protocol, and payload inspection.
 - Tool foundation: upstream `bash`, `read`, `write`, and `edit`; Familiar-owned
   web, media, memory, and browser tools.
-- Web access: `web_search`/`web_fetch` with Brave/Tavily/Exa search routing,
+- Web access: `search_web`/`fetch_web` with Brave/Tavily/Exa search routing,
   TinyFish/Jina markdown fetch, unsafe URL blocking, provider fallback, page
   cache, and untrusted-content wrapping.
 - WebUI dashboard: session picker, shared Discord/Web runtime, live and durable

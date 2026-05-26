@@ -532,7 +532,7 @@ function formatFetchContent(
 		chunk.text,
 	];
 	if (chunk.hasMore && chunk.nextOffset !== undefined) {
-		lines.push("", `[More content available. Next chunk: web_fetch(url="${url}", offset=${chunk.nextOffset})]`);
+		lines.push("", `[More content available. Next chunk: fetch_web(url="${url}", offset=${chunk.nextOffset})]`);
 	}
 	return prefixUntrustedWebContent(lines.join("\n"));
 }
@@ -980,7 +980,7 @@ function makeSearchTool(config: LoadedConfig): AgentTool<typeof webSearchSchema>
 	if (config.apiKeys.EXA_API_KEY) providers.exa = createExaProvider(config.apiKeys.EXA_API_KEY);
 
 	return {
-		name: "web_search",
+		name: "search_web",
 		label: "Web Search",
 		description:
 			"look something up on the open web. returns titles, urls, snippets, and dates when present. depth=thorough swaps brevity for inline excerpts.",
@@ -1051,7 +1051,7 @@ function makeSearchTool(config: LoadedConfig): AgentTool<typeof webSearchSchema>
 function makeFetchTool(config: LoadedConfig): AgentTool<typeof webFetchSchema> {
 	const providers = createFetchProviders(config);
 	return {
-		name: "web_fetch",
+		name: "fetch_web",
 		label: "Web Fetch",
 		description: "pull a webpage down as clean markdown.",
 		parameters: webFetchSchema,
@@ -1131,6 +1131,7 @@ export function createWebTools(_config: Config): AgentTool<any>[] {
 
 export const __webToolsTest = {
 	PageCache,
+	createWebTools,
 	createTestSearchProvider,
 	createFetchProviders,
 	formatFetchContent,

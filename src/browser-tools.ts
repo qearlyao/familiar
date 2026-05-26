@@ -334,20 +334,22 @@ function formatBrowserResult(
 	input?: BrowserToolInput,
 ): { text: string; truncated: boolean } {
 	const body = result.stdout.trim() || result.stderr.trim() || "(no output)";
-	const label = result.backend === "opencli" ? "OpenCLI" : "browser-harness";
-	const header = [
-		`${label} ${result.ok ? "ok" : "failed"} (exit ${result.exitCode})`,
-		`Command: ${commandText(result.command)}`,
-	];
-	if (result.stderr.trim() && result.stdout.trim()) header.push(`stderr:\n${result.stderr.trim()}`);
+	const header: string[] = [];
+	if (!result.ok) {
+		const label = result.backend === "opencli" ? "OpenCLI" : "browser-harness";
+		header.push(`${label} failed (exit ${result.exitCode})`);
+		if (result.backend === "opencli") header.push(`Command: ${commandText(result.command)}`);
+		if (result.stderr.trim() && result.stdout.trim()) header.push(`stderr:\n${result.stderr.trim()}`);
+	}
 	if (!result.ok && input?.mode === "site" && result.backend === "opencli" && !hasArg(result.command, "trace")) {
 		header.push(
 			'Hint: rerun site mode with args.trace="retain-on-failure" and args.verbose=true for OpenCLI trace artifacts.',
 		);
 	}
 	const truncated = truncateText(body, maxChars);
+	const text = [BROWSER_UNTRUSTED_PREFIX, ...header, truncated.text].filter(Boolean).join("\n\n");
 	return {
-		text: `${BROWSER_UNTRUSTED_PREFIX}\n\n${header.join("\n")}\n\n${truncated.text}`,
+		text,
 		truncated: truncated.truncated,
 	};
 }

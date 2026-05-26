@@ -323,7 +323,11 @@ describe("browser tools", () => {
 
 		assert.deepEqual(calls[0], ["browser", "familiar", "--window", "background", "state"]);
 		assert.match(textFrom(result), /untrusted_browser_content/);
+		assert.doesNotMatch(textFrom(result), /OpenCLI ok/);
+		assert.doesNotMatch(textFrom(result), /Command:/);
+		assert.match(textFrom(result), /"title":"Example"/);
 		assert.equal(result.details?.ok, true);
+		assert.deepEqual(result.details?.command, ["opencli", "browser", "familiar", "--window", "background", "state"]);
 		assert.deepEqual(result.details?.json, { title: "Example", url: "https://example.com" });
 	});
 
@@ -355,8 +359,11 @@ describe("browser tools", () => {
 		assert.doesNotMatch(calls[0]?.stdin ?? "", /BU_NAME/);
 		assert.match(calls[0]?.stdin ?? "", /list_tabs\(include_chrome=False\)/);
 		assert.equal(result.details?.backend, "browser-harness");
+		assert.deepEqual(result.details?.command, ["browser-harness"]);
 		assert.deepEqual(result.details?.json, [{ targetId: "tab-1", title: "Inbox", url: "https://mail.example" }]);
-		assert.match(textFrom(result), /browser-harness ok/);
+		assert.doesNotMatch(textFrom(result), /browser-harness ok/);
+		assert.doesNotMatch(textFrom(result), /Command:/);
+		assert.match(textFrom(result), /"targetId":"tab-1"/);
 	});
 
 	it("routes site mode through OpenCLI even when page mode uses browser-harness", async (t) => {
@@ -404,7 +411,9 @@ describe("browser tools", () => {
 		assert.deepEqual(calls[0]?.args, ["reddit", "--help", "-f", "json"]);
 		assert.deepEqual(calls[1]?.args, ["reddit", "saved", "--window", "background", "--limit", "5", "-f", "json"]);
 		assert.equal(result.details?.backend, "opencli");
-		assert.match(textFrom(result), /OpenCLI ok/);
+		assert.doesNotMatch(textFrom(result), /OpenCLI ok/);
+		assert.doesNotMatch(textFrom(result), /Command:/);
+		assert.match(textFrom(result), /"items":\[\]/);
 	});
 
 	it("lists OpenCLI commands for allowed sites from live metadata", async (t) => {
@@ -480,9 +489,34 @@ describe("browser tools", () => {
 		const result = await tool.execute("call-1", { mode: "page", action: "state" });
 
 		assert.match(textFrom(result), /OpenCLI failed \(exit 69\)/);
+		assert.match(textFrom(result), /Command: opencli browser familiar --window background state/);
+		assert.match(textFrom(result), /stderr:\nextension disconnected/);
 		assert.match(textFrom(result), /\.\.\.$/);
 		assert.equal(result.details?.ok, false);
 		assert.equal(result.details?.truncated, true);
+	});
+
+	it("keeps browser-harness failure content diagnostic without echoing the bare command", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: { enabled: true, backend: "browser-harness", maxOutputChars: 1200 },
+		});
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => ({
+			ok: false,
+			backend: "browser-harness",
+			command: [spec.command, ...spec.args],
+			exitCode: 2,
+			stdout: "",
+			stderr: "no active tab",
+			truncated: false,
+		}));
+
+		const result = await tool.execute("call-1", { mode: "page", action: "state" });
+
+		assert.match(textFrom(result), /browser-harness failed \(exit 2\)/);
+		assert.match(textFrom(result), /no active tab/);
+		assert.doesNotMatch(textFrom(result), /Command: browser-harness/);
+		assert.deepEqual(result.details?.command, ["browser-harness"]);
 	});
 
 	it("hints how to enable OpenCLI traces for failed site commands", async (t) => {

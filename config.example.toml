@@ -115,7 +115,7 @@ retention_days = 30
 retention_days = 0
 
 [data.transcripts]
-# Keep transcript retention disabled unless LCM fully covers restart replay needs.
+# Transcripts are the canonical raw history for restart replay; retain them unless loss is intentional.
 retention_days = 0
 
 [data.payloads]

@@ -88,7 +88,7 @@ export function normalizeChatRecords(
 					kind: "tool_result",
 					toolCallId: record.event.toolCallId,
 					toolName: record.event.toolName,
-					output: record.event.result,
+					output: toolResultVisibleOutput(record.event.result),
 					...(record.event.isError ? { isError: true } : {}),
 				},
 			];
@@ -218,6 +218,26 @@ function briefJson(value: unknown, maxLength = 160): string {
 	}
 	const compact = text.replace(/\s+/g, " ").trim();
 	return compact.length > maxLength ? `${compact.slice(0, maxLength - 1)}...` : compact;
+}
+
+function toolResultVisibleOutput(result: unknown): unknown {
+	if (!result || typeof result !== "object" || !("content" in result)) return result;
+	const content = (result as { content?: unknown }).content;
+	if (!Array.isArray(content)) return result;
+	return textFromToolResultContent(content);
+}
+
+function textFromToolResultContent(content: unknown): unknown {
+	if (!Array.isArray(content)) return content;
+	return content
+		.map((item) => {
+			if (item && typeof item === "object" && (item as { type?: unknown }).type === "text") {
+				return (item as { text?: unknown }).text;
+			}
+			return "";
+		})
+		.filter((item): item is string => typeof item === "string" && item.length > 0)
+		.join("\n");
 }
 
 function chatRecordSource(record: ChatLogRecord, sourcePath?: string | null): LcmSourceProvenance {

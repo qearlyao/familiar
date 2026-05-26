@@ -784,7 +784,7 @@ describe("MemoryService", () => {
 			now = 105_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
 			service = createMemoryService(config, { summarizer, now: () => now });
 			try {
-				await service.transformContext([debtMessages().at(-1)!], undefined, {
+				await service.transformContext(debtMessages(), undefined, {
 					sessionKey: "room-debt-restart",
 					sessionId: "session-a",
 					model: { contextWindow: 10_000 } as any,
@@ -908,7 +908,7 @@ describe("MemoryService", () => {
 				try {
 					const contextItems = store.listContextItems("room-rotation-invalidate");
 					assert.equal(contextItems.some((item) => item.type === "summary"), false);
-					assert.equal(contextItems.filter((item) => item.type === "raw").length, 1);
+					assert.equal(contextItems.filter((item) => item.type === "raw").length, 0);
 				} finally {
 					store.close();
 				}
@@ -920,7 +920,7 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("preserves rehydrated raw items through syncContextState on restart", async (t) => {
+	it("does not persist or rehydrate raw context items on restart", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
@@ -968,14 +968,14 @@ describe("MemoryService", () => {
 					},
 				);
 
-				assert.match(renderMessages(afterRestart), /history item 1/);
-				assert.match(renderMessages(afterRestart), /history item 10/);
-						assert.match(renderMessages(afterRestart), /fresh detail delta/);
+				assert.equal(afterRestart.length, 1);
+				assert.doesNotMatch(renderMessages(afterRestart), /history item/);
+				assert.match(renderMessages(afterRestart), /fresh detail delta/);
 
 				const store = LcmStore.open(config);
 				try {
 					const contextItems = store.listContextItems("room-rehydrate-raws");
-					assert.equal(contextItems.filter((item) => item.type === "raw").length, 11);
+					assert.equal(contextItems.filter((item) => item.type === "raw").length, 0);
 				} finally {
 					store.close();
 				}
@@ -1103,7 +1103,7 @@ describe("MemoryService", () => {
 				assert.equal(afterReset.length, 1);
 				assert.doesNotMatch(renderMessages(afterReset), /<from_earlier>/);
 				assert.match(renderMessages(afterReset), /brand new tail delta/);
-				assert.equal(service.lcmStore.listContextItems("room-rotate-invalidate").length, 1);
+				assert.equal(service.lcmStore.listContextItems("room-rotate-invalidate").length, 0);
 			} finally {
 				unsubscribe();
 				await runtime.disconnect();
@@ -1242,7 +1242,7 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("preserves rehydrated raw LCM items after restart when only the fresh tail is replayed", async (t) => {
+	it("ignores legacy persisted raw LCM items after restart", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
@@ -1275,6 +1275,16 @@ describe("MemoryService", () => {
 			} finally {
 				service.close();
 			}
+			const legacyStore = LcmStore.open(config);
+			try {
+				const recordId = legacyStore.listRecords()[0]?.id;
+				assert.ok(recordId);
+				legacyStore.replaceContextItems("room-rehydrate-raws", [
+					{ type: "raw", recordId, fingerprint: "legacy:history-item-1", happenedAt: null },
+				]);
+			} finally {
+				legacyStore.close();
+			}
 
 			service = createMemoryService(config, { summarizer: fixedSummary("unused") });
 			try {
@@ -1288,19 +1298,18 @@ describe("MemoryService", () => {
 					},
 				);
 
-					assert.equal(afterRestart.length, 11);
-				assert.match(renderMessages(afterRestart), /history item 1/);
-				assert.match(renderMessages(afterRestart), /history item 10/);
-								assert.match(renderMessages(afterRestart), /fresh tail after restart/);
-					const store = LcmStore.open(config);
-					try {
-						assert.equal(store.listContextItems("room-rehydrate-raws").length, 11);
-					} finally {
-						store.close();
-					}
+				assert.equal(afterRestart.length, 1);
+				assert.doesNotMatch(renderMessages(afterRestart), /history item/);
+				assert.match(renderMessages(afterRestart), /fresh tail after restart/);
+				const store = LcmStore.open(config);
+				try {
+					assert.equal(store.listContextItems("room-rehydrate-raws").length, 0);
 				} finally {
-					service.close();
+					store.close();
 				}
+			} finally {
+				service.close();
+			}
 		});
 	});
 
@@ -1571,11 +1580,11 @@ describe("MemoryService", () => {
 					},
 				);
 
-				assert.equal(afterRestart.length, 3);
+				assert.equal(afterRestart.length, 2);
 				assert.match(contentText(afterRestart[0]), /<from_earlier>/);
 				assert.match(contentText(afterRestart[0]), /old alpha and beta/);
-				assert.match(renderMessages(afterRestart), /fresh detail gamma/);
-				assert.match(contentText(afterRestart[2]), /brand new tail delta/);
+				assert.doesNotMatch(renderMessages(afterRestart), /fresh detail gamma/);
+				assert.match(contentText(afterRestart[1]), /brand new tail delta/);
 			} finally {
 				service.close();
 			}
@@ -1607,7 +1616,7 @@ describe("MemoryService", () => {
 		};
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer });
+			const service = MemoryService.createWithoutRuntime(config, { summarizer });
 			try {
 				await service.transformContext(
 					[
@@ -1625,8 +1634,8 @@ describe("MemoryService", () => {
 							role: "toolResult" as const,
 							toolCallId: "call-1",
 							toolName: "read",
-							content: [{ type: "text" as const, text: "structured reconstruction TODO" }],
-							details: { text: "structured reconstruction TODO" },
+							content: [{ type: "text" as const, text: "visible read output" }],
+							details: { text: "details-only output" },
 							isError: false,
 							timestamp: 2,
 						},
@@ -1639,7 +1648,12 @@ describe("MemoryService", () => {
 				assert.match(renderedInput, /<tool_call name="read">/);
 				assert.match(renderedInput, /"path": "PLAN\.md"/);
 				assert.match(renderedInput, /<tool_result name="read">/);
-				assert.match(renderedInput, /structured reconstruction TODO/);
+				assert.match(renderedInput, /visible read output/);
+				assert.doesNotMatch(renderedInput, /details-only output/);
+				const toolRecord = service.lcmStore.listRecords().find((record) => record.kind === "tool");
+				assert.deepEqual(toolRecord?.parts, [
+					{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: "visible read output" },
+				]);
 			} finally {
 				service.close();
 			}
@@ -1883,7 +1897,7 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("drops persisted LCM raw context item with missing record during rehydrate", async (t) => {
+	it("drops legacy persisted LCM raw context items without trying to replay them", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = lcmCompactionConfig(baseConfig);
 		const store = LcmStore.open(config);
@@ -1911,33 +1925,26 @@ describe("MemoryService", () => {
 			store.close();
 		}
 
-		const originalConsoleError = console.error;
-		const errors: unknown[][] = [];
-		console.error = (...args: unknown[]) => {
-			errors.push(args);
-		};
-		try {
-			await withEmbeddingFetch([1, 0, 0], async () => {
-				const service = createMemoryService(config, { summarizer: fixedSummary("unused") });
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = createMemoryService(config, { summarizer: fixedSummary("unused") });
+			try {
+				const rendered = await service.transformContext(
+					[{ role: "user" as const, content: "fresh after orphan", timestamp: 2 }],
+					undefined,
+					{ sessionKey: "room-missing-record", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
+				);
+				assert.equal(rendered.length, 1);
+				assert.match(contentText(rendered[0]), /fresh after orphan/);
+				const cleanedStore = LcmStore.open(config);
 				try {
-					const rendered = await service.transformContext(
-						[{ role: "user" as const, content: "fresh after orphan", timestamp: 2 }],
-						undefined,
-						{ sessionKey: "room-missing-record", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
-					);
-					assert.equal(rendered.length, 1);
-					assert.match(contentText(rendered[0]), /fresh after orphan/);
+					assert.equal(cleanedStore.listContextItems("room-missing-record").length, 0);
 				} finally {
-					service.close();
+					cleanedStore.close();
 				}
-			});
-		} finally {
-			console.error = originalConsoleError;
-		}
-		assert.equal(
-			errors.some((args) => String(args[0]).includes("record") && String(args[0]).includes("missing")),
-			true,
-		);
+			} finally {
+				service.close();
+			}
+		});
 	});
 });
 

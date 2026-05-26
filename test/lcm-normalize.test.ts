@@ -216,7 +216,10 @@ describe("normalizeChatRecords", () => {
 						type: "tool_execution_end",
 						toolCallId: "call-1",
 						toolName: "read",
-						result: { ok: true, text: "roadmap" },
+						result: {
+							content: [{ type: "text", text: "visible roadmap" }],
+							details: { text: "details-only roadmap", path: "PLAN.md" },
+						},
 						isError: false,
 					},
 				},
@@ -227,8 +230,35 @@ describe("normalizeChatRecords", () => {
 		assert.equal(batch.records.length, 1);
 		assert.equal(batch.records[0]?.kind, "tool");
 		assert.deepEqual(batch.records[0]?.parts, [
-			{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: { ok: true, text: "roadmap" } },
+			{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: "visible roadmap" },
 		]);
-		assert.match(batch.records[0]?.text ?? "", /\[tool_result: read ->/);
+		assert.match(batch.records[0]?.text ?? "", /visible roadmap/);
+		assert.doesNotMatch(batch.records[0]?.text ?? "", /details-only roadmap/);
+	});
+
+	it("preserves legacy unshaped tool_result values", () => {
+		const batch = normalizeChatRecords(
+			[
+				{
+					...base,
+					type: "agent_event",
+					recordId: 1,
+					jobId: "job-1",
+					messageId: "event-1",
+					event: {
+						type: "tool_execution_end",
+						toolCallId: "call-1",
+						toolName: "read",
+						result: { ok: true, text: "legacy roadmap" },
+						isError: false,
+					},
+				},
+			],
+			{ segmentId: "seg-a" },
+		);
+
+		assert.deepEqual(batch.records[0]?.parts, [
+			{ kind: "tool_result", toolCallId: "call-1", toolName: "read", output: { ok: true, text: "legacy roadmap" } },
+		]);
 	});
 });

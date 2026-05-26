@@ -7,7 +7,6 @@ import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
 	type LcmContextRawItem,
-	lcmRecordToAgentMessage,
 	renderLcmRecordPartsForSummary,
 	resolveFreshTailStartIndex,
 	type selectLcmCompactionCandidate,
@@ -413,20 +412,7 @@ export class LcmContextTransformer {
 		const items: LcmContextItem[] = [];
 		for (const row of rows) {
 			if (row.type === "raw") {
-				const record = this.lcmStore.getRecord(row.recordId);
-				if (!record) {
-					console.error(`memory LCM context item dropped because record ${row.recordId} is missing`);
-					continue;
-				}
-				const message = lcmRecordToAgentMessage(record);
-				items.push({
-					type: "raw",
-					id: row.fingerprint,
-					recordId: record.id,
-					record,
-					message,
-					tokens: estimateAgentMessageTokens(message),
-				});
+				// Raw history is owned by transcripts; legacy raw context rows must not replay it.
 				continue;
 			}
 			const summary = this.lcmStore.getSummary(row.summaryId);
@@ -503,7 +489,6 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 		}
 		const replacement = rawById.get(item.id);
 		if (replacement && !covered.has(item.id)) next.push(replacement);
-		else if (item.recordId !== null && !covered.has(item.id)) next.push(item);
 	}
 
 	for (const item of rawItems) {
@@ -536,8 +521,6 @@ function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextIte
 		const happenedAt =
 			typeof timestamp === "number" && Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 		if (item.type === "raw") {
-			if (item.recordId !== null)
-				stored.push({ type: "raw", recordId: item.recordId, fingerprint: item.id, happenedAt });
 			continue;
 		}
 		if (item.persistedSummaryId !== undefined) {
@@ -787,7 +770,7 @@ function lcmRecordPartsFromAgentMessage(message: AgentMessage): LcmRecordPart[] 
 				kind: "tool_result",
 				toolCallId: toolResult.toolCallId ?? "",
 				toolName: toolResult.toolName ?? "tool",
-				output: toolResult.details ?? textFromContent(toolResult.content),
+				output: textFromContent(toolResult.content),
 				...(toolResult.isError ? { isError: true } : {}),
 			},
 		];

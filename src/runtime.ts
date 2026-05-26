@@ -480,7 +480,7 @@ export class ConversationRuntime {
 		control?: ControlCommand;
 	}): Promise<number | undefined> {
 		const text = options.text.trim();
-		if (!text && options.messageIds.length === 0) return undefined;
+		if (!text && options.messageIds.length === 0 && !options.silent) return undefined;
 		const record = {
 			type: "outbound",
 			...buildRecordBase(this.channel, this.nextRecordId),

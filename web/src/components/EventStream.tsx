@@ -260,7 +260,13 @@ function StepBodyRow({
   );
 }
 
-export function EventStream({ steps }: { steps: GutterStep[] }) {
+export function EventStream({
+  steps,
+  autoCollapse = false,
+}: {
+  steps: GutterStep[];
+  autoCollapse?: boolean;
+}) {
   const active = steps.some(isStepActive);
   const allComplete = !active && steps.length > 0;
   const showDone = allComplete && steps.length >= 2;
@@ -268,8 +274,14 @@ export function EventStream({ steps }: { steps: GutterStep[] }) {
   const [open, setOpen] = useState(active);
   const userTouched = useRef(false);
   useEffect(() => {
-    if (!userTouched.current && active) setOpen(true);
-  }, [active]);
+    if (userTouched.current) return;
+    if (active) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOpen(true);
+    } else if (autoCollapse) {
+      setOpen(false);
+    }
+  }, [active, autoCollapse]);
 
   const toggle = () => {
     userTouched.current = true;

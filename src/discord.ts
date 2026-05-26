@@ -44,6 +44,7 @@ import {
 	buildHeartbeatInjectionText,
 	type CronJobConfig,
 	dueCronSlot,
+	formatIdleDuration,
 	isHeartbeatDue,
 	loadSchedulerState,
 	type SchedulerState,
@@ -1105,7 +1106,7 @@ export async function startDiscordDaemon(
 						await saveScheduler();
 						const text = buildHeartbeatInjectionText({ now: queuedNow, idleSince: latestUserInteractionAt });
 						await heartbeatRuntime.noteHeartbeat(
-							`started after ${Math.floor((queuedNow - latestUserInteractionAt) / 60_000)} idle minute(s)`,
+							`heartbeat stirred after ${formatIdleDuration(queuedNow - latestUserInteractionAt)}`,
 						);
 						return scheduledUserMessage(text, queuedNow);
 					},

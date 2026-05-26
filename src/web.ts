@@ -78,6 +78,15 @@ interface WebMemeFamily {
 	memes: WebMeme[];
 }
 
+const MESSAGE_STREAM_STATE_TTL_MS = 10 * 60 * 1000;
+
+type MessageStreamState = {
+	silentFilter?: ReturnType<typeof createSilentFilterState>;
+	pendingStartTs?: number;
+	locallyStreamed: boolean;
+	updatedAt: number;
+};
+
 function parseMemeCatalog(markdown: string): WebMemeFamily[] {
 	const families: WebMemeFamily[] = [];
 	let currentFamily: WebMemeFamily | undefined;
@@ -310,7 +319,7 @@ function webMessagesFromRecords(
 			const pending = pendingAgentEvents.get(message.id) ?? [];
 			for (const pendingRecord of pending) {
 				applyStoredAgentEventToMessage(message, pendingRecord, {
-					applyTextDeltas: !message.text,
+					applyTextDeltas: !message.text && !message.silent,
 					applyThinkingDeltas: !message.thinking,
 				});
 			}
@@ -320,7 +329,7 @@ function webMessagesFromRecords(
 			const existing = messagesById.get(record.messageId);
 			if (existing) {
 				applyStoredAgentEventToMessage(existing, record, {
-					applyTextDeltas: true,
+					applyTextDeltas: !existing.silent,
 					applyThinkingDeltas: true,
 				});
 			} else {
@@ -489,26 +498,59 @@ export async function startWebDaemon(
 	): WebStreamEvent =>
 		publish({ type: "delta", channelKey, messageId: messageIdValue, part, content: text, text, ts });
 
+	const gcMessageStreamStates = (): void => {
+		const cutoff = Date.now() - MESSAGE_STREAM_STATE_TTL_MS;
+		for (const [messageIdValue, state] of messageStreamStates) {
+			if (state.updatedAt < cutoff) messageStreamStates.delete(messageIdValue);
+		}
+	};
+
+	const getMessageStreamState = (messageIdValue: string): MessageStreamState => {
+		gcMessageStreamStates();
+		const existing = messageStreamStates.get(messageIdValue);
+		if (existing) {
+			existing.updatedAt = Date.now();
+			return existing;
+		}
+		const state: MessageStreamState = { locallyStreamed: false, updatedAt: Date.now() };
+		messageStreamStates.set(messageIdValue, state);
+		return state;
+	};
+
+	const markLocallyStreamed = (messageIdValue: string): void => {
+		getMessageStreamState(messageIdValue).locallyStreamed = true;
+	};
+
+	const takeLocallyStreamed = (messageIdValue: string): boolean => {
+		gcMessageStreamStates();
+		const state = messageStreamStates.get(messageIdValue);
+		if (!state?.locallyStreamed) return false;
+		state.locallyStreamed = false;
+		state.updatedAt = Date.now();
+		if (!state.silentFilter && !("pendingStartTs" in state)) messageStreamStates.delete(messageIdValue);
+		return true;
+	};
+
 	const publishStoredAgentEvent = (
 		channelKey: string,
 		messageIdValue: string,
 		storedEvent: StoredAgentEvent,
 		ts?: number,
 	): void => {
-		touchInFlight(messageIdValue);
+		gcMessageStreamStates();
+		let state = messageStreamStates.get(messageIdValue);
+		if (state) state.updatedAt = Date.now();
 		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
-			const entry = getOrCreateInFlight(messageIdValue);
-			entry.locallyStreamed = true;
-			entry.silentFilter = createSilentFilterState();
-			entry.pendingStartTs = ts;
-			entry.startedSilent = false;
+			state = getMessageStreamState(messageIdValue);
+			state.locallyStreamed = true;
+			state.silentFilter = createSilentFilterState();
+			state.pendingStartTs = ts;
 		}
 		const startedSilentMessage = (): boolean => {
-			const entry = inFlightMessages.get(messageIdValue);
-			if (!entry || entry.startedSilent) return false;
-			const startTs = entry.pendingStartTs;
-			entry.pendingStartTs = undefined;
-			entry.startedSilent = true;
+			if (!state || !("pendingStartTs" in state)) return false;
+			const startTs = state.pendingStartTs;
+			delete state.pendingStartTs;
+			state.updatedAt = Date.now();
 			publish({
 				type: "message_started",
 				channelKey,
@@ -526,7 +568,7 @@ export async function startWebDaemon(
 				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
 			}
 			if (assistantEvent.type === "text_delta") {
-				const filter = inFlightMessages.get(messageIdValue)?.silentFilter;
+				const filter = state?.silentFilter;
 				if (!filter) {
 					startedSilentMessage();
 					publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
@@ -543,10 +585,9 @@ export async function startWebDaemon(
 			startedSilentMessage();
 		}
 		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
-			const entry = inFlightMessages.get(messageIdValue);
-			const filter = entry?.silentFilter;
+			const filter = state?.silentFilter;
 			let silent = false;
-			if (filter && entry) {
+			if (filter) {
 				const final = finalizeSilentFilter(filter);
 				silent = final.silent;
 				if (!silent) {
@@ -554,11 +595,9 @@ export async function startWebDaemon(
 					if (final.flush) {
 						publishDelta(channelKey, messageIdValue, "text", final.flush, ts);
 					}
-				} else {
-					entry.startedSilent = true;
-					entry.pendingStartTs = undefined;
+				} else if (state) {
+					delete state.pendingStartTs;
 				}
-				entry.silentFilter = undefined;
 			} else {
 				startedSilentMessage();
 			}
@@ -570,6 +609,7 @@ export async function startWebDaemon(
 				silent: silent || undefined,
 				ts,
 			});
+			messageStreamStates.delete(messageIdValue);
 		}
 		const tool = toolFromStoredAgentEvent(storedEvent, ts ?? Date.now());
 		if (tool) publish({ type: "tool_event", channelKey, messageId: messageIdValue, tool, ts });
@@ -1155,7 +1195,6 @@ export async function startWebDaemon(
 		const requestedChannelKey = url.searchParams.get("channelKey") || undefined;
 		void getRuntime(requestedChannelKey)
 			.then((runtime) => {
-				if (netSocket.destroyed) return;
 				if (!acceptWebSocket(request, netSocket)) return;
 				netSocket.setNoDelay(true);
 				const client: WebSocketClient = { socket: netSocket, channelKey: runtime.channelKey, authed: false };
@@ -1170,7 +1209,6 @@ export async function startWebDaemon(
 						for (const raw of decoded.messages) {
 							const message = JSON.parse(raw) as unknown;
 							if (isObject(message) && message.type === "hello") {
-								if (!client.channelKey) continue;
 								replay(
 									client,
 									client.channelKey,
@@ -1193,12 +1231,10 @@ export async function startWebDaemon(
 			})
 			.catch((error) => {
 				console.error("WebSocket runtime lookup failed", error);
-				if (!netSocket.destroyed) {
-					netSocket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
-					netSocket.destroy();
-				}
+				netSocket.destroy();
 			});
 	});
+
 
 	await new Promise<void>((resolveListen, rejectListen) => {
 		server.once("error", rejectListen);

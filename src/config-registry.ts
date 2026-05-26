@@ -1,7 +1,7 @@
 import type { Config } from "./config.js";
 import { loadConfigOverrides } from "./config-overrides.js";
 import type { DiscordDaemon } from "./discord.js";
-import { isAllowedModel, parseModelRef } from "./models.js";
+import { isAllowedModel, parseModelRef, resolveProviderSetting } from "./models.js";
 
 export type ConfigKey =
 	| "heartbeat.enabled"
@@ -83,14 +83,6 @@ function requireNonNegativeNumber(value: unknown, key: string): number {
 		throw new Error(`${key} must be a number >= 0`);
 	}
 	return n;
-}
-
-function resolveProviderSetting(
-	records: Record<string, string>,
-	provider: string,
-	modelId: string,
-): string | undefined {
-	return records[`${provider}/${modelId}`] ?? records[provider];
 }
 
 export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {

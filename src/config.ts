@@ -4,6 +4,9 @@ import { isAbsolute, resolve } from "node:path";
 
 import { parse } from "smol-toml";
 
+import { parseModelRef, resolveProviderSetting } from "./models.js";
+import { readEnum } from "./util/guards.js";
+
 export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type DiscordReplyMode = "plain" | "reply";
@@ -278,93 +281,28 @@ function warnOnce(key: string, message: string): void {
 	console.warn(message);
 }
 
-function readCacheRetention(value: unknown, path = "agent.cache_retention"): CacheRetention {
-	if (value === "none" || value === "short" || value === "long") return value;
-	throw new Error(`Config value ${path} must be one of "none", "short", or "long"`);
-}
-
-function readThinkingLevel(value: unknown): ThinkingLevel {
-	if (
-		value === "off" ||
-		value === "minimal" ||
-		value === "low" ||
-		value === "medium" ||
-		value === "high" ||
-		value === "xhigh"
-	) {
-		return value;
-	}
-	throw new Error(
-		'Config value agent.thinking_level must be one of "off", "minimal", "low", "medium", "high", or "xhigh"',
-	);
-}
-
-function readDiscordReplyMode(value: unknown): DiscordReplyMode {
-	if (value === "plain" || value === "reply") return value;
-	throw new Error('Config value discord.reply_mode must be one of "plain" or "reply"');
-}
-
-function readDiscordChunkMode(value: unknown): DiscordChunkMode {
-	if (value === "simple" || value === "paragraph" || value === "newline") return value;
-	throw new Error('Config value discord.chunk_mode must be one of "simple", "paragraph", or "newline"');
-}
-
-function readDiscordDispatchMode(value: unknown, path: string): DiscordDispatchMode {
-	if (value === "steer" || value === "queue" || value === "collect") return value;
-	throw new Error(`Config value ${path} must be one of "steer", "queue", or "collect"`);
-}
-
-function readDiscordChannelTrigger(value: unknown): DiscordChannelTrigger {
-	if (value === "mention" || value === "always") return value;
-	throw new Error('Config value discord.channel_trigger must be one of "mention" or "always"');
-}
-
-function readCronFrequency(value: unknown, path: string): CronFrequency {
-	if (value === "once" || value === "hourly" || value === "daily" || value === "weekly" || value === "monthly") {
-		return value;
-	}
-	throw new Error(`Config value ${path} must be one of "once", "hourly", "daily", "weekly", or "monthly"`);
-}
-
-function readCronDeliveryMode(value: unknown, path: string): CronDeliveryMode {
-	if (value === "queue" || value === "follow_up") return value;
-	throw new Error(`Config value ${path} must be one of "queue" or "follow_up"`);
-}
-
-function readWebAuthMode(value: unknown): WebAuthMode {
-	if (value === "tailscale-only" || value === "bearer" || value === "public-2fa") return value;
-	throw new Error('Config value web.auth_mode must be one of "tailscale-only", "bearer", or "public-2fa"');
-}
-
-function readTtsProvider(value: unknown): TtsProvider {
-	if (value === "elevenlabs") return value;
-	throw new Error('Config value tts.provider must be "elevenlabs"');
-}
-
-function readImageGenApi(value: unknown): ImageGenApi {
-	if (value === "openrouter-images") return value;
-	throw new Error('Config value image_gen.api must be "openrouter-images"');
-}
-
-function readMediaUnderstandingProvider(value: unknown): MediaUnderstandingProvider {
-	if (value === "groq" || value === "google") return value;
-	throw new Error('Config value media_understanding provider must be "groq" or "google"');
-}
-
-function readMemoryEmbeddingFormat(value: unknown, path = "memory.embedding.format"): MemoryEmbeddingFormat {
-	if (value === "gemini" || value === "openai" || value === "voyage") return value;
-	throw new Error(`Config value ${path} must be one of "gemini", "openai", or "voyage"`);
-}
-
-function readBrowserBackend(value: unknown): BrowserBackend {
-	if (value === "opencli" || value === "browser-harness") return value;
-	throw new Error('Config value browser.backend must be "opencli" or "browser-harness"');
-}
-
-function readBrowserWindowMode(value: unknown): "foreground" | "background" {
-	if (value === "foreground" || value === "background") return value;
-	throw new Error('Config value browser.window must be one of "foreground" or "background"');
-}
+const CACHE_RETENTIONS = ["none", "short", "long"] as const satisfies readonly CacheRetention[];
+const THINKING_LEVELS = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+] as const satisfies readonly ThinkingLevel[];
+const DISCORD_REPLY_MODES = ["plain", "reply"] as const satisfies readonly DiscordReplyMode[];
+const DISCORD_CHUNK_MODES = ["simple", "paragraph", "newline"] as const satisfies readonly DiscordChunkMode[];
+const DISCORD_DISPATCH_MODES = ["steer", "queue", "collect"] as const satisfies readonly DiscordDispatchMode[];
+const DISCORD_CHANNEL_TRIGGERS = ["mention", "always"] as const satisfies readonly DiscordChannelTrigger[];
+const CRON_FREQUENCIES = ["once", "hourly", "daily", "weekly", "monthly"] as const satisfies readonly CronFrequency[];
+const CRON_DELIVERY_MODES = ["queue", "follow_up"] as const satisfies readonly CronDeliveryMode[];
+const WEB_AUTH_MODES = ["tailscale-only", "bearer", "public-2fa"] as const satisfies readonly WebAuthMode[];
+const TTS_PROVIDERS = ["elevenlabs"] as const satisfies readonly TtsProvider[];
+const IMAGE_GEN_APIS = ["openrouter-images"] as const satisfies readonly ImageGenApi[];
+const MEDIA_UNDERSTANDING_PROVIDERS = ["groq", "google"] as const satisfies readonly MediaUnderstandingProvider[];
+const MEMORY_EMBEDDING_FORMATS = ["gemini", "openai", "voyage"] as const satisfies readonly MemoryEmbeddingFormat[];
+const BROWSER_BACKENDS = ["opencli", "browser-harness"] as const satisfies readonly BrowserBackend[];
+const BROWSER_WINDOW_MODES = ["foreground", "background"] as const;
 
 function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
 	if (value === undefined) return fallback;
@@ -378,10 +316,6 @@ function readInteger(value: unknown, fallback: number, path: string, min = 0): n
 		throw new Error(`Config value ${path} must be an integer >= ${min}`);
 	}
 	return value;
-}
-
-function resolveProviderSetting(records: Record<string, string>, provider: string, model: string): string | undefined {
-	return records[`${provider}/${model}`] ?? records[provider];
 }
 
 function readNumberInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
@@ -453,13 +387,8 @@ function parseProviderModelRef(value: string, path: string): { provider: string;
 }
 
 function maybeParseProviderModelRef(value: string): { provider: string; modelId: string; key: string } | undefined {
-	const trimmed = value.trim();
-	const separator = trimmed.indexOf("/");
-	if (separator <= 0 || separator === trimmed.length - 1) return undefined;
-	const provider = trimmed.slice(0, separator).trim();
-	const modelId = trimmed.slice(separator + 1).trim();
-	if (!provider || !modelId) return undefined;
-	return { provider, modelId, key: `${provider}/${modelId}` };
+	const parsed = parseModelRef(value);
+	return parsed ? { provider: parsed.provider, modelId: parsed.id, key: parsed.key } : undefined;
 }
 
 function assertKnownKeys(value: Record<string, unknown>, path: string, knownKeys: readonly string[]): void {
@@ -521,9 +450,10 @@ function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
 		}
 		if (seen.has(id)) throw new Error(`Duplicate cron job id: ${id}`);
 		seen.add(id);
-		const frequency = readCronFrequency(
+		const frequency = readEnum(
 			readConfigString(job.frequency, "once", `${prefix}.frequency`),
 			`${prefix}.frequency`,
+			CRON_FREQUENCIES,
 		);
 		const runAt = readOptionalConfigString(job.run_at, `${prefix}.run_at`);
 		const time = readOptionalConfigString(job.time, `${prefix}.time`);
@@ -539,9 +469,10 @@ function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
 			id,
 			enabled: readBoolean(job.enabled, true, `${prefix}.enabled`),
 			frequency,
-			deliveryMode: readCronDeliveryMode(
+			deliveryMode: readEnum(
 				readConfigString(job.delivery_mode, "queue", `${prefix}.delivery_mode`),
 				`${prefix}.delivery_mode`,
+				CRON_DELIVERY_MODES,
 			),
 			prompt: readString(job.prompt, `${prefix}.prompt`),
 			...(runAt ? { runAt } : {}),
@@ -655,11 +586,12 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		);
 		memoryEmbeddingFormatRaw = memoryEmbedding.api;
 	}
-	const memoryEmbeddingFormat = readMemoryEmbeddingFormat(
+	const memoryEmbeddingFormat = readEnum(
 		readOptionalString(memoryEmbeddingFormatRaw, "gemini"),
 		memoryEmbedding.format === undefined && memoryEmbedding.api !== undefined
 			? "memory.embedding.api"
 			: "memory.embedding.format",
+		MEMORY_EMBEDDING_FORMATS,
 	);
 	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
 	const memoryEmbeddingModel = readConfigString(memoryEmbedding.model, "gemini-embedding-2", "memory.embedding.model");
@@ -746,32 +678,45 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			token: readString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN"),
 			ownerId,
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
-			replyMode: readDiscordReplyMode(readOptionalString(discord.reply_mode, "plain")),
-			chunkMode: readDiscordChunkMode(readOptionalString(discord.chunk_mode, "paragraph")),
-			dmMode: readDiscordDispatchMode(readOptionalString(discord.dm_mode, "steer"), "discord.dm_mode"),
-			channelMode: readDiscordDispatchMode(
+			replyMode: readEnum(
+				readOptionalString(discord.reply_mode, "plain"),
+				"discord.reply_mode",
+				DISCORD_REPLY_MODES,
+			),
+			chunkMode: readEnum(
+				readOptionalString(discord.chunk_mode, "paragraph"),
+				"discord.chunk_mode",
+				DISCORD_CHUNK_MODES,
+			),
+			dmMode: readEnum(readOptionalString(discord.dm_mode, "steer"), "discord.dm_mode", DISCORD_DISPATCH_MODES),
+			channelMode: readEnum(
 				readOptionalString(discord.channel_mode, "collect"),
 				"discord.channel_mode",
+				DISCORD_DISPATCH_MODES,
 			),
-			channelTrigger: readDiscordChannelTrigger(readOptionalString(discord.channel_trigger, "mention")),
+			channelTrigger: readEnum(
+				readOptionalString(discord.channel_trigger, "mention"),
+				"discord.channel_trigger",
+				DISCORD_CHANNEL_TRIGGERS,
+			),
 			collectDebounceMs: readInteger(discord.collect_debounce_ms, 4000, "discord.collect_debounce_ms"),
 			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
 		},
 		web: {
 			port: readInteger(web.port, 8787, "web.port"),
-			authMode: readWebAuthMode(readOptionalString(web.auth_mode, "tailscale-only")),
+			authMode: readEnum(readOptionalString(web.auth_mode, "tailscale-only"), "web.auth_mode", WEB_AUTH_MODES),
 			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
 			totpSecret: readOptionalString(web.totp_secret, "") || undefined,
 			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),
 		},
 		browser: {
 			enabled: readBoolean(browser.enabled, false, "browser.enabled"),
-			backend: readBrowserBackend(readOptionalString(browser.backend, "opencli")),
+			backend: readEnum(readOptionalString(browser.backend, "opencli"), "browser.backend", BROWSER_BACKENDS),
 			opencliCommand: readOptionalString(browser.opencli_command, "opencli"),
 			harnessCommand: readOptionalString(browser.harness_command, "browser-harness"),
 			session: readOptionalString(browser.session, "familiar"),
 			profile: readOptionalString(browser.profile, "") || undefined,
-			windowMode: readBrowserWindowMode(readOptionalString(browser.window, "background")),
+			windowMode: readEnum(readOptionalString(browser.window, "background"), "browser.window", BROWSER_WINDOW_MODES),
 			timeoutMs: readInteger(browser.timeout_ms, 60_000, "browser.timeout_ms", 1),
 			maxOutputChars: readInteger(browser.max_output_chars, 12_000, "browser.max_output_chars", 1000),
 			readWrite: readBoolean(browser.read_write, false, "browser.read_write"),
@@ -784,13 +729,18 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			baseUrl: usingLegacyAgentModel ? baseUrl : undefined,
 			apiKeyEnv: usingLegacyAgentModel ? apiKeyEnv : undefined,
 			provider: usingLegacyAgentModel ? provider : undefined,
-			cacheRetention: readCacheRetention(
+			cacheRetention: readEnum(
 				readOptionalString(agentCacheRetentionRaw, "long"),
 				agent.cache_retention === undefined && agent.cacheRetention !== undefined
 					? "agent.cacheRetention"
 					: "agent.cache_retention",
+				CACHE_RETENTIONS,
 			),
-			thinkingLevel: readThinkingLevel(readOptionalString(agent.thinking_level, "medium")),
+			thinkingLevel: readEnum(
+				readOptionalString(agent.thinking_level, "medium"),
+				"agent.thinking_level",
+				THINKING_LEVELS,
+			),
 		},
 		heartbeat: {
 			enabled: readBoolean(heartbeat.enabled, false, "heartbeat.enabled"),
@@ -809,7 +759,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			apiKeyEnvs: modelApiKeyEnvs,
 		},
 		tts: {
-			provider: readTtsProvider(readOptionalString(tts.provider, "elevenlabs")),
+			provider: readEnum(readOptionalString(tts.provider, "elevenlabs"), "tts.provider", TTS_PROVIDERS),
 			apiKeyEnv: readOptionalString(tts.api_key_env, "ELEVENLABS_API_KEY"),
 			voiceId: readOptionalString(tts.voice_id, ""),
 			modelId: readOptionalString(tts.model_id, "eleven_multilingual_v2"),
@@ -837,17 +787,25 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			enabled: readBoolean(imageGen.enabled, true, "image_gen.enabled"),
 			model: readConfigString(imageGen.model, "openrouter/google/gemini-2.5-flash-image", "image_gen.model"),
 			fallbackModel: readOptionalConfigString(imageGen.fallback_model, "image_gen.fallback_model"),
-			api: readImageGenApi(readOptionalString(imageGen.api, "openrouter-images")),
+			api: readEnum(readOptionalString(imageGen.api, "openrouter-images"), "image_gen.api", IMAGE_GEN_APIS),
 			timeoutMs: readInteger(imageGen.timeout_ms, 120_000, "image_gen.timeout_ms", 1),
 		},
 		mediaUnderstanding: {
 			audio: {
-				provider: readMediaUnderstandingProvider(readOptionalString(mediaUnderstandingAudio.provider, "groq")),
+				provider: readEnum(
+					readOptionalString(mediaUnderstandingAudio.provider, "groq"),
+					"media.understanding.audio.provider",
+					MEDIA_UNDERSTANDING_PROVIDERS,
+				),
 				model: readOptionalString(mediaUnderstandingAudio.model, "whisper-large-v3"),
 				apiKeyEnv: readOptionalString(mediaUnderstandingAudio.api_key_env, "GROQ_API_KEY"),
 			},
 			video: {
-				provider: readMediaUnderstandingProvider(readOptionalString(mediaUnderstandingVideo.provider, "google")),
+				provider: readEnum(
+					readOptionalString(mediaUnderstandingVideo.provider, "google"),
+					"media.understanding.video.provider",
+					MEDIA_UNDERSTANDING_PROVIDERS,
+				),
 				model: readOptionalString(mediaUnderstandingVideo.model, "gemini-3-flash-preview"),
 				apiKeyEnv: readOptionalString(mediaUnderstandingVideo.api_key_env, "GEMINI_API_KEY"),
 			},

@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
 import type { Config, DiscordChannelTrigger, ThinkingLevel } from "./config.js";
+import { isThinkingLevel } from "./models.js";
 import { atomicWriteJson, createWriteQueue, readFileOrNull } from "./util/fs.js";
 
 export type SettingSource = "config" | "override";
@@ -30,17 +31,6 @@ export interface SettingsStore {
 interface SettingsFile {
 	version: 1;
 	channels: Record<string, ChannelSettings>;
-}
-
-function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return (
-		value === "off" ||
-		value === "minimal" ||
-		value === "low" ||
-		value === "medium" ||
-		value === "high" ||
-		value === "xhigh"
-	);
 }
 
 function isChannelTrigger(value: unknown): value is DiscordChannelTrigger {

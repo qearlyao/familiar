@@ -116,6 +116,14 @@ export function createConfiguredModel(config: Config): Model<any> {
 	return resolveModel(ref, config);
 }
 
+export function resolveProviderSetting(
+	records: Record<string, string>,
+	provider: string,
+	modelId: string,
+): string | undefined {
+	return records[`${provider}/${modelId}`] ?? records[provider];
+}
+
 export function resolveModelApiKey(config: Config, model: Model<any>): string | undefined {
 	const configuredEnv =
 		config.models.apiKeyEnvs[`${model.provider}/${model.id}`] ??
@@ -181,7 +189,7 @@ export function clampConfiguredThinkingLevel(model: Model<any>, level: ThinkingL
 	return clampThinkingLevel(model, level) as ThinkingLevel;
 }
 
-export function isThinkingLevel(value: string): value is ThinkingLevel {
+export function isThinkingLevel(value: unknown): value is ThinkingLevel {
 	return (
 		value === "off" ||
 		value === "minimal" ||

@@ -2,6 +2,9 @@ import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import { readFileOrNull } from "./util/fs.js";
+import { formatLocalTimestamp, toDate } from "./util/time.js";
+
+export { formatLocalTimestamp } from "./util/time.js";
 
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
@@ -42,36 +45,6 @@ export interface SchedulerLogEvent {
 }
 
 const stateWriteQueues = new Map<string, Promise<void>>();
-
-function toDate(value: Date | number | string): Date {
-	if (value instanceof Date) return value;
-	return new Date(value);
-}
-
-function formatOffset(date: Date): string {
-	const offsetMinutes = -date.getTimezoneOffset();
-	const sign = offsetMinutes >= 0 ? "+" : "-";
-	const absolute = Math.abs(offsetMinutes);
-	const hours = Math.floor(absolute / 60);
-	const minutes = absolute % 60;
-	return minutes === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${String(minutes).padStart(2, "0")}`;
-}
-
-export function formatLocalTimestamp(value: Date | number | string): string {
-	const date = toDate(value);
-	if (Number.isNaN(date.getTime())) return String(value);
-	const localDate = [
-		date.getFullYear(),
-		String(date.getMonth() + 1).padStart(2, "0"),
-		String(date.getDate()).padStart(2, "0"),
-	].join("-");
-	const localTime = [
-		String(date.getHours()).padStart(2, "0"),
-		String(date.getMinutes()).padStart(2, "0"),
-		String(date.getSeconds()).padStart(2, "0"),
-	].join(":");
-	return `${localDate} ${localTime} ${formatOffset(date)}`;
-}
 
 export function formatIdleDuration(ms: number): string {
 	if (!Number.isFinite(ms) || ms <= 0) return "0m";

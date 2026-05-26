@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, writeFile } from "node:fs/promises";
-import { basename, extname, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
@@ -23,16 +23,10 @@ import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 import { ensureInlineImageDerivative } from "./image-derivatives.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
 import { type ModelRef, parseModelRef } from "./models.js";
+import { imageMimeTypeFromPath, sniffImageMimeType } from "./util/image-mime.js";
 
 const IMAGE_GEN_NOTICE_PREFIX = "Generated image attachment:";
 const OPENROUTER_IMAGE_BASE_URL = "https://openrouter.ai/api/v1";
-const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".png": "image/png",
-	".gif": "image/gif",
-	".webp": "image/webp",
-};
 
 const imageGenSchema = Type.Object(
 	{
@@ -175,26 +169,12 @@ function textOutput(result: AssistantImages): string {
 		.join("\n");
 }
 
-function imageMimeTypeFromBytes(buffer: Buffer): string | undefined {
-	if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
-	if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
-		return "image/png";
-	}
-	if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") {
-		return "image/gif";
-	}
-	if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
-		return "image/webp";
-	}
-	return undefined;
-}
-
 function recoveredImageFromBase64(value: string): RecoveredImage | undefined {
 	const data = value.trim();
 	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length % 4 !== 0) return undefined;
 	const buffer = Buffer.from(data, "base64");
 	if (!buffer.length) return undefined;
-	const detectedMimeType = imageMimeTypeFromBytes(buffer);
+	const detectedMimeType = sniffImageMimeType(buffer);
 	if (!detectedMimeType) return undefined;
 	return {
 		mimeType: detectedMimeType,
@@ -232,10 +212,6 @@ function normalizeCompatibleImageText(result: AssistantImages): AssistantImages 
 	return { ...result, output };
 }
 
-function mimeTypeFromPath(path: string): string | undefined {
-	return IMAGE_MIME_BY_EXTENSION[extname(path).toLowerCase()];
-}
-
 function resolveWorkspaceReferencePath(config: Config, rawRef: string): string {
 	const path = isAbsolute(rawRef) ? resolve(rawRef) : resolve(config.workspacePath, rawRef);
 	const workspaceRelative = relative(config.workspacePath, path);
@@ -254,7 +230,7 @@ async function collectWorkspaceReferenceImages(config: Config, rawRef: string): 
 		throw new Error(`Reference image path must be a file, not a folder: ${rawRef}`);
 	}
 	if (!pathStat.isFile()) throw new Error(`Reference image path is not a file or folder: ${rawRef}`);
-	const mimeType = mimeTypeFromPath(path);
+	const mimeType = imageMimeTypeFromPath(path);
 	if (!mimeType) throw new Error(`Reference image path is not a supported image: ${rawRef}`);
 	return [
 		{

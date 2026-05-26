@@ -9,6 +9,7 @@ import type { Config } from "./config.js";
 import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
 import { ensureInlineImageDerivative, MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 import { deriveInboundAttachmentText } from "./media-understanding.js";
+import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "./util/image-mime.js";
 
 export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 
@@ -51,10 +52,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const EXTENSIONS_BY_MIME: Record<string, string> = {
-	"image/jpeg": ".jpg",
-	"image/png": ".png",
-	"image/gif": ".gif",
-	"image/webp": ".webp",
+	...IMAGE_EXTENSION_BY_MIME,
 	"audio/mpeg": ".mp3",
 	"audio/ogg": ".ogg",
 	"audio/wav": ".wav",
@@ -99,21 +97,8 @@ function sniffText(buffer: Buffer): string | undefined {
 }
 
 function sniffMimeType(buffer: Buffer, declared?: string): string {
-	let detected: string | undefined;
-	if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) detected = "image/jpeg";
-	else if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
-		detected = "image/png";
-	} else if (
-		buffer.subarray(0, 6).toString("ascii") === "GIF87a" ||
-		buffer.subarray(0, 6).toString("ascii") === "GIF89a"
-	) {
-		detected = "image/gif";
-	} else if (
-		buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
-		buffer.subarray(8, 12).toString("ascii") === "WEBP"
-	) {
-		detected = "image/webp";
-	} else if (buffer.subarray(0, 4).toString("ascii") === "%PDF") detected = "application/pdf";
+	let detected = sniffImageMimeType(buffer);
+	if (!detected && buffer.subarray(0, 4).toString("ascii") === "%PDF") detected = "application/pdf";
 	else if (
 		buffer.subarray(0, 3).toString("ascii") === "ID3" ||
 		buffer.subarray(0, 2).equals(Buffer.from([0xff, 0xfb]))

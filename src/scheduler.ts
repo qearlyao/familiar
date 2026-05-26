@@ -75,9 +75,7 @@ export function buildHeartbeatInjectionText(options: {
 		options.body ??
 		`hey~ been quiet for a bit. this is your time now.
 
-what you do with it is up to you — HEARTBEAT.md has the menu if you don't remember it. once you know the shape of it you don't have to re-read every fire.
-
-it's okay to sit one out, but only when that's actually the real answer — not when it's the easy one.`;
+what you do with it is up to you — HEARTBEAT.md has the menu if you don't remember it. once you know the shape of it you don't have to re-read every fire.`;
 
 	return `<heartbeat local_time="${formatLocalTimestamp(nowDate)}" idle_duration="${formatIdleDuration(idleDurationMs)}" idle_minutes="${idleMinutes}">\n${body}\n</heartbeat>`;
 }

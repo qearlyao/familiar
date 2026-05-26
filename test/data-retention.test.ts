@@ -7,8 +7,8 @@ import { runDataRetention } from "../src/data-retention.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("data retention", () => {
-	it("removes old data files and keeps recent files by category", async () => {
-		const dataDir = await createTempDataDir();
+	it("removes old data files and keeps recent files by category", async (t) => {
+		const dataDir = await createTempDataDir(t);
 		const oldDate = new Date("2026-04-11T00:00:00.000Z");
 		const recentDate = new Date("2026-05-10T00:00:00.000Z");
 		const now = Date.parse("2026-05-11T00:00:00.000Z");
@@ -28,7 +28,7 @@ describe("data retention", () => {
 		for (const path of [files.chatRecent, files.transcriptRecent, files.payloadRecent]) {
 			await utimes(path, recentDate, recentDate);
 		}
-		const config = await configWithDataDir(dataDir, {
+		const config = await configWithDataDir(t, dataDir, {
 			data: {
 				chat: { retentionDays: 14 },
 				transcripts: { retentionDays: 14 },

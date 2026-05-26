@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -8,9 +8,8 @@ import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("discord attachment payloads", () => {
 	it("can resolve generated attachments without using local path strings", async (t) => {
-		const dataDir = await createTempDataDir();
-		t.after(() => rm(dataDir, { recursive: true, force: true }));
-		const config = await configWithDataDir(dataDir);
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_test.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
 		await writeFile(attachmentPath, Buffer.from("fake audio"));
@@ -40,9 +39,8 @@ describe("discord attachment payloads", () => {
 	});
 
 	it("posts generated attachments through Discord REST multipart", async (t) => {
-		const dataDir = await createTempDataDir();
-		t.after(() => rm(dataDir, { recursive: true, force: true }));
-		const config = await configWithDataDir(dataDir);
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_rest.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
 		await writeFile(attachmentPath, Buffer.from("fake audio"));

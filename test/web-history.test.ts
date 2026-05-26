@@ -95,8 +95,8 @@ function interleavedAssistantRecords(): ChatLogRecord[] {
 }
 
 describe("web history", () => {
-	it("keeps local text attachment previews out of visible user text", async () => {
-		const config = await configWithDataDir(await createTempDataDir());
+	it("keeps local text attachment previews out of visible user text", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const [attachment] = await materializeInboundAttachments(config, [
 			{
 				name: "config.txt",
@@ -126,8 +126,8 @@ describe("web history", () => {
 		assert.equal(message.attachments?.[0]?.name, "config.txt");
 	});
 
-	it("preserves interleaved assistant step order from agent events", async () => {
-		const config = await configWithDataDir(await createTempDataDir());
+	it("preserves interleaved assistant step order from agent events", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records = interleavedAssistantRecords();
 
 		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
@@ -143,8 +143,8 @@ describe("web history", () => {
 		assert.deepEqual(message.tools?.map((tool) => tool.status), ["completed", "completed"]);
 	});
 
-	it("returns ordered steps from the history payload", async () => {
-		const config = await configWithDataDir(await createTempDataDir());
+	it("returns ordered steps from the history payload", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
 
 		const body = __webTest.webHistoryPayload(config, interleavedAssistantRecords(), "Ghost", "discord-dm-channel-1", {
 			limit: 50,
@@ -163,8 +163,8 @@ describe("web history", () => {
 		]);
 	});
 
-	it("preserves the FAMILIAR_SILENT marker as a text step so the frontend can render it", async () => {
-		const config = await configWithDataDir(await createTempDataDir());
+	it("preserves the FAMILIAR_SILENT marker as a text step so the frontend can render it", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [
 			{
 				type: "agent_event",
@@ -231,8 +231,8 @@ describe("web history", () => {
 		assert.equal(textStep?.kind === "text" ? textStep.text : "", "[[FAMILIAR_SILENT]]");
 	});
 
-	it("keeps legit text from earlier turns plus the marker step from a later silent turn", async () => {
-		const config = await configWithDataDir(await createTempDataDir());
+	it("keeps legit text from earlier turns plus the marker step from a later silent turn", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [
 			// turn A: thinking + tool 1
 			{

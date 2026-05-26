@@ -16,9 +16,9 @@ function roundedEmbeddingValues(embeddings: Float32Array[]): number[][] {
 }
 
 describe("embedding provider", () => {
-	it("calls Gemini batch embeddings with configured provider settings", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("calls Gemini batch embeddings with configured provider settings", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -95,9 +95,9 @@ describe("embedding provider", () => {
 		}
 	});
 
-	it("splits requests by configured batch size", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("splits requests by configured batch size", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -130,9 +130,9 @@ describe("embedding provider", () => {
 		]);
 	});
 
-	it("returns an empty list for empty input", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("returns an empty list for empty input", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const provider = createEmbeddingProvider(config, {
 			fetchFn: (() => {
 				throw new Error("fetch should not be called");
@@ -142,9 +142,9 @@ describe("embedding provider", () => {
 		assert.deepEqual(await provider.embed([]), []);
 	});
 
-	it("accepts singular embedding responses for single input", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("accepts singular embedding responses for single input", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -170,9 +170,9 @@ describe("embedding provider", () => {
 		assert.equal(requestedUrls[0], "https://gateway.example.test/v1beta/models/gemini-embedding-2:batchEmbedContents");
 	});
 
-	it("rejects embedding response count mismatches", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("rejects embedding response count mismatches", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -191,9 +191,9 @@ describe("embedding provider", () => {
 		await assert.rejects(() => provider.embed(["a", "b"]), /count mismatch/);
 	});
 
-	it("rejects embeddings with unexpected dimensions", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("rejects embeddings with unexpected dimensions", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -212,9 +212,9 @@ describe("embedding provider", () => {
 		await assert.rejects(() => provider.embedOne("hello"), /dimension mismatch/);
 	});
 
-	it("surfaces provider errors", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("surfaces provider errors", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",
@@ -233,9 +233,9 @@ describe("embedding provider", () => {
 		await assert.rejects(() => provider.embedOne("hello"), /bad request/);
 	});
 
-	it("includes non-json error body snippets", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("includes non-json error body snippets", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
 					api: "gemini",

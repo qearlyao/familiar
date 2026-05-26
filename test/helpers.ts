@@ -1,8 +1,10 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { type Config, loadConfig } from "../src/config.js";
+
+export type TestAfter = { after(fn: () => void | Promise<void>): void };
 
 type ConfigOverrides = Partial<{
 	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser" | "imageGen">]: Partial<
@@ -24,8 +26,9 @@ type ConfigOverrides = Partial<{
 	};
 };
 
-export async function createWorkspace(configToml: string): Promise<string> {
+export async function createWorkspace(t: TestAfter, configToml: string): Promise<string> {
 	const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-test-"));
+	t.after(() => rm(workspacePath, { recursive: true, force: true }));
 	await writeFile(resolve(workspacePath, "config.toml"), configToml, "utf8");
 	await writeFile(resolve(workspacePath, "SOUL.md"), "# Soul\n", "utf8");
 	await writeFile(resolve(workspacePath, "USER.md"), "# User\n", "utf8");
@@ -45,11 +48,14 @@ ${extra}
 `;
 }
 
-export async function createTempDataDir(): Promise<string> {
-	return mkdtemp(resolve(tmpdir(), "familiar-data-"));
+export async function createTempDataDir(t: TestAfter): Promise<string> {
+	const dir = await mkdtemp(resolve(tmpdir(), "familiar-data-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	return dir;
 }
 
 export async function configWithDataDir(
+	t: TestAfter,
 	dataDir: string,
 	overrides: ConfigOverrides = {},
 ): Promise<Config> {
@@ -57,6 +63,7 @@ export async function configWithDataDir(
 	process.env.DISCORD_TOKEN = "discord-token";
 	try {
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [workspace]
 data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"

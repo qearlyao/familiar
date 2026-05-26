@@ -21,36 +21,36 @@ describe("generated media", () => {
 		assert.deepEqual(sink.drain(), []);
 	});
 
-	it("creates public URLs for generated attachment paths", async () => {
-		const config = await configWithDataDir("/workspace/data");
+	it("creates public URLs for generated attachment paths", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data");
 		const localPath = resolve(generatedAttachmentsDir(config), "nested", "voice one.mp3");
 
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/nested/voice%20one.mp3");
 	});
 
-	it("throws for paths outside the generated attachment directory", async () => {
-		const config = await configWithDataDir("/workspace/data");
+	it("throws for paths outside the generated attachment directory", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data");
 
 		assert.throws(() => publicAttachmentPath(config, "/tmp/outside.mp3"), /outside generated attachments dir/);
 	});
 
-	it("keeps generated attachment extensions stable even when the stored path is nested", async () => {
-		const config = await configWithDataDir("/workspace/data");
+	it("keeps generated attachment extensions stable even when the stored path is nested", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data");
 		const localPath = resolve(generatedAttachmentsDir(config), "nested", "voice one.mp3");
 
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/nested/voice%20one.mp3");
 	});
 
-	it("creates public URLs for browser screenshots", async () => {
-		const config = await configWithDataDir("/workspace/data");
+	it("creates public URLs for browser screenshots", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data");
 		const localPath = resolve(browserScreenshotsDir(config), "screen one.png");
 
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/screenshot/screen%20one.png");
 	});
 
-	it("removes generated attachments older than the retention window", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("removes generated attachments older than the retention window", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			media: { generatedRetentionDays: 30 },
 		});
 		const dir = generatedAttachmentsDir(config);
@@ -70,9 +70,9 @@ describe("generated media", () => {
 		assert.equal((await stat(freshPath)).isFile(), true);
 	});
 
-	it("skips generated attachment cleanup when retention is disabled", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("skips generated attachment cleanup when retention is disabled", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			media: { generatedRetentionDays: 0 },
 		});
 		const dir = generatedAttachmentsDir(config);

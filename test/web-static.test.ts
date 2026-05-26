@@ -40,9 +40,9 @@ class FakeResponse {
 
 describe("serveAttachment", () => {
 	it("serves generated audio files", async (t) => {
-		const root = await createTempDataDir();
+		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));
-		const config = await configWithDataDir(root);
+		const config = await configWithDataDir(t, root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "voice.mp3"), "audio", "utf8");
@@ -57,9 +57,9 @@ describe("serveAttachment", () => {
 	});
 
 	it("serves attachment byte ranges for audio metadata requests", async (t) => {
-		const root = await createTempDataDir();
+		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));
-		const config = await configWithDataDir(root);
+		const config = await configWithDataDir(t, root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "voice.mp3"), "0123456789", "utf8");
@@ -76,9 +76,9 @@ describe("serveAttachment", () => {
 	});
 
 	it("serves browser screenshot files", async (t) => {
-		const root = await createTempDataDir();
+		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));
-		const config = await configWithDataDir(root);
+		const config = await configWithDataDir(t, root);
 		const dir = browserScreenshotsDir(config);
 		await rm(dir, { recursive: true, force: true });
 		await mkdir(dir, { recursive: true });
@@ -93,9 +93,9 @@ describe("serveAttachment", () => {
 	});
 
 	it("rejects traversal attempts", async (t) => {
-		const root = await createTempDataDir();
+		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));
-		const config = await configWithDataDir(root);
+		const config = await configWithDataDir(t, root);
 		await mkdir(generatedAttachmentsDir(config), { recursive: true });
 		const response = new FakeResponse();
 
@@ -105,9 +105,9 @@ describe("serveAttachment", () => {
 	});
 
 	it("rejects symlinks inside the generated attachment directory", async (t) => {
-		const root = await createTempDataDir();
+		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));
-		const config = await configWithDataDir(root);
+		const config = await configWithDataDir(t, root);
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
 		const target = join(root, "outside.mp3");

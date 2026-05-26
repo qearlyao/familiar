@@ -55,8 +55,8 @@ describe("image_gen helpers", () => {
 		assert.equal(imageExtension("application/octet-stream"), "png");
 	});
 
-	it("resolves custom image models through models base URL overrides", async () => {
-		const config = await configWithDataDir("/workspace/data", {
+	it("resolves custom image models through models base URL overrides", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
 			imageGen: { model: "custom/gemini-image" },
 			models: {
 				baseUrls: { custom: "https://images.example.test/v1" },
@@ -75,15 +75,15 @@ describe("image_gen helpers", () => {
 });
 
 describe("image_gen tool", () => {
-	it("writes generated images and adds generated attachments", async () => {
+	it("writes generated images and adds generated attachments", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
+			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			let capturedModel: ImagesModel<any> | undefined;
 			let capturedContext: ImagesContext | undefined;
-			const config = await configWithDataDir(dataDir, {
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image", timeoutMs: 1234 },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -132,16 +132,16 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("retries with fallback model when the primary returns no image", async () => {
+	it("retries with fallback model when the primary returns no image", async (t) => {
 		const previousPrimary = process.env.PRIMARY_IMAGE_KEY;
 		const previousFallback = process.env.FALLBACK_IMAGE_KEY;
 		process.env.PRIMARY_IMAGE_KEY = "primary-key";
 		process.env.FALLBACK_IMAGE_KEY = "fallback-key";
 		try {
-			const dataDir = await createTempDataDir();
+			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			const attempted: string[] = [];
-			const config = await configWithDataDir(dataDir, {
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: {
 					model: "primary/model-a",
 					fallbackModel: "fallback/model-b",
@@ -191,13 +191,13 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("recovers provider text data URLs as generated images", async () => {
+	it("recovers provider text data URLs as generated images", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
+			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(dataDir, {
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gpt-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -233,13 +233,13 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("recovers provider markdown image data URLs as generated images", async () => {
+	it("recovers provider markdown image data URLs as generated images", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
+			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(dataDir, {
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gpt-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -275,13 +275,13 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("recovers provider raw base64 text as generated images", async () => {
+	it("recovers provider raw base64 text as generated images", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
+			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(dataDir, {
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gpt-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -312,12 +312,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("does not surface long text payloads as no-image errors", async () => {
+	it("does not surface long text payloads as no-image errors", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gpt-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -340,12 +340,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("passes selected reference image attachments into upstream image context", async () => {
+	it("passes selected reference image attachments into upstream image context", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -395,12 +395,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("passes workspace reference image paths into upstream image context", async () => {
+	it("passes workspace reference image paths into upstream image context", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -439,12 +439,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("resizes oversized workspace reference images before upstream image context", async () => {
+	it("resizes oversized workspace reference images before upstream image context", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -486,12 +486,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("rejects workspace reference image folders", async () => {
+	it("rejects workspace reference image folders", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -518,12 +518,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("rejects workspace reference image paths outside the workspace", async () => {
+	it("rejects workspace reference image paths outside the workspace", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -546,12 +546,12 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("rejects workspace reference image symlinks", async () => {
+	it("rejects workspace reference image symlinks", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";
 		try {
-			const dataDir = await createTempDataDir();
-			const config = await configWithDataDir(dataDir, {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -584,11 +584,11 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("fails before calling the provider when the configured API key is missing", async () => {
+	it("fails before calling the provider when the configured API key is missing", async (t) => {
 		const previousKey = process.env.MISSING_IMAGE_KEY;
 		delete process.env.MISSING_IMAGE_KEY;
 		try {
-			const config = await configWithDataDir("/workspace/data", {
+			const config = await configWithDataDir(t, "/workspace/data", {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
 					baseUrls: { custom: "https://images.example.test/v1" },
@@ -608,8 +608,8 @@ describe("image_gen tool", () => {
 		}
 	});
 
-	it("rejects empty prompts", async () => {
-		const config = await configWithDataDir("/workspace/data");
+	it("rejects empty prompts", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data");
 		const tool = createImageGenTool(config, createGeneratedMediaSink());
 
 		await assert.rejects(() => tool.execute("call-1", { prompt: "  " }), /prompt is required/);

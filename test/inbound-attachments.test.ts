@@ -34,9 +34,9 @@ async function noisyPngBytes(size = 1600): Promise<Buffer> {
 }
 
 describe("inbound attachments", () => {
-	it("materializes image attachments with canonical extensions and derived metadata", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("materializes image attachments with canonical extensions and derived metadata", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const attachments = await materializeInboundAttachments(config, [
 			{
 				name: "../photo.exe",
@@ -52,9 +52,9 @@ describe("inbound attachments", () => {
 		assert.ok(attachments[0]?.localPath?.startsWith(resolve(attachmentsDir(config), "inbound")));
 	});
 
-	it("rejects oversized attachment batches without leaving partial writes", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("rejects oversized attachment batches without leaving partial writes", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		await assert.rejects(
 			() =>
 				materializeInboundAttachments(config, [
@@ -76,9 +76,9 @@ describe("inbound attachments", () => {
 		await assert.rejects(() => stat(join(attachmentsDir(config), "inbound")), /ENOENT/);
 	});
 
-	it("limits attachment count", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("limits attachment count", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		await assert.rejects(
 			() =>
 				materializeInboundAttachments(
@@ -93,9 +93,9 @@ describe("inbound attachments", () => {
 		);
 	});
 
-	it("filters non-image attachments out of prompt images", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("filters non-image attachments out of prompt images", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const [attachment] = await materializeInboundAttachments(config, [
 			{
 				name: "photo.png",
@@ -123,9 +123,9 @@ describe("inbound attachments", () => {
 		assert.match(result.promptSuffix, /photo\.png/);
 	});
 
-	it("includes local paths and text previews in attachment prompt notes", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("includes local paths and text previews in attachment prompt notes", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const [attachment] = await materializeInboundAttachments(config, [
 			{
 				name: "message.txt",
@@ -145,9 +145,9 @@ describe("inbound attachments", () => {
 		assert.match(notes, /\[preview:/);
 	});
 
-	it("creates and inlines resized image derivatives for oversized images", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("creates and inlines resized image derivatives for oversized images", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const largeImage = await noisyPngBytes();
 		assert.ok(Buffer.byteLength(largeImage.toString("base64"), "utf8") > MAX_INLINE_IMAGE_BASE64_BYTES);
 
@@ -175,9 +175,9 @@ describe("inbound attachments", () => {
 		assert.doesNotMatch(result.promptSuffix, /Image omitted/);
 	});
 
-	it("preserves derived attachment text during materialization", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("preserves derived attachment text during materialization", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const previousFetch = globalThis.fetch;
 		const previousGroq = process.env.GROQ_API_KEY;
 		process.env.GROQ_API_KEY = "groq-test";
@@ -205,9 +205,9 @@ describe("inbound attachments", () => {
 		}
 	});
 
-	it("summarizes video attachments through the configured Gemini base URL", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("summarizes video attachments through the configured Gemini base URL", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			models: {
 				baseUrls: { google: "https://example.test/v1beta" },
 			},

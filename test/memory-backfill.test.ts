@@ -53,7 +53,7 @@ async function createHarness(t: { after(fn: () => Promise<void>): void }) {
 			rm(memoryDir, { recursive: true, force: true }),
 		]);
 	});
-	const config = await configWithDataDir(dataDir, {
+	const config = await configWithDataDir(t, dataDir, {
 		memory: {
 			rootDir: memoryDir,
 			indexDir: resolve(memoryDir, "index"),

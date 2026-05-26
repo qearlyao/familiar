@@ -25,16 +25,16 @@ function siteHelp(site: string, commands: Array<{ name: string; access: string; 
 }
 
 describe("browser tools", () => {
-	it("does not register when disabled", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("does not register when disabled", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 
 		assert.deepEqual(createBrowserTools(config, createGeneratedMediaSink()), []);
 	});
 
-	it("loads browser defaults and allowlisted recurring sites", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("loads browser defaults and allowlisted recurring sites", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: {
 				enabled: true,
 			},
@@ -52,9 +52,9 @@ describe("browser tools", () => {
 		assert.equal(config.browser.allowedSites.spotify, true);
 	});
 
-	it("builds OpenCLI page args with positional session", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("builds OpenCLI page args with positional session", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: {
 				enabled: true,
 				session: "familiar-main",
@@ -78,9 +78,9 @@ describe("browser tools", () => {
 		]);
 	});
 
-	it("passes browser timeout through to OpenCLI internals", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("passes browser timeout through to OpenCLI internals", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: {
 				enabled: true,
 				timeoutMs: 120_000,
@@ -157,9 +157,9 @@ describe("browser tools", () => {
 		assert.equal(invocation.options.windowsVerbatimArguments, undefined);
 	});
 
-	it("builds read-only browser tab inspection args", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("builds read-only browser tab inspection args", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 
 		assert.deepEqual(await __browserToolsTest.buildPageArgs({ mode: "page", action: "tab", kind: "list" }, config), [
 			"browser",
@@ -171,9 +171,9 @@ describe("browser tools", () => {
 		]);
 	});
 
-	it("omits window mode from lifecycle commands", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, readWrite: true } });
+	it("omits window mode from lifecycle commands", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, readWrite: true } });
 
 		assert.deepEqual(await __browserToolsTest.buildPageArgs({ mode: "page", action: "close" }, config), [
 			"browser",
@@ -187,9 +187,9 @@ describe("browser tools", () => {
 		]);
 	});
 
-	it("blocks write-like page actions until read_write is enabled", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("blocks write-like page actions until read_write is enabled", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 
 		await assert.rejects(
 			() => __browserToolsTest.buildPageArgs({ mode: "page", action: "click", target: "1" }, config),
@@ -217,9 +217,9 @@ describe("browser tools", () => {
 		);
 	});
 
-	it("allows tab lifecycle commands when read_write is enabled", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, readWrite: true } });
+	it("allows tab lifecycle commands when read_write is enabled", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, readWrite: true } });
 
 		assert.deepEqual(
 			await __browserToolsTest.buildPageArgs(
@@ -238,9 +238,9 @@ describe("browser tools", () => {
 		);
 	});
 
-	it("builds allowlisted site adapter commands as JSON", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("builds allowlisted site adapter commands as JSON", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 
 		assert.deepEqual(
 			__browserToolsTest.buildSiteArgs(
@@ -269,9 +269,9 @@ describe("browser tools", () => {
 		);
 	});
 
-	it("allows site write adapter commands and positional args when read_write is enabled", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("allows site write adapter commands and positional args when read_write is enabled", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: { enabled: true, readWrite: true, windowMode: "foreground" },
 		});
 
@@ -300,9 +300,9 @@ describe("browser tools", () => {
 		);
 	});
 
-	it("executes through injected runner and returns bounded content/details", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, maxOutputChars: 1200 } });
+	it("executes through injected runner and returns bounded content/details", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, maxOutputChars: 1200 } });
 		const calls: string[][] = [];
 		const runner = async (spec: BrowserRunSpec): Promise<BrowserCommandResult> => {
 			calls.push(spec.args);
@@ -327,9 +327,9 @@ describe("browser tools", () => {
 		assert.deepEqual(result.details?.json, { title: "Example", url: "https://example.com" });
 	});
 
-	it("executes browser-harness page commands through stdin scripts", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("executes browser-harness page commands through stdin scripts", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: { enabled: true, backend: "browser-harness", session: "personal" },
 		});
 		const calls: BrowserRunSpec[] = [];
@@ -359,9 +359,9 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /browser-harness ok/);
 	});
 
-	it("routes site mode through OpenCLI even when page mode uses browser-harness", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, {
+	it("routes site mode through OpenCLI even when page mode uses browser-harness", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
 			browser: { enabled: true, backend: "browser-harness", opencliCommand: "opencli-dev" },
 		});
 		const calls: BrowserRunSpec[] = [];
@@ -407,9 +407,9 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /OpenCLI ok/);
 	});
 
-	it("lists OpenCLI commands for allowed sites from live metadata", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("lists OpenCLI commands for allowed sites from live metadata", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 		const calls: BrowserRunSpec[] = [];
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			calls.push(spec);
@@ -439,9 +439,9 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /admin=\[sync\]/);
 	});
 
-	it("lists all configured site commands without a site filter", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("lists all configured site commands without a site filter", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			const site = spec.args[0] ?? "unknown";
 			const json = siteHelp(site, [{ name: "read-one", access: "read" }]);
@@ -464,9 +464,9 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /spotify/);
 	});
 
-	it("returns non-zero exits and truncates long command output", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, maxOutputChars: 1000 } });
+	it("returns non-zero exits and truncates long command output", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, maxOutputChars: 1000 } });
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => ({
 			ok: false,
 			backend: "opencli",
@@ -485,9 +485,9 @@ describe("browser tools", () => {
 		assert.equal(result.details?.truncated, true);
 	});
 
-	it("hints how to enable OpenCLI traces for failed site commands", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, readWrite: true } });
+	it("hints how to enable OpenCLI traces for failed site commands", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, readWrite: true } });
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			if (spec.args.join(" ") === "twitter --help -f json") {
 				const json = siteHelp("twitter", [{ name: "post", access: "write" }]);
@@ -531,9 +531,9 @@ describe("browser tools", () => {
 		assert.match(textFrom(hinted), /args\.trace="retain-on-failure"/);
 	});
 
-	it("stores screenshots under the Familiar screenshot bucket and adds them to the media sink", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true } });
+	it("stores screenshots under the Familiar screenshot bucket and adds them to the media sink", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
 		const sink = createGeneratedMediaSink();
 		const [tool] = createBrowserTools(config, sink, async (spec) => {
 			const screenshotPath = __browserToolsTest.screenshotPathFromCommand([spec.command, ...spec.args]);
@@ -561,9 +561,9 @@ describe("browser tools", () => {
 		assert.doesNotMatch(textFrom(result), /model-picked/);
 	});
 
-	it("adds browser-harness screenshots to the media sink from JSON output", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir, { browser: { enabled: true, backend: "browser-harness" } });
+	it("adds browser-harness screenshots to the media sink from JSON output", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, backend: "browser-harness" } });
 		const sink = createGeneratedMediaSink();
 		const [tool] = createBrowserTools(config, sink, async (spec) => {
 			const match = spec.stdin?.match(/capture_screenshot\(("(?:[^"\\]|\\.)+")/);

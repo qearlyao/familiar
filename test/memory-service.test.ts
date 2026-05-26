@@ -14,7 +14,7 @@ import { ConversationRuntime } from "../src/runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
-	const dataDir = await createTempDataDir();
+	const dataDir = await createTempDataDir(t);
 	const memoryRootDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-service-"));
 	t.after(async () => {
 		await Promise.all([
@@ -22,7 +22,7 @@ async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 			rm(memoryRootDir, { recursive: true, force: true }),
 		]);
 	});
-	return configWithDataDir(dataDir, {
+	return configWithDataDir(t, dataDir, {
 		memory: {
 			rootDir: memoryRootDir,
 			indexDir: resolve(memoryRootDir, "index"),

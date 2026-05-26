@@ -6,9 +6,9 @@ import { ConversationRuntime } from "../src/runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("ConversationRuntime", () => {
-	it("renders prompt timestamps in local time while preserving stored UTC timestamps", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("renders prompt timestamps in local time while preserving stored UTC timestamps", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const runtime = await ConversationRuntime.connect({
 			channelKey: "web-web-owner",
 			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
@@ -34,9 +34,9 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
-	it("includes derived attachment text once in prompt records", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("includes derived attachment text once in prompt records", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const runtime = await ConversationRuntime.connect({
 			channelKey: "web-web-owner",
 			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
@@ -78,9 +78,9 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
-	it("does not redispatch a job with a durable outbound but missing job_completed", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("does not redispatch a job with a durable outbound but missing job_completed", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const channel = { service: "web", scope: "web", channelId: "owner" } as const;
 		const runtime = await ConversationRuntime.connect({
 			channelKey: "web-web-owner",
@@ -132,9 +132,9 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
-	it("tracks last heartbeat-reset interaction from owner inbound records only", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("tracks last heartbeat-reset interaction from owner inbound records only", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const runtime = await ConversationRuntime.connect({
 			channelKey: "web-web-owner",
 			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
@@ -180,9 +180,9 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
-	it("parses reload and restart as owner-only control commands", async () => {
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+	it("parses reload and restart as owner-only control commands", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		const runtime = await ConversationRuntime.connect({
 			channelKey: "web-web-owner",
 			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),

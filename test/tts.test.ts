@@ -22,8 +22,8 @@ describe("tts audio formats", () => {
 });
 
 describe("ElevenLabs voice settings", () => {
-	it("includes full voice settings for v2-style models", async () => {
-		const config = await configWithDataDir("/workspace/data", {
+	it("includes full voice settings for v2-style models", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
 			tts: {
 				modelId: "eleven_multilingual_v2",
 				voiceSettings: {
@@ -45,8 +45,8 @@ describe("ElevenLabs voice settings", () => {
 		});
 	});
 
-	it("omits v2-only settings for Eleven v3", async () => {
-		const config = await configWithDataDir("/workspace/data", {
+	it("omits v2-only settings for Eleven v3", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
 			tts: {
 				modelId: "eleven_v3",
 				voiceSettings: {

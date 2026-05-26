@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -9,8 +9,9 @@ import { describe, it } from "node:test";
 const execFileAsync = promisify(execFile);
 
 describe("CLI init", () => {
-	it("copies default skills into the workspace", async () => {
+	it("copies default skills into the workspace", async (t) => {
 		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-init-"));
+		t.after(() => rm(workspacePath, { recursive: true, force: true }));
 
 		await execFileAsync(process.execPath, ["--import", "tsx", "src/cli.ts", "init", workspacePath], {
 			cwd: resolve(import.meta.dirname, ".."),
@@ -23,8 +24,9 @@ describe("CLI init", () => {
 		assert.match(normalizedSkill, /Read this skill before using the image_gen tool/);
 	});
 
-	it("does not overwrite existing workspace files", async () => {
+	it("does not overwrite existing workspace files", async (t) => {
 		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-init-existing-"));
+		t.after(() => rm(workspacePath, { recursive: true, force: true }));
 		const configPath = resolve(workspacePath, "config.toml");
 		const soulPath = resolve(workspacePath, "SOUL.md");
 		await writeFile(configPath, "custom config\n", "utf8");

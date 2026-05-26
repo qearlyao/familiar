@@ -11,8 +11,8 @@ import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../src/skills
 import { createWorkspace, minimalConfigToml } from "./helpers.js";
 
 describe("Familiar skills", () => {
-	it("loads workspace skills from skills/ and formats only the skill XML block", async () => {
-		const workspacePath = await createWorkspace(minimalConfigToml());
+	it("loads workspace skills from skills/ and formats only the skill XML block", async (t) => {
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
 		const skillDir = resolve(workspacePath, "skills", "image-style");
 		await mkdir(skillDir, { recursive: true });
 		await writeFile(
@@ -63,8 +63,8 @@ Prefer the reference board.
 		assert.ok(skillsStart < reminderEnd);
 	});
 
-	it("omits missing optional INNER.md from the persona prompt", async () => {
-		const workspacePath = await createWorkspace(minimalConfigToml());
+	it("omits missing optional INNER.md from the persona prompt", async (t) => {
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
 		const previousDiscordToken = process.env.DISCORD_TOKEN;
 		process.env.DISCORD_TOKEN = "discord-token";
 		try {
@@ -79,8 +79,9 @@ Prefer the reference board.
 		}
 	});
 
-	it("surfaces configured INNER.md read errors", async () => {
+	it("surfaces configured INNER.md read errors", async (t) => {
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [persona]
 inner = "inner-dir"

@@ -7,10 +7,10 @@ import { __webTest } from "../src/web.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("web meme catalog pathing", () => {
-	it("resolves the meme catalog from the workspace root", async () => {
+	it("resolves the meme catalog from the workspace root", async (t) => {
 		const previousCwd = cwd();
-		const dataDir = await createTempDataDir();
-		const config = await configWithDataDir(dataDir);
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
 		try {
 			chdir("/");
 

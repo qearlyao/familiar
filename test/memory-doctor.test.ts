@@ -37,7 +37,7 @@ class FakeEmbeddingProvider implements EmbeddingProvider {
 async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-doctor-"));
 	t.after(() => rm(dataDir, { recursive: true, force: true }));
-	return configWithDataDir(dataDir, {
+	return configWithDataDir(t, dataDir, {
 		memory: {
 			embedding: {
 				api: "gemini",

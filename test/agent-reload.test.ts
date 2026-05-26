@@ -31,14 +31,15 @@ async function withoutEnv(name: string, run: () => Promise<void>): Promise<void>
 }
 
 describe("FamiliarAgent reload", () => {
-	it("keeps the previous live config when reload validation fails", async () => {
+	it("keeps the previous live config when reload validation fails", async (t) => {
 		await withEnv("ANTHROPIC_API_KEY", "test-key", async () => {
 			await withoutEnv("OPENAI_API_KEY", async () => {
 				const previousDiscordToken = process.env.DISCORD_TOKEN;
 				process.env.DISCORD_TOKEN = "discord-token";
 				try {
-					const dataDir = await createTempDataDir();
+					const dataDir = await createTempDataDir(t);
 					const workspacePath = await createWorkspace(
+						t,
 						minimalConfigToml(`
 [workspace]
 data_dir = "${dataDir.replaceAll("\\", "\\\\")}"
@@ -84,13 +85,14 @@ allow = ["anthropic/claude-sonnet-4-5", "openai/gpt-5.2"]
 		});
 	});
 
-	it("reapplies config overrides after reload rebuilds the base config", async () => {
+	it("reapplies config overrides after reload rebuilds the base config", async (t) => {
 		await withEnv("ANTHROPIC_API_KEY", "test-key", async () => {
 			const previousDiscordToken = process.env.DISCORD_TOKEN;
 			process.env.DISCORD_TOKEN = "discord-token";
 			try {
-				const dataDir = await createTempDataDir();
+				const dataDir = await createTempDataDir(t);
 				const workspacePath = await createWorkspace(
+					t,
 					minimalConfigToml(`
 [workspace]
 data_dir = "${dataDir.replaceAll("\\", "\\\\")}"

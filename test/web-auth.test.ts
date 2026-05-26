@@ -28,15 +28,15 @@ describe("verifyTotp", () => {
 });
 
 describe("createAuth.authorize", () => {
-	it("allows all requests in tailscale-only mode", async () => {
-		const auth = createAuth(await configWithDataDir("/workspace/data"));
+	it("allows all requests in tailscale-only mode", async (t) => {
+		const auth = createAuth(await configWithDataDir(t, "/workspace/data"));
 
 		assert.equal(auth.authorize(request(), "/api/web/stream"), true);
 	});
 
-	it("requires the configured bearer token in bearer mode", async () => {
+	it("requires the configured bearer token in bearer mode", async (t) => {
 		const auth = createAuth(
-			await configWithDataDir("/workspace/data", {
+			await configWithDataDir(t, "/workspace/data", {
 				web: { authMode: "bearer", bearerToken: "secret" },
 			}),
 		);
@@ -45,9 +45,9 @@ describe("createAuth.authorize", () => {
 		assert.equal(auth.authorize(request({ authorization: "Bearer secret" }), "/api/web/stream"), true);
 	});
 
-	it("allows session or bearer auth in public-2fa mode", async () => {
+	it("allows session or bearer auth in public-2fa mode", async (t) => {
 		const auth = createAuth(
-			await configWithDataDir("/workspace/data", {
+			await configWithDataDir(t, "/workspace/data", {
 				web: { authMode: "public-2fa", bearerToken: "secret" },
 			}),
 		);
@@ -58,9 +58,9 @@ describe("createAuth.authorize", () => {
 		assert.equal(auth.authorize(request({ authorization: "Bearer secret" }), "/api/web/stream"), true);
 	});
 
-	it("allows the auth mode endpoint without credentials", async () => {
+	it("allows the auth mode endpoint without credentials", async (t) => {
 		const auth = createAuth(
-			await configWithDataDir("/workspace/data", {
+			await configWithDataDir(t, "/workspace/data", {
 				web: { authMode: "bearer", bearerToken: "secret" },
 			}),
 		);

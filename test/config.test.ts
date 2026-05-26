@@ -22,10 +22,10 @@ describe("loadConfig tts", () => {
 		}
 	});
 
-	it("uses ElevenLabs defaults when tts config is omitted", async () => {
+	it("uses ElevenLabs defaults when tts config is omitted", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
-		const workspacePath = await createWorkspace(minimalConfigToml());
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
 
 		const config = await loadConfig(workspacePath);
 
@@ -80,10 +80,11 @@ describe("loadConfig tts", () => {
 		});
 	});
 
-	it("interpolates voice id from the environment", async () => {
+	it("interpolates voice id from the environment", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		process.env.ELEVENLABS_VOICE_ID = "clone-voice";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [tts]
 voice_id = "\${ELEVENLABS_VOICE_ID:-}"
@@ -95,10 +96,11 @@ voice_id = "\${ELEVENLABS_VOICE_ID:-}"
 		assert.equal(config.tts.voiceId, "clone-voice");
 	});
 
-	it("rejects unsupported tts providers", async () => {
+	it("rejects unsupported tts providers", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [tts]
 provider = "other"
@@ -108,10 +110,11 @@ provider = "other"
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.provider/);
 	});
 
-	it("loads ElevenLabs voice settings", async () => {
+	it("loads ElevenLabs voice settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [tts.voice_settings]
 stability = 0.62
@@ -133,10 +136,11 @@ use_speaker_boost = false
 		});
 	});
 
-	it("rejects out-of-range ElevenLabs voice settings", async () => {
+	it("rejects out-of-range ElevenLabs voice settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [tts.voice_settings]
 stability = 1.1
@@ -146,9 +150,10 @@ stability = 1.1
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.voice_settings\.stability/);
 	});
 
-	it("loads browser settings", async () => {
+	it("loads browser settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 	const workspacePath = await createWorkspace(
+		t,
 		minimalConfigToml(`
 	[browser]
 	enabled = true
@@ -180,9 +185,10 @@ stability = 1.1
 		assert.equal(config.browser.allowedSites.spotify, true);
 	});
 
-	it("loads browser-harness browser backend settings", async () => {
+	it("loads browser-harness browser backend settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 	[browser]
 	enabled = true
@@ -200,9 +206,10 @@ stability = 1.1
 		assert.equal(config.browser.session, "personal");
 	});
 
-	it("rejects invalid browser settings", async () => {
+	it("rejects invalid browser settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 	[browser]
 	backend = "other"
@@ -212,9 +219,10 @@ stability = 1.1
 		await assert.rejects(() => loadConfig(workspacePath), /browser\.backend/);
 	});
 
-	it("rejects legacy browser site command filters", async () => {
+	it("rejects legacy browser site command filters", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 	[browser.sites.twitter]
 	read = ["timeline"]
@@ -226,10 +234,11 @@ stability = 1.1
 		await assert.rejects(() => loadConfig(workspacePath), /browser\.sites/);
 	});
 
-	it("loads generated media retention settings", async () => {
+	it("loads generated media retention settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [media.generated]
 retention_days = 7
@@ -241,9 +250,10 @@ retention_days = 7
 		assert.equal(config.media.generatedRetentionDays, 7);
 	});
 
-	it("loads image generation settings", async () => {
+	it("loads image generation settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [image_gen]
 enabled = false
@@ -265,9 +275,10 @@ timeout_ms = 90000
 		});
 	});
 
-	it("rejects unsupported image generation API shapes", async () => {
+	it("rejects unsupported image generation API shapes", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [image_gen]
 api = "native-gemini"
@@ -277,9 +288,9 @@ api = "native-gemini"
 		await assert.rejects(() => loadConfig(workspacePath), /image_gen\.api/);
 	});
 
-	it("loads media understanding defaults", async () => {
+	it("loads media understanding defaults", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(minimalConfigToml());
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
 
 		const config = await loadConfig(workspacePath);
 
@@ -295,9 +306,9 @@ api = "native-gemini"
 		});
 	});
 
-	it("loads memory defaults under the workspace root", async () => {
+	it("loads memory defaults under the workspace root", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(minimalConfigToml());
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
 
 		const config = await loadConfig(workspacePath);
 
@@ -348,9 +359,9 @@ api = "native-gemini"
 		});
 	});
 
-	it("loads the shipped example config", async () => {
+	it("loads the shipped example config", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(await readFile(resolve("config.example.toml"), "utf8"));
+		const workspacePath = await createWorkspace(t, await readFile(resolve("config.example.toml"), "utf8"));
 
 		const config = await loadConfig(workspacePath);
 
@@ -386,9 +397,10 @@ api = "native-gemini"
 		}
 	});
 
-	it("loads heartbeat settings", async () => {
+	it("loads heartbeat settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [heartbeat]
 enabled = true
@@ -406,9 +418,10 @@ interval_minutes = 90
 		});
 	});
 
-	it("loads cron jobs", async () => {
+	it("loads cron jobs", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [cron]
 enabled = true
@@ -457,9 +470,10 @@ prompt = "Remember this once."
 		});
 	});
 
-	it("rejects invalid cron jobs", async () => {
+	it("rejects invalid cron jobs", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [cron]
 enabled = true
@@ -475,9 +489,10 @@ prompt = "Bad id."
 		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.id/);
 	});
 
-	it("rejects once cron jobs with repeating time", async () => {
+	it("rejects once cron jobs with repeating time", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [cron]
 enabled = true
@@ -494,9 +509,10 @@ prompt = "Conflicting schedule."
 		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.time/);
 	});
 
-	it("rejects invalid cron time strings", async () => {
+	it("rejects invalid cron time strings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [cron]
 enabled = true
@@ -512,9 +528,10 @@ prompt = "Bad time."
 		await assert.rejects(() => loadConfig(workspacePath), /HH:MM local time/);
 	});
 
-	it("loads memory overrides", async () => {
+	it("loads memory overrides", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory]
 root_dir = "brain"
@@ -605,9 +622,10 @@ system_prompt_path = "prompts/lcm-system.md"
 		});
 	});
 
-	it("inherits memory embedding provider settings from configured models", async () => {
+	it("inherits memory embedding provider settings from configured models", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [models.base_urls]
 google = "https://gateway.example.test/google"
@@ -630,9 +648,10 @@ model = "gemini-embedding-2"
 		assert.equal(config.memory.embedding.apiKeyEnv, "GOOGLE_EMBEDDING_KEY");
 	});
 
-	it("inherits memory lcm summarization provider settings from configured models", async () => {
+	it("inherits memory lcm summarization provider settings from configured models", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [models.base_urls]
 anthropic = "https://gateway.example.test/anthropic"
@@ -650,9 +669,10 @@ anthropic = "ANTHROPIC_GATEWAY_KEY"
 		assert.equal(config.memory.lcm.apiKeyEnv, "SUMMARY_GATEWAY_KEY");
 	});
 
-	it("rejects direct memory lcm connection settings", async () => {
+	it("rejects direct memory lcm connection settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.lcm]
 model = "anthropic/claude-sonnet-4-5"
@@ -663,9 +683,10 @@ base_url = "https://summary.example.test"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.base_url/);
 	});
 
-	it("requires memory lcm model to be allowlisted when models.allow is set", async () => {
+	it("requires memory lcm model to be allowlisted when models.allow is set", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [models]
 allow = ["anthropic/claude-sonnet-4-5"]
@@ -678,9 +699,10 @@ model = "google/gemini-3-flash-preview"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.model is not in models\.allow/);
 	});
 
-	it("skips memory lcm model validation when lcm is disabled", async () => {
+	it("skips memory lcm model validation when lcm is disabled", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [models]
 allow = ["anthropic/claude-sonnet-4-5"]
@@ -705,9 +727,10 @@ prompt = 42
 		assert.equal(config.memory.lcm.prompt, undefined);
 	});
 
-	it("allows custom memory embedding providers with explicit connection settings", async () => {
+	it("allows custom memory embedding providers with explicit connection settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.embedding]
 format = "gemini"
@@ -732,9 +755,10 @@ api_key_env = "LOCAL_GATEWAY_KEY"
 		});
 	});
 
-	it("rejects invalid memory numeric settings", async () => {
+	it("rejects invalid memory numeric settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.embedding]
 dimensions = 0
@@ -747,9 +771,10 @@ new_session_retain_depth = -2
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.dimensions/);
 	});
 
-	it("rejects invalid memory lcm settings", async () => {
+	it("rejects invalid memory lcm settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.lcm]
 context_threshold = 1.25
@@ -759,9 +784,10 @@ context_threshold = 1.25
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.context_threshold/);
 	});
 
-	it("rejects unknown memory lcm settings", async () => {
+	it("rejects unknown memory lcm settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.lcm]
 enabled = true
@@ -772,9 +798,10 @@ surprise = "nope"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.surprise/);
 	});
 
-	it("loads memory lcm cache and overflow settings", async () => {
+	it("loads memory lcm cache and overflow settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.lcm]
 cache_ttl_ms = 123456
@@ -790,9 +817,10 @@ critical_overflow_tokens = 3456
 		assert.equal(config.memory.lcm.criticalOverflowTokens, 3456);
 	});
 
-	it("rejects conflicting memory lcm prompts", async () => {
+	it("rejects conflicting memory lcm prompts", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.lcm]
 prompt = "inline"
@@ -803,9 +831,10 @@ prompt_path = "prompt.md"
 		await assert.rejects(() => loadConfig(workspacePath), /prompt or memory\.lcm\.prompt_path/);
 	});
 
-	it("rejects unsupported memory embedding apis", async () => {
+	it("rejects unsupported memory embedding apis", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.embedding]
 format = "invalid"
@@ -817,9 +846,10 @@ base_url = "https://api.openai.com/v1"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.format/);
 	});
 
-	it("accepts deprecated memory embedding api alias but createEmbeddingProvider gates non-gemini formats", async () => {
+	it("accepts deprecated memory embedding api alias but createEmbeddingProvider gates non-gemini formats", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.embedding]
 api = "openai"
@@ -834,14 +864,16 @@ base_url = "https://api.openai.com/v1"
 		assert.equal(config.memory.embedding.api, "openai");
 	});
 
-	it("loads snake_case agent cache retention and accepts deprecated camelCase alias", async () => {
+	it("loads snake_case agent cache retention and accepts deprecated camelCase alias", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const canonicalWorkspace = await createWorkspace(
+			t,
 			minimalConfigToml(`
 cache_retention = "short"
 `),
 		);
 		const legacyWorkspace = await createWorkspace(
+			t,
 			minimalConfigToml(`
 cacheRetention = "none"
 `),
@@ -851,9 +883,10 @@ cacheRetention = "none"
 		assert.equal((await loadConfig(legacyWorkspace)).agent.cacheRetention, "none");
 	});
 
-	it("loads data retention settings", async () => {
+	it("loads data retention settings", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [data.chat]
 retention_days = 14
@@ -875,9 +908,10 @@ retention_days = 3
 		});
 	});
 
-	it("rejects custom memory embedding providers without a base url", async () => {
+	it("rejects custom memory embedding providers without a base url", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
+			t,
 			minimalConfigToml(`
 [memory.embedding]
 provider = "local-gateway"

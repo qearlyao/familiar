@@ -91,9 +91,18 @@ function sniffText(buffer: Buffer): string | undefined {
 	if (buffer.length === 0) return "text/plain";
 	const head = buffer.subarray(0, Math.min(buffer.length, 512));
 	if (head.includes(0)) return undefined;
-	return head.every((byte) => byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126))
-		? "text/plain"
-		: undefined;
+	let decoded: string;
+	try {
+		decoded = new TextDecoder("utf-8", { fatal: true }).decode(head);
+	} catch {
+		return undefined;
+	}
+	for (const char of decoded) {
+		const code = char.codePointAt(0) ?? 0;
+		if (code === 9 || code === 10 || code === 13) continue;
+		if (code < 32 || code === 127) return undefined;
+	}
+	return "text/plain";
 }
 
 function sniffMimeType(buffer: Buffer, declared?: string): string {

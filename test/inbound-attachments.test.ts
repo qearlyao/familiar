@@ -93,6 +93,24 @@ describe("inbound attachments", () => {
 		);
 	});
 
+	it("materializes UTF-8 text attachments without ASCII-only sniffing", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const [attachment] = await materializeInboundAttachments(config, [
+			{
+				name: "message.txt",
+				mimeType: "application/octet-stream",
+				buffer: Buffer.from("任务风险感知 -> AI建议暴露 -> 信任形成", "utf8"),
+				source: "discord",
+			},
+		]);
+
+		assert.equal(attachment?.name, "message.txt");
+		assert.equal(attachment?.kind, "file");
+		assert.equal(attachment?.mimeType, "text/plain");
+		assert.ok(attachment?.localPath?.startsWith(resolve(attachmentsDir(config), "inbound", "discord")));
+	});
+
 	it("filters non-image attachments out of prompt images", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

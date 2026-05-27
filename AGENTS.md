@@ -9,15 +9,6 @@ Use existing local reference clones when available; do not create fresh clones f
 - `earendil-works/pi`: `/Users/qearl/pi`. Remote is `upstream`.
 - `earendil-works/pi-chat`: `/Users/qearl/pi-chat`. Remote is `origin`.
 
-When latest upstream context is needed, update these references in place:
-
-```sh
-git -C /Users/qearl/pi fetch --prune upstream
-git -C /Users/qearl/pi reset --hard upstream/main
-git -C /Users/qearl/pi-chat fetch --prune origin
-git -C /Users/qearl/pi-chat reset --hard origin/main
-```
-
 These directories are reference clones, not Familiar worktrees. It is fine to overwrite them with upstream state. Avoid cloning duplicate copies into `/tmp`; clean up any accidental duplicate upstream clones when noticed.
 
 For high-value upstream/local file references, check `PLAN.md` section `## 6. Reference Index`

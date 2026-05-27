@@ -88,6 +88,8 @@ interface TextImageRecoveryOptions {
 	signal?: AbortSignal;
 }
 
+const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
+
 function formatImageGenNotice(name: string): string {
 	return `${IMAGE_GEN_NOTICE_PREFIX} ${name}`;
 }
@@ -210,11 +212,40 @@ function imageUrlFromMarkdownText(text: string): URL | undefined {
 	}
 }
 
-async function recoveredImageFromRemoteUrl(url: URL, options: TextImageRecoveryOptions): Promise<RecoveredImage | undefined> {
+async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Buffer | undefined> {
+	const reader = response.body?.getReader();
+	if (!reader) {
+		const buffer = Buffer.from(await response.arrayBuffer());
+		return buffer.byteLength > maxBytes ? undefined : buffer;
+	}
+	const chunks: Buffer[] = [];
+	let total = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			const chunk = Buffer.from(value);
+			total += chunk.byteLength;
+			if (total > maxBytes) return undefined;
+			chunks.push(chunk);
+		}
+		return Buffer.concat(chunks);
+	} finally {
+		reader.releaseLock();
+	}
+}
+
+async function recoveredImageFromRemoteUrl(
+	url: URL,
+	options: TextImageRecoveryOptions,
+): Promise<RecoveredImage | undefined> {
 	try {
 		const response = await fetch(url, { signal: options.signal });
 		if (!response.ok) return undefined;
-		const bytes = Buffer.from(await response.arrayBuffer());
+		const contentLength = Number(response.headers.get("content-length") ?? 0);
+		if (contentLength > MAX_REMOTE_IMAGE_BYTES) return undefined;
+		const bytes = await readBoundedResponseBody(response, MAX_REMOTE_IMAGE_BYTES);
+		if (!bytes) return undefined;
 		const detectedMimeType = sniffImageMimeType(bytes);
 		if (!detectedMimeType) return undefined;
 		return {

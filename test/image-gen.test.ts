@@ -363,6 +363,45 @@ describe("image_gen tool", () => {
 		}
 	});
 
+	it("rejects provider markdown URLs whose response body exceeds the size cap", async (t) => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		const previousFetch = globalThis.fetch;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir(t);
+			globalThis.fetch = (async () =>
+				new Response(new Uint8Array(pngBytes()), {
+					headers: {
+						"content-type": "image/png",
+						"content-length": String(20 * 1024 * 1024),
+					},
+				})) as typeof fetch;
+			const config = await configWithDataDir(t, dataDir, {
+				imageGen: { model: "custom/gpt-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model) => {
+					return imageResult([{ type: "text", text: "![image](https://images.example.test/huge.png)" }], {
+						provider: model.provider,
+						model: model.id,
+					});
+				},
+			});
+
+			await assert.rejects(() => tool.execute("call-1", { prompt: "draw oversized remote image" }), {
+				message: "Image generation failed: image generation returned no image output",
+			});
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
 	it("recovers provider raw base64 text as generated images", async (t) => {
 		const previousKey = process.env.CUSTOM_IMAGE_KEY;
 		process.env.CUSTOM_IMAGE_KEY = "secret";

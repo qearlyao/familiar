@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.4 - 2026-05-27
+
+### Added
+
+- Add a step-based WebUI timeline that preserves interleaved thinking, tool calls, and text during live streaming and history reloads.
+- Support pasted and dropped file attachments in the WebUI composer.
+- Include stored attachment paths and bounded plain-text previews in prompt context so non-media attachments are visible to the agent without dumping full files.
+- Accept valid UTF-8 text attachments, including non-ASCII Discord `message.txt` uploads.
+
+### Changed
+
+- Rename Familiar's open-web tools to `search_web` and `fetch_web` to avoid provider tool-name collisions.
+- Keep browser tool success output focused on page content while preserving command diagnostics in failure/details paths.
+- Refresh workspace defaults after `familiar upgrade [workspace]` without overwriting existing config, Markdown, or skills.
+- Keep LCM restart replay summary-only and preserve raw transcript history as the canonical restart record.
+- Refine heartbeat guidance to make silent turns less strict and more conversational.
+
+### Fixed
+
+- Preserve heartbeat-triggered silent turns in WebUI history and render silent markers inline with the timeline.
+- Hide local text attachment previews from visible WebUI message text while retaining attachment cards and prompt context.
+- Fix WebUI/backend edge cases around malformed cookies, stale WebSocket channel lookups, page-cache TTL/LRU behavior, and in-flight message cleanup.
+- Improve memory hot-path performance during retrieval, compaction, indexing, backfill, and retention.
+- Stabilize browser, hot-reload, memory, WebUI history, and attachment tests with self-cleaning temporary workspaces.
+
+### Maintenance
+
+- Consolidate shared filesystem, guard, time, image MIME, model, config, and memory helper logic.
+- Reduce duplicated model/config handling and shared utility code across backend modules.
+
 ## 0.2.3 - 2026-05-24
 
 ### Changed

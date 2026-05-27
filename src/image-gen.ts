@@ -84,6 +84,10 @@ interface RecoveredImage {
 	data: string;
 }
 
+interface TextImageRecoveryOptions {
+	signal?: AbortSignal;
+}
+
 function formatImageGenNotice(name: string): string {
 	return `${IMAGE_GEN_NOTICE_PREFIX} ${name}`;
 }
@@ -183,7 +187,7 @@ function recoveredImageFromBase64(value: string): RecoveredImage | undefined {
 	};
 }
 
-function recoveredImageFromText(text: string): RecoveredImage | undefined {
+function recoveredInlineImageFromText(text: string): RecoveredImage | undefined {
 	const trimmed = text.trim();
 	const dataUrlMatch = trimmed.match(/^data:(image\/[^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
 	if (dataUrlMatch) return recoveredImageFromBase64(dataUrlMatch[2] ?? "");
@@ -194,7 +198,50 @@ function recoveredImageFromText(text: string): RecoveredImage | undefined {
 	return recoveredImageFromBase64(trimmed);
 }
 
-function normalizeCompatibleImageText(result: AssistantImages): AssistantImages {
+function imageUrlFromMarkdownText(text: string): URL | undefined {
+	const match = text.match(/!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i);
+	if (!match?.[1]) return undefined;
+	try {
+		const url = new URL(match[1]);
+		if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+		return url;
+	} catch {
+		return undefined;
+	}
+}
+
+async function recoveredImageFromRemoteUrl(url: URL, options: TextImageRecoveryOptions): Promise<RecoveredImage | undefined> {
+	try {
+		const response = await fetch(url, { signal: options.signal });
+		if (!response.ok) return undefined;
+		const bytes = Buffer.from(await response.arrayBuffer());
+		const detectedMimeType = sniffImageMimeType(bytes);
+		if (!detectedMimeType) return undefined;
+		return {
+			mimeType: detectedMimeType,
+			data: bytes.toString("base64"),
+		};
+	} catch (error) {
+		if (options.signal?.aborted) throw error;
+		return undefined;
+	}
+}
+
+async function recoveredImageFromText(
+	text: string,
+	options: TextImageRecoveryOptions,
+): Promise<RecoveredImage | undefined> {
+	const inlineImage = recoveredInlineImageFromText(text);
+	if (inlineImage) return inlineImage;
+	const url = imageUrlFromMarkdownText(text);
+	if (!url) return undefined;
+	return recoveredImageFromRemoteUrl(url, options);
+}
+
+async function normalizeCompatibleImageText(
+	result: AssistantImages,
+	options: TextImageRecoveryOptions,
+): Promise<AssistantImages> {
 	if (result.output.some((item) => item.type === "image")) return result;
 	const output: AssistantImages["output"] = [];
 	for (const item of result.output) {
@@ -202,7 +249,7 @@ function normalizeCompatibleImageText(result: AssistantImages): AssistantImages 
 			output.push(item);
 			continue;
 		}
-		const recovered = recoveredImageFromText(item.text);
+		const recovered = await recoveredImageFromText(item.text, options);
 		if (!recovered) {
 			output.push(item);
 			continue;
@@ -390,15 +437,14 @@ async function tryGenerateImages(
 ): Promise<{ model: ImagesModel<ImageGenApi>; result: AssistantImages }> {
 	const model = resolveImageModel(config, ref);
 	const context = await buildImageContext(model, prompt, references, workspaceRefs, config);
+	const result = await generate(model, context, {
+		apiKey: resolveImageModelApiKey(config, model),
+		signal,
+		timeoutMs: config.imageGen.timeoutMs,
+	});
 	return {
 		model,
-		result: normalizeCompatibleImageText(
-			await generate(model, context, {
-				apiKey: resolveImageModelApiKey(config, model),
-				signal,
-				timeoutMs: config.imageGen.timeoutMs,
-			}),
-		),
+		result: await normalizeCompatibleImageText(result, { signal }),
 	};
 }
 

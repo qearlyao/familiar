@@ -173,6 +173,11 @@ type SiteCommandInfo = {
 	usage?: string;
 };
 
+type SiteCommandListing = {
+	commands: SiteCommandInfo[];
+	complete: boolean;
+};
+
 type BrowserSpawnStdio = ["pipe" | "ignore", "pipe", "pipe"];
 
 type BrowserSpawnInvocation = {
@@ -275,6 +280,14 @@ function parseJson(text: string): unknown {
 	} catch {
 		return undefined;
 	}
+}
+
+function parseOpenCliJsonOutput(result: BrowserCommandResult, context: string): unknown {
+	if (result.json !== undefined) return result.json;
+	const output = result.stdout.trim();
+	if (!output) throw new Error(`OpenCLI ${context} returned no JSON output.`);
+	const tail = output.slice(-120).replace(/\s+/g, " ").trim();
+	throw new Error(`OpenCLI ${context} returned malformed JSON output near: ${tail || "(empty)"}`);
 }
 
 function stringArg(value: unknown): string | undefined {
@@ -656,22 +669,47 @@ function assertSiteAllowed(config: Config, site: string): void {
 	if (!config.browser.allowedSites[site]) throw new Error(`OpenCLI site is not allowlisted: ${site}`);
 }
 
-function parseSiteCommands(json: unknown): SiteCommandInfo[] {
+function commandInfoFromJson(json: unknown): SiteCommandInfo | undefined {
+	if (!isRecord(json)) return undefined;
+	const name = stringArg(json.name);
+	if (!name) return undefined;
+	return {
+		name,
+		access: stringArg(json.access) ?? "unknown",
+		description: stringArg(json.description),
+		usage: stringArg(json.usage),
+	};
+}
+
+function parseSiteCommands(json: unknown): SiteCommandListing {
 	const commands = isRecord(json) && Array.isArray(json.commands) ? json.commands : [];
-	return commands.flatMap((command) => {
-		if (!isRecord(command)) return [];
-		const name = stringArg(command.name);
-		if (!name) return [];
-		const access = stringArg(command.access) ?? "unknown";
+	return {
+		commands: commands.flatMap((command) => {
+			const info = commandInfoFromJson(command);
+			return info ? [info] : [];
+		}),
+		complete: true,
+	};
+}
+
+function parsePlainSiteHelp(site: string, text: string): SiteCommandListing | undefined {
+	const commandSection = text.match(
+		/Commands:\n(?<body>[\s\S]*?)(?:\n\n[A-Z][^\n]* options:|\n\nCommon options:|\n\nBrowser common options:|\n\nAgent tip:|$)/,
+	);
+	const body = commandSection?.groups?.body;
+	if (!body) return undefined;
+	const commands = body.split("\n").flatMap((line) => {
+		const match = line.match(/^\s{2}(?<name>[A-Za-z0-9._-]+)\b.*\[(?<access>read|write|admin)\]/);
+		if (!match?.groups) return [];
 		return [
 			{
-				name,
-				access,
-				description: stringArg(command.description),
-				usage: stringArg(command.usage),
+				name: match.groups.name,
+				access: match.groups.access,
+				usage: `opencli ${site} ${match.groups.name}`,
 			},
 		];
 	});
+	return { commands, complete: false };
 }
 
 async function loadSiteCommands(
@@ -679,19 +717,41 @@ async function loadSiteCommands(
 	config: Config,
 	runner: BrowserRunner,
 	signal?: AbortSignal,
-): Promise<SiteCommandInfo[]> {
+): Promise<SiteCommandListing> {
 	const result = await runner(openCliSpec(config, [...baseArgs(config), site, "--help", "-f", "json"]), {
 		timeoutMs: config.browser.timeoutMs,
 		signal,
 	});
 	if (!result.ok) throw new Error(formatBrowserResult(result, config.browser.maxOutputChars).text);
-	return parseSiteCommands(result.json);
+	try {
+		return parseSiteCommands(parseOpenCliJsonOutput(result, `${site} metadata`));
+	} catch (error) {
+		const plainResult = await runner(openCliSpec(config, [...baseArgs(config), site, "--help"]), {
+			timeoutMs: config.browser.timeoutMs,
+			signal,
+		});
+		if (!plainResult.ok) throw error;
+		const plainListing = parsePlainSiteHelp(site, plainResult.stdout);
+		if (!plainListing) throw error;
+		return plainListing;
+	}
 }
 
-function findSiteCommand(commands: SiteCommandInfo[], site: string, command: string): SiteCommandInfo {
-	const match = commands.find((item) => item.name === command);
-	if (!match) throw new Error(`OpenCLI site command is not available: ${site} ${command}`);
-	return match;
+async function loadSiteCommand(
+	site: string,
+	command: string,
+	config: Config,
+	runner: BrowserRunner,
+	signal?: AbortSignal,
+): Promise<SiteCommandInfo> {
+	const result = await runner(openCliSpec(config, [...baseArgs(config), site, command, "--help", "-f", "json"]), {
+		timeoutMs: config.browser.timeoutMs,
+		signal,
+	});
+	if (!result.ok) throw new Error(formatBrowserResult(result, config.browser.maxOutputChars).text);
+	const info = commandInfoFromJson(parseOpenCliJsonOutput(result, `${site} ${command} metadata`));
+	if (!info || info.name !== command) throw new Error(`OpenCLI site command is not available: ${site} ${command}`);
+	return info;
 }
 
 function buildSiteArgs(input: BrowserToolInput, config: Config, commandInfo: SiteCommandInfo): string[] {
@@ -742,8 +802,8 @@ async function buildSiteRunSpec(
 	assertSafeName(site, "browser.site");
 	assertSafeName(command, "browser.command");
 	assertSiteAllowed(config, site);
-	const commands = await loadSiteCommands(site, config, runner, signal);
-	return openCliSpec(config, buildSiteArgs(input, config, findSiteCommand(commands, site, command)));
+	const commandInfo = await loadSiteCommand(site, command, config, runner, signal);
+	return openCliSpec(config, buildSiteArgs(input, config, commandInfo));
 }
 
 function buildRunSpec(input: BrowserToolInput, config: Config): Promise<BrowserRunSpec> | BrowserRunSpec {
@@ -768,15 +828,16 @@ async function listCommands(
 	const sites = site ? [site] : Object.keys(config.browser.allowedSites);
 	const lines = ["allowlisted site commands:"];
 	for (const name of sites) {
-		const commands = await loadSiteCommands(name, config, runner, signal);
+		const listing = await loadSiteCommands(name, config, runner, signal);
 		const groups = new Map<string, string[]>();
-		for (const command of commands) {
+		for (const command of listing.commands) {
 			const names = groups.get(command.access) ?? [];
 			names.push(command.name);
 			groups.set(command.access, names);
 		}
 		const parts = Array.from(groups.entries()).map(([access, names]) => `${access}=[${names.join(", ")}]`);
-		lines.push(`- ${name}: ${parts.join(" ")}`);
+		const suffix = listing.complete ? "" : " (from plain help)";
+		lines.push(`- ${name}: ${parts.join(" ")}${suffix}`);
 	}
 	return lines.join("\n");
 }

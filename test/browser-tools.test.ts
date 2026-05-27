@@ -374,8 +374,8 @@ describe("browser tools", () => {
 		const calls: BrowserRunSpec[] = [];
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
 			calls.push(spec);
-			if (spec.args.join(" ") === "reddit --help -f json") {
-				const json = siteHelp("reddit", [{ name: "saved", access: "read" }]);
+			if (spec.args.join(" ") === "reddit saved --help -f json") {
+				const json = { site: "reddit", name: "saved", access: "read", usage: "opencli reddit saved" };
 				return {
 					ok: true,
 					backend: spec.backend,
@@ -408,7 +408,7 @@ describe("browser tools", () => {
 
 		assert.equal(calls[0]?.backend, "opencli");
 		assert.equal(calls[0]?.command, "opencli-dev");
-		assert.deepEqual(calls[0]?.args, ["reddit", "--help", "-f", "json"]);
+		assert.deepEqual(calls[0]?.args, ["reddit", "saved", "--help", "-f", "json"]);
 		assert.deepEqual(calls[1]?.args, ["reddit", "saved", "--window", "background", "--limit", "5", "-f", "json"]);
 		assert.equal(result.details?.backend, "opencli");
 		assert.doesNotMatch(textFrom(result), /OpenCLI ok/);
@@ -446,6 +446,98 @@ describe("browser tools", () => {
 		assert.match(textFrom(result), /timeline/);
 		assert.match(textFrom(result), /post/);
 		assert.match(textFrom(result), /admin=\[sync\]/);
+	});
+
+	it("falls back to plain OpenCLI site help when structured command listing is truncated", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true } });
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			if (spec.args.join(" ") === "twitter --help -f json") {
+				return {
+					ok: true,
+					backend: spec.backend,
+					command: [spec.command, ...spec.args],
+					exitCode: 0,
+					stdout: '{"site":"twitter","commands":[{"name":"timeline"',
+					stderr: "",
+					truncated: false,
+				};
+			}
+			return {
+				ok: true,
+				backend: spec.backend,
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: [
+					"Usage: opencli twitter <command> [args] [options]",
+					"",
+					"Commands:",
+					"  timeline [options]                 [read] Fetch timeline",
+					"  post <text> [options]               [write] Post a new tweet/thread",
+					"",
+					"Common options:",
+				].join("\n"),
+				stderr: "",
+				truncated: false,
+			};
+		});
+
+		const result = await tool.execute("call-1", { mode: "list_commands", site: "twitter" });
+
+		assert.deepEqual(calls.map((call) => call.args), [
+			["twitter", "--help", "-f", "json"],
+			["twitter", "--help"],
+		]);
+		assert.match(textFrom(result), /read=\[timeline\]/);
+		assert.match(textFrom(result), /write=\[post\]/);
+		assert.match(textFrom(result), /from plain help/);
+	});
+
+	it("validates site execution with command-specific OpenCLI metadata", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, readWrite: true } });
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			if (spec.args.join(" ") === "twitter post --help -f json") {
+				const json = { site: "twitter", name: "post", access: "write" };
+				return {
+					ok: true,
+					backend: spec.backend,
+					command: [spec.command, ...spec.args],
+					exitCode: 0,
+					stdout: JSON.stringify(json),
+					stderr: "",
+					json,
+					truncated: false,
+				};
+			}
+			return {
+				ok: true,
+				backend: spec.backend,
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: JSON.stringify({ status: "success" }),
+				stderr: "",
+				json: { status: "success" },
+				truncated: false,
+			};
+		});
+
+		await tool.execute("call-1", {
+			mode: "site",
+			site: "twitter",
+			command: "post",
+			positional: ["hello"],
+			args: { images: "/tmp/cat.png" },
+		});
+
+		assert.deepEqual(calls.map((call) => call.args), [
+			["twitter", "post", "--help", "-f", "json"],
+			["twitter", "post", "--window", "background", "hello", "--images", "/tmp/cat.png", "-f", "json"],
+		]);
 	});
 
 	it("lists all configured site commands without a site filter", async (t) => {
@@ -523,8 +615,8 @@ describe("browser tools", () => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, { browser: { enabled: true, readWrite: true } });
 		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
-			if (spec.args.join(" ") === "twitter --help -f json") {
-				const json = siteHelp("twitter", [{ name: "post", access: "write" }]);
+			if (spec.args.join(" ") === "twitter post --help -f json") {
+				const json = { site: "twitter", name: "post", access: "write" };
 				return {
 					ok: true,
 					backend: spec.backend,

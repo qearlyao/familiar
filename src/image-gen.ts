@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -34,7 +35,7 @@ const imageGenSchema = Type.Object(
 		referenceImages: Type.Optional(
 			Type.Array(Type.String(), {
 				description:
-					"Optional. Image attachment IDs or names, or workspace-relative image file paths, to use as visual references. Prefer IDs from the attachment tags when available.",
+					"Optional. Image attachment IDs or names, or workspace-relative, absolute, or ~/ image file paths, to use as visual references. Prefer IDs from the attachment tags when available.",
 			}),
 		),
 	},
@@ -213,7 +214,9 @@ function normalizeCompatibleImageText(result: AssistantImages): AssistantImages 
 }
 
 function resolveWorkspaceReferencePath(config: Config, rawRef: string): string {
-	const path = isAbsolute(rawRef) ? resolve(rawRef) : resolve(config.workspacePath, rawRef);
+	if (rawRef === "~" || rawRef.startsWith("~/")) return resolve(homedir(), rawRef.slice(2));
+	if (isAbsolute(rawRef)) return resolve(rawRef);
+	const path = resolve(config.workspacePath, rawRef);
 	const workspaceRelative = relative(config.workspacePath, path);
 	if (!workspaceRelative || workspaceRelative.startsWith("..") || isAbsolute(workspaceRelative)) {
 		throw new Error(`Reference image path must be inside the workspace: ${rawRef}`);

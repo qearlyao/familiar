@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomFillSync } from "node:crypto";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
@@ -159,7 +160,7 @@ describe("image_gen tool", () => {
 			});
 			const tool = createImageGenTool(config, sink, {
 				generateImages: async (model, _context, options) => {
-					attempted.push(`${model.provider}/${model.id}:${options?.apiKey}`);
+					attempted.push(`${model.provider}/${model.id}:${options?.apiKey}:${options?.timeoutMs}`);
 					if (model.provider === "primary") {
 						return imageResult([{ type: "text", text: "no image" }], {
 							provider: model.provider,
@@ -176,7 +177,7 @@ describe("image_gen tool", () => {
 			const result = await tool.execute("call-1", { prompt: "draw a fallback" });
 			const attachments = sink.drain();
 
-			assert.deepEqual(attempted, ["primary/model-a:primary-key", "fallback/model-b:fallback-key"]);
+			assert.deepEqual(attempted, ["primary/model-a:primary-key:120000", "fallback/model-b:fallback-key:120000"]);
 			assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason"]);
 			assert.equal(result.details.model, "fallback/model-b");
 			assert.equal(result.details.id, attachments[0]?.id);
@@ -432,6 +433,57 @@ describe("image_gen tool", () => {
 				type: "image",
 				mimeType: "image/png",
 				data: Buffer.from("workspace-image").toString("base64"),
+			});
+		} finally {
+			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
+			else process.env.CUSTOM_IMAGE_KEY = previousKey;
+		}
+	});
+
+	it("passes ~/ reference image paths into upstream image context", async (t) => {
+		const previousKey = process.env.CUSTOM_IMAGE_KEY;
+		process.env.CUSTOM_IMAGE_KEY = "secret";
+		try {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const referenceDir = resolve(homedir(), ".familiar-test-image-gen-refs");
+			await mkdir(referenceDir, { recursive: true });
+			t.after(async () => {
+				const { rm } = await import("node:fs/promises");
+				await rm(referenceDir, { recursive: true, force: true });
+			});
+			const imagePath = resolve(referenceDir, "moon.png");
+			await writeFile(imagePath, "home-image", "utf8");
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", {
+				prompt: "redraw this",
+				referenceImages: ["~/.familiar-test-image-gen-refs/moon.png"],
+			});
+
+			assert.deepEqual(capturedContext?.input[1], {
+				type: "text",
+				text: '<attachment name="moon.png" mime="image/png"></attachment>',
+			});
+			assert.deepEqual(capturedContext?.input[2], {
+				type: "image",
+				mimeType: "image/png",
+				data: Buffer.from("home-image").toString("base64"),
 			});
 		} finally {
 			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;

@@ -15,7 +15,7 @@ export async function readFileOrNull(path: string, encoding: BufferEncoding): Pr
 }
 
 async function fsyncFile(path: string): Promise<void> {
-	const handle = await open(path, "r");
+	const handle = await open(path, "r+");
 	try {
 		await handle.sync();
 	} finally {

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.5 - 2026-05-28
+
+### Changed
+
+- Accept `~/` paths in `image_gen` reference images.
+- Recover hosted image outputs returned as Markdown image links, with remote image fetches capped at 12MB.
+- Harden OpenCLI site command discovery when JSON metadata is missing or malformed.
+
+### Fixed
+
+- Fix atomic JSON writes on Windows by fsyncing the parent directory only when the platform supports it.
+
+### Maintenance
+
+- Add an opt-in image generation fetch trace preloader for debugging OpenRouter-style image responses.
+- Expand focused coverage for image generation recovery, OpenCLI site command discovery, and atomic JSON writes.
+
 ## 0.2.4 - 2026-05-27
 
 ### Added

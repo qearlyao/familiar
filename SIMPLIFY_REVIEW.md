@@ -166,7 +166,7 @@ A few patterns worth flagging:
    - [x] **6b.** Follow-up #1 (HIGH, attachment fire-and-forget vs persisted state) — make required attachment delivery part of the awaited send boundary; persist returned message ids alongside text ids.
    - [x] **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — folded into 6a via `AbortSignal.timeout` on the REST request.
    - [x] **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — folded into 6a via `RawFile.data: Buffer`.
-   - [ ] **6e.** HIGH #17, `runAgentTurn` extraction across `drainJobs` / `runHeartbeat` / `runCronJob` — separate commit, follows attachment cleanup.
+   - [x] **6e.** HIGH #17, `runAgentTurn` extraction across `drainJobs` / `runHeartbeat` / `runCronJob` — separate commit, follows attachment cleanup.
 7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through.
 8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Fold in:
    - Follow-up #4 (MED, persona-load tears down WS) — stash `handleEvent` in a ref so the WS effect only depends on `activeSessionKey`.

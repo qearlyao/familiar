@@ -1,7 +1,6 @@
 import type { FamiliarAgent } from "../agent.js";
 import type { DiscordWebSession } from "../discord.js";
 import { supportedThinkingLevels } from "../models.js";
-import type { EffectiveSetting } from "../settings.js";
 import { isObject } from "./http.js";
 
 export function commandArgs(command: string, args: unknown): string {
@@ -10,10 +9,6 @@ export function commandArgs(command: string, args: unknown): string {
 	if (command === "thinking") return typeof args.level === "string" ? args.level : "";
 	if (command === "channel-trigger") return typeof args.trigger === "string" ? args.trigger : "";
 	return "";
-}
-
-export function formatSetting<T>(setting: EffectiveSetting<T>): string {
-	return `${setting.value} (${setting.source})`;
 }
 
 export function agentSettingsPayload(

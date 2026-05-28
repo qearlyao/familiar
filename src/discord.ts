@@ -26,7 +26,6 @@ import {
 	EPHEMERAL_REPLY,
 	FAMILIAR_COMMAND_NAME,
 	formatCommandResponse,
-	formatSetting,
 	getAutocompleteChoices,
 	inboundInputFromInteraction,
 	isAllowedInteractionChannel,
@@ -65,7 +64,7 @@ import {
 	type SchedulerState,
 	saveSchedulerState,
 } from "./scheduler.js";
-import type { EffectiveSetting, SettingsStore } from "./settings.js";
+import { type EffectiveSetting, formatSetting, type SettingsStore } from "./settings.js";
 
 export interface DiscordDaemon {
 	client: Client<true>;

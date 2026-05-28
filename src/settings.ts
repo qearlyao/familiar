@@ -11,6 +11,10 @@ export interface EffectiveSetting<T> {
 	source: SettingSource;
 }
 
+export function formatSetting<T>(setting: EffectiveSetting<T>): string {
+	return `${setting.value} (${setting.source})`;
+}
+
 export interface ChannelSettings {
 	model?: string;
 	thinkingLevel?: ThinkingLevel;

@@ -25,15 +25,16 @@ import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
+import { formatSetting } from "./settings.js";
 import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter, parseAgentReply } from "./silent-marker.js";
+import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
+import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
+import { isObject, readJsonBody, sendJson, sendText } from "./web/http.js";
 import { eventId, messageId, toUnixMs } from "./web/ids.js";
 import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
 import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload, webMessagesFromRecords } from "./web/messages.js";
 import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./web/multipart.js";
-import { agentSettingsPayload, commandArgs, formatSetting, sessionDto } from "./web/payloads.js";
-import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
-import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
-import { isObject, readJsonBody, sendJson, sendText } from "./web/http.js";
+import { agentSettingsPayload, commandArgs, sessionDto } from "./web/payloads.js";
 import { serveAttachment, serveStatic } from "./web/static.js";
 import {
 	EVENT_REPLAY_LIMIT,

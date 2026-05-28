@@ -15,7 +15,8 @@ import {
 import type { FamiliarAgent } from "../agent.js";
 import type { Config } from "../config.js";
 import type { ConversationRuntime, InboundMessageInput } from "../runtime.js";
-import type { EffectiveSetting } from "../settings.js";
+import { type EffectiveSetting, formatSetting } from "../settings.js";
+import { normalizeOutboundText } from "./send.js";
 
 export const FAMILIAR_COMMAND_NAME = "familiar";
 const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -152,7 +153,7 @@ export function inboundInputFromInteraction(interaction: ChatInputCommandInterac
 }
 
 export async function replyEphemeral(interaction: ChatInputCommandInteraction, text: string): Promise<string[]> {
-	const content = text.trim() || "(empty response)";
+	const content = normalizeOutboundText(text);
 	if (interaction.deferred || interaction.replied) {
 		await interaction.editReply({ content });
 	} else {
@@ -166,10 +167,6 @@ export async function replyInteractionError(interaction: ChatInputCommandInterac
 	const message = error instanceof Error ? error.message : String(error);
 	console.error("Discord interaction handling failed", error);
 	await replyEphemeral(interaction, `I hit an error while handling that command.\n${message}`);
-}
-
-export function formatSetting<T>(setting: EffectiveSetting<T>): string {
-	return `${setting.value} (${setting.source})`;
 }
 
 export function formatCommandResponse(

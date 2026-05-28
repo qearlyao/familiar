@@ -220,3 +220,29 @@ Scope: current code in `src/discord.ts`, `src/web.ts`, `src/web-tools.ts`, `src/
 
 Summary: 10 live findings: 1 HIGH, 5 MED, 4 LOW. One new HIGH-severity issue appeared: Discord attachment delivery moved outside the durable outbound/job completion boundary.
 
+## 2026-05-29 `/simplify --fix` over decomposition commits `1c62758` + `a498ad1`
+
+Reviewed the discord.ts → `src/discord/*` and web.ts → `src/web/*` decompositions (#24 stage 1). 9-angle finder pass + sweep found **zero behavior-change bugs** — the moves are mechanically clean (bodies, signatures, call wiring, `__test`/`__webTest` surfaces all preserved; tests 635/635, tsc + biome clean). All surviving findings are cleanup the decomposition stopped one step short of.
+
+### Applied (this pass)
+
+- **`formatSetting<T>` lifted to [src/settings.ts](src/settings.ts#L14).** Was defined identically in `src/discord/commands.ts` and `src/web/payloads.ts` (pre-existing dup, both copies were being moved anyway). Now single source; discord.ts/web.ts/commands.ts import from `./settings.js`.
+- **`replyEphemeral` restored to `normalizeOutboundText`.** The decomp inlined `text.trim() || "(empty response)"` in [src/discord/commands.ts](src/discord/commands.ts#L155) instead of importing the helper the original used. Exported `normalizeOutboundText` from [src/discord/send.ts:29](src/discord/send.ts#L29) and re-pointed `replyEphemeral` at it, so the empty-reply sentinel has one definition again.
+
+### Skipped (deferred — touch code/tests outside the two-commit diff)
+
+- **`webMessageId()` duplicates `messageId()`.** [src/discord/turn.ts:31](src/discord/turn.ts#L31) returns `msg_${uuid}`, identical to [src/web/ids.ts:12](src/web/ids.ts#L12) `messageId()` default. Cleanest fix is a shared `src/ids.ts`; folding turn.ts into `../web/ids.js` would be a discord→web layer crossing. Defer to a dedicated id-module consolidation.
+- **`parseAgentReply` name collision.** [src/silent-marker.ts:7](src/silent-marker.ts#L7) exports a raw `parseAgentReply` (no normalization); [src/discord/send.ts:67](src/discord/send.ts#L67) exports a *normalizing* wrapper of the same name. `discord/turn.ts` imports the normalizing one; `web.ts` imports the raw one from silent-marker. Same name, different semantics, different paths — a future consolidator could silently route web through the normalizing variant and start leaking `(empty response)` placeholders into the web UI. Renaming touches the web.ts caller path outside this diff. Defer; rename the send.ts wrapper (e.g. `parseOutboundReply`) when next touching that area.
+- **`__test` / `__webTest` re-export objects now redundant.** [src/discord.ts:94](src/discord.ts#L94) (`buildRawFiles`, `postDiscordAttachments`) and [src/web.ts:859](src/web.ts#L859) (`memeCatalogPath`, `parseMemeCatalog`, `webHistoryPayload`, `webMessagesFromRecords`) — every member is now an independent export of its real module. `test/discord-attachments.test.ts` and `test/web-{memes,history}.test.ts` reach them via the umbrella objects; the web tests for auth/static/events already import submodules directly. Removing the seams means updating those test imports — outside the diff. Defer to a test-import cleanup.
+- **`sendReply` / `sendChannelMessage` near-duplicate pipeline (altitude).** [src/discord/send.ts:73](src/discord/send.ts#L73) and [src/discord/send.ts:111](src/discord/send.ts#L111) share ~25 lines of normalize→chunk→burst-delay loop→append-attachments, differing only in the reply-mode first chunk. A `sendChunked(..., { firstChunkReply? })` helper would collapse both to thin wrappers. Larger refactor than the decomp's scope (overlaps MED #46); defer.
+
+### Out of scope (pre-existing — verified byte-identical to `1c62758^`)
+
+Finder angles surfaced these in the moved code, but `git show 1c62758^:…` confirms each predates the refactor, so they're not introduced by these commits:
+
+- `src/web/multipart.ts` `raw.toString("binary")` round-trip + `String.split` on boundary (overlaps existing MED #63).
+- `src/discord/chunking.ts` `splitLongBlock` UTF-16 fallback can split surrogate pairs; `chunkDiscordParagraph` `normalized.slice(0, limit)` final fallback truncates; `chunkDiscordNewline` returns `[]` for empty input while simple/paragraph return the `(empty response)` fallback.
+- `src/discord/send.ts` `sendReply` first-chunk `try` also catches its own `!isSendable()` throw, then re-checks below (mislabeled log).
+- `src/web/messages.ts` `ensureFallbackSteps` admits `thinkingMs === 0` via `!= null`.
+- `readJsonBody` `JSON.parse` without try/catch (in `src/web/http.ts`, not touched by these commits).
+

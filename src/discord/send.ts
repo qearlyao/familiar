@@ -26,7 +26,7 @@ async function delayBetweenBurstChunks(config: Config, channel: DiscordChatChann
 	await sleep(NEWLINE_BURST_DELAY_MS);
 }
 
-function normalizeOutboundText(text: string): string {
+export function normalizeOutboundText(text: string): string {
 	return text.trim() || "(empty response)";
 }
 

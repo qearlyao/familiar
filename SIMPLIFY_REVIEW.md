@@ -55,7 +55,7 @@ Items prefixed **[Codex]** came from the Codex pass.
 
 ### God modules (Codex framing)
 
-24. **[Codex]** Decompose along ownership boundaries: [src/discord.ts:938](src/discord.ts#L938), [src/web.ts:421](src/web.ts#L421), [src/web-tools.ts:1](src/web-tools.ts#L1), [src/memory/lcm/store.ts:125](src/memory/lcm/store.ts#L125), [src/config.ts:574](src/config.ts#L574), [src/agent.ts:121](src/agent.ts#L121). Not immediate typecheck failures, but where future regressions accumulate. (Item #17 is the first slice of discord.ts; #28-30 below address web.ts/web-tools.ts/config.ts.)
+24. **[Codex]** Decompose along ownership boundaries: ~~[src/discord.ts:938](src/discord.ts#L938)~~ (stage 1 done — 1462 → 785 lines, extracted into `src/discord/{chunking,send,channel,inbound,commands,turn,client}.ts`; stage 2 daemon class TBD), [src/web.ts:421](src/web.ts#L421), [src/web-tools.ts:1](src/web-tools.ts#L1), [src/memory/lcm/store.ts:125](src/memory/lcm/store.ts#L125), [src/config.ts:574](src/config.ts#L574), [src/agent.ts:121](src/agent.ts#L121). Not immediate typecheck failures, but where future regressions accumulate. (Item #17 is the first slice of discord.ts; #28-30 below address web.ts/web-tools.ts/config.ts.)
 
 ---
 

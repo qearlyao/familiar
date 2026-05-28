@@ -30,6 +30,22 @@ Start from this baseline:
 - Keep files cohesive. Do not push a file from under 1000 lines to over 1000 lines without a strong structural reason; extract focused modules or helpers first.
 - Separate orchestration from business logic. Parallelize independent work when that also makes the flow clearer, and make related state updates atomic when partial state would be harder to reason about.
 
+## Pre-Write Checks
+
+Run these four lenses against code you're about to write — they're the same ones the `/simplify` review uses, applied earlier so they don't become rework.
+
+1. **Reuse** — before writing a new helper, grep for an existing one. Shared utilities already cover common needs:
+   - `src/util/fs.ts` — `isEnoent`, `readFileOrNull`, `atomicWriteJson`, `createWriteQueue`
+   - `src/util/guards.ts` — `isRecord`, `readEnum`
+   - `src/util/time.ts` — `formatLocalTimestamp`, `formatOffset`
+   - `src/util/image-mime.ts` — `imageMimeTypeFromPath`, `sniffImageMimeType`
+   - `src/memory/util.ts` — `positiveIntegerOrDefault`, `runInTransaction`
+   - `src/models.ts` — `isThinkingLevel`, `parseModelRef`, `resolveProviderSetting`
+   - Inline string manipulation, manual path handling, ad-hoc type guards, custom env checks, hand-rolled fetch where a client already exposes a REST handle: probably already a util or library call for it.
+2. **Quality** — no redundant state (cached values that could be derived, observers that could be direct calls); no parameter sprawl (generalize or restructure instead of adding the seventh param); no copy-paste with slight variation (unify with a shared helper); no leaky abstractions; no stringly-typed code where constants/string unions/branded types exist; no nested conditionals 3+ deep (flatten with early returns, guard clauses, or lookup tables); no comments narrating WHAT the code does or referencing the task/caller (well-named identifiers carry the WHAT — keep only non-obvious WHY).
+3. **Efficiency** — no redundant work (repeated file reads, duplicate API calls, N+1); no missed concurrency on independent ops; no hot-path bloat in startup or per-request paths; no recurring no-op store updates (add change-detection guards); no TOCTOU pre-existence checks (operate directly, handle the error); no unbounded data structures; no overly broad reads (load only what you filter for).
+4. **Cross-write atomicity** — when one logical operation writes to multiple places (e.g. external service + durable record), they must commit together or roll back together. Persisted state must not claim a thing exists that wasn't successfully delivered.
+
 ## Project Rules
 
 - Add concise comments that explain the non-obvious intent, invariants, or failure mode.
@@ -38,14 +54,30 @@ Start from this baseline:
 
 ## Commit Messages
 
-When writing commit messages for this repo, prefer the detailed style, example shape:
+Start the title with a conventional header so the log is grep-able. Format: `<type>(<scope>): <subject>` — lowercase, no trailing period, under ~70 chars. Scope is optional but useful in large files (`discord`, `memory`, `web`, etc.).
+
+Allowed types:
+
+- `feat:` new user-visible feature
+- `fix:` bug fix
+- `refactor:` structural change with no behavior change
+- `perf:` performance improvement
+- `docs:` documentation only
+- `test:` test changes only
+- `chore:` tooling, deps, repo housekeeping
+
+For nontrivial changes, follow the title with a blank line and a body. Explain the WHY and any non-obvious tradeoffs — the diff already shows the WHAT. Use bullets when the change has multiple coordinated pieces.
+
+Example:
 
 ```text
-Add namespaced Discord slash controls
+refactor(discord): post attachments via client.rest, await delivery, persist ids
 
-- Register /familiar without bulk-overwriting existing bot commands
-- Add native status/stop/new/model/thinking/channel-trigger controls
-- Support model autocomplete from models.allow
-- Reply ephemerally for native control acknowledgements
-- Keep legacy text slash commands as fallback
+- Switch the attachment path off raw FormData/fetch onto discord.js's
+  REST handle with RawFile, so the runtime owns retry/auth and the
+  hop stays inside the client.
+- Await delivery before persisting messageIds; never claim attachment
+  delivery that didn't happen.
+- Thread AbortSignal.timeout through the post so a stuck upload can
+  be cancelled by the heartbeat slot.
 ```

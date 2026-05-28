@@ -134,18 +134,18 @@ Items prefixed **[Codex]** came from the Codex pass.
 
 ### Test helpers consolidation
 
-76. `withEnv` / `withoutEnv` / `withDiscordToken` boilerplate appears in 8+ test files (`agent-reload`, `config`, `discord-attachments`, `image-gen`, `inbound-attachments`, `runtime`, `skills`, `tts`); consolidate in [test/helpers.ts](test/helpers.ts).
-77. PNG/MP4 fixture bytes duplicated between [test/image-gen.test.ts](test/image-gen.test.ts) and [test/inbound-attachments.test.ts](test/inbound-attachments.test.ts).
-78. `FakeEmbeddingProvider` cloned across 8+ memory tests (chunk-indexer, diary-chunks, diary-indexer, lcm-indexer, memory-backfill, memory-doctor, memory-tools, memory-index-store). Vector strategies are interchangeable for the assertions actually performed.
-79. `FakeStore`/`FakeRetrievalStore` + `hit()` factory duplicated between `diary-ambient.test.ts:302-354` and `memory-retrieval.test.ts:391-437`.
-80. `LcmSourceProvenance source` + `storedRecord()`/`record()` builder cloned 5× (eviction-score, lcm-condense, lcm-context, lcm-indexer, lcm-store).
-81. `assistantMessage()` + `contentText()`/`renderMessages()` + `zeroUsage()` repeated in memory-service, lcm-context, lcm-condense.
-82. 6 near-identical "debt" tests in [test/memory-service.test.ts:582-799](test/memory-service.test.ts#L582-L799) and 1109-1473 — parameterize.
-83. `withEmbeddingFetch` used in ~25 places but bypassed in 2 (148-156, 212-219); fold them in and have it return `{ callCount }`.
-84. `withMemoryService(config, fn)` / `withMemoryRuntime(config, fn)` harness would remove ~400 lines and 8 copies of `try/finally service.close()` from memory-service.test.ts.
-85. [test/memory-service.test.ts](test/memory-service.test.ts) — ~30 tests reopen `LcmStore` mid-test (e.g. lines 261-271, 303-318) when `service.lcmStore` is already exposed. Gratuitous SQLite churn.
-86. [test/cli.test.ts](test/cli.test.ts) — Each `it` spawns `tsx src/cli.ts` via `execFile` — seconds per test, serial.
-87. [test/generated-media.test.ts:24-49](test/generated-media.test.ts#L24-L49) — Two byte-identical tests; delete one.
+76. ~~`withEnv` / `withoutEnv` / `withDiscordToken` boilerplate appears in 8+ test files; consolidate in [test/helpers.ts](test/helpers.ts).~~ **Done (P7a):** lifted into test/helpers.ts, adopted in agent-reload, skills, embedding-provider, image-gen. config.test.ts kept its describe-level before/after idiom (cleaner than wrapping 30 tests); two inbound + three image-gen tests that also juggle `globalThis.fetch` kept their existing try/finally.
+77. ~~PNG/MP4 fixture bytes duplicated between image-gen and inbound-attachments.~~ **Done (P7a):** shared via new test/media-fixtures.ts (kept out of helpers.ts so the `sharp` dep stays off the common import path).
+78. ~~`FakeEmbeddingProvider` cloned across 8+ memory tests.~~ **Done (P7b):** shared `FakeEmbeddingProvider` in test/memory-fakes.ts; migrated chunk-indexer, lcm-indexer, memory-backfill, memory-doctor. Left the charCode-vector providers (diary-chunks, diary-indexer), the query-tracking ones (diary-ambient, memory-retrieval), and memory-tools' fixed-vector variant — their shapes genuinely diverge.
+79. ~~`FakeStore`/`FakeRetrievalStore` + `hit()` factory duplicated.~~ **Done (P7b):** shared `FakeRetrievalStore` + `memoryHit()`; migrated diary-ambient and memory-retrieval.
+80. ~~`LcmSourceProvenance source` + `storedRecord()`/`record()` builder cloned 5×.~~ **Done (P7b):** shared `testLcmSource` const + `lcmRecord()` for eviction-score, lcm-context, lcm-condense. Left lcm-indexer's `storedRecord()` and lcm-store's function-style `source(id)` (different signatures).
+81. ~~`assistantMessage()` + `contentText()`/`renderMessages()` + `zeroUsage()` repeated.~~ **Done (P7b):** all four shared in test/memory-fakes.ts; migrated memory-service, lcm-context, lcm-condense.
+82. 6 near-identical "debt" tests in [test/memory-service.test.ts:582-799](test/memory-service.test.ts#L582-L799) and 1109-1473 — parameterize. **Deferred (P7):** parameterizing trades readability for line count; revisit only if the set grows.
+83. ~~`withEmbeddingFetch` used in ~25 places but bypassed in 2; fold them in and have it return `{ callCount }`.~~ **Moot (P7):** the two bypass sites deliberately assert on `embeddingCalls === 0` / fetch ordering with their own `globalThis.fetch`; folding them in would obscure the assertion.
+84. ~~`withMemoryService(config, fn)` harness would remove ~400 lines and 8 copies of `try/finally service.close()`.~~ **Done (P7b):** `withMemoryService` in test/memory-fakes.ts; migrated 7 straightforward close blocks. Left watcher, runtime-cleanup, and multi-service-restart cases where the helper would obscure ordering.
+85. ~~~30 tests reopen `LcmStore` mid-test when `service.lcmStore` is already exposed.~~ **Done (P7b):** removed 7 pure reopen-to-read blocks in favour of `service.lcmStore` (better-sqlite3 commits synchronously, so live store == fresh handle after flush). Left deliberate persistence/restart/peer-store-write reopens.
+86. [test/cli.test.ts](test/cli.test.ts) — Each `it` spawns `tsx src/cli.ts` via `execFile` — seconds per test, serial. **Deferred (P7):** speedup, not dedup; out of this pass's scope.
+87. ~~[test/generated-media.test.ts:24-49](test/generated-media.test.ts#L24-L49) — Two byte-identical tests; delete one.~~ **Done (P7a).**
 
 ---
 
@@ -174,7 +174,7 @@ A few patterns worth flagging:
    - [x] **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — folded into 6a via `AbortSignal.timeout` on the REST request.
    - [x] **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — folded into 6a via `RawFile.data: Buffer`.
    - [x] **6e.** HIGH #17, `runAgentTurn` extraction across `drainJobs` / `runHeartbeat` / `runCronJob` — separate commit, follows attachment cleanup.
-7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through.
+[x]7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through. Done in two commits: P7a (env helpers + media fixtures + dup-test delete, #76/#77/#87) and P7b (shared memory fakes/builders, #78-81/#84-85). #82/#86 deferred (parameterize/speedup, not dedup); #83 moot. Net ~-310 lines.
 8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Fold in:
    - Follow-up #4 (MED, persona-load tears down WS) — stash `handleEvent` in a ref so the WS effect only depends on `activeSessionKey`.
    - Follow-up #9 (LOW, `closeOpenContentSteps` vs `closeAllSteps` duplication) — collapse into one helper.

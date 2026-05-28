@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { ChatLogRecord } from "../src/chat-log.js";
 import { materializeInboundAttachments } from "../src/inbound-attachments.js";
-import { __webTest } from "../src/web.js";
+import { webHistoryPayload, webMessagesFromRecords } from "../src/web/messages.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function base(recordId: number, ts: string) {
@@ -119,7 +119,7 @@ describe("web history", () => {
 			},
 		];
 
-		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
 
 		assert.ok(message);
 		assert.equal(message.text, "can u see it?");
@@ -130,7 +130,7 @@ describe("web history", () => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records = interleavedAssistantRecords();
 
-		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
 
 		assert.ok(message);
 		assert.deepEqual(message.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool", "text"]);
@@ -146,7 +146,7 @@ describe("web history", () => {
 	it("returns ordered steps from the history payload", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 
-		const body = __webTest.webHistoryPayload(config, interleavedAssistantRecords(), "Ghost", "discord-dm-channel-1", {
+		const body = webHistoryPayload(config, interleavedAssistantRecords(), "Ghost", "discord-dm-channel-1", {
 			limit: 50,
 		});
 
@@ -221,7 +221,7 @@ describe("web history", () => {
 			},
 		];
 
-		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
 
 		assert.ok(message);
 		assert.equal(message.silent, true);
@@ -341,7 +341,7 @@ describe("web history", () => {
 			},
 		];
 
-		const [message] = __webTest.webMessagesFromRecords(config, records, "Ghost");
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
 
 		assert.ok(message);
 		assert.equal(message.silent, true);

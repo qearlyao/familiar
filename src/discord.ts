@@ -34,13 +34,7 @@ import {
 	replyInteractionError,
 } from "./discord/commands.js";
 import { canSteerFromRecord, getChannelTriggerSetting, getDispatchMode, toInboundInput } from "./discord/inbound.js";
-import {
-	buildRawFiles,
-	postDiscordAttachments,
-	sendChannelMessage,
-	sendDiscordAttachments,
-	sendReply,
-} from "./discord/send.js";
+import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./discord/send.js";
 import {
 	CRON_SKIPPED,
 	canceledJobError,
@@ -90,11 +84,6 @@ export interface DiscordWebSession {
 	channel: ChatChannelRef;
 	isDefault?: boolean;
 }
-
-export const __test = {
-	buildRawFiles,
-	postDiscordAttachments,
-};
 
 async function applyControlCommand(options: {
 	control: NonNullable<ReturnType<ConversationRuntime["parseControlCommand"]>>;

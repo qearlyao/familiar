@@ -64,7 +64,7 @@ export async function postDiscordAttachments(
 	return [data.id];
 }
 
-export function parseAgentReply(text: string): { text: string; silent: boolean } {
+export function parseOutboundReply(text: string): { text: string; silent: boolean } {
 	const parsed = parseSilentMarker(text);
 	if (parsed.silent) return parsed;
 	return { text: normalizeOutboundText(parsed.text), silent: false };

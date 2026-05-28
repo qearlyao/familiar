@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgentReply } from "../agent.js";
@@ -10,9 +8,10 @@ import {
 	updateAgentEventSummary,
 } from "../agent-events.js";
 import type { Config } from "../config.js";
+import { messageId } from "../ids.js";
 import type { ConversationRuntime } from "../runtime.js";
 import { isHeartbeatDue } from "../scheduler.js";
-import { parseAgentReply } from "./send.js";
+import { parseOutboundReply } from "./send.js";
 
 export const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 export const CRON_SKIPPED = Symbol("cron-skipped");
@@ -26,10 +25,6 @@ export function canceledJobError(): Error {
 	const error = new Error("Job was canceled before completion.");
 	error.name = "CanceledJobError";
 	return error;
-}
-
-export function webMessageId(): string {
-	return `msg_${randomUUID()}`;
 }
 
 export function scheduledUserMessage(text: string, timestamp: number): AgentMessage {
@@ -59,11 +54,11 @@ export async function runAgentTurn<R extends FamiliarAgentReply>(
 	) => Promise<R | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED>,
 ): Promise<{
 	reply: R;
-	parsedReply: ReturnType<typeof parseAgentReply>;
+	parsedReply: ReturnType<typeof parseOutboundReply>;
 	summary: AgentEventSummary;
 	assistantMessageId: string;
 } | null> {
-	const assistantMessageId = webMessageId();
+	const assistantMessageId = messageId();
 	const summary: AgentEventSummary = { thinking: "" };
 	const recorder = createAgentEventRecorder((storedEvent) =>
 		runtime.noteAgentEvent(jobKey, assistantMessageId, storedEvent, { notify: false }),
@@ -84,7 +79,7 @@ export async function runAgentTurn<R extends FamiliarAgentReply>(
 	if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) return null;
 	return {
 		reply,
-		parsedReply: parseAgentReply(reply.text),
+		parsedReply: parseOutboundReply(reply.text),
 		summary,
 		assistantMessageId,
 	};

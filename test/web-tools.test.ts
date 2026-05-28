@@ -1,12 +1,34 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { __webToolsTest, webContentWarning } from "../src/web-tools.js";
+import { createFetchProviders, createWebTools, webContentWarning } from "../src/web-tools.js";
+import { PageCache } from "../src/web-tools/cache.js";
+import { parseTinyfishResponse } from "../src/web-tools/fetch-providers.js";
+import { formatFetchContent, formatSearchResults, paginateContent } from "../src/web-tools/format.js";
+import { resolveSearchProviders } from "../src/web-tools/routing.js";
+import { validateFetchUrl } from "../src/web-tools/safety.js";
+import {
+	normalizeDomains,
+	parseBraveResults,
+	parseExaResults,
+	parseTavilyResults,
+} from "../src/web-tools/search-providers.js";
+import type { SearchCapability, SearchProvider, SearchProviderName } from "../src/web-tools/types.js";
+
+function createTestSearchProvider(name: SearchProviderName, capabilities: SearchCapability[]): SearchProvider {
+	return {
+		name,
+		capabilities: new Set(capabilities),
+		async search() {
+			return { results: [] };
+		},
+	};
+}
 
 describe("web tools", () => {
 	it("exposes reversed tool names to avoid provider-native web tool collisions", () => {
 		assert.deepEqual(
-			__webToolsTest.createWebTools({} as any).map((tool) => tool.name),
+			createWebTools({} as any).map((tool) => tool.name),
 			["search_web", "fetch_web"],
 		);
 	});
@@ -20,13 +42,13 @@ describe("web tools", () => {
 	});
 
 	it("prefixes web search and fetch results with the untrusted-content block", () => {
-		const search = __webToolsTest.formatSearchResults({
+		const search = formatSearchResults({
 			results: [{ title: "A", url: "https://example.com", snippet: "Hello world" }],
 			provider: "brave",
 			requestedDepth: "basic",
 			servedDepth: "basic",
 		});
-		const fetch = __webToolsTest.formatFetchContent("https://example.com", "jina", {
+		const fetch = formatFetchContent("https://example.com", "jina", {
 			text: "Page body",
 			offset: 0,
 			returnedChars: 9,
@@ -39,7 +61,7 @@ describe("web tools", () => {
 	});
 
 	it("prefers TinyFish for fetch when configured", () => {
-		const providers = __webToolsTest.createFetchProviders({
+		const providers = createFetchProviders({
 			apiKeys: { TINYFISH_API_KEY: "tinyfish-key" },
 			warnings: [],
 		});
@@ -51,7 +73,7 @@ describe("web tools", () => {
 	});
 
 	it("parses TinyFish markdown results", () => {
-		const parsed = __webToolsTest.parseTinyfishResponse({
+		const parsed = parseTinyfishResponse({
 			results: [{ content: "# Title\r\n\r\nBody" }],
 		});
 
@@ -59,7 +81,7 @@ describe("web tools", () => {
 	});
 
 	it("parses TinyFish live API text-shaped results", () => {
-		const parsed = __webToolsTest.parseTinyfishResponse({
+		const parsed = parseTinyfishResponse({
 			results: [
 				{
 					url: "https://example.com",
@@ -89,25 +111,25 @@ describe("web tools", () => {
 		];
 
 		for (const url of blocked) {
-			assert.throws(() => __webToolsTest.validateFetchUrl(url), /Invalid URL|Blocked URL/);
+			assert.throws(() => validateFetchUrl(url), /Invalid URL|Blocked URL/);
 		}
 	});
 
 	it("normalizes and validates search domain filters", () => {
-		assert.deepEqual(__webToolsTest.normalizeDomains([" Example.COM ", "docs.example.com"]), [
+		assert.deepEqual(normalizeDomains([" Example.COM ", "docs.example.com"]), [
 			"example.com",
 			"docs.example.com",
 		]);
-		assert.throws(() => __webToolsTest.normalizeDomains(["https://example.com"]), /Invalid domain/);
-		assert.throws(() => __webToolsTest.normalizeDomains(["example.com/path"]), /Invalid domain/);
-		assert.throws(() => __webToolsTest.normalizeDomains(["example.com:443"]), /Invalid domain/);
+		assert.throws(() => normalizeDomains(["https://example.com"]), /Invalid domain/);
+		assert.throws(() => normalizeDomains(["example.com/path"]), /Invalid domain/);
+		assert.throws(() => normalizeDomains(["example.com:443"]), /Invalid domain/);
 	});
 
 	it("does not route multi-domain searches to Brave", () => {
-		const brave = __webToolsTest.createTestSearchProvider("brave", ["search", "freshness"]);
-		const tavily = __webToolsTest.createTestSearchProvider("tavily", ["search", "content", "domainFilter"]);
+		const brave = createTestSearchProvider("brave", ["search", "freshness"]);
+		const tavily = createTestSearchProvider("tavily", ["search", "content", "domainFilter"]);
 
-		const providers = __webToolsTest.resolveSearchProviders(
+		const providers = resolveSearchProviders(
 			{ depth: "basic", domains: ["a.example", "b.example"] },
 			{ brave, tavily },
 		);
@@ -119,7 +141,7 @@ describe("web tools", () => {
 	});
 
 	it("preserves fetchedAt across reads so TTL still expires entries", async () => {
-		const cache = new __webToolsTest.PageCache({ ttlMs: 100, capacity: 2 });
+		const cache = new PageCache({ ttlMs: 100, capacity: 2 });
 		cache.set("https://example.com/a", "a", "tinyfish");
 		const firstFetchedAt = cache.entries.get("https://example.com/a")?.fetchedAt ?? 0;
 		const firstLastAccessed = cache.entries.get("https://example.com/a")?.lastAccessed ?? 0;
@@ -133,7 +155,7 @@ describe("web tools", () => {
 	});
 
 	it("paginates content and reports offsets past the end", () => {
-		assert.deepEqual(__webToolsTest.paginateContent("abcdef", 2, 3), {
+		assert.deepEqual(paginateContent("abcdef", 2, 3), {
 			text: "cde",
 			offset: 2,
 			returnedChars: 3,
@@ -141,7 +163,7 @@ describe("web tools", () => {
 			nextOffset: 5,
 			hasMore: true,
 		});
-		assert.deepEqual(__webToolsTest.paginateContent("abc", 10, 3), {
+		assert.deepEqual(paginateContent("abc", 10, 3), {
 			text: "",
 			offset: 10,
 			returnedChars: 0,
@@ -151,7 +173,7 @@ describe("web tools", () => {
 	});
 
 	it("points follow-up page reads at fetch_web", () => {
-		const formatted = __webToolsTest.formatFetchContent("https://example.com", "jina", {
+		const formatted = formatFetchContent("https://example.com", "jina", {
 			text: "abc",
 			offset: 0,
 			returnedChars: 3,
@@ -166,20 +188,20 @@ describe("web tools", () => {
 
 	it("normalizes provider result payloads", () => {
 		assert.equal(
-			__webToolsTest.parseBraveResults({
+			parseBraveResults({
 				web: { results: [{ title: "A", url: "https://example.com", description: "Hello world" }] },
 			})[0]?.title,
 			"A",
 		);
 		assert.equal(
-			__webToolsTest.parseExaResults(
+			parseExaResults(
 				{ results: [{ title: "B", url: "https://example.com", text: "Long body" }] },
 				true,
 			)[0]?.content,
 			"Long body",
 		);
 		assert.equal(
-			__webToolsTest.parseTavilyResults(
+			parseTavilyResults(
 				{ results: [{ title: "C", url: "https://example.com", raw_content: "Markdown body" }] },
 				true,
 			)[0]?.content,

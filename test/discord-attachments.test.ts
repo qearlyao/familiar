@@ -7,6 +7,7 @@ import type { RawFile } from "@discordjs/rest";
 import { REST } from "discord.js";
 
 import type { StoredAttachment } from "../src/chat-log.js";
+import { buildRawFiles, postDiscordAttachments } from "../src/discord/send.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("discord attachment payloads", () => {
@@ -23,8 +24,7 @@ describe("discord attachment payloads", () => {
 			localPath: attachmentPath,
 		};
 
-		const module = await import("../src/discord.js");
-		const files = await module.__test.buildRawFiles([attachment]);
+		const files = await buildRawFiles([attachment]);
 
 		assert.equal(files.length, 1);
 		assert.equal(files[0].name, "tts_test.mp3");
@@ -38,8 +38,7 @@ describe("discord attachment payloads", () => {
 		await configWithDataDir(t, dataDir);
 		const attachment: StoredAttachment = { id: "no-path", name: "missing.mp3" };
 
-		const module = await import("../src/discord.js");
-		const files = await module.__test.buildRawFiles([attachment]);
+		const files = await buildRawFiles([attachment]);
 
 		assert.equal(files.length, 0);
 	});
@@ -67,8 +66,7 @@ describe("discord attachment payloads", () => {
 		};
 		try {
 			const rest = new REST();
-			const module = await import("../src/discord.js");
-			const ids = await module.__test.postDiscordAttachments(rest, "channel-1", [attachment]);
+			const ids = await postDiscordAttachments(rest, "channel-1", [attachment]);
 
 			assert.deepEqual(ids, ["discord-file-message"]);
 			assert.equal(capturedRoute, "/channels/channel-1/messages");
@@ -100,8 +98,7 @@ describe("discord attachment payloads", () => {
 		};
 		try {
 			const rest = new REST();
-			const module = await import("../src/discord.js");
-			const ids = await module.__test.postDiscordAttachments(rest, "channel-2", [attachment]);
+			const ids = await postDiscordAttachments(rest, "channel-2", [attachment]);
 			// The returned id must be present so callers can include it in messageIds for persistence.
 			assert.ok(ids.includes("attachment-msg-id"), "attachment message id must be returned for persistence");
 		} finally {
@@ -113,8 +110,7 @@ describe("discord attachment payloads", () => {
 		const dataDir = await createTempDataDir(t);
 		await configWithDataDir(t, dataDir);
 		const rest = new REST();
-		const module = await import("../src/discord.js");
-		const ids = await module.__test.postDiscordAttachments(rest, "channel-3", []);
+		const ids = await postDiscordAttachments(rest, "channel-3", []);
 		assert.deepEqual(ids, []);
 	});
 });

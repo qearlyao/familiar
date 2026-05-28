@@ -33,7 +33,3 @@ export async function readJsonBody(request: IncomingMessage): Promise<unknown> {
 	const raw = Buffer.concat(chunks).toString("utf8").trim();
 	return raw ? JSON.parse(raw) : {};
 }
-
-export function isObject(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
-}

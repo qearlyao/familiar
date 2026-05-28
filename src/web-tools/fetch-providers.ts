@@ -1,6 +1,6 @@
+import { isRecord } from "../util/guards.js";
 import { fetchJson, fetchText } from "./http.js";
 import { FETCH_TIMEOUT_MS, type FetchProvider, MAX_RESPONSE_BYTES, ProviderError } from "./types.js";
-import { isPlainObject } from "./util.js";
 
 export function createJinaProvider(apiKey?: string | null): FetchProvider {
 	return {
@@ -49,14 +49,14 @@ export function createTinyfishProvider(apiKey: string): FetchProvider {
 }
 
 export function parseTinyfishResponse(value: unknown): { content: string } {
-	if (!isPlainObject(value)) {
+	if (!isRecord(value)) {
 		throw new ProviderError("tinyfish", "TinyFish returned unexpected response shape.", false);
 	}
 
 	const results = value.results;
 	if (Array.isArray(results)) {
 		const first = results[0];
-		if (isPlainObject(first)) {
+		if (isRecord(first)) {
 			const content =
 				typeof first.content === "string"
 					? first.content
@@ -70,8 +70,8 @@ export function parseTinyfishResponse(value: unknown): { content: string } {
 	}
 
 	const errors = Array.isArray(value.errors) ? value.errors : undefined;
-	const firstError = errors?.find((entry) => isPlainObject(entry));
-	if (isPlainObject(firstError)) {
+	const firstError = errors?.find((entry) => isRecord(entry));
+	if (isRecord(firstError)) {
 		const message =
 			typeof firstError.message === "string"
 				? firstError.message
@@ -108,7 +108,7 @@ export async function fetchJinaContent(
 	if (preferJson) {
 		try {
 			const parsed = JSON.parse(responseText) as unknown;
-			if (isPlainObject(parsed) && isPlainObject(parsed.data)) {
+			if (isRecord(parsed) && isRecord(parsed.data)) {
 				if (typeof parsed.data.content === "string" && parsed.data.content.trim()) {
 					return parsed.data.content.replaceAll(/\r\n/g, "\n").trim();
 				}

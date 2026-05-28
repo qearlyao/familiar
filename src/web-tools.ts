@@ -3,7 +3,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Config } from "./config.js";
 import { PageCache } from "./web-tools/cache.js";
 import { loadWebConfig } from "./web-tools/config.js";
-import { createJinaProvider, createTinyfishProvider, parseTinyfishResponse } from "./web-tools/fetch-providers.js";
+import { createJinaProvider, createTinyfishProvider } from "./web-tools/fetch-providers.js";
 import { formatFetchContent, formatSearchResults, paginateContent } from "./web-tools/format.js";
 import { resolveSearchProviders } from "./web-tools/routing.js";
 import { isTransientProviderError, validateFetchUrl } from "./web-tools/safety.js";
@@ -12,15 +12,11 @@ import {
 	createExaProvider,
 	createTavilyProvider,
 	normalizeDomains,
-	parseBraveResults,
-	parseExaResults,
-	parseTavilyResults,
 } from "./web-tools/search-providers.js";
 import {
 	FETCH_DEFAULT_MAX_CHARS,
 	type FetchProvider,
 	type LoadedConfig,
-	type SearchCapability,
 	type SearchProvider,
 	type SearchProviderName,
 	WEB_UNTRUSTED_PREFIX,
@@ -160,21 +156,11 @@ function makeFetchTool(config: LoadedConfig): AgentTool<typeof webFetchSchema> {
 	};
 }
 
-function createFetchProviders(config: LoadedConfig): FetchProvider[] {
+export function createFetchProviders(config: LoadedConfig): FetchProvider[] {
 	const providers: FetchProvider[] = [];
 	if (config.apiKeys.TINYFISH_API_KEY) providers.push(createTinyfishProvider(config.apiKeys.TINYFISH_API_KEY));
 	providers.push(createJinaProvider(config.apiKeys.JINA_API_KEY));
 	return providers;
-}
-
-function createTestSearchProvider(name: SearchProviderName, capabilities: SearchCapability[]): SearchProvider {
-	return {
-		name,
-		capabilities: new Set(capabilities),
-		async search() {
-			return { results: [] };
-		},
-	};
 }
 
 export function webContentWarning(): string {
@@ -185,20 +171,3 @@ export function createWebTools(_config: Config): AgentTool<any>[] {
 	const loaded = loadWebConfig();
 	return [makeSearchTool(loaded), makeFetchTool(loaded)];
 }
-
-export const __webToolsTest = {
-	PageCache,
-	createWebTools,
-	createTestSearchProvider,
-	createFetchProviders,
-	formatFetchContent,
-	formatSearchResults,
-	normalizeDomains,
-	parseBraveResults,
-	parseExaResults,
-	parseTavilyResults,
-	parseTinyfishResponse,
-	paginateContent,
-	resolveSearchProviders,
-	validateFetchUrl,
-};

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { chdir, cwd } from "node:process";
 import { describe, it } from "node:test";
 
-import { __webTest } from "../src/web.js";
+import { memeCatalogPath, parseMemeCatalog } from "../src/web/memes.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("web meme catalog pathing", () => {
@@ -14,17 +14,14 @@ describe("web meme catalog pathing", () => {
 		try {
 			chdir("/");
 
-			assert.equal(
-				__webTest.memeCatalogPath(config),
-				resolve(config.workspacePath, "skills", "memes", "SKILL.md"),
-			);
+			assert.equal(memeCatalogPath(config), resolve(config.workspacePath, "skills", "memes", "SKILL.md"));
 		} finally {
 			chdir(previousCwd);
 		}
 	});
 
 	it("parses meme families from markdown", () => {
-		const families = __webTest.parseMemeCatalog(`## Cute
+		const families = parseMemeCatalog(`## Cute
 - cat smile — cute/cat.png
 `);
 

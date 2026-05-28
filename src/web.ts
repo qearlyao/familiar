@@ -21,18 +21,19 @@ import { CONFIG_KEYS, CONFIG_REGISTRY, type ConfigKey, getConfigDefault, isConfi
 import { getContactNickname, refreshContactNote, setContactNotePath } from "./contact-note.js";
 import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon } from "./discord.js";
+import { eventId, messageId, toUnixMs } from "./ids.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import { formatSetting } from "./settings.js";
 import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter, parseAgentReply } from "./silent-marker.js";
+import { isRecord } from "./util/guards.js";
 import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
-import { isObject, readJsonBody, sendJson, sendText } from "./web/http.js";
-import { eventId, messageId, toUnixMs } from "./web/ids.js";
+import { readJsonBody, sendJson, sendText } from "./web/http.js";
 import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
-import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload, webMessagesFromRecords } from "./web/messages.js";
+import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload } from "./web/messages.js";
 import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./web/multipart.js";
 import { agentSettingsPayload, commandArgs, sessionDto } from "./web/payloads.js";
 import { serveAttachment, serveStatic } from "./web/static.js";
@@ -287,7 +288,7 @@ export async function startWebDaemon(
 	const getChannelKeyFromRequest = (url: URL, body?: unknown): string | undefined => {
 		const queryKey = url.searchParams.get("channelKey");
 		if (queryKey) return queryKey;
-		if (isObject(body) && typeof body.channelKey === "string") return body.channelKey;
+		if (isRecord(body) && typeof body.channelKey === "string") return body.channelKey;
 		return undefined;
 	};
 
@@ -532,7 +533,7 @@ export async function startWebDaemon(
 			}
 			if (request.method === "POST" && url.pathname === "/api/web/agent/models") {
 				const body = await readJsonBody(request);
-				if (!isObject(body)) {
+				if (!isRecord(body)) {
 					sendJson(response, 400, { error: "body is required" });
 					return true;
 				}
@@ -558,7 +559,7 @@ export async function startWebDaemon(
 			}
 			if (request.method === "DELETE" && url.pathname === "/api/web/agent/models") {
 				const body = await readJsonBody(request);
-				if (!isObject(body)) {
+				if (!isRecord(body)) {
 					sendJson(response, 400, { error: "body is required" });
 					return true;
 				}
@@ -581,7 +582,7 @@ export async function startWebDaemon(
 			}
 			if (request.method === "POST" && url.pathname === "/api/web/config") {
 				const body = await readJsonBody(request);
-				if (!isObject(body) || typeof body.key !== "string") {
+				if (!isRecord(body) || typeof body.key !== "string") {
 					sendJson(response, 400, { error: "key is required" });
 					return true;
 				}
@@ -605,7 +606,7 @@ export async function startWebDaemon(
 			}
 			if (request.method === "DELETE" && url.pathname === "/api/web/config") {
 				const body = await readJsonBody(request);
-				if (!isObject(body) || typeof body.key !== "string") {
+				if (!isRecord(body) || typeof body.key !== "string") {
 					sendJson(response, 400, { error: "key is required" });
 					return true;
 				}
@@ -643,11 +644,11 @@ export async function startWebDaemon(
 					: contentType.includes("multipart/form-data");
 				const body = isMultipart ? await readMultipartBody(request, contentType) : await readJsonBody(request);
 				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isObject(body) || typeof body.text !== "string") {
+				if (!isRecord(body) || typeof body.text !== "string") {
 					sendJson(response, 400, { error: "text is required" });
 					return true;
 				}
-				if (!isMultipart && isObject(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
+				if (!isMultipart && isRecord(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
 					sendJson(response, 400, { error: "attachments require multipart form data" });
 					return true;
 				}
@@ -683,7 +684,7 @@ export async function startWebDaemon(
 			if (request.method === "POST" && url.pathname === "/api/web/agent/settings") {
 				const body = await readJsonBody(request);
 				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isObject(body)) {
+				if (!isRecord(body)) {
 					sendJson(response, 400, { error: "body is required" });
 					return true;
 				}
@@ -716,12 +717,12 @@ export async function startWebDaemon(
 			if (request.method === "POST" && url.pathname === "/api/web/control") {
 				const body = await readJsonBody(request);
 				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isObject(body) || typeof body.command !== "string") {
+				if (!isRecord(body) || typeof body.command !== "string") {
 					sendJson(response, 400, { error: "command is required" });
 					return true;
 				}
 				if (config.web.authMode === "public-2fa" && body.command === "login") {
-					const token = isObject(body.args) && typeof body.args.token === "string" ? body.args.token : "";
+					const token = isRecord(body.args) && typeof body.args.token === "string" ? body.args.token : "";
 					if (!config.web.totpSecret || !verifyTotp(config.web.totpSecret, token)) {
 						sendJson(response, 401, { ok: false, message: "Invalid TOTP token." });
 						return true;
@@ -801,7 +802,7 @@ export async function startWebDaemon(
 						if (decoded.close) netSocket.destroy();
 						for (const raw of decoded.messages) {
 							const message = JSON.parse(raw) as unknown;
-							if (isObject(message) && message.type === "hello") {
+							if (isRecord(message) && message.type === "hello") {
 								if (!client.channelKey) continue;
 								replay(
 									client,
@@ -809,7 +810,7 @@ export async function startWebDaemon(
 									typeof message.lastEventId === "string" ? message.lastEventId : null,
 								);
 							}
-							if (isObject(message) && message.type === "abort") {
+							if (isRecord(message) && message.type === "abort") {
 								void getRuntime(client.channelKey).then(async (runtime) => {
 									familiarAgent.requestSoftStop(runtime.channelKey);
 								});
@@ -855,12 +856,5 @@ export async function startWebDaemon(
 		},
 	};
 }
-
-export const __webTest = {
-	memeCatalogPath,
-	parseMemeCatalog,
-	webHistoryPayload,
-	webMessagesFromRecords,
-};
 
 export type { WebAuthMode, WebDaemon };

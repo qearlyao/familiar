@@ -2,8 +2,8 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../chat-
 import type { Config } from "../config.js";
 import { getContactNickname } from "../contact-note.js";
 import { publicAttachmentPath } from "../generated-media.js";
-import { isObject } from "./http.js";
-import { toUnixMs } from "./ids.js";
+import { toUnixMs } from "../ids.js";
+import { isRecord } from "../util/guards.js";
 import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "./types.js";
 
 export function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
@@ -32,7 +32,7 @@ export function attachmentDerivedText(attachment: StoredAttachment): string | un
 
 export function toolError(result: unknown): string | undefined {
 	if (typeof result === "string") return result;
-	if (!isObject(result)) return undefined;
+	if (!isRecord(result)) return undefined;
 	if (typeof result.error === "string") return result.error;
 	if (typeof result.message === "string") return result.message;
 	return undefined;

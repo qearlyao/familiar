@@ -1,3 +1,4 @@
+import { isRecord } from "../util/guards.js";
 import { fetchJson } from "./http.js";
 import {
 	MAX_RESPONSE_BYTES,
@@ -10,7 +11,7 @@ import {
 	type SearchResponse,
 	type SearchResult,
 } from "./types.js";
-import { hostnameFromUrl, isPlainObject, normalizeIsoDate, truncateSnippet } from "./util.js";
+import { hostnameFromUrl, normalizeIsoDate, truncateSnippet } from "./util.js";
 
 export function normalizeDomains(domains: string[] | undefined): string[] | undefined {
 	if (!domains?.length) return undefined;
@@ -58,12 +59,12 @@ export function freshnessToPublishedDate(freshness: SearchFreshness | undefined)
 }
 
 export function parseBraveResults(payload: unknown): SearchResult[] {
-	if (!isPlainObject(payload) || !isPlainObject(payload.web) || !Array.isArray(payload.web.results)) {
+	if (!isRecord(payload) || !isRecord(payload.web) || !Array.isArray(payload.web.results)) {
 		throw new ProviderError("brave", "Brave returned unexpected response shape.", false);
 	}
 	const results: SearchResult[] = [];
 	for (const raw of payload.web.results) {
-		if (!isPlainObject(raw)) continue;
+		if (!isRecord(raw)) continue;
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
 		if (!title || !url) continue;
@@ -89,12 +90,12 @@ export function parseBraveResults(payload: unknown): SearchResult[] {
 }
 
 export function parseExaResults(payload: unknown, includeContent: boolean): SearchResult[] {
-	if (!isPlainObject(payload) || !Array.isArray(payload.results)) {
+	if (!isRecord(payload) || !Array.isArray(payload.results)) {
 		throw new ProviderError("exa", "Exa returned unexpected response shape.", false);
 	}
 	const results: SearchResult[] = [];
 	for (const raw of payload.results) {
-		if (!isPlainObject(raw)) continue;
+		if (!isRecord(raw)) continue;
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
 		if (!title || !url) continue;
@@ -121,12 +122,12 @@ export function parseExaResults(payload: unknown, includeContent: boolean): Sear
 }
 
 export function parseTavilyResults(payload: unknown, includeContent: boolean): SearchResult[] {
-	if (!isPlainObject(payload) || !Array.isArray(payload.results)) {
+	if (!isRecord(payload) || !Array.isArray(payload.results)) {
 		throw new ProviderError("tavily", "Tavily returned unexpected response shape.", false);
 	}
 	const results: SearchResult[] = [];
 	for (const raw of payload.results) {
-		if (!isPlainObject(raw)) continue;
+		if (!isRecord(raw)) continue;
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
 		if (!title || !url) continue;
@@ -228,7 +229,7 @@ export function createExaProvider(apiKey: string): SearchProvider {
 				timeoutMs: args.includeContent ? SEARCH_TIMEOUT_THOROUGH_MS : SEARCH_TIMEOUT_BASIC_MS,
 				maxBytes: MAX_RESPONSE_BYTES.search,
 				validate(value) {
-					if (!isPlainObject(value) || !Array.isArray(value.results)) {
+					if (!isRecord(value) || !Array.isArray(value.results)) {
 						throw new Error("Exa returned unexpected response shape.");
 					}
 					return { results: value.results };
@@ -273,7 +274,7 @@ export function createTavilyProvider(apiKey: string): SearchProvider {
 				timeoutMs: args.includeContent ? SEARCH_TIMEOUT_THOROUGH_MS : SEARCH_TIMEOUT_BASIC_MS,
 				maxBytes: MAX_RESPONSE_BYTES.search,
 				validate(value) {
-					if (!isPlainObject(value) || (value.results !== undefined && !Array.isArray(value.results))) {
+					if (!isRecord(value) || (value.results !== undefined && !Array.isArray(value.results))) {
 						throw new Error("Tavily returned unexpected response shape.");
 					}
 					return { results: value.results };

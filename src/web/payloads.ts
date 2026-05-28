@@ -1,10 +1,10 @@
 import type { FamiliarAgent } from "../agent.js";
 import type { DiscordWebSession } from "../discord.js";
 import { supportedThinkingLevels } from "../models.js";
-import { isObject } from "./http.js";
+import { isRecord } from "../util/guards.js";
 
 export function commandArgs(command: string, args: unknown): string {
-	if (!isObject(args)) return "";
+	if (!isRecord(args)) return "";
 	if (command === "model") return typeof args.model === "string" ? args.model : "";
 	if (command === "thinking") return typeof args.level === "string" ? args.level : "";
 	if (command === "channel-trigger") return typeof args.trigger === "string" ? args.trigger : "";

@@ -4,6 +4,7 @@ import {
 	SEARCH_OUTPUT_BUDGET,
 	type SearchDepth,
 	type SearchFreshness,
+	type SearchProviderName,
 	type SearchResponse,
 	type SearchResult,
 	WEB_UNTRUSTED_PREFIX,
@@ -18,7 +19,7 @@ export function collectSearchNotes(requested: SearchDepth, served: SearchDepth, 
 }
 
 export function buildSearchDocument(args: {
-	provider: string;
+	provider: SearchProviderName;
 	depth: SearchDepth;
 	freshness?: SearchFreshness;
 	domains?: string[];
@@ -118,7 +119,7 @@ export function paginateContent(
 
 export function formatSearchResults(args: {
 	results: SearchResult[];
-	provider: string;
+	provider: SearchProviderName;
 	requestedDepth: SearchDepth;
 	servedDepth: SearchDepth;
 	freshness?: SearchFreshness;

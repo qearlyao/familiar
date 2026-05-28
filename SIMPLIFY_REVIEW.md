@@ -55,7 +55,15 @@ Items prefixed **[Codex]** came from the Codex pass.
 
 ### God modules (Codex framing)
 
-24. **[Codex]** Decompose along ownership boundaries: ~~[src/discord.ts:938](src/discord.ts#L938)~~ (stage 1 done — 1462 → 785 lines, extracted into `src/discord/{chunking,send,channel,inbound,commands,turn,client}.ts`; stage 2 daemon class TBD), ~~[src/web.ts:421](src/web.ts#L421)~~ (stage 1 done — 1336 → 865 lines, extracted into `src/web/{ids,multipart,memes,messages,payloads}.ts` plus consolidating `src/web-{auth,events,http,static,types}.ts` under `src/web/`; stage 2 daemon class TBD), ~~[src/web-tools.ts:1](src/web-tools.ts#L1)~~ (stage 1 done — 1147 → 204 lines, extracted into `src/web-tools/{types,cache,http,util,config,safety,search-providers,fetch-providers,format,routing}.ts`), ~~[src/memory/lcm/store.ts:125](src/memory/lcm/store.ts#L125)~~ (stage 1 done — 1050 → 535 lines, extracted into `src/memory/lcm/store/{row-types,serialization,normalizers,row-mappers,snapshots,inserts,index-ids}.ts`; `runSummaryInsertTransaction` absorbed as a class private method), ~~[src/config.ts:574](src/config.ts#L574)~~ (stage 1 done — 930 → 504 lines, extracted into `src/config/{types,readers,enums,interpolate,model-refs,sections}.ts`; cron-format asserts moved file-private into `sections.ts`, model-ref parsers into `model-refs.ts`), ~~[src/agent.ts:121](src/agent.ts#L121)~~ (stage 1 done — 842 → 521 lines, extracted into `src/agent/{types,tool-descriptions,payload-normalizers,transcript-log,session-helpers,tools}.ts`; the `createFamiliarAgent` factory closure stays in `agent.ts`, public type exports preserved via re-export). Not immediate typecheck failures, but where future regressions accumulate. (Item #17 is the first slice of discord.ts; #28-30 below address web.ts/web-tools.ts/config.ts.)
+24. **[Codex]** ~~Decompose along ownership boundaries.~~ **Done — all six god-modules decomposed (pure relocation: closure-free helpers/types/consts into focused submodules, public export paths preserved via re-export, no behavior change).**
+    - ~~[src/discord.ts:938](src/discord.ts#L938)~~ — 1462 → 785 lines, into `src/discord/{chunking,send,channel,inbound,commands,turn,client}.ts`.
+    - ~~[src/web.ts:421](src/web.ts#L421)~~ — 1336 → 865 lines, into `src/web/{ids,multipart,memes,messages,payloads}.ts` plus consolidating `src/web-{auth,events,http,static,types}.ts` under `src/web/`.
+    - ~~[src/web-tools.ts:1](src/web-tools.ts#L1)~~ — 1147 → 204 lines, into `src/web-tools/{types,cache,http,util,config,safety,search-providers,fetch-providers,format,routing}.ts`.
+    - ~~[src/memory/lcm/store.ts:125](src/memory/lcm/store.ts#L125)~~ — 1050 → 535 lines, into `src/memory/lcm/store/{row-types,serialization,normalizers,row-mappers,snapshots,inserts,index-ids}.ts`; `runSummaryInsertTransaction` absorbed as a class private method.
+    - ~~[src/config.ts:574](src/config.ts#L574)~~ — 930 → 504 lines, into `src/config/{types,readers,enums,interpolate,model-refs,sections}.ts`; cron-format asserts moved file-private into `sections.ts`, model-ref parsers into `model-refs.ts`.
+    - ~~[src/agent.ts:121](src/agent.ts#L121)~~ — 842 → 521 lines, into `src/agent/{types,tool-descriptions,payload-normalizers,transcript-log,session-helpers,tools}.ts`; `createFamiliarAgent` factory closure stays in `agent.ts`.
+
+    (Item #17 is the first slice of discord.ts; #28-30 below address web.ts/web-tools.ts/config.ts.)
 
 ---
 
@@ -74,14 +82,10 @@ Items prefixed **[Codex]** came from the Codex pass.
 33. **ENOENT-swallowing fs reads** repeated in `persona.ts`, `data-retention.ts`, `scheduler.ts`, `chat-log.ts` — extract `readFileOrNull` / `isEnoent`.
 34. **`positiveIntegerOrDefault` defined 4×** across memory tree ([diary/chunks.ts:287](src/memory/diary/chunks.ts#L287), [index/retrieval.ts:331](src/memory/index/retrieval.ts#L331), [diary/ambient-injector.ts:86](src/memory/diary/ambient-injector.ts#L86), [diary/ambient.ts:183](src/memory/diary/ambient.ts#L183)) — single `src/memory/util.ts` would consolidate.
 35. **`db.inTransaction ? runX() : db.transaction(runX).immediate()`** pattern repeats 6+ times across [operator.ts](src/memory/operator.ts) and [doctor.ts](src/memory/doctor.ts).
-36. **Insert-then-re-read N+1** in LCM: [backfill.ts:127](src/memory/lcm/backfill.ts#L127), [indexer.ts:45](src/memory/lcm/indexer.ts#L45), [context-transformer.ts:395-396](src/memory/lcm/context-transformer.ts#L395-L396) — have `insertRecord` return the `StoredLcmRecord`.
+36. ~~**Insert-then-re-read N+1** in LCM: [backfill.ts:127](src/memory/lcm/backfill.ts#L127), [indexer.ts:45](src/memory/lcm/indexer.ts#L45), [context-transformer.ts:395-396](src/memory/lcm/context-transformer.ts#L395-L396) — have `insertRecord` return the `StoredLcmRecord`.~~ **Deferred (P5):** the named call sites already use `insertRecordReturningStored()`; changing `insertRecord()` itself would now be mostly API churn across tests and non-hot-path callers.
 36a. **`stableHash` duplicated** — [src/memory/lcm/context.ts:82-84](src/memory/lcm/context.ts#L82-L84) `fingerprintRecords` is byte-identical to `stableHash` ([store/serialization.ts:30-32](src/memory/lcm/store/serialization.ts#L30-L32)): both `createHash("sha256").update(JSON.stringify(...)).digest("hex")`. Import `stableHash` instead. (Surfaced during #25/#26 decomp review; pre-existing, deferred to keep the carve-outs pure relocation.)
 36b. **`readOptionalString` is type-lenient** — [src/config/readers.ts:8-10](src/config/readers.ts#L8-L10) silently returns the fallback for non-string values instead of throwing like the other `read*` validators (`readConfigString`, `readBoolean`, etc. all reject wrong types). A misconfigured non-string in the TOML is swallowed. Decide: throw on wrong-type, or document the lenience. (Surfaced during #26 config decomp review; pre-existing behavior, not a carve-out regression.)
 36c. **`config-registry.ts` parallel `require*` readers** — [src/config-registry.ts:43-86](src/config-registry.ts#L43-L86) (`requireBoolean`/`requireInt`/`requireNumberInRange`/`requireNonNegativeInt`/…) reimplement the same coercion-and-throw logic as `src/config/readers.ts`, with a `require`-prefix/`key`-arg convention instead of `read`-prefix/`path`-arg. Overlaps #29 (`resolveProviderSetting` copy). Consolidate onto the `src/config/readers.ts` set once the override-apply path is next touched. (Surfaced during #26 config decomp review; pre-existing.)
-
-### P5 deferred items
-
-- #36: The named LCM N+1 call sites already use `insertRecordReturningStored()` (`backfill`, `indexer`, `context-transformer`). Changing `insertRecord()` itself to return `StoredLcmRecord` would now be mostly API churn across tests and non-hot-path callers, so it is deferred.
 
 ### Backend hot-path inefficiencies
 
@@ -164,7 +168,7 @@ A few patterns worth flagging:
 [x]3. **Memory hot-path fixes (HIGH #6-12)** — these run per turn; biggest perf wins. Worth a focused branch.
 [x]4. **Test hygiene — tmp-dir cleanup sweep (HIGH #18-21)** — easy, large blast radius, will reveal latent flakiness.
 [x]5. **Shared utilities sweep (MED #25-36)** — one PR creating `src/util/guards.ts`, `src/util/fs.ts`, `src/memory/util.ts`, plus the `createWriteQueue` + `atomicWriteJson` + `readEnum` helpers. Cascades into every other simplification.
-6. **God-module decomposition (HIGH #17, #24) + discord attachment cleanup** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate. Fold in the discord attachment findings from the 2026-05-24 + 2026-05-26 addenda, in this order:
+[x]6. **God-module decomposition (HIGH #17, #24) + discord attachment cleanup** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate. Fold in the discord attachment findings from the 2026-05-24 + 2026-05-26 addenda, in this order:
    - [x] **6a.** 2026-05-24 addendum (`postDiscordAttachments` → `client.rest.post(Routes.channelMessages…)`). Doing this first likely makes 6c and 6d moot — discord.js's REST manager already handles timeouts/retries and accepts `RawFile` buffers directly.
    - [x] **6b.** Follow-up #1 (HIGH, attachment fire-and-forget vs persisted state) — make required attachment delivery part of the awaited send boundary; persist returned message ids alongside text ids.
    - [x] **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — folded into 6a via `AbortSignal.timeout` on the REST request.
@@ -180,6 +184,8 @@ A few patterns worth flagging:
    - Follow-up #10 (LOW, `done` check after errored tool) — compute `hasError`, suppress the done row.
    - Follow-up #3 (MED, config override mutates memory before durable write) — stage + rollback helper in `web.ts`. Unrelated to EventStream but bundles cleanly as a small standalone fix.
    - Follow-up #8 (LOW, paginated history rebuilds full transcript) — optional; window message ids before folding steps. Defer if transcript size isn't biting yet.
+10. **Backend hot-path inefficiencies (MED #37-68)** — per-call scans, N+1 queries, re-compiled statements, missing timeouts, and a few near-duplicate pipelines across `runtime.ts`, `web.ts`, `web-tools.ts`, `discord.ts`, the memory tree, and media helpers. No single big win; cluster by file and land independently. (#60 overlaps HIGH #5; #66-67 are the agent.ts items.)
+11. **LOW — style/polish** — comment-narration trims, the `clonePayload` JSON fallback, `Model<any>` in `scripts/spike.ts`, plus the long per-file tail not enumerated here. Lowest priority; fold in opportunistically when already touching a file.
 
 Suggest small, scoped commits per category with regression testing after each — not one mega-PR.
 

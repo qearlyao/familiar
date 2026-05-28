@@ -9,6 +9,17 @@ import { describe, it } from "node:test";
 const execFileAsync = promisify(execFile);
 
 describe("CLI init", () => {
+	it("prints top-level help", async () => {
+		const { stdout, stderr } = await execFileAsync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
+			cwd: resolve(import.meta.dirname, ".."),
+		});
+
+		assert.equal(stderr, "");
+		assert.match(stdout, /^Usage:/);
+		assert.match(stdout, /familiar --help/);
+		assert.match(stdout, /familiar --version/);
+	});
+
 	it("prints the package version", async () => {
 		const root = resolve(import.meta.dirname, "..");
 		const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as { version: string };

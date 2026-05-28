@@ -187,6 +187,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 function usage(): string {
 	return [
 		"Usage:",
+		"  familiar --help",
 		"  familiar --version",
 		"  familiar init [workspace]",
 		"  familiar run [workspace]",
@@ -202,6 +203,10 @@ function usage(): string {
 
 async function main(): Promise<void> {
 	const [, , command, workspace, ...rest] = process.argv;
+	if (!command || command === "--help" || command === "-h") {
+		console.log(usage());
+		return;
+	}
 	if (command === "--version" || command === "-v") {
 		console.log(await packageVersion());
 		return;

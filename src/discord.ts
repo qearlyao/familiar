@@ -792,6 +792,45 @@ function heartbeatStillDue(
 	});
 }
 
+async function runAgentTurn<R extends FamiliarAgentReply>(
+	jobKey: string,
+	runtime: ConversationRuntime,
+	prompt: (
+		onEvent: (event: AgentEvent) => Promise<void>,
+	) => Promise<R | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED>,
+): Promise<{
+	reply: R;
+	parsedReply: ReturnType<typeof parseAgentReply>;
+	summary: AgentEventSummary;
+	assistantMessageId: string;
+} | null> {
+	const assistantMessageId = webMessageId();
+	const summary: AgentEventSummary = { thinking: "" };
+	const recorder = createAgentEventRecorder((storedEvent) =>
+		runtime.noteAgentEvent(jobKey, assistantMessageId, storedEvent, { notify: false }),
+	);
+	let reply: R | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
+	try {
+		reply = await prompt(async (event) => {
+			updateAgentEventSummary(summary, event);
+			const storedEvent = storedAgentEventFromAgentEvent(event);
+			if (storedEvent) {
+				runtime.publishAgentEvent(jobKey, assistantMessageId, storedEvent);
+				await recorder.record(storedEvent);
+			}
+		});
+	} finally {
+		await recorder.flush();
+	}
+	if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) return null;
+	return {
+		reply,
+		parsedReply: parseAgentReply(reply.text),
+		summary,
+		assistantMessageId,
+	};
+}
+
 function startTypingIndicator(message: Message): () => void {
 	const sendTyping = () => {
 		if (!message.channel.isSendable()) return;
@@ -975,31 +1014,11 @@ export async function startDiscordDaemon(
 			if (!dispatch) return;
 			const stopTyping = startTypingIndicator(message);
 			try {
-				const assistantMessageId = webMessageId();
-				const summary: AgentEventSummary = { thinking: "" };
-				const recorder = createAgentEventRecorder((storedEvent) =>
-					runtime.noteAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent, { notify: false }),
+				const turn = await runAgentTurn(dispatch.job.jobId, runtime, (onEvent) =>
+					promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
 				);
-				let reply: Awaited<ReturnType<typeof promptForRuntime>>;
-				try {
-					reply = await promptForRuntime(
-						runtime,
-						dispatch.job.jobId,
-						dispatch.prompt,
-						dispatch.attachments,
-						async (event) => {
-							updateAgentEventSummary(summary, event);
-							const storedEvent = storedAgentEventFromAgentEvent(event);
-							if (storedEvent) {
-								runtime.publishAgentEvent(dispatch.job.jobId, assistantMessageId, storedEvent);
-								await recorder.record(storedEvent);
-							}
-						},
-					);
-				} finally {
-					await recorder.flush();
-				}
-				const parsedReply = parseAgentReply(reply.text);
+				if (!turn) return;
+				const { reply, parsedReply, summary, assistantMessageId } = turn;
 				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
 				const messageIds = parsedReply.silent
 					? await sendDiscordAttachments(client.rest, replyAnchor.channelId, reply.attachments)
@@ -1059,14 +1078,8 @@ export async function startDiscordDaemon(
 				return;
 			}
 
-			const assistantMessageId = webMessageId();
-			const summary: AgentEventSummary = { thinking: "" };
-			const recorder = createAgentEventRecorder((storedEvent) =>
-				heartbeatRuntime.noteAgentEvent("heartbeat", assistantMessageId, storedEvent, { notify: false }),
-			);
-			let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
-			try {
-				reply = await promptScheduledMessage(
+			const turn = await runAgentTurn("heartbeat", heartbeatRuntime, (onEvent) =>
+				promptScheduledMessage(
 					heartbeatRuntime,
 					async () => {
 						const queuedNow = Date.now();
@@ -1090,21 +1103,12 @@ export async function startDiscordDaemon(
 						);
 						return scheduledUserMessage(text, queuedNow);
 					},
-					async (event) => {
-						updateAgentEventSummary(summary, event);
-						const storedEvent = storedAgentEventFromAgentEvent(event);
-						if (storedEvent) {
-							heartbeatRuntime.publishAgentEvent("heartbeat", assistantMessageId, storedEvent);
-							await recorder.record(storedEvent);
-						}
-					},
+					onEvent,
 					{ skipAmbient: true },
-				);
-			} finally {
-				await recorder.flush();
-			}
-			if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) return;
-			const parsedReply = parseAgentReply(reply.text);
+				),
+			);
+			if (!turn) return;
+			const { reply, parsedReply, summary, assistantMessageId } = turn;
 			const messageIds = parsedReply.silent
 				? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
 				: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
@@ -1183,14 +1187,9 @@ export async function startDiscordDaemon(
 			return;
 		}
 
-		const assistantMessageId = webMessageId();
-		const summary: AgentEventSummary = { thinking: "" };
-		const recorder = createAgentEventRecorder((storedEvent) =>
-			runtime.noteAgentEvent(`cron:${job.id}`, assistantMessageId, storedEvent, { notify: false }),
-		);
-		let reply: FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
-		try {
-			reply = await promptScheduledMessage(
+		const jobKey = `cron:${job.id}`;
+		const turn = await runAgentTurn(jobKey, runtime, (onEvent) =>
+			promptScheduledMessage(
 				runtime,
 				async () => {
 					const jobState = schedulerState.cron[job.id];
@@ -1205,20 +1204,11 @@ export async function startDiscordDaemon(
 					await markCronSlotStarted(job, slot);
 					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
 				},
-				async (event) => {
-					updateAgentEventSummary(summary, event);
-					const storedEvent = storedAgentEventFromAgentEvent(event);
-					if (storedEvent) {
-						runtime.publishAgentEvent(`cron:${job.id}`, assistantMessageId, storedEvent);
-						await recorder.record(storedEvent);
-					}
-				},
+				onEvent,
 				{ skipAmbient: true },
-			);
-		} finally {
-			await recorder.flush();
-		}
-		if (reply === HEARTBEAT_SKIPPED || reply === CRON_SKIPPED) {
+			),
+		);
+		if (!turn) {
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_skipped",
 				jobId: job.id,
@@ -1228,7 +1218,7 @@ export async function startDiscordDaemon(
 			});
 			return;
 		}
-		const parsedReply = parseAgentReply(reply.text);
+		const { reply, parsedReply, summary, assistantMessageId } = turn;
 		const messageIds = parsedReply.silent
 			? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
 			: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
@@ -1240,7 +1230,7 @@ export async function startDiscordDaemon(
 			thinking: summary.thinking,
 			thinkingMs: thinkingDurationMs(summary),
 			silent: parsedReply.silent,
-			jobId: `cron:${job.id}`,
+			jobId: jobKey,
 		});
 		await completeCronSlot(job, slot);
 		await appendSchedulerLog(config.workspace.dataDir, {

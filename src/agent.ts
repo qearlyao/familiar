@@ -1,372 +1,51 @@
-import { createHash } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
-import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
 import { setAddedModelsPath } from "./added-models.js";
-import { createBrowserTools } from "./browser-tools.js";
+import { normalizeProviderPayload } from "./agent/payload-normalizers.js";
+import {
+	assertModelAllowed,
+	deriveSessionId,
+	formatModel,
+	getLastAssistantText,
+	getRequestApiKey,
+	logUsage,
+	resolveModelName,
+	userTextMessage,
+} from "./agent/session-helpers.js";
+import { createFamiliarTools, setReferenceAttachments } from "./agent/tools.js";
+import { loadStoredMessages, writePayloadLog, writeTranscriptLog } from "./agent/transcript-log.js";
+import type {
+	FamiliarAgent,
+	FamiliarAgentOptions,
+	FamiliarAgentReply,
+	FamiliarAgentSession,
+	FamiliarPromptOptions,
+	ReloadedSession,
+	ReloadSnapshot,
+} from "./agent/types.js";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config, ThinkingLevel } from "./config.js";
 import { setConfigOverridesPath } from "./config-overrides.js";
 import { applyConfigOverridesToConfig } from "./config-registry.js";
-import { createGeneratedMediaSink, type GeneratedAttachment, type GeneratedMediaSink } from "./generated-media.js";
-import { createImageGenTool } from "./image-gen.js";
+import { createGeneratedMediaSink } from "./generated-media.js";
 import type { MemoryService } from "./memory/service.js";
 import {
-	assertModelCanAuthenticate,
 	clampConfiguredThinkingLevel,
 	createConfiguredModel,
-	isAllowedModel,
 	isThinkingLevel,
-	type ModelRef,
 	parseModelRef,
 	resolveModel,
-	resolveModelApiKey,
 	supportedThinkingLevels,
 } from "./models.js";
 import { buildSystemPrompt, loadPersona } from "./persona.js";
 import type { EffectiveSetting, SettingsStore } from "./settings.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "./skills.js";
-import { createTtsTool } from "./tts.js";
-import { isEnoent } from "./util/fs.js";
-import { isRecord } from "./util/guards.js";
-import { createWebTools } from "./web-tools.js";
 
-export interface FamiliarAgentReply {
-	text: string;
-	attachments: GeneratedAttachment[];
-}
-
-export interface FamiliarPromptOptions {
-	skipAmbient?: boolean;
-	referenceAttachments?: StoredAttachment[];
-	onTurnEnd?: () => void | Promise<void>;
-}
-
-export interface FamiliarAgent {
-	prompt(
-		sessionKey: string,
-		input: string,
-		images?: ImageContent[],
-		onEvent?: (event: AgentEvent) => void | Promise<void>,
-		options?: FamiliarPromptOptions,
-	): Promise<FamiliarAgentReply>;
-	promptMessage(
-		sessionKey: string,
-		message: AgentMessage,
-		onEvent?: (event: AgentEvent) => void | Promise<void>,
-		options?: FamiliarPromptOptions,
-	): Promise<FamiliarAgentReply>;
-	steer(sessionKey: string, input: string): void;
-	// Stage 9 scheduled jobs use message-shaped injections to preserve timestamps without faking user identity.
-	steerMessage(sessionKey: string, message: AgentMessage): void;
-	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
-	abort(sessionKey: string): void;
-	requestSoftStop(sessionKey: string): void;
-	reset(sessionKey: string): Promise<void>;
-	reload(): Promise<string>;
-	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };
-	getModel(sessionKey: string): EffectiveSetting<string>;
-	getThinkingLevel(sessionKey: string): EffectiveSetting<string>;
-	setModel(sessionKey: string, input: string): Promise<string>;
-	setThinkingLevel(sessionKey: string, input: string): Promise<string>;
-}
-
-interface FamiliarAgentSession {
-	agent: Agent;
-	sessionId: string;
-	model: Model<any>;
-	thinkingLevel: ThinkingLevel;
-	mediaSink: GeneratedMediaSink;
-	referenceAttachments: StoredAttachment[];
-	promptQueue: Promise<void>;
-}
-
-export interface FamiliarAgentOptions {
-	reloadConfig?: () => Promise<Config>;
-}
-
-interface ReloadSnapshot {
-	config: Config;
-	persona: Awaited<ReturnType<typeof loadPersona>>;
-	skillsResult: ReturnType<typeof loadFamiliarSkills>;
-	systemPrompt: string;
-	defaultModel: Model<any>;
-}
-
-interface ReloadedSession {
-	session: FamiliarAgentSession;
-	model: Model<any>;
-	thinkingLevel: ThinkingLevel;
-	tools: AgentTool<any>[];
-}
-
-const BASH_DESCRIPTION =
-	"run a bash command. defaults to the workspace; absolute paths and `~/...` reach anywhere else. returns stdout and stderr. output truncates to the last 2000 lines or 50KB, whichever hits first; full output lands in a temp file if cut. timeout in seconds optional.";
-
-const READ_DESCRIPTION =
-	"read a file. paths resolve from the workspace, but absolute paths and `~/...` work too. text and images (jpg, png, gif, webp); images come back as attachments. text output truncates to 2000 lines or 50KB, whichever hits first — use offset and limit for long files, and keep paging until you have what you need.";
-
-const WRITE_DESCRIPTION =
-	"write a file from scratch or replace it wholesale. creates the file if missing, overwrites if not, and makes parent directories as needed. paths resolve from the workspace; absolute and `~/...` also accepted.";
-
-const EDIT_DESCRIPTION =
-	"edit a file with exact text replacement. each edits[].oldText must match a unique, non-overlapping slice of the original — overlapping or nested edits are rejected, so merge nearby changes into one entry rather than chaining them. don't pad oldText with large unchanged regions just to connect distant changes. paths resolve from the workspace; absolute and `~/...` also work.";
-
-function deriveSessionId(workspacePath: string, sessionKey: string): string {
-	const digest = createHash("sha256").update(`${workspacePath}\0${sessionKey}`).digest("hex").slice(0, 32);
-	return `familiar-${digest}`;
-}
-
-function dailyLogPath(dataDir: string, streamName: "payloads" | "transcripts", now = new Date()): string {
-	const date = now.toISOString().slice(0, 10);
-	return resolve(dataDir, streamName, `${date}.jsonl`);
-}
-
-async function appendJsonl(path: string, record: unknown): Promise<void> {
-	await mkdir(dirname(path), { recursive: true });
-	await appendFile(path, `${JSON.stringify(record)}\n`, "utf8");
-}
-
-function writePayloadLog(config: Config, record: Record<string, unknown>): void {
-	appendJsonl(dailyLogPath(config.workspace.dataDir, "payloads"), record).catch((err) =>
-		console.error("payload log write failed", err),
-	);
-}
-
-function writeTranscriptLog(config: Config, record: Record<string, unknown>): void {
-	appendJsonl(dailyLogPath(config.workspace.dataDir, "transcripts"), record).catch((err) =>
-		console.error("transcript log write failed", err),
-	);
-}
-
-function clonePayload(payload: unknown): unknown {
-	if (typeof structuredClone === "function") return structuredClone(payload);
-	return JSON.parse(JSON.stringify(payload)) as unknown;
-}
-
-// TODO: remove once pi-ai handles store:false reasoning replay upstream.
-function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
-	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
-	const nextPayload = clonePayload(payload);
-	if (!isRecord(nextPayload)) return nextPayload;
-	const request = nextPayload as { input?: unknown; store?: unknown };
-	if (request.store !== false) return nextPayload;
-	const input = request.input;
-	if (!Array.isArray(input)) return nextPayload;
-	request.input = input.filter((item) => {
-		if (!item || typeof item !== "object" || Array.isArray(item)) return true;
-		return (item as { type?: unknown }).type !== "reasoning";
-	});
-	return nextPayload;
-}
-
-function moveAnthropicCacheControlBeforeInjectedMemory(payload: unknown, model: Model<any>): unknown {
-	if (model.api !== "anthropic-messages") return payload;
-	if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
-	const messages = payload.messages;
-	const lastMessage = messages.at(-1);
-	if (!isRecord(lastMessage) || lastMessage.role !== "user") return payload;
-	const content = lastMessage.content;
-	if (!Array.isArray(content) || content.length < 2) return payload;
-	const injectedBlock = content.at(-1);
-	const stableBlock = content.at(-2);
-	if (!isInjectedMemoryTextBlock(injectedBlock) || !isRecord(stableBlock)) return payload;
-	const cacheControl = injectedBlock.cache_control;
-	if (!cacheControl) return payload;
-	delete injectedBlock.cache_control;
-	stableBlock.cache_control = cacheControl;
-	return payload;
-}
-
-function isInjectedMemoryTextBlock(value: unknown): value is Record<string, unknown> {
-	if (!isRecord(value) || value.type !== "text" || typeof value.text !== "string") return false;
-	return value.text.trim().startsWith("<injected_memory>");
-}
-
-function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
-	return moveAnthropicCacheControlBeforeInjectedMemory(stripOpenAIStoredReasoningItems(payload, model), model);
-}
+export type { FamiliarAgent, FamiliarAgentOptions, FamiliarAgentReply, FamiliarPromptOptions } from "./agent/types.js";
 
 export const __agentTest = {
 	normalizeProviderPayload,
 };
-
-type StoredMessageRecord = {
-	ts: string;
-	sessionId: string;
-	message: AgentMessage;
-};
-
-type StoredResetRecord = {
-	ts: string;
-	sessionId: string;
-	type: "reset";
-};
-
-type StoredTranscriptRecord = StoredMessageRecord | StoredResetRecord;
-
-function isStoredMessageRecord(value: unknown): value is StoredMessageRecord {
-	if (!value || typeof value !== "object") return false;
-	const record = value as Record<string, unknown>;
-	return typeof record.ts === "string" && typeof record.sessionId === "string" && !!record.message;
-}
-
-function isStoredResetRecord(value: unknown): value is StoredResetRecord {
-	if (!value || typeof value !== "object") return false;
-	const record = value as Record<string, unknown>;
-	return record.type === "reset" && typeof record.ts === "string" && typeof record.sessionId === "string";
-}
-
-async function loadStoredMessages(dataDir: string, sessionId: string): Promise<AgentMessage[]> {
-	const transcriptsDir = resolve(dataDir, "transcripts");
-	let files: string[];
-	try {
-		files = await readdir(transcriptsDir);
-	} catch (error) {
-		if (isEnoent(error)) return [];
-		console.error("transcript history read failed", error);
-		return [];
-	}
-
-	const records: StoredTranscriptRecord[] = [];
-	for (const file of files.filter((entry) => entry.endsWith(".jsonl")).sort()) {
-		const path = resolve(transcriptsDir, file);
-		let contents: string;
-		try {
-			contents = await readFile(path, "utf8");
-		} catch (error) {
-			console.error(`transcript file read failed: ${path}`, error);
-			continue;
-		}
-		for (const [index, line] of contents.split(/\r?\n/).entries()) {
-			if (!line.trim()) continue;
-			try {
-				const parsed = JSON.parse(line) as unknown;
-				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed)) {
-					console.error(`skipping malformed transcript line: ${path}:${index + 1}`);
-					continue;
-				}
-				if (parsed.sessionId !== sessionId) continue;
-				records.push(parsed);
-			} catch (error) {
-				console.error(`skipping unparsable transcript line: ${path}:${index + 1}`, error);
-			}
-		}
-	}
-
-	records.sort((a, b) => a.ts.localeCompare(b.ts));
-	let lastResetIndex = -1;
-	for (let index = records.length - 1; index >= 0; index--) {
-		const record = records[index];
-		if (record && "type" in record && record.type === "reset") {
-			lastResetIndex = index;
-			break;
-		}
-	}
-	const activeRecords = lastResetIndex >= 0 ? records.slice(lastResetIndex + 1) : records;
-	return activeRecords.flatMap((record) => ("message" in record ? [record.message] : []));
-}
-
-function getRequestApiKey(config: Config, model: Model<any>): string | undefined {
-	const apiKey = resolveModelApiKey(config, model);
-	assertModelCanAuthenticate(config, model);
-	return apiKey;
-}
-
-function formatModel(model: Model<any>): string {
-	return `${model.provider}/${model.id}`;
-}
-
-function resolveModelName(value: string | undefined, fallback: Model<any>): string {
-	return value ?? formatModel(fallback);
-}
-
-function assertModelAllowed(config: Config, ref: ModelRef): void {
-	if (!isAllowedModel(config, ref)) throw new Error(`Model is not allowlisted: ${ref.key}`);
-}
-
-function extractText(message: unknown): string {
-	if (!message || typeof message !== "object") return "";
-	const record = message as { content?: unknown; stopReason?: unknown; errorMessage?: unknown };
-	if (record.stopReason === "error" && typeof record.errorMessage === "string" && record.errorMessage.trim()) {
-		return `Model error: ${record.errorMessage}`;
-	}
-	if (!("content" in record)) return "";
-	const content = record.content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content
-		.filter((item): item is { type: "text"; text: string } => {
-			return !!item && typeof item === "object" && (item as { type?: unknown }).type === "text";
-		})
-		.map((item) => item.text)
-		.join("");
-}
-
-function getLastAssistantText(agent: Agent): string {
-	for (let i = agent.state.messages.length - 1; i >= 0; i--) {
-		const message = agent.state.messages[i];
-		if (message.role === "assistant") return extractText(message);
-	}
-	return "";
-}
-
-function logUsage(event: AgentEvent): void {
-	if (event.type !== "message_end" || event.message.role !== "assistant") return;
-	const usage = event.message.usage;
-	console.log(
-		JSON.stringify({
-			type: "usage",
-			input: usage.input,
-			output: usage.output,
-			cacheRead: usage.cacheRead,
-			cacheWrite: usage.cacheWrite,
-			cost: usage.cost.total,
-		}),
-	);
-}
-
-function userTextMessage(text: string, timestamp = Date.now()): AgentMessage {
-	return {
-		role: "user",
-		content: [{ type: "text", text }],
-		timestamp,
-	};
-}
-
-function createFamiliarTools(
-	config: Config,
-	mediaSink: GeneratedMediaSink,
-	referenceAttachments: () => readonly StoredAttachment[] = () => [],
-	memoryService?: MemoryService,
-): AgentTool<any>[] {
-	const bashTool = createBashTool(config.workspacePath);
-	bashTool.description = BASH_DESCRIPTION;
-	const readTool = createReadTool(config.workspacePath);
-	readTool.description = READ_DESCRIPTION;
-	const writeTool = createWriteTool(config.workspacePath);
-	writeTool.description = WRITE_DESCRIPTION;
-	const editTool = createEditTool(config.workspacePath);
-	editTool.description = EDIT_DESCRIPTION;
-	return [
-		bashTool,
-		readTool,
-		writeTool,
-		editTool,
-		createTtsTool(config, mediaSink),
-		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
-		...createWebTools(config),
-		...createBrowserTools(config, mediaSink),
-		...(memoryService?.memoryTools() ?? []),
-	];
-}
-
-function setReferenceAttachments(session: FamiliarAgentSession, attachments: readonly StoredAttachment[] = []): void {
-	session.referenceAttachments.splice(0, session.referenceAttachments.length, ...attachments);
-}
 
 export async function createFamiliarAgent(
 	config: Config,

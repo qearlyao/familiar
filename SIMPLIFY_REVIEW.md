@@ -182,13 +182,13 @@ Suggest small, scoped commits per category with regression testing after each �
 
 ---
 
-## Addendum — newer commits (2026-05-24)
+[x]## Addendum — newer commits (2026-05-24)
 
 Findings from a follow-up `/simplify` pass over commits `c01dafa`, `8461431`, `fdc737e`. Smaller items (O(n²) mime lookup, triple-ternary in `AttachmentList`, single-use `resolveForOptions` wrapper) were fixed in place. One real reuse win was left as-is because it touches the test mocks:
 
 - **[src/discord.ts:424-448](src/discord.ts#L424-L448) — `postDiscordAttachments` hand-rolls Discord REST.** The function `fetch`es `https://discord.com/api/v10/channels/{id}/messages` with a manual `Authorization: Bot ${token}` header and a hand-built `FormData`. The same module already holds a live `Client<true>` (used for `client.channels.fetch`, `channel.send`, command registration). discord.js exposes `client.rest` — a pre-authenticated `REST` instance that handles the base URL, token, API version, ratelimit, retries, and multipart bodies via `RawFile[]`. Refactor to `client.rest.post(Routes.channelMessages(channelId), { files, body: {} })`. Drops the v10 pin, the manual auth header, the bespoke 200/`id` parsing, and removes a leaky abstraction. Touches [test/discord-attachments.test.ts:41-81](test/discord-attachments.test.ts#L41-L81) — the test currently stubs `globalThis.fetch`, would need to mock the REST manager instead. Severity: MED.
 
-## 2026-05-26 Follow-up scan (Codex) -- webui/web.ts/discord.ts deltas
+[x]## 2026-05-26 Follow-up scan (Codex) -- webui/web.ts/discord.ts deltas
 
 Scope: current code in `src/discord.ts`, `src/web.ts`, `src/web-tools.ts`, `src/web-auth.ts`, and changed `web/src/` React/TS files, against baseline `f4bfa9f`.
 
@@ -211,16 +211,7 @@ Scope: current code in `src/discord.ts`, `src/web.ts`, `src/web-tools.ts`, `src/
 9. [web/src/lib/useChat.ts:37-50](web/src/lib/useChat.ts#L37-L50), [web/src/lib/useChat.ts:96-108](web/src/lib/useChat.ts#L96-L108) — `closeOpenContentSteps` and `closeAllSteps` duplicate the same step-closing logic under different names. Fix: collapse them into one helper, parameterized only if completion behavior actually diverges. Lens: CODE REUSE / CODE QUALITY.
 10. [web/src/components/EventStream.tsx:270-272](web/src/components/EventStream.tsx#L270-L272), [web/src/components/EventStream.tsx:361-367](web/src/components/EventStream.tsx#L361-L367) — the terminal `done` row appears after failed tool steps because completion only checks inactivity, not success. Fix: compute `hasError`/`allSucceeded` separately and suppress or replace the done row on errors. Lens: CODE QUALITY.
 
-### Original-list items confirmed already fixed
-
-- Original #13 fixed: [src/web-tools.ts:152-174](src/web-tools.ts#L152-L174) keeps `fetchedAt` as the TTL timestamp and updates `lastAccessed` separately.
-- Original #14 fixed: [src/web.ts:1257-1264](src/web.ts#L1257-L1264) resolves the runtime before accepting the WebSocket, removing the hello/channel race.
-- Original #15 fixed: [src/web.ts:532-561](src/web.ts#L532-L561), [src/web.ts:1317](src/web.ts#L1317) consolidate in-flight message state into one TTL-managed map and clear its timer on shutdown.
-- Original #16 fixed: [src/web-auth.ts:18-25](src/web-auth.ts#L18-L25) guards malformed cookie decoding.
-
-Summary: 10 live findings: 1 HIGH, 5 MED, 4 LOW. One new HIGH-severity issue appeared: Discord attachment delivery moved outside the durable outbound/job completion boundary.
-
-## 2026-05-29 `/simplify --fix` over decomposition commits `1c62758` + `a498ad1`
+[x]## 2026-05-29 `/simplify --fix` over decomposition commits `1c62758` + `a498ad1`
 
 Reviewed the discord.ts → `src/discord/*` and web.ts → `src/web/*` decompositions (#24 stage 1). 9-angle finder pass + sweep found **zero behavior-change bugs** — the moves are mechanically clean (bodies, signatures, call wiring, `__test`/`__webTest` surfaces all preserved; tests 635/635, tsc + biome clean). All surviving findings are cleanup the decomposition stopped one step short of.
 

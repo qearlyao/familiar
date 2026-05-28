@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -8,21 +7,41 @@ import type { Config } from "../../config.js";
 import { normalizeFtsMatchQuery } from "../index/fts-query.js";
 import { runInTransaction } from "../util.js";
 import { readMeta, runLcmMigrations } from "./schema.js";
+import { lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store/index-ids.js";
+import { insertRecordPrepared, insertSummaryPrepared } from "./store/inserts.js";
+import {
+	computeLcmRecordKey,
+	dedupeSummaryParentIds,
+	type NormalizedSummaryInput,
+	normalizeRecordInput,
+	normalizeSummaryInput,
+} from "./store/normalizers.js";
+import {
+	contextItemFromRow,
+	recordFromRow,
+	segmentFromRow,
+	sessionStateFromRow,
+	summaryFromRow,
+	summarySourceFromRow,
+} from "./store/row-mappers.js";
+import type {
+	LcmContextItemRow,
+	LcmRecordRow,
+	LcmSegmentRow,
+	LcmSessionStateRow,
+	LcmSummaryRow,
+	LcmSummarySourceRow,
+} from "./store/row-types.js";
+import { jsonOrNull } from "./store/serialization.js";
+import { buildSummaryParentSnapshot, buildSummarySnapshot } from "./store/snapshots.js";
 import type {
 	LcmContextItemInput,
 	LcmRecordInput,
-	LcmRecordKind,
-	LcmRecordPart,
 	LcmRetentionOptions,
 	LcmRetentionReport,
 	LcmSegmentInput,
-	LcmSegmentStatus,
-	LcmSourceProvenance,
 	LcmSummaryInput,
-	LcmSummaryParentSnapshot,
-	LcmSummarySnapshot,
 	LcmSummarySourceInput,
-	LcmSummaryStatus,
 	StoredLcmContextItem,
 	StoredLcmRecord,
 	StoredLcmSegment,
@@ -31,96 +50,12 @@ import type {
 	StoredLcmSummarySource,
 } from "./types.js";
 
+export { lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store/index-ids.js";
+export { computeLcmRecordKey } from "./store/normalizers.js";
+
 interface StoreOptions {
 	path?: string;
 	db?: Database.Database;
-}
-
-interface LcmSegmentRow {
-	id: string;
-	status: string;
-	session_id: string | null;
-	channel_key: string | null;
-	started_at: string;
-	closed_at: string | null;
-	raw_pruned_at: string | null;
-	boundary_source_json: string | null;
-	metadata_json: string | null;
-	created_at: number;
-	updated_at: number;
-}
-
-interface LcmRecordRow {
-	id: number;
-	record_key: string;
-	segment_id: string;
-	kind: string;
-	text_full: string;
-	parts_json: string | null;
-	happened_at: string;
-	session_id: string | null;
-	channel_key: string | null;
-	channel_id: string | null;
-	job_id: string | null;
-	source_type: string;
-	source_path: string | null;
-	source_line: number | null;
-	source_record_id: string | null;
-	source_message_id: string | null;
-	source_ref: string | null;
-	attachments_json: string | null;
-	metadata_json: string | null;
-	created_at: number;
-	updated_at: number;
-}
-
-interface LcmSummaryRow {
-	id: number;
-	summary_key: string;
-	segment_id: string;
-	depth: number;
-	status: string;
-	text_full: string;
-	pinned: number;
-	covers_from_record_id: number | null;
-	covers_to_record_id: number | null;
-	snapshot_json: string | null;
-	source_type: string;
-	source_path: string | null;
-	source_line: number | null;
-	source_record_id: string | null;
-	source_message_id: string | null;
-	source_ref: string | null;
-	metadata_json: string | null;
-	created_at: number;
-	updated_at: number;
-}
-
-interface LcmSummarySourceRow {
-	summary_id: number;
-	ord: number;
-	record_id: number | null;
-	source_summary_id: number | null;
-	source_ref: string | null;
-	snapshot_json: string | null;
-}
-
-interface LcmContextItemRow {
-	session_key: string;
-	ordinal: number;
-	item_type: string;
-	record_id: number | null;
-	summary_id: number | null;
-	fingerprint: string;
-	happened_at: string | null;
-	updated_at: number;
-}
-
-interface LcmSessionStateRow {
-	session_key: string;
-	compaction_debt: number;
-	cache_touched_at: number | null;
-	updated_at: number | null;
 }
 
 export interface LcmRecordInsertResult {
@@ -286,7 +221,7 @@ export class LcmStore {
 		}
 		const normalized = normalizeSummaryInput(input);
 		const runInsert = () =>
-			runSummaryInsertTransaction(this, normalized, (id, sources, parents) => {
+			this.runSummaryInsertTransaction(normalized, (id, sources, parents) => {
 				this.insertSummarySources(id, sources);
 				this.insertSummaryParents(id, parents);
 			});
@@ -510,7 +445,7 @@ export class LcmStore {
 
 	private insertSummaryParents(summaryId: number, parents: number[]): void {
 		if (parents.length === 0) return;
-		const uniqueParents = dedupeNumbers(parents);
+		const uniqueParents = dedupeSummaryParentIds(parents);
 		const existingRows = this.db
 			.prepare(`SELECT id FROM lcm_summaries WHERE id IN (${uniqueParents.map(() => "?").join(",")})`)
 			.all(...uniqueParents) as { id: number }[];
@@ -522,6 +457,18 @@ export class LcmStore {
 			 VALUES (?, ?, ?)`,
 		);
 		for (const [index, parentId] of uniqueParents.entries()) insert.run(summaryId, parentId, index);
+	}
+
+	private runSummaryInsertTransaction(
+		normalized: NormalizedSummaryInput,
+		insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
+	): number {
+		this.ensureSegment({ id: normalized.segmentId });
+		const existing = this.db
+			.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?")
+			.get(normalized.summaryKey) as { id: number } | undefined;
+		if (existing) return existing.id;
+		return insertSummaryPrepared(this.db, normalized, insertEdges);
 	}
 
 	private summaryParentMap(summaryIds: number[]): Map<number, number[]> {
@@ -586,465 +533,4 @@ export class LcmStore {
 			update.run(jsonOrNull(snapshot.parents), row.id);
 		}
 	}
-}
-
-export function lcmRecordIndexSourceId(id: number): string {
-	return `lcm_record:${id}`;
-}
-
-export function lcmSummaryIndexSourceId(id: number): string {
-	return `lcm_summary:${id}`;
-}
-
-export function computeLcmRecordKey(input: LcmRecordInput): string {
-	const text = (input.text ?? "").trim();
-	if (!text && input.kind !== "boundary") throw new Error("LCM record text must not be empty");
-	const parts = input.parts?.length ? input.parts : null;
-	return stableHash({
-		segmentId: input.segmentId,
-		kind: input.kind,
-		text: text || "Session boundary",
-		parts,
-		happenedAt: input.happenedAt ?? new Date().toISOString(),
-		source: normalizeSource(input.source),
-	});
-}
-
-function normalizeRecordInput(input: LcmRecordInput): NormalizedRecordInput {
-	const text = (input.text ?? "").trim();
-	if (!text && input.kind !== "boundary") throw new Error("LCM record text must not be empty");
-	const source = normalizeSource(input.source);
-	const happenedAt = input.happenedAt ?? new Date().toISOString();
-	const parts = input.parts?.length ? input.parts : null;
-	const normalizedText = text || "Session boundary";
-	return {
-		segmentId: input.segmentId,
-		kind: input.kind,
-		text: normalizedText,
-		parts,
-		happenedAt,
-		sessionId: input.sessionId ?? null,
-		channelKey: input.channelKey ?? null,
-		channelId: input.channelId ?? null,
-		jobId: input.jobId ?? null,
-		source,
-		attachments: input.attachments?.length ? input.attachments : null,
-		metadata: input.metadata ?? null,
-		recordKey: computeLcmRecordKey({ ...input, happenedAt }),
-	};
-}
-
-function insertRecordPrepared(db: Database.Database, normalized: NormalizedRecordInput): LcmRecordRow {
-	const inserted = db
-		.prepare(
-			`INSERT INTO lcm_records (
-				record_key, segment_id, kind, text_full, happened_at, session_id, channel_key,
-				channel_id, job_id, source_type, source_path, source_line, source_record_id,
-				source_message_id, source_ref, attachments_json, metadata_json, parts_json
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.run(
-			normalized.recordKey,
-			normalized.segmentId,
-			normalized.kind,
-			normalized.text,
-			normalized.happenedAt,
-			normalized.sessionId,
-			normalized.channelKey,
-			normalized.channelId,
-			normalized.jobId,
-			normalized.source.sourceType,
-			normalized.source.sourcePath ?? null,
-			normalized.source.sourceLine ?? null,
-			sourceRecordIdToString(normalized.source.sourceRecordId),
-			normalized.source.sourceMessageId ?? null,
-			normalized.source.sourceRef ?? null,
-			jsonOrNull(normalized.attachments),
-			jsonOrNull(normalized.metadata),
-			jsonOrNull(normalized.parts),
-		);
-	const id = Number(inserted.lastInsertRowid);
-	if (normalized.kind !== "boundary") {
-		db.prepare("INSERT INTO lcm_records_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
-	}
-	const row = db.prepare("SELECT * FROM lcm_records WHERE id = ?").get(id) as LcmRecordRow | undefined;
-	if (!row) throw new Error(`Failed to read inserted LCM record: ${id}`);
-	return row;
-}
-
-function normalizeSummaryInput(input: LcmSummaryInput): NormalizedSummaryInput {
-	const text = (input.text ?? "").trim();
-	const source = normalizeSource(input.source);
-	const status = input.status ?? (text ? "ready" : "placeholder");
-	const normalizedText = text || "";
-	return {
-		segmentId: input.segmentId,
-		depth: input.depth,
-		status,
-		text: normalizedText,
-		pinned: input.pinned ?? false,
-		coversFromRecordId: input.coversFromRecordId ?? null,
-		coversToRecordId: input.coversToRecordId ?? null,
-		source,
-		sourceItems: input.sourceItems ?? [],
-		parents: input.parents ?? [],
-		metadata: input.metadata ?? null,
-		summaryKey: stableHash({
-			segmentId: input.segmentId,
-			depth: input.depth,
-			status,
-			text: normalizedText,
-			coversFromRecordId: input.coversFromRecordId ?? null,
-			coversToRecordId: input.coversToRecordId ?? null,
-			source,
-			parents: input.parents ?? [],
-		}),
-	};
-}
-
-function insertSummaryPrepared(
-	db: Database.Database,
-	normalized: NormalizedSummaryInput,
-	insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
-): number {
-	const inserted = db
-		.prepare(
-			`INSERT INTO lcm_summaries (
-				summary_key, segment_id, depth, status, text_full, pinned,
-				covers_from_record_id, covers_to_record_id, snapshot_json, source_type, source_path,
-				source_line, source_record_id, source_message_id, source_ref, metadata_json
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.run(
-			normalized.summaryKey,
-			normalized.segmentId,
-			normalized.depth,
-			normalized.status,
-			normalized.text,
-			normalized.pinned ? 1 : 0,
-			normalized.coversFromRecordId,
-			normalized.coversToRecordId,
-			null,
-			normalized.source.sourceType,
-			normalized.source.sourcePath ?? null,
-			normalized.source.sourceLine ?? null,
-			sourceRecordIdToString(normalized.source.sourceRecordId),
-			normalized.source.sourceMessageId ?? null,
-			normalized.source.sourceRef ?? null,
-			jsonOrNull(normalized.metadata),
-		);
-	const id = Number(inserted.lastInsertRowid);
-	db.prepare("INSERT INTO lcm_summaries_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
-	insertEdges(id, normalized.sourceItems, normalized.parents);
-	return id;
-}
-
-function runSummaryInsertTransaction(
-	store: LcmStore,
-	normalized: NormalizedSummaryInput,
-	insertEdges: (summaryId: number, sources: LcmSummarySourceInput[], parents: number[]) => void,
-): number {
-	store.ensureSegment({ id: normalized.segmentId });
-	const existing = store.db.prepare("SELECT id FROM lcm_summaries WHERE summary_key = ?").get(normalized.summaryKey) as
-		| { id: number }
-		| undefined;
-	if (existing) return existing.id;
-	return insertSummaryPrepared(store.db, normalized, insertEdges);
-}
-
-function dedupeNumbers(values: readonly number[]): number[] {
-	const seen = new Set<number>();
-	const result: number[] = [];
-	for (const value of values) {
-		if (!Number.isInteger(value) || value <= 0) throw new Error("LCM summary parents must be positive integer ids");
-		if (seen.has(value)) continue;
-		seen.add(value);
-		result.push(value);
-	}
-	return result;
-}
-
-function normalizeSource(source: LcmSourceProvenance): LcmSourceProvenance {
-	return {
-		sourceType: source.sourceType,
-		sourcePath: source.sourcePath ?? null,
-		sourceLine: source.sourceLine ?? null,
-		sourceRecordId: source.sourceRecordId ?? null,
-		sourceMessageId: source.sourceMessageId ?? null,
-		sourceRef: source.sourceRef ?? null,
-	};
-}
-
-function stableHash(value: unknown): string {
-	return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function sourceRecordIdToString(value: number | string | null | undefined): string | null {
-	if (value === null || value === undefined) return null;
-	return String(value);
-}
-
-function jsonOrNull(value: unknown): string | null {
-	if (value === null || value === undefined) return null;
-	return JSON.stringify(value);
-}
-
-function parseJsonObject(value: string | null): Record<string, unknown> | null {
-	if (!value) return null;
-	try {
-		const parsed = JSON.parse(value) as unknown;
-		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-			? (parsed as Record<string, unknown>)
-			: null;
-	} catch {
-		return null;
-	}
-}
-
-function parseJsonArray<T>(value: string | null): T[] | null {
-	if (!value) return null;
-	try {
-		const parsed = JSON.parse(value) as unknown;
-		return Array.isArray(parsed) ? (parsed as T[]) : null;
-	} catch {
-		return null;
-	}
-}
-
-function sourceFromRow(row: {
-	source_type: string;
-	source_path: string | null;
-	source_line: number | null;
-	source_record_id: string | null;
-	source_message_id: string | null;
-	source_ref: string | null;
-}): LcmSourceProvenance {
-	return {
-		sourceType: row.source_type as LcmSourceProvenance["sourceType"],
-		sourcePath: row.source_path,
-		sourceLine: row.source_line,
-		sourceRecordId: row.source_record_id,
-		sourceMessageId: row.source_message_id,
-		sourceRef: row.source_ref,
-	};
-}
-
-function segmentFromRow(row: LcmSegmentRow): StoredLcmSegment {
-	return {
-		id: row.id,
-		status: row.status as LcmSegmentStatus,
-		sessionId: row.session_id,
-		channelKey: row.channel_key,
-		startedAt: row.started_at,
-		closedAt: row.closed_at,
-		rawPrunedAt: row.raw_pruned_at,
-		boundarySource: parseJsonObject(row.boundary_source_json) as LcmSourceProvenance | null,
-		metadata: parseJsonObject(row.metadata_json),
-		createdAt: row.created_at,
-		updatedAt: row.updated_at,
-	};
-}
-
-function recordFromRow(row: LcmRecordRow): StoredLcmRecord {
-	return {
-		id: row.id,
-		recordKey: row.record_key,
-		segmentId: row.segment_id,
-		kind: row.kind as LcmRecordKind,
-		text: row.text_full,
-		parts: parseJsonArray<LcmRecordPart>(row.parts_json),
-		happenedAt: row.happened_at,
-		sessionId: row.session_id,
-		channelKey: row.channel_key,
-		channelId: row.channel_id,
-		jobId: row.job_id,
-		source: sourceFromRow(row),
-		attachments: parseJsonArray(row.attachments_json),
-		metadata: parseJsonObject(row.metadata_json),
-		createdAt: row.created_at,
-		updatedAt: row.updated_at,
-	};
-}
-
-function summaryFromRow(row: LcmSummaryRow, parents: number[] = []): StoredLcmSummary {
-	return {
-		id: row.id,
-		summaryKey: row.summary_key,
-		segmentId: row.segment_id,
-		depth: row.depth,
-		status: row.status as LcmSummaryStatus,
-		text: row.text_full,
-		pinned: row.pinned === 1,
-		coversFromRecordId: row.covers_from_record_id,
-		coversToRecordId: row.covers_to_record_id,
-		source: sourceFromRow(row),
-		metadata: parseJsonObject(row.metadata_json),
-		snapshot: parseJsonArray(row.snapshot_json) as LcmSummarySnapshot | null,
-		parents,
-		createdAt: row.created_at,
-		updatedAt: row.updated_at,
-	};
-}
-
-function summarySourceFromRow(row: LcmSummarySourceRow): StoredLcmSummarySource {
-	return {
-		summaryId: row.summary_id,
-		ord: row.ord,
-		recordId: row.record_id,
-		sourceSummaryId: row.source_summary_id,
-		sourceRef: row.source_ref,
-		snapshot: parseJsonObject(row.snapshot_json),
-	};
-}
-
-function contextItemFromRow(row: LcmContextItemRow): StoredLcmContextItem {
-	if (row.item_type === "raw") {
-		if (row.record_id === null) throw new Error(`Invalid raw LCM context item at ordinal ${row.ordinal}`);
-		return {
-			sessionKey: row.session_key,
-			ordinal: row.ordinal,
-			type: "raw",
-			recordId: row.record_id,
-			summaryId: null,
-			fingerprint: row.fingerprint,
-			happenedAt: row.happened_at,
-			updatedAt: row.updated_at,
-		};
-	}
-	if (row.item_type === "summary") {
-		if (row.summary_id === null) throw new Error(`Invalid summary LCM context item at ordinal ${row.ordinal}`);
-		return {
-			sessionKey: row.session_key,
-			ordinal: row.ordinal,
-			type: "summary",
-			recordId: null,
-			summaryId: row.summary_id,
-			fingerprint: row.fingerprint,
-			happenedAt: row.happened_at,
-			updatedAt: row.updated_at,
-		};
-	}
-	throw new Error(`Unknown LCM context item type: ${row.item_type}`);
-}
-
-function sessionStateFromRow(row: LcmSessionStateRow): StoredLcmSessionState {
-	return {
-		sessionKey: row.session_key,
-		compactionDebt: row.compaction_debt,
-		cacheTouchedAt: row.cache_touched_at,
-		updatedAt: row.updated_at,
-	};
-}
-
-const SUMMARY_SNAPSHOT_TEXT_LIMIT = 4 * 1024;
-const SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX = "…[truncated]";
-
-function buildSummarySnapshot(db: Database.Database, summary: LcmSummaryRow): LcmSummarySnapshot {
-	const rows = db
-		.prepare(
-			`SELECT * FROM lcm_records
-			 WHERE segment_id = ?
-			   AND id BETWEEN ? AND ?
-			 ORDER BY happened_at, id`,
-		)
-		.all(summary.segment_id, summary.covers_from_record_id, summary.covers_to_record_id) as LcmRecordRow[];
-	return rows.map(snapshotRecordFromRow);
-}
-
-function buildSummaryParentSnapshot(
-	db: Database.Database,
-	summaryId: number,
-	visiting: Set<number>,
-): LcmSummaryParentSnapshot {
-	if (visiting.has(summaryId)) throw new Error(`Cycle detected in LCM summary parents at ${summaryId}`);
-	visiting.add(summaryId);
-	const row = db.prepare("SELECT * FROM lcm_summaries WHERE id = ?").get(summaryId) as LcmSummaryRow | undefined;
-	if (!row) throw new Error(`LCM summary does not exist: ${summaryId}`);
-	let snapshot = parseJsonArray<LcmSummarySnapshot[number]>(row.snapshot_json) as LcmSummarySnapshot | null;
-	if (
-		!snapshot &&
-		row.covers_from_record_id !== null &&
-		row.covers_to_record_id !== null &&
-		db
-			.prepare("SELECT 1 FROM lcm_records WHERE segment_id = ? AND id BETWEEN ? AND ? LIMIT 1")
-			.get(row.segment_id, row.covers_from_record_id, row.covers_to_record_id)
-	) {
-		snapshot = buildSummarySnapshot(db, row);
-	}
-	const parentRows = db
-		.prepare(
-			`SELECT parent_summary_id
-			 FROM lcm_summary_parents
-			 WHERE summary_id = ?
-			 ORDER BY ord, parent_summary_id`,
-		)
-		.all(summaryId) as { parent_summary_id: number }[];
-	const parents = parentRows.map((parent) => buildSummaryParentSnapshot(db, parent.parent_summary_id, visiting));
-	visiting.delete(summaryId);
-	return {
-		summaryId: row.id,
-		depth: row.depth,
-		text: row.text_full,
-		coversFromRecordId: row.covers_from_record_id,
-		coversToRecordId: row.covers_to_record_id,
-		snapshot,
-		parents,
-	};
-}
-
-function snapshotRecordFromRow(row: LcmRecordRow): LcmSummarySnapshot[number] {
-	const metadata = parseJsonObject(row.metadata_json);
-	return {
-		id: row.id,
-		kind: row.kind as LcmRecordKind,
-		happened_at: row.happened_at,
-		role: snapshotRole(row.kind as LcmRecordKind, metadata),
-		text: truncateSummarySnapshotText(row.text_full),
-		parts: parseJsonArray<LcmRecordPart>(row.parts_json),
-		attachments: parseJsonArray(row.attachments_json),
-	};
-}
-
-function snapshotRole(kind: LcmRecordKind, metadata: Record<string, unknown> | null): string | null {
-	if (typeof metadata?.role === "string" && metadata.role.trim()) return metadata.role;
-	if (kind === "user" || kind === "assistant") return kind;
-	if (kind === "tool") return "tool";
-	return null;
-}
-
-function truncateSummarySnapshotText(text: string): string {
-	if (text.length <= SUMMARY_SNAPSHOT_TEXT_LIMIT) return text;
-	const retainedLength = Math.max(0, SUMMARY_SNAPSHOT_TEXT_LIMIT - SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX.length);
-	return `${text.slice(0, retainedLength)}${SUMMARY_SNAPSHOT_TRUNCATED_SUFFIX}`;
-}
-
-interface NormalizedRecordInput {
-	recordKey: string;
-	segmentId: string;
-	kind: LcmRecordKind;
-	text: string;
-	parts: LcmRecordPart[] | null;
-	happenedAt: string;
-	sessionId: string | null;
-	channelKey: string | null;
-	channelId: string | null;
-	jobId: string | null;
-	source: LcmSourceProvenance;
-	attachments: LcmRecordInput["attachments"] | null;
-	metadata: Record<string, unknown> | null;
-}
-
-interface NormalizedSummaryInput {
-	summaryKey: string;
-	segmentId: string;
-	depth: number;
-	status: LcmSummaryStatus;
-	text: string;
-	pinned: boolean;
-	coversFromRecordId: number | null;
-	coversToRecordId: number | null;
-	source: LcmSourceProvenance;
-	sourceItems: LcmSummarySourceInput[];
-	parents: number[];
-	metadata: Record<string, unknown> | null;
 }

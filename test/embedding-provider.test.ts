@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createEmbeddingProvider } from "../src/memory/index/embedding-provider.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, withEnv } from "./helpers.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
@@ -31,9 +31,7 @@ describe("embedding provider", () => {
 				},
 			},
 		});
-		const previousKey = process.env.EMBEDDING_TEST_KEY;
 		const requests: Array<{ url: string; init?: RequestInit; body: any }> = [];
-		process.env.EMBEDDING_TEST_KEY = "embedding-key";
 		const fetchFn = (async (input, init) => {
 			requests.push({
 				url: String(input),
@@ -45,7 +43,7 @@ describe("embedding provider", () => {
 			});
 		}) as typeof fetch;
 
-		try {
+		await withEnv("EMBEDDING_TEST_KEY", "embedding-key", async () => {
 			const provider = createEmbeddingProvider(config, { fetchFn });
 			const embeddings = await provider.embed([
 				"hello",
@@ -89,10 +87,7 @@ describe("embedding provider", () => {
 				[0.1, 0.2, 0.3],
 				[0.4, 0.5, 0.6],
 			]);
-		} finally {
-			if (previousKey === undefined) delete process.env.EMBEDDING_TEST_KEY;
-			else process.env.EMBEDDING_TEST_KEY = previousKey;
-		}
+		});
 	});
 
 	it("splits requests by configured batch size", async (t) => {

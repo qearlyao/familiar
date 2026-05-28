@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
-import { randomFillSync } from "node:crypto";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
 import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai";
-import sharp from "sharp";
 
 import type { StoredAttachment } from "../src/chat-log.js";
 import { attachmentsDir } from "../src/generated-media.js";
 import { createGeneratedMediaSink, generatedAttachmentsDir } from "../src/generated-media.js";
 import { createImageGenTool, imageExtension, resolveImageModel } from "../src/image-gen.js";
 import { MAX_INLINE_IMAGE_BASE64_BYTES } from "../src/inbound-attachments.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, withEnv, withoutEnv } from "./helpers.js";
+import { noisyPngBytes, pngBytes } from "./media-fixtures.js";
 
 function toolText(result: Awaited<ReturnType<ReturnType<typeof createImageGenTool>["execute"]>>): string {
 	return result.content
@@ -32,19 +31,6 @@ function imageResult(output: AssistantImages["output"], overrides: Partial<Assis
 		timestamp: Date.now(),
 		...overrides,
 	};
-}
-
-async function noisyPngBytes(size = 1600): Promise<Buffer> {
-	const raw = Buffer.alloc(size * size * 3);
-	randomFillSync(raw);
-	return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer();
-}
-
-function pngBytes(): Buffer {
-	return Buffer.from(
-		"89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000154012a0b0000000049454e44ae426082",
-		"hex",
-	);
 }
 
 describe("image_gen helpers", () => {
@@ -77,9 +63,7 @@ describe("image_gen helpers", () => {
 
 describe("image_gen tool", () => {
 	it("writes generated images and adds generated attachments", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			let capturedModel: ImagesModel<any> | undefined;
@@ -127,75 +111,63 @@ describe("image_gen tool", () => {
 			assert.equal(result.details.id, attachments[0]?.id);
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.equal(result.details.stopReason, "stop");
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("retries with fallback model when the primary returns no image", async (t) => {
-		const previousPrimary = process.env.PRIMARY_IMAGE_KEY;
-		const previousFallback = process.env.FALLBACK_IMAGE_KEY;
-		process.env.PRIMARY_IMAGE_KEY = "primary-key";
-		process.env.FALLBACK_IMAGE_KEY = "fallback-key";
-		try {
-			const dataDir = await createTempDataDir(t);
-			const sink = createGeneratedMediaSink();
-			const attempted: string[] = [];
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: {
-					model: "primary/model-a",
-					fallbackModel: "fallback/model-b",
-				},
-				models: {
-					baseUrls: {
-						primary: "https://primary.example.test/v1",
-						fallback: "https://fallback.example.test/v1",
+		await withEnv("PRIMARY_IMAGE_KEY", "primary-key", () =>
+			withEnv("FALLBACK_IMAGE_KEY", "fallback-key", async () => {
+				const dataDir = await createTempDataDir(t);
+				const sink = createGeneratedMediaSink();
+				const attempted: string[] = [];
+				const config = await configWithDataDir(t, dataDir, {
+					imageGen: {
+						model: "primary/model-a",
+						fallbackModel: "fallback/model-b",
 					},
-					apiKeyEnvs: {
-						primary: "PRIMARY_IMAGE_KEY",
-						fallback: "FALLBACK_IMAGE_KEY",
+					models: {
+						baseUrls: {
+							primary: "https://primary.example.test/v1",
+							fallback: "https://fallback.example.test/v1",
+						},
+						apiKeyEnvs: {
+							primary: "PRIMARY_IMAGE_KEY",
+							fallback: "FALLBACK_IMAGE_KEY",
+						},
 					},
-				},
-			});
-			const tool = createImageGenTool(config, sink, {
-				generateImages: async (model, _context, options) => {
-					attempted.push(`${model.provider}/${model.id}:${options?.apiKey}:${options?.timeoutMs}`);
-					if (model.provider === "primary") {
-						return imageResult([{ type: "text", text: "no image" }], {
+				});
+				const tool = createImageGenTool(config, sink, {
+					generateImages: async (model, _context, options) => {
+						attempted.push(`${model.provider}/${model.id}:${options?.apiKey}:${options?.timeoutMs}`);
+						if (model.provider === "primary") {
+							return imageResult([{ type: "text", text: "no image" }], {
+								provider: model.provider,
+								model: model.id,
+							});
+						}
+						return imageResult([{ type: "image", mimeType: "image/webp", data: Buffer.from("ok").toString("base64") }], {
 							provider: model.provider,
 							model: model.id,
 						});
-					}
-					return imageResult([{ type: "image", mimeType: "image/webp", data: Buffer.from("ok").toString("base64") }], {
-						provider: model.provider,
-						model: model.id,
-					});
-				},
-			});
+					},
+				});
 
-			const result = await tool.execute("call-1", { prompt: "draw a fallback" });
-			const attachments = sink.drain();
+				const result = await tool.execute("call-1", { prompt: "draw a fallback" });
+				const attachments = sink.drain();
 
-			assert.deepEqual(attempted, ["primary/model-a:primary-key:120000", "fallback/model-b:fallback-key:120000"]);
-			assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason"]);
-			assert.equal(result.details.model, "fallback/model-b");
-			assert.equal(result.details.id, attachments[0]?.id);
-			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.equal(result.details.localPath?.endsWith(".webp"), true);
-			assert.equal(result.details.stopReason, "stop");
-		} finally {
-			if (previousPrimary === undefined) delete process.env.PRIMARY_IMAGE_KEY;
-			else process.env.PRIMARY_IMAGE_KEY = previousPrimary;
-			if (previousFallback === undefined) delete process.env.FALLBACK_IMAGE_KEY;
-			else process.env.FALLBACK_IMAGE_KEY = previousFallback;
-		}
+				assert.deepEqual(attempted, ["primary/model-a:primary-key:120000", "fallback/model-b:fallback-key:120000"]);
+				assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason"]);
+				assert.equal(result.details.model, "fallback/model-b");
+				assert.equal(result.details.id, attachments[0]?.id);
+				assert.equal(result.details.localPath, attachments[0]?.localPath);
+				assert.equal(result.details.localPath?.endsWith(".webp"), true);
+				assert.equal(result.details.stopReason, "stop");
+			}),
+		);
 	});
 
 	it("recovers provider text data URLs as generated images", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			const config = await configWithDataDir(t, dataDir, {
@@ -228,16 +200,11 @@ describe("image_gen tool", () => {
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("recovers provider markdown image data URLs as generated images", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			const config = await configWithDataDir(t, dataDir, {
@@ -270,10 +237,7 @@ describe("image_gen tool", () => {
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("recovers provider markdown image URLs as generated images", async (t) => {
@@ -403,9 +367,7 @@ describe("image_gen tool", () => {
 	});
 
 	it("recovers provider raw base64 text as generated images", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
 			const config = await configWithDataDir(t, dataDir, {
@@ -433,16 +395,11 @@ describe("image_gen tool", () => {
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.match(toolText(result), /Generated image attachment: image_gen_/);
 			assert.doesNotMatch(toolText(result), /iVBOR/);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("does not surface long text payloads as no-image errors", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gpt-image" },
@@ -461,16 +418,11 @@ describe("image_gen tool", () => {
 			await assert.rejects(() => tool.execute("call-1", { prompt: "draw text only" }), {
 				message: "Image generation failed: image generation returned no image output",
 			});
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("passes selected reference image attachments into upstream image context", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -516,16 +468,11 @@ describe("image_gen tool", () => {
 				mimeType: "image/png",
 				data: Buffer.from("reference-image").toString("base64"),
 			});
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("passes workspace reference image paths into upstream image context", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -560,16 +507,11 @@ describe("image_gen tool", () => {
 				mimeType: "image/png",
 				data: Buffer.from("workspace-image").toString("base64"),
 			});
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("passes ~/ reference image paths into upstream image context", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -611,16 +553,11 @@ describe("image_gen tool", () => {
 				mimeType: "image/png",
 				data: Buffer.from("home-image").toString("base64"),
 			});
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("resizes oversized workspace reference images before upstream image context", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -658,16 +595,11 @@ describe("image_gen tool", () => {
 				assert.equal(capturedContext.input[2].mimeType, "image/webp");
 				assert.ok(Buffer.byteLength(capturedContext.input[2].data, "utf8") <= MAX_INLINE_IMAGE_BASE64_BYTES);
 			}
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("rejects workspace reference image folders", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -690,16 +622,11 @@ describe("image_gen tool", () => {
 					message: "Reference image path must be a file, not a folder: refs/style",
 				},
 			);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("rejects workspace reference image paths outside the workspace", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -718,16 +645,11 @@ describe("image_gen tool", () => {
 				() => tool.execute("call-1", { prompt: "redraw this", referenceImages: ["../outside.png"] }),
 				/must be inside the workspace/,
 			);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("rejects workspace reference image symlinks", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image" },
@@ -756,16 +678,11 @@ describe("image_gen tool", () => {
 				() => tool.execute("call-1", { prompt: "redraw this", referenceImages: ["refs/link.png"] }),
 				/cannot be a symlink/,
 			);
-		} finally {
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("fails before calling the provider when the configured API key is missing", async (t) => {
-		const previousKey = process.env.MISSING_IMAGE_KEY;
-		delete process.env.MISSING_IMAGE_KEY;
-		try {
+		await withoutEnv("MISSING_IMAGE_KEY", async () => {
 			const config = await configWithDataDir(t, "/workspace/data", {
 				imageGen: { model: "custom/gemini-image" },
 				models: {
@@ -780,10 +697,7 @@ describe("image_gen tool", () => {
 			});
 
 			await assert.rejects(() => tool.execute("call-1", { prompt: "draw" }), /MISSING_IMAGE_KEY/);
-		} finally {
-			if (previousKey === undefined) delete process.env.MISSING_IMAGE_KEY;
-			else process.env.MISSING_IMAGE_KEY = previousKey;
-		}
+		});
 	});
 
 	it("rejects empty prompts", async (t) => {

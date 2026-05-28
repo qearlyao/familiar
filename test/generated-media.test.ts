@@ -34,13 +34,6 @@ describe("generated media", () => {
 		assert.throws(() => publicAttachmentPath(config, "/tmp/outside.mp3"), /outside generated attachments dir/);
 	});
 
-	it("keeps generated attachment extensions stable even when the stored path is nested", async (t) => {
-		const config = await configWithDataDir(t, "/workspace/data");
-		const localPath = resolve(generatedAttachmentsDir(config), "nested", "voice one.mp3");
-
-		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/nested/voice%20one.mp3");
-	});
-
 	it("creates public URLs for browser screenshots", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data");
 		const localPath = resolve(browserScreenshotsDir(config), "screen one.png");

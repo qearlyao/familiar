@@ -8,7 +8,7 @@ import { createSyntheticSourceInfo } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "../src/config.js";
 import { buildSystemPrompt, loadPersona } from "../src/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../src/skills.js";
-import { createWorkspace, minimalConfigToml } from "./helpers.js";
+import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 
 describe("Familiar skills", () => {
 	it("loads workspace skills from skills/ and formats only the skill XML block", async (t) => {
@@ -29,11 +29,7 @@ Prefer the reference board.
 			"utf8",
 		);
 
-		const previousDiscordToken = process.env.DISCORD_TOKEN;
-		process.env.DISCORD_TOKEN = "discord-token";
-		const config = await loadConfig(workspacePath);
-		if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
-		else process.env.DISCORD_TOKEN = previousDiscordToken;
+		const config = await withDiscordToken(() => loadConfig(workspacePath));
 		const result = loadFamiliarSkills(config);
 		const block = formatFamiliarSkillsForPrompt(result.skills);
 
@@ -65,18 +61,13 @@ Prefer the reference board.
 
 	it("omits missing optional INNER.md from the persona prompt", async (t) => {
 		const workspacePath = await createWorkspace(t, minimalConfigToml());
-		const previousDiscordToken = process.env.DISCORD_TOKEN;
-		process.env.DISCORD_TOKEN = "discord-token";
-		try {
+		await withDiscordToken(async () => {
 			const config = await loadConfig(workspacePath);
 			const persona = await loadPersona(config);
 
 			assert.equal(persona.inner, null);
 			assert.doesNotMatch(buildSystemPrompt(persona), /INNER\.md/);
-		} finally {
-			if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
-			else process.env.DISCORD_TOKEN = previousDiscordToken;
-		}
+		});
 	});
 
 	it("surfaces configured INNER.md read errors", async (t) => {
@@ -88,16 +79,11 @@ inner = "inner-dir"
 `),
 		);
 		await mkdir(resolve(workspacePath, "inner-dir"), { recursive: true });
-		const previousDiscordToken = process.env.DISCORD_TOKEN;
-		process.env.DISCORD_TOKEN = "discord-token";
-		try {
+		await withDiscordToken(async () => {
 			const config = await loadConfig(workspacePath);
 
 			await assert.rejects(() => loadPersona(config), /EISDIR|illegal operation on a directory/);
-		} finally {
-			if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
-			else process.env.DISCORD_TOKEN = previousDiscordToken;
-		}
+		});
 	});
 
 	it("omits skills disabled for model invocation", () => {

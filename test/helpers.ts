@@ -6,6 +6,31 @@ import { type Config, loadConfig } from "../src/config.js";
 
 export type TestAfter = { after(fn: () => void | Promise<void>): void };
 
+export async function withEnv<T>(name: string, value: string, run: () => Promise<T>): Promise<T> {
+	const previous = process.env[name];
+	process.env[name] = value;
+	try {
+		return await run();
+	} finally {
+		if (previous === undefined) delete process.env[name];
+		else process.env[name] = previous;
+	}
+}
+
+export async function withoutEnv<T>(name: string, run: () => Promise<T>): Promise<T> {
+	const previous = process.env[name];
+	delete process.env[name];
+	try {
+		return await run();
+	} finally {
+		if (previous !== undefined) process.env[name] = previous;
+	}
+}
+
+export function withDiscordToken<T>(run: () => Promise<T>): Promise<T> {
+	return withEnv("DISCORD_TOKEN", "discord-token", run);
+}
+
 type ConfigOverrides = Partial<{
 	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser" | "imageGen">]: Partial<
 		Config[K]
@@ -59,9 +84,7 @@ export async function configWithDataDir(
 	dataDir: string,
 	overrides: ConfigOverrides = {},
 ): Promise<Config> {
-	const previousDiscordToken = process.env.DISCORD_TOKEN;
-	process.env.DISCORD_TOKEN = "discord-token";
-	try {
+	return withDiscordToken(async () => {
 		const workspacePath = await createWorkspace(
 			t,
 			minimalConfigToml(`
@@ -101,8 +124,5 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 				lcm: { ...config.memory.lcm, ...overrides.memory?.lcm },
 			},
 		};
-	} finally {
-		if (previousDiscordToken === undefined) delete process.env.DISCORD_TOKEN;
-		else process.env.DISCORD_TOKEN = previousDiscordToken;
-	}
+	});
 }

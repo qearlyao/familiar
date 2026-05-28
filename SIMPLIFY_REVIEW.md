@@ -162,10 +162,11 @@ A few patterns worth flagging:
 [x]4. **Test hygiene — tmp-dir cleanup sweep (HIGH #18-21)** — easy, large blast radius, will reveal latent flakiness.
 [x]5. **Shared utilities sweep (MED #25-36)** — one PR creating `src/util/guards.ts`, `src/util/fs.ts`, `src/memory/util.ts`, plus the `createWriteQueue` + `atomicWriteJson` + `readEnum` helpers. Cascades into every other simplification.
 6. **God-module decomposition (HIGH #17, #24) + discord attachment cleanup** — start with the `runAgentTurn` extraction in `discord.ts` since it's the most concentrated triplicate. Fold in the discord attachment findings from the 2026-05-24 + 2026-05-26 addenda, in this order:
-   - **6a.** 2026-05-24 addendum (`postDiscordAttachments` → `client.rest.post(Routes.channelMessages…)`). Doing this first likely makes 6c and 6d moot — discord.js's REST manager already handles timeouts/retries and accepts `RawFile` buffers directly.
-   - **6b.** Follow-up #1 (HIGH, attachment fire-and-forget vs persisted state) — make required attachment delivery part of the awaited send boundary; persist returned message ids alongside text ids.
-   - **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — likely deleted by 6a; if not, add `AbortSignal`.
-   - **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — likely deleted by 6a.
+   - [x] **6a.** 2026-05-24 addendum (`postDiscordAttachments` → `client.rest.post(Routes.channelMessages…)`). Doing this first likely makes 6c and 6d moot — discord.js's REST manager already handles timeouts/retries and accepts `RawFile` buffers directly.
+   - [x] **6b.** Follow-up #1 (HIGH, attachment fire-and-forget vs persisted state) — make required attachment delivery part of the awaited send boundary; persist returned message ids alongside text ids.
+   - [x] **6c.** Follow-up #2 (MED, `withDiscordSendTimeout` doesn't abort) — folded into 6a via `AbortSignal.timeout` on the REST request.
+   - [x] **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — folded into 6a via `RawFile.data: Buffer`.
+   - [ ] **6e.** HIGH #17, `runAgentTurn` extraction across `drainJobs` / `runHeartbeat` / `runCronJob` — separate commit, follows attachment cleanup.
 7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through.
 8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Fold in:
    - Follow-up #4 (MED, persona-load tears down WS) — stash `handleEvent` in a ref so the WS effect only depends on `activeSessionKey`.

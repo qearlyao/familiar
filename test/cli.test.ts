@@ -9,6 +9,17 @@ import { describe, it } from "node:test";
 const execFileAsync = promisify(execFile);
 
 describe("CLI init", () => {
+	it("prints the package version", async () => {
+		const root = resolve(import.meta.dirname, "..");
+		const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as { version: string };
+
+		const { stdout } = await execFileAsync(process.execPath, ["--import", "tsx", "src/cli.ts", "--version"], {
+			cwd: root,
+		});
+
+		assert.equal(stdout.trim(), packageJson.version);
+	});
+
 	it("copies default skills into the workspace", async (t) => {
 		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-init-"));
 		t.after(() => rm(workspacePath, { recursive: true, force: true }));

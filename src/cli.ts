@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { copyFile, cp, mkdir } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,10 @@ const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
 const DEFAULT_WORKSPACE_PATH = resolve(homedir(), ".familiar");
 const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "backfill", "prune", "backup", "help", "--help"]);
 const RESTART_EXIT_DELAY_MS = 1500;
+
+interface PackageJson {
+	version?: unknown;
+}
 
 interface WorkspaceDirs {
 	dataDir: string;
@@ -98,6 +102,12 @@ function parseMemoryArgs(
 function isMemoryHelp(args: string[]): boolean {
 	const command = args[0];
 	return !command || command === "help" || command === "--help";
+}
+
+async function packageVersion(): Promise<string> {
+	const raw = await readFile(resolve(PROJECT_ROOT, "package.json"), "utf8");
+	const packageJson = JSON.parse(raw) as PackageJson;
+	return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 }
 
 async function initWorkspace(workspaceInput?: string): Promise<void> {
@@ -177,6 +187,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 function usage(): string {
 	return [
 		"Usage:",
+		"  familiar --version",
 		"  familiar init [workspace]",
 		"  familiar run [workspace]",
 		"  familiar memory [workspace] <subcommand>",
@@ -191,6 +202,10 @@ function usage(): string {
 
 async function main(): Promise<void> {
 	const [, , command, workspace, ...rest] = process.argv;
+	if (command === "--version" || command === "-v") {
+		console.log(await packageVersion());
+		return;
+	}
 	if (command === "init") {
 		await initWorkspace(workspace);
 		return;

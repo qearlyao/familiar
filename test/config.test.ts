@@ -365,7 +365,7 @@ api = "native-gemini"
 
 		const config = await loadConfig(workspacePath);
 
-		assert.equal(config.agent.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.agent.model, "anthropic/claude-opus-4-8");
 		assert.equal(config.agent.cacheRetention, "short");
 		assert.equal(config.discord.chunkMode, "newline");
 		assert.deepEqual(config.browser, {
@@ -391,7 +391,7 @@ api = "native-gemini"
 			api: "openrouter-images",
 			timeoutMs: 120000,
 		});
-		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-7");
+		assert.equal(config.memory.lcm.model, "anthropic/claude-opus-4-8");
 		for (const model of [config.agent.model, config.memory.lcm.model, config.imageGen.model, config.imageGen.fallbackModel]) {
 			assert.ok(model === undefined || config.models.allow.includes(model));
 		}

@@ -48,7 +48,6 @@ Run these four lenses against code you're about to write — they're the same on
 
 ## Project Rules
 
-- Add concise comments that explain the non-obvious intent, invariants, or failure mode.
 - Flexibly and proactively utilize the agent team/sub-agents to enhance work efficiency; when necessary, please review the changes made by the sub-agents.
 - Any test that creates temporary files or directories must register cleanup in the same test (`t.after(() => rm(dir, { recursive: true, force: true }))`). Prefer the helpers in `test/helpers.ts` (`createTempDataDir`, `createWorkspace`, `configWithDataDir`), which self-clean when given the node:test `t` context.
 
@@ -56,28 +55,4 @@ Run these four lenses against code you're about to write — they're the same on
 
 Start the title with a conventional header so the log is grep-able. Format: `<type>(<scope>): <subject>` — lowercase, no trailing period, under ~70 chars. Scope is optional but useful in large files (`discord`, `memory`, `web`, etc.).
 
-Allowed types:
-
-- `feat:` new user-visible feature
-- `fix:` bug fix
-- `refactor:` structural change with no behavior change
-- `perf:` performance improvement
-- `docs:` documentation only
-- `test:` test changes only
-- `chore:` tooling, deps, repo housekeeping
-
 For nontrivial changes, follow the title with a blank line and a body. Explain the WHY and any non-obvious tradeoffs — the diff already shows the WHAT. Use bullets when the change has multiple coordinated pieces.
-
-Example:
-
-```text
-refactor(discord): post attachments via client.rest, await delivery, persist ids
-
-- Switch the attachment path off raw FormData/fetch onto discord.js's
-  REST handle with RawFile, so the runtime owns retry/auth and the
-  hop stays inside the client.
-- Await delivery before persisting messageIds; never claim attachment
-  delivery that didn't happen.
-- Thread AbortSignal.timeout through the post so a stuck upload can
-  be cancelled by the heartbeat slot.
-```

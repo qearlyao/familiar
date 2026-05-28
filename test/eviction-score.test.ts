@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { scoreEvictable, tokenBag } from "../src/memory/lcm/eviction-score.js";
-import type { LcmRecordKind, LcmSourceProvenance, StoredLcmRecord } from "../src/memory/lcm/types.js";
-
-const source: LcmSourceProvenance = {
-	sourceType: "chat",
-	sourceRef: "chat:test",
-};
+import { lcmRecord as record } from "./memory-fakes.js";
 
 describe("LCM eviction scoring", () => {
 	it("scores a record with distinctive prompt overlap higher than an unrelated record", () => {
@@ -42,29 +37,3 @@ describe("LCM eviction scoring", () => {
 		assert.deepEqual(tokenBag("Rebar, lattice! x a").slice(0, 2), ["rebar", "lattice"]);
 	});
 });
-
-function record(
-	id: number,
-	kind: LcmRecordKind,
-	text: string,
-	happenedAt = `2026-05-10T00:${String(id).padStart(2, "0")}:00.000Z`,
-): StoredLcmRecord {
-	return {
-		id,
-		recordKey: `record-${id}`,
-		segmentId: "seg-a",
-		kind,
-		text,
-		parts: null,
-		happenedAt,
-		sessionId: "session-a",
-		channelKey: "web-web-room",
-		channelId: "room",
-		jobId: null,
-		source,
-		attachments: null,
-		metadata: null,
-		createdAt: id,
-		updatedAt: id,
-	};
-}

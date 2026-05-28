@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
-import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
+import { FakeEmbeddingProvider } from "./memory-fakes.js";
 
 async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-chunk-indexer-"));
@@ -21,35 +21,6 @@ function openStore(path: string, dimensions = 3): MemoryIndexStore {
 		embeddingModel: "fake-embedding",
 		embeddingDimensions: dimensions,
 	});
-}
-
-class FakeEmbeddingProvider implements EmbeddingProvider {
-	readonly api = "fake";
-	readonly provider = "fake";
-	readonly model = "fake-embedding";
-	readonly dimensions: number;
-	readonly batches: EmbeddingInput[][] = [];
-
-	constructor(dimensions = 3) {
-		this.dimensions = dimensions;
-	}
-
-	async embed(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-		this.batches.push(inputs);
-		return inputs.map((input) => this.vectorFor(input));
-	}
-
-	async embedOne(input: EmbeddingInput): Promise<Float32Array> {
-		const [embedding] = await this.embed([input]);
-		if (!embedding) throw new Error("missing embedding");
-		return embedding;
-	}
-
-	private vectorFor(input: EmbeddingInput): Float32Array {
-		const text = typeof input === "string" ? input : input.parts.map((part) => ("text" in part ? part.text : "")).join("");
-		const values = Array.from({ length: this.dimensions }, (_, index) => text.length + index);
-		return new Float32Array(values);
-	}
 }
 
 describe("ChunkIndexer", () => {

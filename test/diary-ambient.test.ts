@@ -7,35 +7,8 @@ import { AmbientDiaryInjector } from "../src/memory/diary/ambient-injector.js";
 import { __memoryServiceTest } from "../src/memory/service.js";
 import { retrieveAmbientDiary } from "../src/memory/diary/index.js";
 import type { EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
-import {
-	type MemoryRetrievalSearchOptions,
-	type MemoryRetrievalStore,
-} from "../src/memory/index/retrieval.js";
-import type { MemorySearchHit, StoredMemoryChunk } from "../src/memory/index/store.js";
-
-class FakeStore implements MemoryRetrievalStore {
-	readonly lexicalCorpora: Array<string | undefined> = [];
-	readonly semanticCorpora: Array<string | undefined> = [];
-
-	constructor(
-		private readonly lexicalHits: MemorySearchHit[],
-		private readonly semanticHitsByCorpus: Map<string | undefined, MemorySearchHit[]>,
-	) {}
-
-	searchLexical(_query: string, options: number | MemoryRetrievalSearchOptions = {}): MemorySearchHit[] {
-		const normalized = normalizeSearchOptions(options);
-		this.lexicalCorpora.push(normalized.corpus);
-		return this.lexicalHits
-			.filter((hit) => !normalized.corpus || hit.chunk.corpus === normalized.corpus)
-			.slice(0, normalized.limit);
-	}
-
-	searchSemantic(_query: Float32Array, options: number | MemoryRetrievalSearchOptions = {}): MemorySearchHit[] {
-		const normalized = normalizeSearchOptions(options);
-		this.semanticCorpora.push(normalized.corpus);
-		return (this.semanticHitsByCorpus.get(normalized.corpus) ?? []).slice(0, normalized.limit);
-	}
-}
+import type { MemorySearchHit } from "../src/memory/index/store.js";
+import { FakeRetrievalStore as FakeStore, memoryHit } from "./memory-fakes.js";
 
 class FakeEmbeddingProvider {
 	readonly queries: string[] = [];
@@ -307,27 +280,7 @@ function hit(
 	score: number,
 	metadata: Record<string, unknown>,
 ): MemorySearchHit {
-	return {
-		id,
-		score,
-		chunk: {
-			id,
-			contentHash: `hash-${id}`,
-			corpus,
-			sourceId,
-			sourceRef: `ref-${sourceId}`,
-			chunkIndex: 0,
-			sources: [{ corpus, sourceId, sourceRef: `ref-${sourceId}`, chunkIndex: 0 }],
-			text,
-			snippet: text,
-			tokenCount: null,
-			metadata,
-			embeddingModel: "fake",
-			embeddingDimensions: 3,
-			createdAt: 1_775_779_200,
-			updatedAt: 1_775_779_200,
-		} satisfies StoredMemoryChunk,
-	};
+	return memoryHit(id, corpus, sourceId, text, score, metadata, 1_775_779_200);
 }
 
 function ambientHit(base: MemorySearchHit, snippet: string): Awaited<ReturnType<typeof retrieveAmbientDiary>>[number] {
@@ -346,9 +299,4 @@ function ambientHit(base: MemorySearchHit, snippet: string): Awaited<ReturnType<
 			recency: 0,
 		},
 	};
-}
-
-function normalizeSearchOptions(options: number | MemoryRetrievalSearchOptions): { limit: number; corpus?: string } {
-	if (typeof options === "number") return { limit: options };
-	return options.corpus ? { limit: options.limit ?? 10, corpus: options.corpus } : { limit: options.limit ?? 10 };
 }

@@ -6,12 +6,12 @@ import { describe, it } from "node:test";
 
 import type { ChatLogRecord } from "../src/chat-log.js";
 import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
-import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { backfillFromChatLogs } from "../src/memory/lcm/backfill.js";
 import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import { configWithDataDir } from "./helpers.js";
+import { FakeEmbeddingProvider } from "./memory-fakes.js";
 
 const base = {
 	ts: "2026-05-01T01:00:00.000Z",
@@ -19,26 +19,6 @@ const base = {
 	scope: "web",
 	channelId: "test-channel",
 } as const;
-
-class FakeEmbeddingProvider implements EmbeddingProvider {
-	readonly api = "fake";
-	readonly provider = "fake";
-	readonly model = "fake-embedding";
-	readonly dimensions = 3;
-
-	async embed(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-		return inputs.map((input) => {
-			const text = typeof input === "string" ? input : input.parts.map((part) => ("text" in part ? part.text : "")).join("");
-			return new Float32Array([text.length, text.length + 1, text.length + 2]);
-		});
-	}
-
-	async embedOne(input: EmbeddingInput): Promise<Float32Array> {
-		const [embedding] = await this.embed([input]);
-		if (!embedding) throw new Error("missing embedding");
-		return embedding;
-	}
-}
 
 async function tempDir(prefix: string): Promise<string> {
 	return mkdtemp(resolve(tmpdir(), prefix));

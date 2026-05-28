@@ -12,6 +12,7 @@ import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { contentText, renderMessages, withMemoryService, zeroUsage } from "./memory-fakes.js";
 
 async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await createTempDataDir(t);
@@ -119,8 +120,7 @@ describe("MemoryService", () => {
 		}
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config);
-			try {
+			await withMemoryService(config, async (service) => {
 				const [message] = await service.transformContext([
 					{ role: "user", content: "blue lantern", timestamp: Date.now() },
 				]);
@@ -128,9 +128,7 @@ describe("MemoryService", () => {
 				assert.match(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
 				assert.match(typeof message?.content === "string" ? message.content : "", /<\/injected_memory>/);
 				assert.match(typeof message?.content === "string" ? message.content : "", /blue lantern/);
-			} finally {
-				service.close();
-			}
+			});
 		});
 	});
 
@@ -160,8 +158,7 @@ describe("MemoryService", () => {
 			});
 		}) as typeof fetch;
 		try {
-			const service = createMemoryService(config);
-			try {
+			await withMemoryService(config, async (service) => {
 				const [message] = await service.transformContext(
 					[{ role: "user", content: "heartbeat lantern", timestamp: Date.now() }],
 					undefined,
@@ -170,9 +167,7 @@ describe("MemoryService", () => {
 				assert.equal(message?.role, "user");
 				assert.doesNotMatch(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
 				assert.equal(embeddingCalls, 0);
-			} finally {
-				service.close();
-			}
+			});
 		} finally {
 			globalThis.fetch = previousFetch;
 		}
@@ -246,7 +241,7 @@ describe("MemoryService", () => {
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config);
+			const service = MemoryService.createWithoutRuntime(config);
 			const log = memoryLog();
 			const runtime = await ConversationRuntime.connect({
 				channelKey: "web-web-room",
@@ -260,21 +255,16 @@ describe("MemoryService", () => {
 					authorId: "owner",
 					text: "Remember the compact toolbar.",
 				});
-					await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
+				await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
 
-				const lcmStore = LcmStore.open(config);
-				try {
-					const records = lcmStore.listRecords();
-					assert.deepEqual(
-						records.map((record) => record.kind),
-						["user", "assistant", "boundary"],
-					);
-					assert.equal(lcmStore.listSegments().some((segment) => segment.status === "closed"), true);
-					} finally {
-					lcmStore.close();
-				}
+				const records = service.lcmStore.listRecords();
+				assert.deepEqual(
+					records.map((record) => record.kind),
+					["user", "assistant", "boundary"],
+				);
+				assert.equal(service.lcmStore.listSegments().some((segment) => segment.status === "closed"), true);
 			} finally {
 				unsubscribe();
 				await runtime.disconnect();
@@ -290,7 +280,7 @@ describe("MemoryService", () => {
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: -1 } },
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config);
+			const service = MemoryService.createWithoutRuntime(config);
 			const log = memoryLog();
 			const runtime = await ConversationRuntime.connect({
 				channelKey: "web-web-room",
@@ -326,12 +316,7 @@ describe("MemoryService", () => {
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
 
-				const lcmStoreAfterReset = LcmStore.open(config);
-				try {
-					assert.equal(lcmStoreAfterReset.listContextItems("web-web-room").length, 0);
-				} finally {
-					lcmStoreAfterReset.close();
-				}
+				assert.equal(service.lcmStore.listContextItems("web-web-room").length, 0);
 			} finally {
 				unsubscribe();
 				await runtime.disconnect();
@@ -415,7 +400,7 @@ describe("MemoryService", () => {
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config);
+			const service = MemoryService.createWithoutRuntime(config);
 			const log = memoryLog();
 			const runtime = await ConversationRuntime.connect({
 				channelKey: "web-web-room",
@@ -441,12 +426,7 @@ describe("MemoryService", () => {
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
 
-				const lcmStore = LcmStore.open(config);
-				try {
-					assert.deepEqual(lcmStore.listRecords(), []);
-				} finally {
-					lcmStore.close();
-				}
+				assert.deepEqual(service.lcmStore.listRecords(), []);
 
 				memoryStore = MemoryIndexStore.open(config);
 				try {
@@ -487,8 +467,7 @@ describe("MemoryService", () => {
 			},
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer });
-			try {
+			await withMemoryService(config, { summarizer }, async (service) => {
 				const messages = [
 					{ role: "user" as const, content: "old detail alpha", timestamp: 1 },
 					{ role: "assistant" as const, content: [{ type: "text" as const, text: "old detail beta" }], api: "test", provider: "test", model: "test", usage: zeroUsage(), stopReason: "stop" as const, timestamp: 2 },
@@ -513,28 +492,21 @@ describe("MemoryService", () => {
 					sessionId: "session-a",
 					model: { contextWindow: 10_000 } as any,
 				});
-					assert.equal(calls, 1);
+				assert.equal(calls, 1);
 				assert.deepEqual(second.map((message) => message.role), first.map((message) => message.role));
 
-				const lcmStore = LcmStore.open(config);
-				try {
-					const summaries = lcmStore.listSummaries();
-					assert.equal(summaries.length, 1);
-					assert.match(summaries[0]?.text ?? "", /old alpha and beta/);
-					assert.ok(summaries[0]?.coversFromRecordId);
-					assert.ok(summaries[0]?.coversToRecordId);
-					assert.ok(lcmStore.getRecord(summaries[0]?.coversFromRecordId as number));
-					assert.ok(lcmStore.getRecord(summaries[0]?.coversToRecordId as number));
-					const sources = lcmStore.getSummarySources(summaries[0]?.id as number);
-					assert.equal(sources.length, 2);
-					assert.equal(sources.every((source) => source.recordId !== null), true);
-					for (const source of sources) assert.ok(lcmStore.getRecord(source.recordId as number));
-				} finally {
-					lcmStore.close();
-				}
-			} finally {
-				service.close();
-			}
+				const summaries = service.lcmStore.listSummaries();
+				assert.equal(summaries.length, 1);
+				assert.match(summaries[0]?.text ?? "", /old alpha and beta/);
+				assert.ok(summaries[0]?.coversFromRecordId);
+				assert.ok(summaries[0]?.coversToRecordId);
+				assert.ok(service.lcmStore.getRecord(summaries[0]?.coversFromRecordId as number));
+				assert.ok(service.lcmStore.getRecord(summaries[0]?.coversToRecordId as number));
+				const sources = service.lcmStore.getSummarySources(summaries[0]?.id as number);
+				assert.equal(sources.length, 2);
+				assert.equal(sources.every((source) => source.recordId !== null), true);
+				for (const source of sources) assert.ok(service.lcmStore.getRecord(source.recordId as number));
+			});
 		});
 	});
 
@@ -555,14 +527,13 @@ describe("MemoryService", () => {
 			},
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, {
+			await withMemoryService(config, {
 				summarizer: {
 					async summarizeLeaf() {
 						throw new Error("budget guard should not need summarization");
 					},
 				},
-			});
-			try {
+			}, async (service) => {
 				const messages = [
 					{ role: "user" as const, content: "old alpha ".repeat(200), timestamp: 1 },
 					{ role: "user" as const, content: "old beta ".repeat(200), timestamp: 2 },
@@ -579,9 +550,7 @@ describe("MemoryService", () => {
 				assert.doesNotMatch(rendered, /old alpha/);
 				assert.doesNotMatch(rendered, /old beta/);
 				assert.match(rendered, /fresh gamma/);
-			} finally {
-				service.close();
-			}
+			});
 		});
 	});
 
@@ -598,8 +567,7 @@ describe("MemoryService", () => {
 		};
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer, now: () => now });
-			try {
+			await withMemoryService(config, { summarizer, now: () => now }, async (service) => {
 				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
 					sessionKey: "room-hot-defer",
 					sessionId: "session-a",
@@ -613,16 +581,9 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 0);
 
-				const store = LcmStore.open(config);
-				try {
-					assert.equal(store.listSummaries().length, 0);
-					assert.ok((store.getSessionState("room-hot-defer")?.compactionDebt ?? 0) > 0);
-				} finally {
-					store.close();
-				}
-			} finally {
-				service.close();
-			}
+				assert.equal(service.lcmStore.listSummaries().length, 0);
+				assert.ok((service.lcmStore.getSessionState("room-hot-defer")?.compactionDebt ?? 0) > 0);
+			});
 		});
 	});
 
@@ -648,8 +609,7 @@ describe("MemoryService", () => {
 		};
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer, now: () => now });
-			try {
+			await withMemoryService(config, { summarizer, now: () => now }, async (service) => {
 				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
 					sessionKey: "room-cold-service",
 					sessionId: "session-a",
@@ -671,16 +631,9 @@ describe("MemoryService", () => {
 				});
 					assert.equal(calls, 1);
 
-				const store = LcmStore.open(config);
-				try {
-				assert.equal(store.listSummaries().length, 1);
-				assert.equal(store.getSessionState("room-cold-service")?.compactionDebt, 0);
-				} finally {
-					store.close();
-				}
-			} finally {
-				service.close();
-			}
+				assert.equal(service.lcmStore.listSummaries().length, 1);
+				assert.equal(service.lcmStore.getSessionState("room-cold-service")?.compactionDebt, 0);
+			});
 		});
 	});
 
@@ -707,8 +660,7 @@ describe("MemoryService", () => {
 		};
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer, now: () => now });
-			try {
+			await withMemoryService(config, { summarizer, now: () => now }, async (service) => {
 				await service.transformContext([{ role: "user" as const, content: "warm cache tail", timestamp: 1 }], undefined, {
 					sessionKey: "room-critical-overflow",
 					sessionId: "session-a",
@@ -722,16 +674,12 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 1);
 
-				const store = LcmStore.open(config);
-				try {
-					assert.equal(store.listSummaries().length, 1);
-					assert.ok((store.getSessionState("room-critical-overflow")?.compactionDebt ?? 0) < config.memory.lcm.criticalOverflowTokens);
-				} finally {
-					store.close();
-				}
-			} finally {
-				service.close();
-			}
+				assert.equal(service.lcmStore.listSummaries().length, 1);
+				assert.ok(
+					(service.lcmStore.getSessionState("room-critical-overflow")?.compactionDebt ?? 0) <
+						config.memory.lcm.criticalOverflowTokens,
+				);
+			});
 		});
 	});
 
@@ -1963,32 +1911,6 @@ function memoryLog() {
 		async acquire() {},
 		async release() {},
 	};
-}
-
-function zeroUsage() {
-	return {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
-}
-
-function contentText(message: unknown): string {
-	if (!message) return "";
-	const content = (message as { content?: unknown }).content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content
-		.filter((item): item is { type: "text"; text: string } => item?.type === "text")
-		.map((item) => item.text)
-		.join("\n");
-}
-
-function renderMessages(messages: unknown[]): string {
-	return messages.map(contentText).join("\n");
 }
 
 function lcmCompactionConfig(baseConfig: Awaited<ReturnType<typeof memoryConfig>>) {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
 
 import {
 	createAgentMessageFingerprint,
@@ -14,16 +13,8 @@ import {
 	selectLcmCompactionCandidatePromptAware,
 } from "../src/memory/lcm/context.js";
 import { buildCondensedSummaryPrompt, buildLeafSummaryPrompt, capSummaryText } from "../src/memory/lcm/summarizer.js";
-import type {
-	LcmRecordKind,
-	LcmSourceProvenance,
-	StoredLcmRecord,
-} from "../src/memory/lcm/types.js";
-
-const source: LcmSourceProvenance = {
-	sourceType: "chat",
-	sourceRef: "chat:test",
-};
+import type { StoredLcmRecord } from "../src/memory/lcm/types.js";
+import { assistantMessage, lcmRecord as record, zeroUsage } from "./memory-fakes.js";
 
 describe("LCM context helpers", () => {
 	it("uses companion-oriented prompts and depth-aware condensed prompts", () => {
@@ -313,67 +304,11 @@ describe("LCM context helpers", () => {
 	});
 });
 
-function record(
-	id: number,
-	kind: LcmRecordKind,
-	text: string,
-	happenedAt = `2026-05-10T00:${String(id).padStart(2, "0")}:00.000Z`,
-): StoredLcmRecord {
-	return {
-		id,
-		recordKey: `record-${id}`,
-		segmentId: "seg-a",
-		kind,
-		text,
-		parts: null,
-		happenedAt,
-		sessionId: "session-a",
-		channelKey: "web-web-room",
-		channelId: "room",
-		jobId: null,
-		source,
-		attachments: null,
-		metadata: null,
-		createdAt: id,
-		updatedAt: id,
-	};
-}
-
 function rawItem(record: StoredLcmRecord, message: AgentMessage) {
 	return {
 		id: `item-${record.id}`,
 		message,
 		record,
 		tokens: estimateAgentMessageTokens(message),
-	};
-}
-
-function assistantMessage(content: AssistantMessage["content"]): AgentMessage {
-	return {
-		role: "assistant",
-		content,
-		api: "test",
-		provider: "test",
-		model: "test",
-		usage: zeroUsage(),
-		stopReason: "stop",
-		timestamp: 2,
-	};
-}
-
-function zeroUsage() {
-	return {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			total: 0,
-		},
 	};
 }

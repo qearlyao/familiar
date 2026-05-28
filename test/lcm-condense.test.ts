@@ -11,18 +11,14 @@ import { LcmContextTransformer } from "../src/memory/lcm/context-transformer.js"
 import { LcmSegmentManager } from "../src/memory/lcm/segment-manager.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
-import type { LcmSummaryParentSnapshot, LcmSourceProvenance } from "../src/memory/lcm/types.js";
+import type { LcmSummaryParentSnapshot } from "../src/memory/lcm/types.js";
+import { renderMessages, testLcmSource as source } from "./memory-fakes.js";
 
 async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-lcm-condense-"));
 	t.after(() => rm(dir, { recursive: true, force: true }));
 	return resolve(dir, "memories", "lcm", "lcm.sqlite");
 }
-
-const source: LcmSourceProvenance = {
-	sourceType: "chat",
-	sourceRef: "chat:test",
-};
 
 describe("LCM condense", () => {
 	it("drives 4 leaf-summary-triggering compactions in one segment; asserts a depth-2 summary is auto-created with 4 leaves as parents and covering range = union of child ranges", async (t) => {
@@ -320,7 +316,7 @@ describe("LCM condense", () => {
 				sessionId: "session-runtime",
 				model: { contextWindow: 10_000 } as any,
 			});
-			const text = rendered.map(contentText).join("\n");
+			const text = renderMessages(rendered);
 
 			assert.match(text, /runtime depth two summary/);
 			assert.doesNotMatch(text, /leaf summary for old detail 0[\s\S]*leaf summary for old detail 3/);
@@ -472,7 +468,7 @@ describe("LCM condense", () => {
 					model: { contextWindow: 10_000 } as any,
 				},
 			);
-			const text = afterRestart.map(contentText).join("\n");
+			const text = renderMessages(afterRestart);
 
 			assert.match(text, /condensed coverage survives restart/);
 			for (let index = 0; index < 4; index += 1) assert.doesNotMatch(text, new RegExp(`old detail ${index}`));
@@ -501,14 +497,4 @@ function nullMemoryStore() {
 			return 0;
 		},
 	} as any;
-}
-
-function contentText(message: AgentMessage): string {
-	if (!("content" in message)) return "";
-	if (typeof message.content === "string") return message.content;
-	if (!Array.isArray(message.content)) return "";
-	return message.content
-		.map((part) => (part.type === "text" ? part.text : ""))
-		.filter(Boolean)
-		.join("\n");
 }

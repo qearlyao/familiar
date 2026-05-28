@@ -1,36 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-	retrieveMemory,
-	type MemoryRetrievalSearchOptions,
-	type MemoryRetrievalStore,
-} from "../src/memory/index/retrieval.js";
-import type { MemorySearchHit, StoredMemoryChunk } from "../src/memory/index/store.js";
+import { retrieveMemory } from "../src/memory/index/retrieval.js";
+import { FakeRetrievalStore as FakeStore, memoryHit as hit } from "./memory-fakes.js";
 
-class FakeStore implements MemoryRetrievalStore {
-	readonly lexicalCorpora: Array<string | undefined> = [];
-	readonly semanticCorpora: Array<string | undefined> = [];
-
-	constructor(
-		private readonly lexicalHits: MemorySearchHit[],
-		private readonly semanticHitsByCorpus: Map<string | undefined, MemorySearchHit[]>,
-	) {}
-
-	searchLexical(_query: string, options: number | MemoryRetrievalSearchOptions = {}): MemorySearchHit[] {
-		const normalized = normalizeSearchOptions(options);
-		this.lexicalCorpora.push(normalized.corpus);
-		return this.lexicalHits
-			.filter((hit) => !normalized.corpus || hit.chunk.corpus === normalized.corpus)
-			.slice(0, normalized.limit);
-	}
-
-	searchSemantic(_query: Float32Array, options: number | MemoryRetrievalSearchOptions = {}): MemorySearchHit[] {
-		const normalized = normalizeSearchOptions(options);
-		this.semanticCorpora.push(normalized.corpus);
-		return (this.semanticHitsByCorpus.get(normalized.corpus) ?? []).slice(0, normalized.limit);
-	}
-}
 
 class FakeEmbeddingProvider {
 	readonly queries: string[] = [];
@@ -387,51 +360,3 @@ describe("retrieveMemory", () => {
 		assert.deepEqual(provider.queries, []);
 	});
 });
-
-function hit(
-	id: number,
-	corpus: string,
-	sourceId: string,
-	text: string,
-	score: number,
-	metadata: Record<string, unknown> | null = null,
-	createdAt = id,
-): MemorySearchHit {
-	return {
-		id,
-		score,
-		chunk: chunk(id, corpus, sourceId, text, metadata, createdAt),
-	};
-}
-
-function chunk(
-	id: number,
-	corpus: string,
-	sourceId: string,
-	text: string,
-	metadata: Record<string, unknown> | null,
-	createdAt: number,
-): StoredMemoryChunk {
-	return {
-		id,
-		contentHash: `hash-${id}`,
-		corpus,
-		sourceId,
-		sourceRef: `ref-${sourceId}`,
-		chunkIndex: 0,
-		sources: [{ corpus, sourceId, sourceRef: `ref-${sourceId}`, chunkIndex: 0 }],
-		text,
-		snippet: text,
-		tokenCount: null,
-		metadata,
-		embeddingModel: "fake",
-		embeddingDimensions: 3,
-		createdAt,
-		updatedAt: id,
-	};
-}
-
-function normalizeSearchOptions(options: number | MemoryRetrievalSearchOptions): { limit: number; corpus?: string } {
-	if (typeof options === "number") return { limit: options };
-	return options.corpus ? { limit: options.limit ?? 10, corpus: options.corpus } : { limit: options.limit ?? 10 };
-}

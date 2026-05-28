@@ -7,32 +7,12 @@ import { describe, it } from "node:test";
 import Database from "better-sqlite3";
 
 import { configWithDataDir } from "./helpers.js";
+import { FakeEmbeddingProvider } from "./memory-fakes.js";
 import { applyDoctorFixes, runDoctor } from "../src/memory/doctor.js";
-import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
 import { lcmRecordIndexSourceId } from "../src/memory/lcm/store.js";
 import { MemoryService } from "../src/memory/service.js";
 import { __memoryOperatorTest } from "../src/memory/operator.js";
-
-class FakeEmbeddingProvider implements EmbeddingProvider {
-	readonly api = "fake";
-	readonly provider = "fake";
-	readonly model = "fake-embedding";
-	readonly dimensions = 3;
-
-	async embed(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-		return inputs.map((input) => {
-			const text = typeof input === "string" ? input : input.parts.map((part) => ("text" in part ? part.text : "")).join("");
-			return new Float32Array([text.length, text.length + 1, text.length + 2]);
-		});
-	}
-
-	async embedOne(input: EmbeddingInput): Promise<Float32Array> {
-		const [embedding] = await this.embed([input]);
-		if (!embedding) throw new Error("missing embedding");
-		return embedding;
-	}
-}
 
 async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-doctor-"));

@@ -1,7 +1,7 @@
 import { createReadStream, existsSync } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Config } from "../config.js";
@@ -9,7 +9,7 @@ import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "
 import { sendText } from "./http.js";
 
 function getProjectRoot(): string {
-	return resolve(fileURLToPath(import.meta.url), "../..");
+	return resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
 function mimeType(path: string): string {

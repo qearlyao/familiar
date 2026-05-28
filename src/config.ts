@@ -1,26 +1,65 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
-
-import { parseModelRef, resolveProviderSetting } from "./models.js";
+import {
+	BROWSER_BACKENDS,
+	BROWSER_WINDOW_MODES,
+	CACHE_RETENTIONS,
+	DISCORD_CHANNEL_TRIGGERS,
+	DISCORD_CHUNK_MODES,
+	DISCORD_DISPATCH_MODES,
+	DISCORD_REPLY_MODES,
+	IMAGE_GEN_APIS,
+	MEDIA_UNDERSTANDING_PROVIDERS,
+	MEMORY_EMBEDDING_FORMATS,
+	THINKING_LEVELS,
+	TTS_PROVIDERS,
+	WEB_AUTH_MODES,
+} from "./config/enums.js";
+import { interpolateValue } from "./config/interpolate.js";
+import { maybeParseProviderModelRef, parseProviderModelRef } from "./config/model-refs.js";
+import {
+	assertKnownKeys,
+	readBoolean,
+	readConfigString,
+	readFraction,
+	readInteger,
+	readIntegerInRange,
+	readNumberInRange,
+	readOptionalConfigString,
+	readOptionalInteger,
+	readOptionalString,
+	readPositiveNumber,
+	readString,
+	readStringArray,
+	readStringRecord,
+	resolveWorkspacePath,
+} from "./config/readers.js";
+import { defaultBrowserAllowedSites, readCronJobs, readPromptOverrides } from "./config/sections.js";
+import type { Config } from "./config/types.js";
+import { resolveProviderSetting } from "./models.js";
 import { readEnum } from "./util/guards.js";
 
-export type CacheRetention = "none" | "short" | "long";
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export type DiscordReplyMode = "plain" | "reply";
-export type DiscordChunkMode = "simple" | "paragraph" | "newline";
-export type DiscordDispatchMode = "steer" | "queue" | "collect";
-export type DiscordChannelTrigger = "mention" | "always";
-export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
-export type CronDeliveryMode = "queue" | "follow_up";
-export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
-export type TtsProvider = "elevenlabs";
-export type ImageGenApi = "openrouter-images";
-export type MediaUnderstandingProvider = "groq" | "google";
-export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
-export type BrowserBackend = "opencli" | "browser-harness";
+export type {
+	BrowserBackend,
+	CacheRetention,
+	Config,
+	CronDeliveryMode,
+	CronFrequency,
+	DiscordChannelTrigger,
+	DiscordChunkMode,
+	DiscordDispatchMode,
+	DiscordReplyMode,
+	ImageGenApi,
+	MediaUnderstandingProvider,
+	MemoryEmbeddingFormat,
+	ThinkingLevel,
+	TtsProvider,
+	TtsVoiceSettings,
+	WebAuthMode,
+} from "./config/types.js";
 
 const loggedConfigWarnings = new Set<string>();
 
@@ -32,474 +71,10 @@ const DEFAULT_MEMORY_EMBEDDING_API_KEY_ENVS: Record<string, string> = {
 	google: "GEMINI_API_KEY",
 };
 
-export interface TtsVoiceSettings {
-	stability: number;
-	similarityBoost: number;
-	style: number;
-	speed: number;
-	useSpeakerBoost: boolean;
-}
-
-export interface Config {
-	workspacePath: string;
-	discord: {
-		token: string;
-		ownerId: string;
-		allowedChannels: string[];
-		replyMode: DiscordReplyMode;
-		chunkMode: DiscordChunkMode;
-		dmMode: DiscordDispatchMode;
-		channelMode: DiscordDispatchMode;
-		channelTrigger: DiscordChannelTrigger;
-		collectDebounceMs: number;
-		allowBotMessages: boolean;
-	};
-	web: {
-		port: number;
-		authMode: WebAuthMode;
-		bearerToken?: string;
-		totpSecret?: string;
-		bindAddress: string;
-	};
-	browser: {
-		enabled: boolean;
-		backend: BrowserBackend;
-		opencliCommand: string;
-		harnessCommand: string;
-		session: string;
-		profile?: string;
-		windowMode: "foreground" | "background";
-		timeoutMs: number;
-		maxOutputChars: number;
-		readWrite: boolean;
-		allowedSites: Record<string, true>;
-	};
-	agent: {
-		model: string;
-		api?: string;
-		modelId?: string;
-		baseUrl?: string;
-		apiKeyEnv?: string;
-		provider?: string;
-		cacheRetention: CacheRetention;
-		thinkingLevel: ThinkingLevel;
-	};
-	heartbeat: {
-		enabled: boolean;
-		idleThresholdMs: number;
-		intervalMs: number;
-	};
-	cron: {
-		enabled: boolean;
-		pollMs: number;
-		jobs: Array<{
-			id: string;
-			enabled: boolean;
-			frequency: CronFrequency;
-			deliveryMode: CronDeliveryMode;
-			prompt: string;
-			runAt?: string;
-			time?: string;
-			minute?: number;
-			weekday?: number;
-			day?: number;
-		}>;
-	};
-	models: {
-		allow: string[];
-		baseUrls: Record<string, string>;
-		apiKeyEnvs: Record<string, string>;
-	};
-	tts: {
-		provider: TtsProvider;
-		apiKeyEnv: string;
-		voiceId: string;
-		modelId: string;
-		outputFormat: string;
-		maxInputChars: number;
-		voiceSettings: TtsVoiceSettings;
-	};
-	imageGen: {
-		enabled: boolean;
-		model: string;
-		fallbackModel?: string;
-		api: ImageGenApi;
-		timeoutMs: number;
-	};
-	mediaUnderstanding: {
-		audio: {
-			provider: MediaUnderstandingProvider;
-			model: string;
-			apiKeyEnv: string;
-		};
-		video: {
-			provider: MediaUnderstandingProvider;
-			model: string;
-			apiKeyEnv: string;
-		};
-	};
-	persona: {
-		soul: string;
-		user: string;
-		contact: string;
-		memory: string;
-		inner: string;
-	};
-	media: {
-		generatedRetentionDays: number;
-	};
-	data: {
-		chat: {
-			retentionDays: number;
-		};
-		transcripts: {
-			retentionDays: number;
-		};
-		payloads: {
-			retentionDays: number;
-		};
-	};
-	workspace: {
-		dataDir: string;
-	};
-	memory: {
-		rootDir: string;
-		indexDir: string;
-		lcmDir: string;
-		diariesDir: string;
-		archiveDir: string;
-		embedding: {
-			format?: MemoryEmbeddingFormat;
-			api: MemoryEmbeddingFormat;
-			provider: string;
-			model: string;
-			baseUrl: string;
-			apiKeyEnv: string;
-			dimensions: number;
-			batchSize: number;
-		};
-		ambient: {
-			enabled: boolean;
-			topK: number;
-			minQueryLength: number;
-			throttleSeconds: number;
-			weightSimilarity: number;
-			weightValence: number;
-			weightRecency: number;
-			weightIntensity: number;
-		};
-		lcm: {
-			enabled: boolean;
-			model: string;
-			provider: string;
-			modelId: string;
-			baseUrl?: string;
-			apiKeyEnv?: string;
-			contextThreshold: number;
-			freshTailCount: number;
-			freshTailMaxTokens?: number;
-			leafChunkTokens: number;
-			leafTargetTokens: number;
-			promptAwareEvictionEnabled: boolean;
-			condenseGroupSize: number;
-			maxSummaryDepth: number;
-			newSessionRetainDepth: number;
-			maxRounds: number;
-			cacheTtlMs: number;
-			cacheTouchSlackMs: number;
-			criticalOverflowTokens: number;
-			timeoutMs: number;
-			prompt?: string;
-			promptPath?: string;
-			systemPrompt?: string;
-			systemPromptPath?: string;
-		};
-	};
-}
-
-function interpolateEnv(value: string): string {
-	return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_match, name: string, fallback?: string) => {
-		return process.env[name] ?? fallback ?? "";
-	});
-}
-
-function interpolateValue(value: unknown): unknown {
-	if (typeof value === "string") return interpolateEnv(value);
-	if (Array.isArray(value)) return value.map(interpolateValue);
-	if (value && typeof value === "object") {
-		return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, interpolateValue(child)]));
-	}
-	return value;
-}
-
-function readString(value: unknown, path: string): string {
-	if (typeof value !== "string" || value.trim() === "") {
-		throw new Error(`Missing required config value: ${path}`);
-	}
-	return value;
-}
-
-function readOptionalString(value: unknown, fallback: string): string {
-	return typeof value === "string" && value.trim() !== "" ? value : fallback;
-}
-
-function readOptionalConfigString(value: unknown, path: string): string | undefined {
-	if (value === undefined) return undefined;
-	if (typeof value !== "string") throw new Error(`Config value ${path} must be a string`);
-	const trimmed = value.trim();
-	return trimmed ? trimmed : undefined;
-}
-
-function readConfigString(value: unknown, fallback: string, path: string): string {
-	const read = readOptionalConfigString(value, path);
-	return read ?? fallback;
-}
-
-function readStringArray(value: unknown, path: string): string[] {
-	if (value === undefined) return [];
-	if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-		throw new Error(`Config value must be a string array: ${path}`);
-	}
-	return value;
-}
-
-function readStringRecord(value: unknown, path: string): Record<string, string> {
-	if (value === undefined) return {};
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new Error(`Config value must be a string map: ${path}`);
-	}
-	const entries = Object.entries(value);
-	for (const [key, child] of entries) {
-		if (typeof child !== "string") throw new Error(`Config value must be a string map: ${path}.${key}`);
-	}
-	return Object.fromEntries(entries) as Record<string, string>;
-}
-
 function warnOnce(key: string, message: string): void {
 	if (loggedConfigWarnings.has(key)) return;
 	loggedConfigWarnings.add(key);
 	console.warn(message);
-}
-
-const CACHE_RETENTIONS = ["none", "short", "long"] as const satisfies readonly CacheRetention[];
-const THINKING_LEVELS = [
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-] as const satisfies readonly ThinkingLevel[];
-const DISCORD_REPLY_MODES = ["plain", "reply"] as const satisfies readonly DiscordReplyMode[];
-const DISCORD_CHUNK_MODES = ["simple", "paragraph", "newline"] as const satisfies readonly DiscordChunkMode[];
-const DISCORD_DISPATCH_MODES = ["steer", "queue", "collect"] as const satisfies readonly DiscordDispatchMode[];
-const DISCORD_CHANNEL_TRIGGERS = ["mention", "always"] as const satisfies readonly DiscordChannelTrigger[];
-const CRON_FREQUENCIES = ["once", "hourly", "daily", "weekly", "monthly"] as const satisfies readonly CronFrequency[];
-const CRON_DELIVERY_MODES = ["queue", "follow_up"] as const satisfies readonly CronDeliveryMode[];
-const WEB_AUTH_MODES = ["tailscale-only", "bearer", "public-2fa"] as const satisfies readonly WebAuthMode[];
-const TTS_PROVIDERS = ["elevenlabs"] as const satisfies readonly TtsProvider[];
-const IMAGE_GEN_APIS = ["openrouter-images"] as const satisfies readonly ImageGenApi[];
-const MEDIA_UNDERSTANDING_PROVIDERS = ["groq", "google"] as const satisfies readonly MediaUnderstandingProvider[];
-const MEMORY_EMBEDDING_FORMATS = ["gemini", "openai", "voyage"] as const satisfies readonly MemoryEmbeddingFormat[];
-const BROWSER_BACKENDS = ["opencli", "browser-harness"] as const satisfies readonly BrowserBackend[];
-const BROWSER_WINDOW_MODES = ["foreground", "background"] as const;
-
-function readBoolean(value: unknown, fallback: boolean, path: string): boolean {
-	if (value === undefined) return fallback;
-	if (typeof value === "boolean") return value;
-	throw new Error(`Config value ${path} must be a boolean`);
-}
-
-function readInteger(value: unknown, fallback: number, path: string, min = 0): number {
-	if (value === undefined) return fallback;
-	if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
-		throw new Error(`Config value ${path} must be an integer >= ${min}`);
-	}
-	return value;
-}
-
-function readNumberInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
-	if (value === undefined) return fallback;
-	if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
-		throw new Error(`Config value ${path} must be a number between ${min} and ${max}`);
-	}
-	return value;
-}
-
-function readFraction(value: unknown, fallback: number, path: string): number {
-	if (value === undefined) return fallback;
-	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1) {
-		throw new Error(`Config value ${path} must be a number > 0 and <= 1`);
-	}
-	return value;
-}
-
-function readPositiveNumber(value: unknown, fallback: number, path: string): number {
-	if (value === undefined) return fallback;
-	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-		throw new Error(`Config value ${path} must be a positive number`);
-	}
-	return value;
-}
-
-function readOptionalInteger(value: unknown, path: string, min = 0): number | undefined {
-	if (value === undefined) return undefined;
-	if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
-		throw new Error(`Config value ${path} must be an integer >= ${min}`);
-	}
-	return value;
-}
-
-function readIntegerInRange(value: unknown, fallback: number, path: string, min: number, max: number): number {
-	const read = readInteger(value, fallback, path, min);
-	if (read > max) throw new Error(`Config value ${path} must be an integer <= ${max}`);
-	return read;
-}
-
-function readOptionalIntegerInRange(value: unknown, path: string, min: number, max: number): number | undefined {
-	const read = readOptionalInteger(value, path, min);
-	if (read !== undefined && read > max) throw new Error(`Config value ${path} must be an integer <= ${max}`);
-	return read;
-}
-
-function assertCronTime(value: string | undefined, path: string): void {
-	if (value === undefined) return;
-	if (!/^([01]?\d|2[0-3]):([0-5]\d)$/.test(value)) {
-		throw new Error(`Config value ${path} must be HH:MM local time`);
-	}
-}
-
-function assertCronRunAt(value: string | undefined, path: string): void {
-	if (value === undefined) return;
-	if (Number.isFinite(Date.parse(value))) return;
-	if (/^\d{4}-\d{2}-\d{2}[ T]([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.test(value)) return;
-	throw new Error(`Config value ${path} must be an ISO timestamp or YYYY-MM-DD HH:MM local time`);
-}
-
-function resolveWorkspacePath(workspacePath: string, filePath: string): string {
-	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
-}
-
-function parseProviderModelRef(value: string, path: string): { provider: string; modelId: string; key: string } {
-	const parsed = maybeParseProviderModelRef(value);
-	if (parsed) return parsed;
-	throw new Error(`Config value ${path} must be a provider/model id`);
-}
-
-function maybeParseProviderModelRef(value: string): { provider: string; modelId: string; key: string } | undefined {
-	const parsed = parseModelRef(value);
-	return parsed ? { provider: parsed.provider, modelId: parsed.id, key: parsed.key } : undefined;
-}
-
-function assertKnownKeys(value: Record<string, unknown>, path: string, knownKeys: readonly string[]): void {
-	const known = new Set(knownKeys);
-	for (const key of Object.keys(value)) {
-		if (!known.has(key)) throw new Error(`Unknown config value: ${path}.${key}`);
-	}
-}
-
-function readPromptOverrides(
-	value: Record<string, unknown>,
-	workspacePath: string,
-	prefix: string,
-): { prompt?: string; promptPath?: string; systemPrompt?: string; systemPromptPath?: string } {
-	const prompt = readOptionalConfigString(value.prompt, `${prefix}.prompt`);
-	const promptPath = readOptionalConfigString(value.prompt_path, `${prefix}.prompt_path`);
-	const systemPrompt = readOptionalConfigString(value.system_prompt, `${prefix}.system_prompt`);
-	const systemPromptPath = readOptionalConfigString(value.system_prompt_path, `${prefix}.system_prompt_path`);
-	if (prompt && promptPath) throw new Error(`Set either ${prefix}.prompt or ${prefix}.prompt_path, not both`);
-	if (systemPrompt && systemPromptPath) {
-		throw new Error(`Set either ${prefix}.system_prompt or ${prefix}.system_prompt_path, not both`);
-	}
-	return {
-		...(prompt ? { prompt } : {}),
-		...(promptPath ? { promptPath: resolveWorkspacePath(workspacePath, promptPath) } : {}),
-		...(systemPrompt ? { systemPrompt } : {}),
-		...(systemPromptPath ? { systemPromptPath: resolveWorkspacePath(workspacePath, systemPromptPath) } : {}),
-	};
-}
-
-function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
-	const rawJobs = cron.jobs;
-	if (rawJobs === undefined) return [];
-	if (!Array.isArray(rawJobs)) throw new Error("Config value cron.jobs must be an array");
-	const seen = new Set<string>();
-	return rawJobs.map((rawJob, index) => {
-		if (!rawJob || typeof rawJob !== "object" || Array.isArray(rawJob)) {
-			throw new Error(`Config value cron.jobs[${index}] must be a table`);
-		}
-		const job = rawJob as Record<string, unknown>;
-		const prefix = `cron.jobs[${index}]`;
-		assertKnownKeys(job, prefix, [
-			"id",
-			"enabled",
-			"frequency",
-			"delivery_mode",
-			"prompt",
-			"run_at",
-			"time",
-			"minute",
-			"weekday",
-			"day",
-		]);
-		const id = readString(job.id, `${prefix}.id`);
-		if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
-			throw new Error(
-				`Config value ${prefix}.id may only contain letters, numbers, dot, underscore, equals, or dash`,
-			);
-		}
-		if (seen.has(id)) throw new Error(`Duplicate cron job id: ${id}`);
-		seen.add(id);
-		const frequency = readEnum(
-			readConfigString(job.frequency, "once", `${prefix}.frequency`),
-			`${prefix}.frequency`,
-			CRON_FREQUENCIES,
-		);
-		const runAt = readOptionalConfigString(job.run_at, `${prefix}.run_at`);
-		const time = readOptionalConfigString(job.time, `${prefix}.time`);
-		assertCronRunAt(runAt, `${prefix}.run_at`);
-		assertCronTime(time, `${prefix}.time`);
-		if (frequency === "once" && !runAt) throw new Error(`Config value ${prefix}.run_at is required for once jobs`);
-		if (frequency === "once" && time) throw new Error(`Config value ${prefix}.time is only valid for repeating jobs`);
-		if (frequency !== "once" && runAt) throw new Error(`Config value ${prefix}.run_at is only valid for once jobs`);
-		if (frequency !== "once" && frequency !== "hourly" && !time) {
-			throw new Error(`Config value ${prefix}.time is required for ${frequency} jobs`);
-		}
-		return {
-			id,
-			enabled: readBoolean(job.enabled, true, `${prefix}.enabled`),
-			frequency,
-			deliveryMode: readEnum(
-				readConfigString(job.delivery_mode, "queue", `${prefix}.delivery_mode`),
-				`${prefix}.delivery_mode`,
-				CRON_DELIVERY_MODES,
-			),
-			prompt: readString(job.prompt, `${prefix}.prompt`),
-			...(runAt ? { runAt } : {}),
-			...(time ? { time } : {}),
-			...(job.minute !== undefined
-				? { minute: readOptionalIntegerInRange(job.minute, `${prefix}.minute`, 0, 59) }
-				: {}),
-			...(job.weekday !== undefined
-				? { weekday: readOptionalIntegerInRange(job.weekday, `${prefix}.weekday`, 0, 6) }
-				: {}),
-			...(job.day !== undefined ? { day: readOptionalIntegerInRange(job.day, `${prefix}.day`, 1, 31) } : {}),
-		};
-	});
-}
-
-function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {
-	return {
-		twitter: true,
-		xiaohongshu: true,
-		rednote: true,
-		reddit: true,
-		bilibili: true,
-		youtube: true,
-		tiktok: true,
-		douyin: true,
-		spotify: true,
-	};
 }
 
 export async function loadConfig(workspacePathInput: string): Promise<Config> {

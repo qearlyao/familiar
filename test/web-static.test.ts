@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
 import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/generated-media.js";
-import { serveAttachment } from "../src/web-static.js";
+import { serveAttachment } from "../src/web/static.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 class FakeResponse {

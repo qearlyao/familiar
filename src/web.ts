@@ -31,17 +31,17 @@ import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
 import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload, webMessagesFromRecords } from "./web/messages.js";
 import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./web/multipart.js";
 import { agentSettingsPayload, commandArgs, formatSetting, sessionDto } from "./web/payloads.js";
-import { createAuth, sessionCookie, verifyTotp } from "./web-auth.js";
-import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web-events.js";
-import { isObject, readJsonBody, sendJson, sendText } from "./web-http.js";
-import { serveAttachment, serveStatic } from "./web-static.js";
+import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
+import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
+import { isObject, readJsonBody, sendJson, sendText } from "./web/http.js";
+import { serveAttachment, serveStatic } from "./web/static.js";
 import {
 	EVENT_REPLAY_LIMIT,
 	WEB_USER_NAME,
 	type WebDaemon,
 	type WebPublishEvent,
 	type WebStreamEvent,
-} from "./web-types.js";
+} from "./web/types.js";
 
 export async function startWebDaemon(
 	config: Config,

@@ -2,7 +2,7 @@ import type { FamiliarAgent } from "../agent.js";
 import type { DiscordWebSession } from "../discord.js";
 import { supportedThinkingLevels } from "../models.js";
 import type { EffectiveSetting } from "../settings.js";
-import { isObject } from "../web-http.js";
+import { isObject } from "./http.js";
 
 export function commandArgs(command: string, args: unknown): string {
 	if (!isObject(args)) return "";

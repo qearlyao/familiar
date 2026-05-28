@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
-import type { Config } from "./config.js";
+import type { Config } from "../config.js";
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 

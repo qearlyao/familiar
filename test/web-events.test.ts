@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { decodeFrames, encodeFrame } from "../src/web-events.js";
+import { decodeFrames, encodeFrame } from "../src/web/events.js";
 
 function maskedTextFrame(text: string): Buffer {
 	const payload = Buffer.from(text, "utf8");

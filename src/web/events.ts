@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
 
-import type { WebStreamEvent } from "./web-types.js";
+import type { WebStreamEvent } from "./types.js";
 
 export interface WebSocketClient {
 	socket: Socket;

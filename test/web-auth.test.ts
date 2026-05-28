@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { IncomingMessage } from "node:http";
 
-import { createAuth, sessionCookie, verifyTotp } from "../src/web-auth.js";
+import { createAuth, sessionCookie, verifyTotp } from "../src/web/auth.js";
 import { configWithDataDir } from "./helpers.js";
 
 function request(headers: Record<string, string> = {}): IncomingMessage {

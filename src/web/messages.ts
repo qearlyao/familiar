@@ -2,9 +2,9 @@ import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../chat-
 import type { Config } from "../config.js";
 import { getContactNickname } from "../contact-note.js";
 import { publicAttachmentPath } from "../generated-media.js";
-import { isObject } from "../web-http.js";
-import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "../web-types.js";
+import { isObject } from "./http.js";
 import { toUnixMs } from "./ids.js";
+import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "./types.js";
 
 export function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
 	return record.type !== "runtime" || !["armed", "reset", "stopped"].includes(record.event);

@@ -4,9 +4,9 @@ import type { ServerResponse } from "node:http";
 import { extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Config } from "./config.js";
-import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "./generated-media.js";
-import { sendText } from "./web-http.js";
+import type { Config } from "../config.js";
+import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../generated-media.js";
+import { sendText } from "./http.js";
 
 function getProjectRoot(): string {
 	return resolve(fileURLToPath(import.meta.url), "../..");

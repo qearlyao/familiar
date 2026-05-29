@@ -53,9 +53,21 @@ structural decomposition. Needs its own task + review — NOT a batch.
   separately so the caller still surfaces its own error, `onRejected` slot
   dropped. (The finding's "double-run" framing was imprecise — `p.then(fn, fn)`
   runs one handler; no double-execution existed.)
-- **#48 — discord `runtimes` / `collectTimers` Maps grow unbounded** for
-  long-lived bots. [src/discord.ts] (post-decomp: client orchestration). Needs an
-  eviction/lifecycle policy; behavior change.
+- **#48 — discord `runtimes` Map grows unbounded → DEFERRED to the
+  Discord-optional / web-first refactor.** [src/discord.ts]. The only unbounded
+  source is **distinct Discord threads** (DMs + the one allowed channel are a
+  fixed, web-shared set that eviction must pin anyway); at low thread usage the
+  slope is ~1 dead entry per thread ever touched, not per message — low practical
+  severity. A proper eviction daemon is new lifecycle machinery wired into the
+  exact layer being reworked when the must-connect-to-Discord launch requirement
+  is lifted; build it there against a settled runtime-ownership model. (`collectTimers`
+  is self-healing — fires within collectDebounceMs and deletes its own entry — NOT
+  a leak.) **Two real sub-bugs to fold into that refactor:**
+  - The connect-failure rollback (discord.ts:~245) **discards the memory-projection
+    unsubscribe handle** — a latent leak independent of eviction. Capture + call it.
+  - Any eviction MUST route through `runtime.disconnect()` (the only chat-log
+    `.lock` release); evicting without it orphans the lock and makes the channel
+    un-recreatable in-process (same-PID lock is treated as live).
 - **#42 — web-tools Jina double-fetches** when JSON parse fails on a text
   response. [src/web-tools.ts:866-895](src/web-tools.ts#L866-L895) (now under
   `src/web-tools/fetch-providers.ts`). NOT a pure dedup: the two fetches send

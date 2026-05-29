@@ -45,12 +45,12 @@ function UserTurn({ message }: { message: Message }) {
     .map((s) => (s.kind === "text" ? s.text : ""))
     .join("");
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex w-full flex-col items-end gap-1">
       <span className="text-xs uppercase tracking-wider text-muted-foreground">
         {message.who}
       </span>
-      <div className="flex max-w-[85%] flex-col items-end">
-        {text && renderInlineText(text)}
+      <div className="flex min-w-0 max-w-[85%] flex-col items-end">
+        {text && renderInlineText(text, { align: "end" })}
         <AttachmentList attachments={message.attachments ?? []} align="right" />
       </div>
     </div>

@@ -323,12 +323,17 @@ export function applyConfigOverridesToConfig(config: Config): void {
 	}
 }
 
-export async function commitConfigChange(key: ConfigKey, value: unknown, ctx: RegistryApplyContext): Promise<void> {
+async function mutateConfig(
+	key: ConfigKey,
+	nextValue: unknown,
+	persist: () => Promise<void>,
+	ctx: RegistryApplyContext,
+): Promise<void> {
 	const entry = CONFIG_REGISTRY[key];
 	const previous = entry.read(ctx.config);
-	entry.write(ctx.config, value);
+	entry.write(ctx.config, nextValue);
 	try {
-		await setConfigOverride(key, value);
+		await persist();
 		await entry.apply?.(ctx);
 	} catch (error) {
 		entry.write(ctx.config, previous);
@@ -336,15 +341,10 @@ export async function commitConfigChange(key: ConfigKey, value: unknown, ctx: Re
 	}
 }
 
+export async function commitConfigChange(key: ConfigKey, value: unknown, ctx: RegistryApplyContext): Promise<void> {
+	await mutateConfig(key, value, () => setConfigOverride(key, value), ctx);
+}
+
 export async function clearConfigChange(key: ConfigKey, ctx: RegistryApplyContext): Promise<void> {
-	const entry = CONFIG_REGISTRY[key];
-	const previous = entry.read(ctx.config);
-	entry.write(ctx.config, getConfigDefault(key));
-	try {
-		await clearConfigOverride(key);
-		await entry.apply?.(ctx);
-	} catch (error) {
-		entry.write(ctx.config, previous);
-		throw error;
-	}
+	await mutateConfig(key, getConfigDefault(key), () => clearConfigOverride(key), ctx);
 }

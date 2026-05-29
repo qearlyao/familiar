@@ -44,13 +44,15 @@ drifted — re-locate each finding in current code before acting.
 ## OPEN — step 10 DEFER-risky tier
 
 Each changes observable behavior, adds bounds/eviction, rewrites SQL/IO, or is a
-structural decomposition. Needs its own task + review — NOT a batch. Suggested
-lead: **#55** (it's an actual correctness bug, not a perf item).
+structural decomposition. Needs its own task + review — NOT a batch.
 
-- **#55 — `queue.then(run, run)` swallows errors AND double-runs on rejection.**
-  [src/memory/lcm/segment-manager.ts:38-46](src/memory/lcm/segment-manager.ts#L38-L46) +
-  [context-transformer.ts:294-296](src/memory/lcm/context-transformer.ts#L294-L296).
-  CORRECTNESS bug — belongs in `/code-review`, not a perf dedup.
+- **#55 — done (`9c9f018`).** `queue.then(work, work)` in `compactLcmCandidate`
+  and `subscribeRuntime` stored a rejecting promise that poisoned the shared
+  serialization queue (next link fired in its rejection slot, error discarded).
+  Fixed: stored tail kept non-rejecting via `.catch`, real work promise awaited
+  separately so the caller still surfaces its own error, `onRejected` slot
+  dropped. (The finding's "double-run" framing was imprecise — `p.then(fn, fn)`
+  runs one handler; no double-execution existed.)
 - **#48 — discord `runtimes` / `collectTimers` Maps grow unbounded** for
   long-lived bots. [src/discord.ts] (post-decomp: client orchestration). Needs an
   eviction/lifecycle policy; behavior change.

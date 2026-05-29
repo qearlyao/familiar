@@ -112,7 +112,7 @@ Items prefixed **[Codex]** came from the Codex pass.
 57. [src/image-derivatives.ts:94-124](src/image-derivatives.ts#L94-L124) — 6×4 grid of sharp encodings runs sequentially; the inner quality loop is monotonic so early-break is safe.
 58. [src/media-understanding.ts:79-89](src/media-understanding.ts#L79-L89) — Reads full video into memory + base64 inline; doubles memory and blocks event loop.
 59. [src/tts.ts:126-141](src/tts.ts#L126-L141) — No timeout on the ElevenLabs fetch (other media helpers do); hung requests block.
-60. [src/inbound-attachments.ts:226-258](src/inbound-attachments.ts#L226-L258) — Derived attachment files aren't tracked in `writtenPaths`; partial failure leaks them. (See HIGH #5 for the Codex framing.)
+60. ~~Derived attachment files aren't tracked in `writtenPaths`; partial failure leaks them.~~ **Done in step 6 (HIGH #5):** `inbound-attachments.ts` now pushes derived image paths into `writtenPaths` and the rollback `unlink`s them.
 61. [src/web.ts:836-1102](src/web.ts#L836-L1102) — `handleApi` is a 270-line switch-on-pathname with 16 branches; extract a route table.
 62. [src/web.ts:888](src/web.ts#L888) — `loadAddedModels()` called twice per POST.
 63. [src/web.ts:144-189](src/web.ts#L144-L189) — Multipart parser uses `Buffer.toString("binary")` round-trip; fragile + slow on large uploads. Use streaming parser or work on `Buffer` directly.
@@ -187,7 +187,41 @@ A few patterns worth flagging:
    - [x] Follow-up #10 (LOW, `done` check after errored tool) — `hasError` (any tool step `status === "error"`) suppresses the done row.
    - [x] Follow-up #3 (MED, config override mutates memory before durable write) — done via Codex + `/simplify` review: commit-or-rollback moved into `config-registry.ts` as `commitConfigChange`/`clearConfigChange` (canonical owner), web.ts handlers now only validate + dispatch. Committed `d00c732`.
    - [ ] Follow-up #8 (LOW, paginated history rebuilds full transcript) — DEFERRED; transcript size not biting yet. Window message ids before folding steps when it does.
-10. **Backend hot-path inefficiencies (MED #37-68)** — per-call scans, N+1 queries, re-compiled statements, missing timeouts, and a few near-duplicate pipelines across `runtime.ts`, `web.ts`, `web-tools.ts`, `discord.ts`, the memory tree, and media helpers. No single big win; cluster by file and land independently. (#60 overlaps HIGH #5; #66-67 are the agent.ts items.)
+10. **Backend hot-path inefficiencies (MED #37-68)** — per-call scans, N+1 queries, re-compiled statements, missing timeouts, and a few near-duplicate pipelines across `runtime.ts`, `web/`, `web-tools/`, `discord.ts`, the memory tree, and media helpers. No single big win; cluster by file and land independently.
+
+    **Progress:** #37 #38 (`eaa41e8`), #40 #41 (`97fb605`) done. #39 deferred (web-history coupling). #60 already done in step 6 (HIGH #5 — `inbound-attachments.ts` now tracks derived paths in `writtenPaths` and unlinks on rollback).
+
+    **Risk triage (2026-05-30, for the "pure perf only" pass).** SAFE = behavior-preserving dedup/cache/hoist, land in the batch. DEFER = changes observable behavior, adds bounds/eviction, rewrites SQL/IO, or is a structural decomposition — needs its own task + review, not the batch.
+
+    SAFE-now (batched):
+    - #42 web-tools Jina double-fetch — detect Content-Type before re-fetching; output identical.
+    - #43 `fetchJson`/`fetchText` share ~25 lines — factor `performFetch`.
+    - #44 `parseBrave`/`parseExa`/`parseTavily` share ~50-line skeleton — extract.
+    - #45 `getOwnerDmSession` re-`createDM` per tick — cache the stable DM channel.
+    - #46 `sendReply`/`sendChannelMessage` share ~30 lines — extract chunk-loop/attachment helper.
+    - #47 `promptForRuntime`/`promptScheduledMessage` share ~30 lines — extract queue/owner/restore helper.
+    - #49 `vectorCapability()` re-reads `memory_meta` every op — cache at construction.
+    - #50 `prepare()` re-compiled per row in `insertNormalized` — hoist statements.
+    - #51 (partial) `cosineDistance` dead `?? 0` on Float32Array indices — remove. (The two-`sqrt`→squared-distance change is DEFERRED: it alters returned distance values.)
+    - #62 `loadAddedModels()` called twice per POST — call once.
+    - #64 `buildSiteRunSpec` + `buildSiteArgs` re-validate `site`/`command` — validate once.
+    - #65 `defaultBrowserRunner` leaks `timeout` on the abort branch — add `clearTimeout`. (Leak fix, behavior-preserving.)
+
+    DEFER-risky (own task + review, NOT in the batch):
+    - #48 discord `runtimes`/`collectTimers` Maps grow unbounded — needs eviction/lifecycle; behavior change.
+    - #52 diary sequential per-file indexing → bounded `Promise.all` — changes index ordering; verify order-independence first.
+    - #53 lcm N+1 `getSummaryChildren` — batchable to one query but SQL-correctness-sensitive; do carefully alone.
+    - #54 `snapshotSummariesForPrunedRecords`/`buildSummaryParentSnapshot` CTE rewrite — SQL correctness, high blast radius.
+    - #55 `queue.then(run, run)` swallows errors AND double-runs on rejection — this is a CORRECTNESS bug (belongs in `/code-review`, not a perf dedup); segment-manager + context-transformer.
+    - #56 chat-log sequential JSONL reads → `Promise.all` + merge — must preserve record order; verify before parallelizing.
+    - #57 sharp 6×4 encode grid early-break — must prove output byte-identical to the full scan.
+    - #58 video read fully into memory + base64 inline — streaming rewrite, large, changes memory profile.
+    - #59 tts ElevenLabs fetch has no timeout — adds a new failure mode (timeout); robustness change, decide the deadline deliberately.
+    - #61 `handleApi` 270-line switch → route table — god-function decomposition, structural (more like #24 than a perf fix).
+    - #63 multipart `Buffer.toString("binary")` round-trip → streaming — fragile, behavior-sensitive on large uploads.
+    - #66 `loadStoredMessages` O(N×files) dir scan per session — bound by mtime/since-reset; behavior-sensitive (which messages load).
+    - #67 agent `prompt`/`promptMessage` ~70-line dup — structural dedup but concurrency/teardown-sensitive; safe in principle, own task.
+    - #68 hot-reload watcher not re-attached on error — adds retry logic; behavior change.
 11. **LOW — style/polish** — comment-narration trims, the `clonePayload` JSON fallback, `Model<any>` in `scripts/spike.ts`, plus the long per-file tail not enumerated here. Lowest priority; fold in opportunistically when already touching a file.
 
 Suggest small, scoped commits per category with regression testing after each — not one mega-PR.

@@ -70,6 +70,26 @@ export function parseOutboundReply(text: string): { text: string; silent: boolea
 	return { text: normalizeOutboundText(parsed.text), silent: false };
 }
 
+async function sendChunkedMessage(
+	config: Config,
+	rest: REST,
+	channel: DiscordChatChannel,
+	channelId: string,
+	normalizedText: string,
+	attachments: StoredAttachment[],
+	sendChunk: (chunk: string, index: number) => Promise<Message>,
+): Promise<string[]> {
+	const chunks = chunkDiscord(config, normalizedText);
+	const sentIds: string[] = [];
+	for (const [index, chunk] of chunks.entries()) {
+		if (index > 0) await delayBetweenBurstChunks(config, channel);
+		const sent = await sendChunk(chunk, index);
+		sentIds.push(sent.id);
+	}
+	const attachmentIds = await sendDiscordAttachments(rest, channelId, attachments);
+	return [...sentIds, ...attachmentIds];
+}
+
 export async function sendReply(
 	config: Config,
 	rest: REST,
@@ -79,33 +99,32 @@ export async function sendReply(
 	attachments: StoredAttachment[] = [],
 ): Promise<string[]> {
 	const normalizedText = normalizeOutboundText(text);
-	const chunks = chunkDiscord(config, normalizedText);
-	const sentIds: string[] = [];
-	for (const [index, chunk] of chunks.entries()) {
-		if (index > 0) await delayBetweenBurstChunks(config, message.channel);
-		let sent: Message;
-		if (index === 0 && config.discord.replyMode === "reply") {
-			try {
-				const replyTarget = replyToMessageId || message.id;
-				if (!message.channel.isSendable()) {
-					throw new Error(`Discord channel is not sendable: ${message.channelId}`);
+	return sendChunkedMessage(
+		config,
+		rest,
+		message.channel,
+		message.channelId,
+		normalizedText,
+		attachments,
+		async (chunk, index) => {
+			if (index === 0 && config.discord.replyMode === "reply") {
+				try {
+					const replyTarget = replyToMessageId || message.id;
+					if (!message.channel.isSendable()) {
+						throw new Error(`Discord channel is not sendable: ${message.channelId}`);
+					}
+					const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget } };
+					return await message.channel.send(options);
+				} catch (error) {
+					console.error("Discord reply failed; falling back to channel send", error);
 				}
-				const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget } };
-				sent = await message.channel.send(options);
-				sentIds.push(sent.id);
-				continue;
-			} catch (error) {
-				console.error("Discord reply failed; falling back to channel send", error);
 			}
-		}
-		if (!message.channel.isSendable()) {
-			throw new Error(`Discord channel is not sendable: ${message.channelId}`);
-		}
-		sent = await message.channel.send(chunk);
-		sentIds.push(sent.id);
-	}
-	const attachmentIds = await sendDiscordAttachments(rest, message.channelId, attachments);
-	return [...sentIds, ...attachmentIds];
+			if (!message.channel.isSendable()) {
+				throw new Error(`Discord channel is not sendable: ${message.channelId}`);
+			}
+			return message.channel.send(chunk);
+		},
+	);
 }
 
 export async function sendChannelMessage(
@@ -119,15 +138,9 @@ export async function sendChannelMessage(
 		throw new Error("Discord channel is not sendable");
 	}
 	const normalizedText = normalizeOutboundText(text);
-	const chunks = chunkDiscord(config, normalizedText);
-	const sentIds: string[] = [];
-	for (const [index, chunk] of chunks.entries()) {
-		if (index > 0) await delayBetweenBurstChunks(config, channel);
-		const sent = await channel.send(chunk);
-		sentIds.push(sent.id);
-	}
-	const attachmentIds = await sendDiscordAttachments(rest, channel.id, attachments);
-	return [...sentIds, ...attachmentIds];
+	return sendChunkedMessage(config, rest, channel, channel.id, normalizedText, attachments, (chunk) =>
+		channel.send(chunk),
+	);
 }
 
 export async function sendDiscordAttachments(

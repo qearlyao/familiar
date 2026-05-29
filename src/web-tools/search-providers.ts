@@ -3,6 +3,7 @@ import { fetchJson } from "./http.js";
 import {
 	MAX_RESPONSE_BYTES,
 	ProviderError,
+	type ProviderName,
 	SEARCH_TIMEOUT_BASIC_MS,
 	SEARCH_TIMEOUT_THOROUGH_MS,
 	type SearchCapability,
@@ -58,19 +59,46 @@ export function freshnessToPublishedDate(freshness: SearchFreshness | undefined)
 	return now.toISOString();
 }
 
-export function parseBraveResults(payload: unknown): SearchResult[] {
-	if (!isRecord(payload) || !isRecord(payload.web) || !Array.isArray(payload.web.results)) {
-		throw new ProviderError("brave", "Brave returned unexpected response shape.", false);
+const PROVIDER_DISPLAY_NAME: Record<ProviderName, string> = {
+	brave: "Brave",
+	exa: "Exa",
+	jina: "Jina",
+	tavily: "Tavily",
+	tinyfish: "TinyFish",
+};
+
+function unexpectedShapeError(provider: ProviderName): ProviderError {
+	return new ProviderError(provider, `${PROVIDER_DISPLAY_NAME[provider]} returned unexpected response shape.`, false);
+}
+
+function parseSearchResults(
+	provider: ProviderName,
+	results: unknown,
+	mapResult: (raw: Record<string, unknown>) => SearchResult | undefined,
+): SearchResult[] {
+	if (!Array.isArray(results)) {
+		throw unexpectedShapeError(provider);
 	}
-	const results: SearchResult[] = [];
-	for (const raw of payload.web.results) {
+	const parsed: SearchResult[] = [];
+	for (const raw of results) {
 		if (!isRecord(raw)) continue;
+		const result = mapResult(raw);
+		if (result) parsed.push(result);
+	}
+	return parsed;
+}
+
+export function parseBraveResults(payload: unknown): SearchResult[] {
+	if (!isRecord(payload) || !isRecord(payload.web)) {
+		throw unexpectedShapeError("brave");
+	}
+	return parseSearchResults("brave", payload.web.results, (raw) => {
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
-		if (!title || !url) continue;
+		if (!title || !url) return undefined;
 		const snippet =
 			typeof raw.description === "string" ? raw.description : typeof raw.snippet === "string" ? raw.snippet : "";
-		results.push({
+		return {
 			title,
 			url,
 			snippet: truncateSnippet(snippet, 500),
@@ -84,21 +112,18 @@ export function parseBraveResults(payload: unknown): SearchResult[] {
 							? raw.date
 							: undefined,
 			),
-		});
-	}
-	return results;
+		};
+	});
 }
 
 export function parseExaResults(payload: unknown, includeContent: boolean): SearchResult[] {
-	if (!isRecord(payload) || !Array.isArray(payload.results)) {
-		throw new ProviderError("exa", "Exa returned unexpected response shape.", false);
+	if (!isRecord(payload)) {
+		throw unexpectedShapeError("exa");
 	}
-	const results: SearchResult[] = [];
-	for (const raw of payload.results) {
-		if (!isRecord(raw)) continue;
+	return parseSearchResults("exa", payload.results, (raw) => {
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
-		if (!title || !url) continue;
+		if (!title || !url) return undefined;
 		const result: SearchResult = {
 			title,
 			url,
@@ -116,21 +141,18 @@ export function parseExaResults(payload: unknown, includeContent: boolean): Sear
 		if (includeContent && typeof raw.text === "string" && raw.text.trim()) {
 			result.content = raw.text.trim();
 		}
-		results.push(result);
-	}
-	return results;
+		return result;
+	});
 }
 
 export function parseTavilyResults(payload: unknown, includeContent: boolean): SearchResult[] {
-	if (!isRecord(payload) || !Array.isArray(payload.results)) {
-		throw new ProviderError("tavily", "Tavily returned unexpected response shape.", false);
+	if (!isRecord(payload)) {
+		throw unexpectedShapeError("tavily");
 	}
-	const results: SearchResult[] = [];
-	for (const raw of payload.results) {
-		if (!isRecord(raw)) continue;
+	return parseSearchResults("tavily", payload.results, (raw) => {
 		const title = typeof raw.title === "string" ? raw.title.trim() : "";
 		const url = typeof raw.url === "string" ? raw.url.trim() : "";
-		if (!title || !url) continue;
+		if (!title || !url) return undefined;
 		const snippetSource =
 			typeof raw.content === "string" && raw.content.trim()
 				? raw.content
@@ -147,9 +169,8 @@ export function parseTavilyResults(payload: unknown, includeContent: boolean): S
 		if (includeContent && typeof raw.raw_content === "string" && raw.raw_content.trim()) {
 			result.content = raw.raw_content.trim();
 		}
-		results.push(result);
-	}
-	return results;
+		return result;
+	});
 }
 
 export function createBraveProvider(apiKey: string): SearchProvider {

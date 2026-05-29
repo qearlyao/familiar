@@ -35,6 +35,47 @@ export function createHttpError(provider: ProviderName, response: Response): Pro
 	);
 }
 
+// Pass through aborts and already-typed ProviderErrors raw; wrap everything else
+// (network failures, JSON.parse/validate throws) as a retryable ProviderError.
+function rethrowAsProviderError(provider: ProviderName, error: unknown, signal: AbortSignal): never {
+	if (error instanceof ProviderError) throw error;
+	if (signal.aborted) throw error;
+	throw new ProviderError(
+		provider,
+		error instanceof Error ? `${provider} request failed: ${error.message}` : `${provider} request failed.`,
+		true,
+		undefined,
+		error,
+	);
+}
+
+async function performFetch(
+	provider: ProviderName,
+	url: string,
+	options: {
+		method?: string;
+		headers?: Record<string, string>;
+		body?: string;
+		signal: AbortSignal;
+		timeoutMs: number;
+		maxBytes: number;
+	},
+): Promise<string> {
+	try {
+		const response = await fetch(url, {
+			method: options.method ?? "GET",
+			headers: options.headers,
+			body: options.body,
+			redirect: "error",
+			signal: buildRequestSignal(options.signal, options.timeoutMs),
+		});
+		if (!response.ok) throw createHttpError(provider, response);
+		return await readBoundedBody(response, options.maxBytes);
+	} catch (error) {
+		rethrowAsProviderError(provider, error, options.signal);
+	}
+}
+
 export async function fetchJson<T>(
 	provider: ProviderName,
 	url: string,
@@ -49,27 +90,18 @@ export async function fetchJson<T>(
 	},
 ): Promise<T> {
 	try {
-		const response = await fetch(url, {
-			method: options.method ?? "GET",
+		const body = await performFetch(provider, url, {
+			method: options.method,
 			headers: options.headers,
 			body: options.body,
-			redirect: "error",
-			signal: buildRequestSignal(options.signal, options.timeoutMs),
+			signal: options.signal,
+			timeoutMs: options.timeoutMs,
+			maxBytes: options.maxBytes,
 		});
-		if (!response.ok) throw createHttpError(provider, response);
-		const body = await readBoundedBody(response, options.maxBytes);
 		const parsed = body ? JSON.parse(body) : null;
 		return options.validate(parsed);
 	} catch (error) {
-		if (error instanceof ProviderError) throw error;
-		if (options.signal.aborted) throw error;
-		throw new ProviderError(
-			provider,
-			error instanceof Error ? `${provider} request failed: ${error.message}` : `${provider} request failed.`,
-			true,
-			undefined,
-			error,
-		);
+		rethrowAsProviderError(provider, error, options.signal);
 	}
 }
 
@@ -83,24 +115,11 @@ export async function fetchText(
 		maxBytes: number;
 	},
 ): Promise<string> {
-	try {
-		const response = await fetch(url, {
-			method: "GET",
-			headers: options.headers,
-			redirect: "error",
-			signal: buildRequestSignal(options.signal, options.timeoutMs),
-		});
-		if (!response.ok) throw createHttpError(provider, response);
-		return await readBoundedBody(response, options.maxBytes);
-	} catch (error) {
-		if (error instanceof ProviderError) throw error;
-		if (options.signal.aborted) throw error;
-		throw new ProviderError(
-			provider,
-			error instanceof Error ? `${provider} request failed: ${error.message}` : `${provider} request failed.`,
-			true,
-			undefined,
-			error,
-		);
-	}
+	return await performFetch(provider, url, {
+		method: "GET",
+		headers: options.headers,
+		signal: options.signal,
+		timeoutMs: options.timeoutMs,
+		maxBytes: options.maxBytes,
+	});
 }

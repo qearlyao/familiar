@@ -16,8 +16,8 @@ export function cosineDistance(a: Float32Array, b: Float32Array): number {
 	let aNorm = 0;
 	let bNorm = 0;
 	for (let index = 0; index < a.length; index++) {
-		const av = a[index] ?? 0;
-		const bv = b[index] ?? 0;
+		const av = a[index];
+		const bv = b[index];
 		dot += av * bv;
 		aNorm += av * av;
 		bNorm += bv * bv;

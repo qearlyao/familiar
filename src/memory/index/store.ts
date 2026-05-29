@@ -128,6 +128,13 @@ export class MemoryIndexStore {
 	private readonly embeddingProvider: string;
 	private readonly embeddingModel: string;
 	private readonly embeddingDimensions: number;
+	private readonly vectorCapabilityValue: VectorCapability;
+	private readonly findChunkIdByHashStmt!: Database.Statement<[string], { id: number }>;
+	private readonly insertChunkStmt!: Database.Statement<
+		[string, string, string, string, number | null, string | null, string, number, Buffer]
+	>;
+	private readonly insertFtsStmt!: Database.Statement<[number, string, string]>;
+	private readonly insertMemoryVecStmt!: Database.Statement<[number, Buffer]>;
 
 	constructor(options: StoreOptions) {
 		if (!options.db && !options.path) throw new Error("MemoryIndexStore requires a db or path");
@@ -148,6 +155,20 @@ export class MemoryIndexStore {
 			embeddingModel: this.embeddingModel,
 			embeddingDimensions: this.embeddingDimensions,
 		});
+		this.vectorCapabilityValue = readMeta(this.db, "vector_capability") === "sqlite-vec" ? "sqlite-vec" : "blob-js";
+		this.findChunkIdByHashStmt = this.db.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?");
+		this.insertChunkStmt = this.db.prepare(
+			`INSERT INTO memory_chunks (
+					content_hash, corpus, text_full, snippet, token_count, metadata_json, embedding_model,
+					embedding_dimensions, embedding
+				 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		);
+		this.insertFtsStmt = this.db.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)");
+		if (this.vectorCapabilityValue === "sqlite-vec") {
+			this.insertMemoryVecStmt = this.db.prepare(
+				"INSERT INTO memory_vec(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)",
+			);
+		}
 	}
 
 	static open(config: Config): MemoryIndexStore {
@@ -202,9 +223,7 @@ export class MemoryIndexStore {
 						this.insertSourceMapping(preloadedId, item);
 						continue;
 					}
-					const existing = this.db
-						.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?")
-						.get(item.contentHash) as { id: number } | undefined;
+					const existing = this.findChunkIdByHashStmt.get(item.contentHash);
 					if (existing) this.insertSourceMapping(existing.id, item);
 				}
 			})
@@ -509,7 +528,7 @@ export class MemoryIndexStore {
 	}
 
 	private vectorCapability(): VectorCapability {
-		return readMeta(this.db, "vector_capability") === "sqlite-vec" ? "sqlite-vec" : "blob-js";
+		return this.vectorCapabilityValue;
 	}
 
 	private vectorRowCount(): number {
@@ -561,41 +580,28 @@ export class MemoryIndexStore {
 				? { id: knownId }
 				: knownMissingHashes?.has(item.contentHash)
 					? undefined
-					: (this.db.prepare("SELECT id FROM memory_chunks WHERE content_hash = ?").get(item.contentHash) as
-							| { id: number }
-							| undefined);
+					: this.findChunkIdByHashStmt.get(item.contentHash);
 		if (existing) {
 			knownIds.set(item.contentHash, existing.id);
 			this.insertSourceMapping(existing.id, item);
 			return existing.id;
 		}
 
-		const result = this.db
-			.prepare(
-				`INSERT INTO memory_chunks (
-					content_hash, corpus, text_full, snippet, token_count, metadata_json, embedding_model,
-					embedding_dimensions, embedding
-				 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			)
-			.run(
-				item.contentHash,
-				item.corpus,
-				item.text,
-				item.snippet,
-				item.tokenCount,
-				item.metadataJson,
-				this.embeddingModel,
-				this.embeddingDimensions,
-				encodeVector(item.embedding),
-			);
+		const result = this.insertChunkStmt.run(
+			item.contentHash,
+			item.corpus,
+			item.text,
+			item.snippet,
+			item.tokenCount,
+			item.metadataJson,
+			this.embeddingModel,
+			this.embeddingDimensions,
+			encodeVector(item.embedding),
+		);
 		const id = Number(result.lastInsertRowid);
-		this.db
-			.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)")
-			.run(id, item.text, item.snippet);
+		this.insertFtsStmt.run(id, item.text, item.snippet);
 		if (this.vectorCapability() === "sqlite-vec") {
-			this.db
-				.prepare("INSERT INTO memory_vec(rowid, embedding) VALUES (CAST(? AS INTEGER), ?)")
-				.run(id, encodeVector(item.embedding));
+			this.insertMemoryVecStmt.run(id, encodeVector(item.embedding));
 		}
 		knownIds.set(item.contentHash, id);
 		this.insertSourceMapping(id, item);

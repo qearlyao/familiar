@@ -194,17 +194,23 @@ A few patterns worth flagging:
     **Risk triage (2026-05-30, for the "pure perf only" pass).** SAFE = behavior-preserving dedup/cache/hoist, land in the batch. DEFER = changes observable behavior, adds bounds/eviction, rewrites SQL/IO, or is a structural decomposition — needs its own task + review, not the batch.
 
     SAFE-now (batched):
-    - #43 `fetchJson`/`fetchText` share ~25 lines — factor `performFetch`.
-    - #44 `parseBrave`/`parseExa`/`parseTavily` share ~50-line skeleton — extract.
-    - #45 `getOwnerDmSession` re-`createDM` per tick — cache the stable DM channel.
-    - #46 `sendReply`/`sendChannelMessage` share ~30 lines — extract chunk-loop/attachment helper.
-    - #47 `promptForRuntime`/`promptScheduledMessage` share ~30 lines — extract queue/owner/restore helper.
-    - #49 `vectorCapability()` re-reads `memory_meta` every op — cache at construction.
-    - #50 `prepare()` re-compiled per row in `insertNormalized` — hoist statements.
-    - #51 (partial) `cosineDistance` dead `?? 0` on Float32Array indices — remove. (The two-`sqrt`→squared-distance change is DEFERRED: it alters returned distance values.)
-    - #62 `loadAddedModels()` called twice per POST — call once.
-    - #64 `buildSiteRunSpec` + `buildSiteArgs` re-validate `site`/`command` — validate once.
-    - #65 `defaultBrowserRunner` leaks `timeout` on the abort branch — add `clearTimeout`. (Leak fix, behavior-preserving.)
+    - #43 `fetchJson`/`fetchText` share ~25 lines — factor `performFetch`. (staged)
+    - #44 `parseBrave`/`parseExa`/`parseTavily` share ~50-line skeleton — extract. (staged)
+    - #45 `getOwnerDmSession` re-`createDM` per tick — cache the stable DM channel. (staged)
+    - #46 `sendReply`/`sendChannelMessage` share ~30 lines — extract chunk-loop/attachment helper. (staged)
+    - #47 `promptForRuntime`/`promptScheduledMessage` share ~30 lines — extract queue/owner/restore helper. (staged)
+    - #49 **done** — `vectorCapability()` now reads `memory_meta` once in the constructor (write-once at schema init) and caches as `vectorCapabilityValue`. (staged)
+    - #50 **done** — `insertNormalized`'s 4 statements (find-by-hash, insert chunk/fts/vec) hoisted to constructor-prepared fields; `memory_vec` stmt prepared only when sqlite-vec. better-sqlite3 does NOT cache prepares (its `stmts` set is cleanup-only), so this is a real win. (staged)
+    - #51 (partial) **done** — `cosineDistance` dead `?? 0` removed (`noUncheckedIndexedAccess` off; Float32Array in-bounds indexing is `number`). The two-`sqrt`→squared-distance change stays DEFERRED (alters returned distance values). (staged)
+    - #62 **dropped (non-finding)** — `loadAddedModels()` is already internally cached (`loaded`/`modelsCache` guard in added-models.ts); the two calls are cache-hit array spreads on a rare admin POST, not repeated disk reads.
+    - #64 **dropped (not pure perf)** — re-validating `site`/`command` is pure CPU dwarfed by the subprocess spawn that follows; a DRY concern, not a perf win. Revisit only as a readability cleanup.
+    - #65 **done** — `defaultBrowserRunner` abort branch now calls `clearTimeout` (fixed directly, one line). (staged)
+
+    Consolidated Opus `/simplify` review of the staged batch (2026-05-30) surfaced 4 in-scope findings; 3 applied, 1 deferred:
+    - **applied** — `recordSourceMappings` still re-`prepare()`d the find-by-hash SQL per row in its bulk transaction loop (the one site the #50 hoist missed); now reuses `findChunkIdByHashStmt`, dropping a per-row prepare and an `as` cast.
+    - **applied** — `http.ts` had a byte-identical `ProviderError`-wrap catch in both `performFetch` and `fetchJson`; extracted `rethrowAsProviderError(provider, error, signal)`. Behavior-preserving.
+    - **applied** — `search-providers.ts` `providerDisplayName` switch duplicated the three guard literals and had dead arms; folded to a `PROVIDER_DISPLAY_NAME` record + single `unexpectedShapeError(provider)` builder, routed all 4 throw sites through it. (The two `validate`-callback `Error` throws stay untouched — they wrap to retriable=true, a deliberate difference.)
+    - **DEFER** — `enqueueAgentWork` (discord.ts #47) duplicates the `createWriteQueue` (src/util/fs.ts) pattern, a 4th copy of the serial-async-queue idiom. Mechanically equivalent, BUT reusing `createWriteQueue` adds a `console.error("agent work write failed", …)` on tail rejection (it logs where `enqueueAgentWork` is silent), and "write" mislabels prompt-dispatch. Behavior delta → own reuse-cleanup task, decide the logging deliberately. Not perf.
 
     DEFER-risky (own task + review, NOT in the batch):
     - #42 web-tools Jina double-fetch — the two fetches use different `Accept` headers (application/json vs text/plain) and Jina serves different bodies per Accept, so reusing the first response could change returned content. Needs care; not a pure dedup.

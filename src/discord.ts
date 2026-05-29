@@ -3,6 +3,7 @@ import {
 	type AutocompleteInteraction,
 	type ChatInputCommandInteraction,
 	type Client,
+	type DMChannel,
 	Events,
 	type Interaction,
 	type Message,
@@ -172,6 +173,16 @@ export async function startDiscordDaemon(
 	let heartbeatQueued = false;
 	let cronRunning = false;
 	let schedulerState: SchedulerState = { cron: {} };
+	let ownerDmChannelPromise: Promise<DMChannel> | undefined;
+
+	const enqueueAgentWork = <T>(work: () => Promise<T>): Promise<T> => {
+		const run = agentWorkQueue.then(work);
+		agentWorkQueue = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	};
 
 	const promptForRuntime = async (
 		runtime: ConversationRuntime,
@@ -181,7 +192,7 @@ export async function startDiscordDaemon(
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 		onTurnEnd?: () => void | Promise<void>,
 	): Promise<FamiliarAgentReply> => {
-		const run = agentWorkQueue.then(async () => {
+		return enqueueAgentWork(async () => {
 			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
 			activeAgentOwner = runtime.channelKey;
 			try {
@@ -197,11 +208,6 @@ export async function startDiscordDaemon(
 				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
 			}
 		});
-		agentWorkQueue = run.then(
-			() => undefined,
-			() => undefined,
-		);
-		return run;
 	};
 
 	const promptScheduledMessage = async (
@@ -214,7 +220,7 @@ export async function startDiscordDaemon(
 		onEvent?: (event: AgentEvent) => void | Promise<void>,
 		options?: FamiliarPromptOptions,
 	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED> => {
-		const run = agentWorkQueue.then(async () => {
+		return enqueueAgentWork(async () => {
 			const message = await buildMessage();
 			if (message === HEARTBEAT_SKIPPED || message === CRON_SKIPPED) return message;
 			activeAgentOwner = runtime.channelKey;
@@ -224,11 +230,6 @@ export async function startDiscordDaemon(
 				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
 			}
 		});
-		agentWorkQueue = run.then(
-			() => undefined,
-			() => undefined,
-		);
-		return run;
 	};
 
 	const getRuntimeForChannel = async (channel: ChatChannelRef): Promise<ConversationRuntime> => {
@@ -266,9 +267,19 @@ export async function startDiscordDaemon(
 		return getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
 	};
 
+	const getOwnerDmChannel = (): Promise<DMChannel> => {
+		if (!ownerDmChannelPromise) {
+			ownerDmChannelPromise = client.users.createDM(config.discord.ownerId).catch((error) => {
+				ownerDmChannelPromise = undefined;
+				throw error;
+			});
+		}
+		return ownerDmChannelPromise;
+	};
+
 	const getWebSessions = async (): Promise<DiscordWebSession[]> => {
 		const sessions: DiscordWebSession[] = [];
-		const dmChannel = await client.users.createDM(config.discord.ownerId);
+		const dmChannel = await getOwnerDmChannel();
 		const dmRef = buildChannelRef(dmChannel, dmChannel.id);
 		sessions.push({
 			key: chatChannelKey(dmRef),
@@ -290,7 +301,7 @@ export async function startDiscordDaemon(
 	};
 
 	const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime; channel: DiscordChatChannel }> => {
-		const dmChannel = await client.users.createDM(config.discord.ownerId);
+		const dmChannel = await getOwnerDmChannel();
 		const runtime = await getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
 		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};

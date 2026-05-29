@@ -231,6 +231,7 @@ function defaultBrowserRunner(): BrowserRunner {
 				reject(new Error(`Browser command timed out after ${options.timeoutMs}ms.`));
 			}, options.timeoutMs);
 			const abort = () => {
+				clearTimeout(timeout);
 				child.kill("SIGTERM");
 				reject(new Error("Browser command aborted."));
 			};

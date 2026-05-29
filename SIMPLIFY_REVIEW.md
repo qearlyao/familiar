@@ -89,9 +89,9 @@ Items prefixed **[Codex]** came from the Codex pass.
 
 ### Backend hot-path inefficiencies
 
-37. [src/runtime.ts:276-290](src/runtime.ts#L276-L290) — `getLastQueuedTriggerRecordId` / `getLastCompletedTriggerRecordId` scan full records array per inbound message. Maintain counters in `appendRecord`.
-38. [src/runtime.ts:443-461](src/runtime.ts#L443-L461) — `buildPrompt` and `buildPromptAttachments` filter the same slice twice.
-39. [src/runtime.ts:128](src/runtime.ts#L128) — `records: ChatLogRecord[]` grows unbounded per channel. Bound by reset or sliding window.
+37. ~~`getLastQueuedTriggerRecordId` / `getLastCompletedTriggerRecordId` scan full records array per inbound message.~~ **Done (step 10, `eaa41e8`):** maintained incrementally via `indexRecordForTriggers` (folded into the `rebuildPendingJobs` load loop + `appendRecord` live path); reads are O(1). `rebuildPendingJobs` now resets the fields first so idempotence is by design.
+38. ~~`buildPrompt` and `buildPromptAttachments` filter the same slice twice.~~ **Done (step 10, `eaa41e8`):** `beginNextJob` computes the slice once via `triggerInboundSlice` and feeds both; per-turn filter passes 2→1 (Opus simplify-review caught that the first cut deduped code but not the scan).
+39. **Deferred (step 10):** [src/runtime.ts] `records: ChatLogRecord[]` grows unbounded per channel. NOT a pure hot-path fix — `getRecords()` feeds `web.ts webHistoryPayload`, so a sliding window would silently truncate the web history panel. Needs web history to read from the persisted log instead; separate design task.
 40. [src/web-static.ts:32-48](src/web-static.ts#L32-L48) — Per-request `existsSync(distDir)` + uncached `realpath(root)` for each attempt; cache at startup.
 41. [src/web-static.ts:56-92](src/web-static.ts#L56-L92) — `serveAttachment` does ~9 syscalls per miss.
 42. [src/web-tools.ts:866-895](src/web-tools.ts#L866-L895) — Jina double-fetches when JSON parse fails on a text response; detect Content-Type first.

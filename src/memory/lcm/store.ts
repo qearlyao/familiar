@@ -430,8 +430,7 @@ export class LcmStore {
 			 ) VALUES (?, ?, ?, ?, ?, ?)`,
 		);
 		for (const [index, source] of sources.entries()) {
-			// source_summary_id is legacy advisory lineage only. The canonical
-			// parent edge is lcm_summary_parents, and this column is scheduled for removal.
+			// source_summary_id is advisory only; the canonical parent edge is lcm_summary_parents.
 			insert.run(
 				summaryId,
 				index,

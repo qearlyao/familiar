@@ -755,13 +755,18 @@ async function loadSiteCommand(
 	return info;
 }
 
-function buildSiteArgs(input: BrowserToolInput, config: Config, commandInfo: SiteCommandInfo): string[] {
+function resolveSiteCommand(input: BrowserToolInput, config: Config): { site: string; command: string } {
 	const site = stringArg(input.site);
 	const command = stringArg(input.command);
 	if (!site || !command) throw new Error("browser site mode requires site and command.");
 	assertSafeName(site, "browser.site");
 	assertSafeName(command, "browser.command");
 	assertSiteAllowed(config, site);
+	return { site, command };
+}
+
+function buildSiteArgs(input: BrowserToolInput, config: Config, commandInfo: SiteCommandInfo): string[] {
+	const { site, command } = resolveSiteCommand(input, config);
 	if (commandInfo.access === "write" && !config.browser.readWrite) {
 		throw new Error(`OpenCLI write command is disabled until browser.read_write is true: ${site} ${command}`);
 	}
@@ -797,12 +802,7 @@ async function buildSiteRunSpec(
 	runner: BrowserRunner,
 	signal?: AbortSignal,
 ): Promise<BrowserRunSpec> {
-	const site = stringArg(input.site);
-	const command = stringArg(input.command);
-	if (!site || !command) throw new Error("browser site mode requires site and command.");
-	assertSafeName(site, "browser.site");
-	assertSafeName(command, "browser.command");
-	assertSiteAllowed(config, site);
+	const { site, command } = resolveSiteCommand(input, config);
 	const commandInfo = await loadSiteCommand(site, command, config, runner, signal);
 	return openCliSpec(config, buildSiteArgs(input, config, commandInfo));
 }

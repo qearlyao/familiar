@@ -1,15 +1,10 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { isRecord } from "../util/guards.js";
 
-function clonePayload(payload: unknown): unknown {
-	if (typeof structuredClone === "function") return structuredClone(payload);
-	return JSON.parse(JSON.stringify(payload)) as unknown;
-}
-
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.
 function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
-	const nextPayload = clonePayload(payload);
+	const nextPayload = structuredClone(payload);
 	if (!isRecord(nextPayload)) return nextPayload;
 	const request = nextPayload as { input?: unknown; store?: unknown };
 	if (request.store !== false) return nextPayload;

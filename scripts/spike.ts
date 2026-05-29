@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
-import { type Model, streamSimple } from "@earendil-works/pi-ai";
+import { type Api, type Model, streamSimple } from "@earendil-works/pi-ai";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
 
 function env(name: string, fallback: string): string {
@@ -12,7 +12,7 @@ function requiredEnv(name: string): string {
 	return value;
 }
 
-function createSpikeModel(): Model<any> {
+function createSpikeModel(): Model<Api> {
 	const provider = process.env.FAMILIAR_SPIKE_PROVIDER ?? "anthropic";
 	const modelId = env("FAMILIAR_SPIKE_MODEL", "claude-sonnet-4-5");
 	return {

@@ -114,7 +114,7 @@ function daysInMonth(year: number, month: number): number {
 
 function scheduledDate(year: number, month: number, day: number, time: { hour: number; minute: number }): Date {
 	const clampedDay = Math.min(day, daysInMonth(year, month));
-	// Local Date construction follows host timezone DST rules; rare skipped or repeated wall-clock hours are acceptable for v0.
+	// Local Date construction follows host timezone DST rules; rare skipped or repeated wall-clock hours are acceptable.
 	return new Date(year, month, clampedDay, time.hour, time.minute, 0, 0);
 }
 

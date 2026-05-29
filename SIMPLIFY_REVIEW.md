@@ -84,15 +84,20 @@ structural decomposition. Needs its own task + review — NOT a batch.
   many small queries → CTE** walking `lcm_summary_parents`.
   [src/memory/lcm/store.ts:539-561,945-984](src/memory/lcm/store.ts#L539-L561).
   SQL correctness, high blast radius.
-- **#56 — chat-log JSONL files read sequentially → `Promise.all` + merge.**
-  [src/chat-log.ts:260-280](src/chat-log.ts#L260-L280). Must preserve record order.
-- **#57 — sharp 6×4 encode grid runs sequentially**; inner quality loop is
-  monotonic so early-break is safe.
-  [src/image-derivatives.ts:94-124](src/image-derivatives.ts#L94-L124). Must prove
-  output byte-identical to the full scan.
-- **#58 — video read fully into memory + base64 inline** doubles memory, blocks
-  the event loop. [src/media-understanding.ts:79-89](src/media-understanding.ts#L79-L89).
-  Streaming rewrite; changes memory profile.
+- **#56 — done (`a288fbe`).** chat-log `read()` now issues all per-day `.jsonl`
+  reads via `Promise.all` (libuv threadpool bounds real concurrency), parses the
+  resolved buffers in deterministic filename order, and keeps the final recordId
+  sort — output order unchanged, same malformed-record error.
+- **#57 — DROPPED (not a win; finding was wrong).** [src/image-derivatives.ts:102-124].
+  The roadmap line assumed a full 6×4=24 encode scan, but the loop **already
+  early-breaks** — it walks edge steps largest→first, quality high→first, and
+  returns the first output under the 4.5 MB inline limit. The full 24 encodes only
+  run in the worst case where nothing fits. Parallelizing would (a) force all 24
+  encodes every time, pessimizing the common 1–2-encode path with more CPU + 24
+  buffers in flight, and (b) require replicating the exact biggest-edge/highest-quality
+  tie-break to keep output identical. sharp is CPU-bound on a 4-thread pool, so
+  firing 24 at once just queues them. Net: trades common-case efficiency for
+  rare-case latency and risks output drift. Leave the early-break loop as-is.
 - **#59 — tts ElevenLabs fetch has no timeout** (other media helpers do).
   [src/tts.ts:126-141](src/tts.ts#L126-L141). Adds a new failure mode; decide the
   deadline deliberately.
@@ -189,6 +194,16 @@ structural decomposition. Needs its own task + review — NOT a batch.
 
 ## OPEN — deferred misc
 
+- **#58 — video read fully into memory + base64 inline → Gemini Files API.**
+  [src/media-understanding.ts:80,87](src/media-understanding.ts#L80-L87). Real waste:
+  `readFile` loads the whole video, then `.toString("base64")` allocates a second
+  ~1.33× copy and the synchronous encode blocks the event loop. BUT the roadmap's
+  "streaming rewrite" isn't available here — `@google/genai`'s `createPartFromBase64`
+  requires an inline base64 string; `generateContent` has no streaming-upload path.
+  The real fix is `ai.files.upload` (streaming upload → reference by URI), which
+  changes external behavior (uploaded files persist server-side ~48h, different
+  content part) — a small feature, not a perf cleanup. Re-scoped + deferred; bundle
+  with a video size cap (none today) when picked up as its own task.
 - **#8 / 2026-05-26 Follow-up #8 — paginated history rebuilds the full transcript.**
   [src/web.ts:383-434](src/web.ts#L383-L434). Page loads scale with total transcript
   size, not page size. DEFERRED — transcript size not biting yet; window record/message

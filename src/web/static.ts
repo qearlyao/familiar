@@ -8,9 +8,12 @@ import type { Config } from "../config.js";
 import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../generated-media.js";
 import { sendText } from "./http.js";
 
-function getProjectRoot(): string {
-	return resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-}
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const DIST_DIR = resolve(PROJECT_ROOT, "web/dist");
+
+// Only successful realpaths are cached: the attachment root dirs are created
+// lazily on first write, so a missing root must stay retryable.
+const rootRealPathCache = new Map<string, string>();
 
 function mimeType(path: string): string {
 	const extension = extname(path).toLowerCase();
@@ -30,17 +33,16 @@ function mimeType(path: string): string {
 }
 
 export async function serveStatic(response: ServerResponse, requestPath: string): Promise<boolean> {
-	const distDir = resolve(getProjectRoot(), "web/dist");
-	if (!existsSync(distDir)) return false;
+	if (!existsSync(DIST_DIR)) return false;
 	const pathname = decodeURIComponent(requestPath.split("?")[0] || "/");
-	const candidate = resolve(distDir, pathname === "/" ? "index.html" : pathname.slice(1));
-	if (!candidate.startsWith(distDir)) {
+	const candidate = resolve(DIST_DIR, pathname === "/" ? "index.html" : pathname.slice(1));
+	if (!candidate.startsWith(DIST_DIR)) {
 		sendText(response, 403, "Forbidden");
 		return true;
 	}
 	let filePath = candidate;
 	const fileStat = await stat(filePath).catch(() => undefined);
-	if (!fileStat?.isFile()) filePath = join(distDir, "index.html");
+	if (!fileStat?.isFile()) filePath = join(DIST_DIR, "index.html");
 	const stream = createReadStream(filePath);
 	response.writeHead(200, { "content-type": mimeType(filePath) });
 	stream.pipe(response);
@@ -83,8 +85,12 @@ export async function serveAttachment(
 		{ root: browserScreenshotsDir(config), relativePath: relativePath.replace(/^screenshot[\\/]/, "") },
 	];
 	for (const { root, relativePath: candidateRelativePath } of candidates) {
-		const rootRealPath = await realpath(root).catch(() => undefined);
-		if (!rootRealPath) continue;
+		let rootRealPath = rootRealPathCache.get(root);
+		if (rootRealPath === undefined) {
+			rootRealPath = await realpath(root).catch(() => undefined);
+			if (!rootRealPath) continue;
+			rootRealPathCache.set(root, rootRealPath);
+		}
 		const filePath = resolve(root, candidateRelativePath);
 		const rel = relative(root, filePath);
 		if (rel.startsWith("..") || rel.startsWith("/") || rel.startsWith("\\") || rel === "") {

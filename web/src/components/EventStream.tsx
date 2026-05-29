@@ -78,6 +78,10 @@ function hasStepBody(step: GutterStep): boolean {
   return Boolean(tool.args || tool.result || tool.partialResult || tool.error);
 }
 
+function stepHasError(step: GutterStep): boolean {
+  return step.kind === "tool" && step.tool.status === "error";
+}
+
 function IconCell({
   step,
   active,
@@ -269,8 +273,7 @@ export function EventStream({
 }) {
   const active = steps.some(isStepActive);
   const allComplete = !active && steps.length > 0;
-  const hasError = steps.some((s) => s.kind === "tool" && s.tool.status === "error");
-  const showDone = allComplete && steps.length >= 2 && !hasError;
+  const showDone = allComplete && steps.length >= 2 && !steps.some(stepHasError);
 
   const [open, setOpen] = useState(active);
   const userTouched = useRef(false);

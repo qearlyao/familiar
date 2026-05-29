@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Attachment, Message } from "../types";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
@@ -66,7 +67,7 @@ function SystemTurn({ message }: { message: Message }) {
   );
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
   return (
@@ -75,4 +76,4 @@ export function MessageBubble({ message }: { message: Message }) {
       <AttachmentList attachments={message.attachments ?? []} align="left" />
     </div>
   );
-}
+});

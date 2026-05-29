@@ -36,16 +36,18 @@ export function MessageList({
   messages,
   personaName,
   historyLoaded,
+  streaming = false,
 }: {
   messages: Message[];
   personaName: string;
   historyLoaded: boolean;
+  streaming?: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+    endRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth", block: "end" });
+  }, [messages, streaming]);
 
   if (historyLoaded && messages.length === 0) {
     return (

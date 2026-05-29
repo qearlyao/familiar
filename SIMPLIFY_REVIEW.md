@@ -175,9 +175,12 @@ A few patterns worth flagging:
    - [x] **6d.** Follow-up #7 (LOW, Buffer→Uint8Array→Blob extra copy) — folded into 6a via `RawFile.data: Buffer`.
    - [x] **6e.** HIGH #17, `runAgentTurn` extraction across `drainJobs` / `runHeartbeat` / `runCronJob` — separate commit, follows attachment cleanup.
 [x]7. **Test helpers consolidation (MED #76-87)** — extract once, ripple through. Done in two commits: P7a (env helpers + media fixtures + dup-test delete, #76/#77/#87) and P7b (shared memory fakes/builders, #78-81/#84-85). #82/#86 deferred (parameterize/speedup, not dedup); #83 moot. Net ~-310 lines.
-8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Fold in:
-   - Follow-up #4 (MED, persona-load tears down WS) — stash `handleEvent` in a ref so the WS effect only depends on `activeSessionKey`.
-   - Follow-up #9 (LOW, `closeOpenContentSteps` vs `closeAllSteps` duplication) — collapse into one helper.
+[x]8. **Frontend hooks consolidation (HIGH #22-23, MED #69-75) + useChat cleanup** — meaningful for re-render perf. Done in four scoped groups:
+   - **A** (useChat): collapsed `closeOpenContentSteps`/`closeAllSteps` → one `closeContentSteps` (Follow-up #9); extracted `patchSteps` for the delta/tool upserts (#22); stashed `handleEvent` in a ref so the WS effect only depends on `activeSessionKey` (#23 + Follow-up #4), no more teardown when `personaName` resolves.
+   - **B** (render perf): `React.memo` on `MessageBubble` (#70) so unchanged bubbles skip per-token re-render; `scrollIntoView` switches to `behavior:"auto"` while streaming (#69).
+   - **C** (config inputs): extracted shared `OnOffToggle`/`MinuteInput`/`NumberInput`/`ModelRefInput` into `config/inputs.tsx` + a `useCommittedInput` hook (#71); the hook resyncs the draft only while unfocused, replacing the `key={…value…}` remount hack that dropped focus (#72); extracted `useIsMounted` + `useRequestState` (`requestState.ts`), folding the mount-guard/busy/error lifecycle out of `useConfig` + `useAgentSettings` (#73).
+   - **D** (api/drawer): one `jsonRequest` helper replaces six POST/DELETE fetch-parse-throw bodies in `api.ts` (#74); `MemorySection` now takes the typed `ConfigPayload["values"]` map instead of 18 drilled props, collapsing the `ConfigDrawer` call site (#75).
+   - All 638 tests pass; web + backend typecheck + eslint clean; dev server transforms all changed modules without error. Browser click-test of input focus retention not run (no live backend in this env) — verified by typecheck + logic review.
 9. **EventStream + leftover atomicity polish** — small, scoped:
    - Follow-up #5 (MED, `aria-hidden` over focusable `show more` button) — swap to `inert` while collapsed.
    - Follow-up #6 (MED, `JSON.stringify` on every render) — `useMemo` keyed by tool id + status.

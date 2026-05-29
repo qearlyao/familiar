@@ -235,31 +235,33 @@ export async function fetchAvailableModels(): Promise<AvailableModels> {
   return { models: body.models, added: body.added ?? [] };
 }
 
-export async function addModel(model: string): Promise<AvailableModels> {
-  const res = await fetch("/api/web/agent/models", {
-    method: "POST",
+// POST/DELETE with a JSON body; on failure surface the server's {error} string,
+// falling back to "<label>: <status>". Returns the parsed body (undefined if empty).
+async function jsonRequest<T>(
+  url: string,
+  method: "POST" | "DELETE",
+  body: unknown,
+  label: string,
+): Promise<T> {
+  const res = await fetch(url, {
+    method,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `agent/models: ${res.status}`);
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errBody.error ?? `${label}: ${res.status}`);
   }
-  const body = (await res.json()) as AvailableModels;
+  return (await res.json().catch(() => undefined)) as T;
+}
+
+export async function addModel(model: string): Promise<AvailableModels> {
+  const body = await jsonRequest<AvailableModels>("/api/web/agent/models", "POST", { model }, "agent/models");
   return { models: body.models, added: body.added ?? [] };
 }
 
 export async function removeModel(model: string): Promise<AvailableModels> {
-  const res = await fetch("/api/web/agent/models", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `agent/models: ${res.status}`);
-  }
-  const body = (await res.json()) as AvailableModels;
+  const body = await jsonRequest<AvailableModels>("/api/web/agent/models", "DELETE", { model }, "agent/models");
   return { models: body.models, added: body.added ?? [] };
 }
 
@@ -267,28 +269,11 @@ export async function updateAgentSettings(
   channelKey: string,
   changes: { model?: string; thinking?: ThinkingLevel },
 ): Promise<AgentSettings> {
-  const res = await fetch("/api/web/agent/settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ channelKey, ...changes }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `agent/settings: ${res.status}`);
-  }
-  return (await res.json()) as AgentSettings;
+  return jsonRequest<AgentSettings>("/api/web/agent/settings", "POST", { channelKey, ...changes }, "agent/settings");
 }
 
 export async function startNewChat(channelKey: string): Promise<void> {
-  const res = await fetch("/api/web/agent/new", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ channelKey }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `agent/new: ${res.status}`);
-  }
+  await jsonRequest<void>("/api/web/agent/new", "POST", { channelKey }, "agent/new");
 }
 
 export interface Meme {
@@ -366,6 +351,8 @@ export interface ConfigPayload {
   };
 }
 
+export type ConfigValues = ConfigPayload["values"];
+
 export async function fetchConfig(): Promise<ConfigPayload> {
   const res = await fetch("/api/web/config");
   if (!res.ok) throw new Error(`config: ${res.status}`);
@@ -373,27 +360,9 @@ export async function fetchConfig(): Promise<ConfigPayload> {
 }
 
 export async function setConfig(key: ConfigKey, value: unknown): Promise<ConfigPayload> {
-  const res = await fetch("/api/web/config", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key, value }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `config: ${res.status}`);
-  }
-  return (await res.json()) as ConfigPayload;
+  return jsonRequest<ConfigPayload>("/api/web/config", "POST", { key, value }, "config");
 }
 
 export async function clearConfig(key: ConfigKey): Promise<ConfigPayload> {
-  const res = await fetch("/api/web/config", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key }),
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `config: ${res.status}`);
-  }
-  return (await res.json()) as ConfigPayload;
+  return jsonRequest<ConfigPayload>("/api/web/config", "DELETE", { key }, "config");
 }

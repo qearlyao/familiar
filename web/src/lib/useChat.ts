@@ -34,7 +34,7 @@ function mergeTool(existing: ToolEvent | undefined, patch: ToolEvent): ToolEvent
   };
 }
 
-function closeOpenContentSteps(steps: Step[], now: number): Step[] {
+function closeContentSteps(steps: Step[], now: number): Step[] {
   if (steps.length === 0) return steps;
   return steps.map((step) => {
     if (step.kind === "thinking") {
@@ -61,7 +61,7 @@ function appendDelta(
       const updated: ThinkingStep = { ...last, text: last.text + content };
       return [...steps.slice(0, -1), updated];
     }
-    const closed = closeOpenContentSteps(steps, now);
+    const closed = closeContentSteps(steps, now);
     const next: ThinkingStep = {
       kind: "thinking",
       id: uid(),
@@ -74,7 +74,7 @@ function appendDelta(
     const updated: TextStep = { ...last, text: last.text + content };
     return [...steps.slice(0, -1), updated];
   }
-  const closed = closeOpenContentSteps(steps, now);
+  const closed = closeContentSteps(steps, now);
   const next: TextStep = { kind: "text", id: uid(), text: content };
   return [...closed, next];
 }
@@ -88,23 +88,9 @@ function upsertToolStep(steps: Step[], tool: ToolEvent, now: number): Step[] {
     next[idx] = merged;
     return next;
   }
-  const closed = closeOpenContentSteps(steps, now);
+  const closed = closeContentSteps(steps, now);
   const next: ToolStep = { kind: "tool", id: tool.id, tool };
   return [...closed, next];
-}
-
-function closeAllSteps(steps: Step[], now: number): Step[] {
-  return steps.map((step) => {
-    if (step.kind === "thinking") {
-      if (step.complete) return step;
-      return { ...step, complete: true, endedAt: step.endedAt ?? now };
-    }
-    if (step.kind === "text") {
-      if (step.complete) return step;
-      return { ...step, complete: true };
-    }
-    return step;
-  });
 }
 
 export interface ChatHook {
@@ -134,6 +120,10 @@ export function useChat(): ChatHook {
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
 
+  const patchSteps = useCallback((messageId: string, fn: (steps: Step[]) => Step[]) => {
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, steps: fn(m.steps) } : m)));
+  }, []);
+
   const handleEvent = useCallback(
     (event: StreamEvent) => {
       if ("eventId" in event) lastEventIdRef.current = event.eventId;
@@ -159,25 +149,13 @@ export function useChat(): ChatHook {
 
         case "delta": {
           const now = Date.now();
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === event.messageId
-                ? { ...m, steps: appendDelta(m.steps, event.part, event.content, now) }
-                : m,
-            ),
-          );
+          patchSteps(event.messageId, (steps) => appendDelta(steps, event.part, event.content, now));
           break;
         }
 
         case "tool_event": {
           const now = Date.now();
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === event.messageId
-                ? { ...m, steps: upsertToolStep(m.steps, event.tool, now) }
-                : m,
-            ),
-          );
+          patchSteps(event.messageId, (steps) => upsertToolStep(steps, event.tool, now));
           break;
         }
 
@@ -204,7 +182,7 @@ export function useChat(): ChatHook {
               if (m.id !== event.messageId) return m;
               return {
                 ...m,
-                steps: closeAllSteps(m.steps, now),
+                steps: closeContentSteps(m.steps, now),
                 attachments: event.attachments ?? m.attachments,
                 usage: event.usage ?? m.usage,
                 silent: event.silent ?? m.silent,
@@ -231,7 +209,7 @@ export function useChat(): ChatHook {
               if (m.steps.some((s) => s.id === errorStepId)) {
                 return { ...m, steps: m.steps.map((s) => (s.id === errorStepId ? errorStep : s)) };
               }
-              return { ...m, steps: [...closeAllSteps(m.steps, now), errorStep] };
+              return { ...m, steps: [...closeContentSteps(m.steps, now), errorStep] };
             });
           });
           break;
@@ -272,8 +250,13 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [activeSessionKey, personaName],
+    [activeSessionKey, personaName, patchSteps],
   );
+
+  const handleEventRef = useRef(handleEvent);
+  useEffect(() => {
+    handleEventRef.current = handleEvent;
+  }, [handleEvent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,7 +330,7 @@ export function useChat(): ChatHook {
         if (cancelled) return;
         try {
           const data = JSON.parse(e.data) as StreamEvent;
-          handleEvent(data);
+          handleEventRef.current(data);
         } catch {
           /* ignore malformed frame */
         }
@@ -384,7 +367,7 @@ export function useChat(): ChatHook {
       if (wsRef.current === ws) wsRef.current = null;
       ws?.close();
     };
-  }, [activeSessionKey, handleEvent]);
+  }, [activeSessionKey]);
 
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);

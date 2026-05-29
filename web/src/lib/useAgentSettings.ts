@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   addModel as apiAddModel,
   fetchAgentSettings,
@@ -8,6 +8,7 @@ import {
   type AgentSettings,
   type ThinkingLevel,
 } from "./api";
+import { useRequestState } from "./requestState";
 
 export interface UseAgentSettings {
   data: AgentSettings | undefined;
@@ -27,38 +28,19 @@ export function useAgentSettings(channelKey: string | undefined): UseAgentSettin
   const [data, setData] = useState<AgentSettings | undefined>(undefined);
   const [models, setModels] = useState<string[]>([]);
   const [addedModels, setAddedModels] = useState<string[]>([]);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
-  const aliveRef = useRef(true);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const { error, isLoading, isMutating, run } = useRequestState();
 
   const load = useCallback(async () => {
     if (!channelKey) return;
-    setIsLoading(true);
-    setError(undefined);
-    try {
-      const [settings, modelList] = await Promise.all([
-        fetchAgentSettings(channelKey),
-        fetchAvailableModels(),
-      ]);
-      if (!aliveRef.current) return;
-      setData(settings);
-      setModels(modelList.models);
-      setAddedModels(modelList.added);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (aliveRef.current) setIsLoading(false);
-    }
-  }, [channelKey]);
+    await run(() => Promise.all([fetchAgentSettings(channelKey), fetchAvailableModels()]), {
+      busy: "load",
+      apply: ([settings, modelList]) => {
+        setData(settings);
+        setModels(modelList.models);
+        setAddedModels(modelList.added);
+      },
+    });
+  }, [channelKey, run]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);
@@ -69,71 +51,53 @@ export function useAgentSettings(channelKey: string | undefined): UseAgentSettin
     async (changes: { model?: string; thinking?: ThinkingLevel }) => {
       if (!channelKey) return;
       const previous = data;
-      const optimistic: AgentSettings | undefined = previous
-        ? {
-            ...previous,
-            model: changes.model
-              ? { value: changes.model, source: "override" }
-              : previous.model,
-            thinking: changes.thinking
-              ? { value: changes.thinking, source: "override" }
-              : previous.thinking,
-          }
-        : previous;
-      if (optimistic) setData(optimistic);
-      setIsMutating(true);
-      setError(undefined);
-      try {
-        const next = await updateAgentSettings(channelKey, changes);
-        if (!aliveRef.current) return;
-        setData(next);
-      } catch (err) {
-        if (!aliveRef.current) return;
-        if (previous) setData(previous);
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (aliveRef.current) setIsMutating(false);
+      if (previous) {
+        setData({
+          ...previous,
+          model: changes.model ? { value: changes.model, source: "override" } : previous.model,
+          thinking: changes.thinking
+            ? { value: changes.thinking, source: "override" }
+            : previous.thinking,
+        });
       }
+      await run(() => updateAgentSettings(channelKey, changes), {
+        apply: setData,
+        onError: () => {
+          if (previous) setData(previous);
+        },
+      });
     },
-    [channelKey, data],
+    [channelKey, data, run],
   );
 
   const setModel = useCallback((model: string) => mutate({ model }), [mutate]);
   const setThinking = useCallback((thinking: ThinkingLevel) => mutate({ thinking }), [mutate]);
 
-  const addModel = useCallback(async (model: string) => {
-    setIsMutating(true);
-    setError(undefined);
-    try {
-      const next = await apiAddModel(model);
-      if (!aliveRef.current) return;
-      setModels(next.models);
-      setAddedModels(next.added);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-      throw err;
-    } finally {
-      if (aliveRef.current) setIsMutating(false);
-    }
-  }, []);
+  const addModel = useCallback(
+    async (model: string) => {
+      await run(() => apiAddModel(model), {
+        apply: (next) => {
+          setModels(next.models);
+          setAddedModels(next.added);
+        },
+        rethrow: true,
+      });
+    },
+    [run],
+  );
 
-  const removeModel = useCallback(async (model: string) => {
-    setIsMutating(true);
-    setError(undefined);
-    try {
-      const next = await apiRemoveModel(model);
-      if (!aliveRef.current) return;
-      setModels(next.models);
-      setAddedModels(next.added);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-      throw err;
-    } finally {
-      if (aliveRef.current) setIsMutating(false);
-    }
-  }, []);
+  const removeModel = useCallback(
+    async (model: string) => {
+      await run(() => apiRemoveModel(model), {
+        apply: (next) => {
+          setModels(next.models);
+          setAddedModels(next.added);
+        },
+        rethrow: true,
+      });
+    },
+    [run],
+  );
 
   return {
     data,

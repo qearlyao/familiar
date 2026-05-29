@@ -34,7 +34,7 @@ export function Chat() {
         onNewChatStarted={notifyNewChat}
       />
       <main className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} personaName={personaName} historyLoaded={historyLoaded} />
+        <MessageList messages={messages} personaName={personaName} historyLoaded={historyLoaded} streaming={streaming} />
       </main>
       <Composer
         onSend={(text, attachments) => void send(text, attachments)}

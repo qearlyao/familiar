@@ -1,100 +1,15 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { ConfigKey, SettingSource } from "@/lib/api";
+import type { ConfigKey, ConfigValues } from "@/lib/api";
+import { NumberInput, OnOffToggle } from "./inputs";
 
 interface MemorySectionProps {
-  compactionEnabled: boolean | undefined;
-  compactionModel: string | undefined;
-  compactionModelSource: SettingSource | undefined;
+  values: ConfigValues | undefined;
   models: string[];
-  contextThreshold: number | undefined;
-  freshTailCount: number | undefined;
-  leafChunkTokens: number | undefined;
-  leafTargetTokens: number | undefined;
-  condenseGroupSize: number | undefined;
-  maxSummaryDepth: number | undefined;
-  newSessionRetainDepth: number | undefined;
-  ambientEnabled: boolean | undefined;
-  topK: number | undefined;
-  minQueryLength: number | undefined;
-  throttleSeconds: number | undefined;
-  weightSimilarity: number | undefined;
-  weightValence: number | undefined;
-  weightRecency: number | undefined;
-  weightIntensity: number | undefined;
   disabled: boolean;
   onChange: (key: ConfigKey, value: unknown) => Promise<void>;
   onClear: (key: ConfigKey) => Promise<void>;
-}
-
-const toggleClass =
-  "h-9 rounded-md px-3.5 text-sm lowercase text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary";
-
-function NumberInput({
-  value,
-  step = 1,
-  min,
-  max,
-  disabled,
-  onCommit,
-}: {
-  value: number | undefined;
-  step?: number;
-  min?: number;
-  max?: number;
-  disabled: boolean;
-  onCommit: (v: number) => Promise<void>;
-}) {
-  const live = value === undefined ? "" : String(value);
-  const [draft, setDraft] = useState<string>(live);
-  const [busy, setBusy] = useState(false);
-
-  const commit = async () => {
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setDraft(live);
-      return;
-    }
-    if (min !== undefined && parsed < min) {
-      setDraft(live);
-      return;
-    }
-    if (max !== undefined && parsed > max) {
-      setDraft(live);
-      return;
-    }
-    if (parsed === value) return;
-    setBusy(true);
-    try {
-      await onCommit(parsed);
-    } catch {
-      setDraft(live);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <input
-      type="number"
-      inputMode={step < 1 ? "decimal" : "numeric"}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => void commit()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.currentTarget.blur();
-        }
-      }}
-      disabled={disabled || busy}
-      step={step}
-      min={min}
-      max={max}
-      className="h-8 w-20 rounded-md border border-border bg-background px-2 font-mono text-sm text-right text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
-    />
-  );
 }
 
 function Row({
@@ -127,65 +42,12 @@ function SubBlockLabel({ children }: { children: ReactNode }) {
   );
 }
 
-function OnOffToggle({
-  enabled,
-  disabled,
-  ariaPrefix,
-  onChange,
-}: {
-  enabled: boolean | undefined;
-  disabled: boolean;
-  ariaPrefix: string;
-  onChange: (next: boolean) => void;
-}) {
-  const isOn = enabled === true;
-  return (
-    <ToggleGroup
-      type="single"
-      value={enabled === undefined ? "" : isOn ? "on" : "off"}
-      onValueChange={(value) => {
-        if (value) onChange(value === "on");
-      }}
-      disabled={disabled}
-      spacing={1}
-      className="rounded-lg bg-muted/40 p-1"
-    >
-      <ToggleGroupItem value="on" aria-label={`${ariaPrefix} on`} className={toggleClass}>
-        on
-      </ToggleGroupItem>
-      <ToggleGroupItem value="off" aria-label={`${ariaPrefix} off`} className={toggleClass}>
-        off
-      </ToggleGroupItem>
-    </ToggleGroup>
-  );
-}
-
-export function MemorySection({
-  compactionEnabled,
-  compactionModel,
-  compactionModelSource,
-  models,
-  contextThreshold,
-  freshTailCount,
-  leafChunkTokens,
-  leafTargetTokens,
-  condenseGroupSize,
-  maxSummaryDepth,
-  newSessionRetainDepth,
-  ambientEnabled,
-  topK,
-  minQueryLength,
-  throttleSeconds,
-  weightSimilarity,
-  weightValence,
-  weightRecency,
-  weightIntensity,
-  disabled,
-  onChange,
-  onClear,
-}: MemorySectionProps) {
+export function MemorySection({ values, models, disabled, onChange, onClear }: MemorySectionProps) {
+  const compactionEnabled = values?.["memory.lcm.enabled"].value;
+  const compactionModel = values?.["memory.lcm.model"].value;
+  const compactionModelSource = values?.["memory.lcm.model"].source;
   const compactionOff = disabled || compactionEnabled !== true;
-  const ambientOff = disabled || ambientEnabled !== true;
+  const ambientOff = disabled || values?.["memory.ambient.enabled"].value !== true;
 
   return (
     <>
@@ -243,8 +105,7 @@ export function MemorySection({
         <div className="mt-4 grid gap-4">
           <Row label="context threshold" description="fraction of context that triggers compaction">
             <NumberInput
-              key={`context-${contextThreshold ?? "default"}`}
-              value={contextThreshold}
+              value={values?.["memory.lcm.contextThreshold"].value}
               step={0.05}
               min={0}
               max={1}
@@ -254,8 +115,7 @@ export function MemorySection({
           </Row>
           <Row label="fresh tail count" description="most recent messages kept raw, never compacted">
             <NumberInput
-              key={`fresh-${freshTailCount ?? "default"}`}
-              value={freshTailCount}
+              value={values?.["memory.lcm.freshTailCount"].value}
               min={1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.freshTailCount", v)}
@@ -263,8 +123,7 @@ export function MemorySection({
           </Row>
           <Row label="leaf chunk tokens" description="max tokens of input per leaf summary">
             <NumberInput
-              key={`leaf-chunk-${leafChunkTokens ?? "default"}`}
-              value={leafChunkTokens}
+              value={values?.["memory.lcm.leafChunkTokens"].value}
               min={1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.leafChunkTokens", v)}
@@ -272,8 +131,7 @@ export function MemorySection({
           </Row>
           <Row label="leaf target tokens" description="target tokens per leaf summary output">
             <NumberInput
-              key={`leaf-target-${leafTargetTokens ?? "default"}`}
-              value={leafTargetTokens}
+              value={values?.["memory.lcm.leafTargetTokens"].value}
               min={1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.leafTargetTokens", v)}
@@ -281,8 +139,7 @@ export function MemorySection({
           </Row>
           <Row label="condense group size" description="how many summaries combine into one at the next level">
             <NumberInput
-              key={`condense-${condenseGroupSize ?? "default"}`}
-              value={condenseGroupSize}
+              value={values?.["memory.lcm.condenseGroupSize"].value}
               min={1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.condenseGroupSize", v)}
@@ -290,8 +147,7 @@ export function MemorySection({
           </Row>
           <Row label="max summary depth" description="deepest level of recursive summary-of-summaries">
             <NumberInput
-              key={`max-depth-${maxSummaryDepth ?? "default"}`}
-              value={maxSummaryDepth}
+              value={values?.["memory.lcm.maxSummaryDepth"].value}
               min={1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.maxSummaryDepth", v)}
@@ -302,8 +158,7 @@ export function MemorySection({
             description="lowest summary depth kept after /new. -1 keeps full context, 0 keeps every summary."
           >
             <NumberInput
-              key={`retain-${newSessionRetainDepth ?? "default"}`}
-              value={newSessionRetainDepth}
+              value={values?.["memory.lcm.newSessionRetainDepth"].value}
               min={-1}
               disabled={compactionOff}
               onCommit={(v) => onChange("memory.lcm.newSessionRetainDepth", v)}
@@ -315,7 +170,7 @@ export function MemorySection({
       <section className="mt-8">
         <SubBlockLabel>ambient</SubBlockLabel>
         <OnOffToggle
-          enabled={ambientEnabled}
+          enabled={values?.["memory.ambient.enabled"].value}
           disabled={disabled}
           ariaPrefix="ambient"
           onChange={(next) => void onChange("memory.ambient.enabled", next)}
@@ -323,8 +178,7 @@ export function MemorySection({
         <div className="mt-4 grid gap-4">
           <Row label="top k" description="how many memories to surface per query">
             <NumberInput
-              key={`top-k-${topK ?? "default"}`}
-              value={topK}
+              value={values?.["memory.ambient.topK"].value}
               min={1}
               disabled={ambientOff}
               onCommit={(v) => onChange("memory.ambient.topK", v)}
@@ -332,8 +186,7 @@ export function MemorySection({
           </Row>
           <Row label="min query length" description="minimum query chars before recall fires">
             <NumberInput
-              key={`min-query-${minQueryLength ?? "default"}`}
-              value={minQueryLength}
+              value={values?.["memory.ambient.minQueryLength"].value}
               min={0}
               disabled={ambientOff}
               onCommit={(v) => onChange("memory.ambient.minQueryLength", v)}
@@ -341,8 +194,7 @@ export function MemorySection({
           </Row>
           <Row label="throttle seconds" description="cooldown between recalls">
             <NumberInput
-              key={`throttle-${throttleSeconds ?? "default"}`}
-              value={throttleSeconds}
+              value={values?.["memory.ambient.throttleSeconds"].value}
               min={0}
               disabled={ambientOff}
               onCommit={(v) => onChange("memory.ambient.throttleSeconds", v)}
@@ -350,8 +202,7 @@ export function MemorySection({
           </Row>
           <Row label="similarity weight" description="semantic match to your query">
             <NumberInput
-              key={`weight-similarity-${weightSimilarity ?? "default"}`}
-              value={weightSimilarity}
+              value={values?.["memory.ambient.weightSimilarity"].value}
               step={0.05}
               min={0}
               disabled={ambientOff}
@@ -360,8 +211,7 @@ export function MemorySection({
           </Row>
           <Row label="valence weight" description="emotional charge of the memory">
             <NumberInput
-              key={`weight-valence-${weightValence ?? "default"}`}
-              value={weightValence}
+              value={values?.["memory.ambient.weightValence"].value}
               step={0.05}
               min={0}
               disabled={ambientOff}
@@ -370,8 +220,7 @@ export function MemorySection({
           </Row>
           <Row label="recency weight" description="favors recent memories">
             <NumberInput
-              key={`weight-recency-${weightRecency ?? "default"}`}
-              value={weightRecency}
+              value={values?.["memory.ambient.weightRecency"].value}
               step={0.05}
               min={0}
               disabled={ambientOff}
@@ -380,8 +229,7 @@ export function MemorySection({
           </Row>
           <Row label="intensity weight" description="favors strongly-felt memories">
             <NumberInput
-              key={`weight-intensity-${weightIntensity ?? "default"}`}
-              value={weightIntensity}
+              value={values?.["memory.ambient.weightIntensity"].value}
               step={0.05}
               min={0}
               disabled={ambientOff}

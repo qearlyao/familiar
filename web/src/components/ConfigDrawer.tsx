@@ -125,9 +125,7 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
             description="your companion's pulse when you've gone quiet."
           >
             <HeartbeatSection
-              enabled={configData?.values["heartbeat.enabled"].value}
-              idleThresholdMs={configData?.values["heartbeat.idleThresholdMs"].value}
-              intervalMs={configData?.values["heartbeat.intervalMs"].value}
+              values={configData?.values}
               disabled={!ready || busy}
               onChange={setConfig}
             />
@@ -137,9 +135,7 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
             description="which model your companion uses to paint."
           >
             <ImageGenSection
-              enabled={configData?.values["image_gen.enabled"].value}
-              model={configData?.values["image_gen.model"].value}
-              fallbackModel={configData?.values["image_gen.fallback_model"].value}
+              values={configData?.values}
               disabled={!ready || busy}
               onChange={setConfig}
             />
@@ -149,25 +145,8 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
             description="how older conversation is condensed and how earlier memories return."
           >
             <MemorySection
-              compactionEnabled={configData?.values["memory.lcm.enabled"].value}
-              compactionModel={configData?.values["memory.lcm.model"].value}
-              compactionModelSource={configData?.values["memory.lcm.model"].source}
+              values={configData?.values}
               models={models}
-              contextThreshold={configData?.values["memory.lcm.contextThreshold"].value}
-              freshTailCount={configData?.values["memory.lcm.freshTailCount"].value}
-              leafChunkTokens={configData?.values["memory.lcm.leafChunkTokens"].value}
-              leafTargetTokens={configData?.values["memory.lcm.leafTargetTokens"].value}
-              condenseGroupSize={configData?.values["memory.lcm.condenseGroupSize"].value}
-              maxSummaryDepth={configData?.values["memory.lcm.maxSummaryDepth"].value}
-              newSessionRetainDepth={configData?.values["memory.lcm.newSessionRetainDepth"].value}
-              ambientEnabled={configData?.values["memory.ambient.enabled"].value}
-              topK={configData?.values["memory.ambient.topK"].value}
-              minQueryLength={configData?.values["memory.ambient.minQueryLength"].value}
-              throttleSeconds={configData?.values["memory.ambient.throttleSeconds"].value}
-              weightSimilarity={configData?.values["memory.ambient.weightSimilarity"].value}
-              weightValence={configData?.values["memory.ambient.weightValence"].value}
-              weightRecency={configData?.values["memory.ambient.weightRecency"].value}
-              weightIntensity={configData?.values["memory.ambient.weightIntensity"].value}
               disabled={!ready || busy}
               onChange={setConfig}
               onClear={clearConfig}

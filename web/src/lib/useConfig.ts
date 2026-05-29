@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   clearConfig as apiClearConfig,
   fetchConfig,
@@ -6,6 +6,7 @@ import {
   type ConfigKey,
   type ConfigPayload,
 } from "./api";
+import { useRequestState } from "./requestState";
 
 export interface UseConfig {
   data: ConfigPayload | undefined;
@@ -19,78 +20,31 @@ export interface UseConfig {
 
 export function useConfig(enabled: boolean): UseConfig {
   const [data, setData] = useState<ConfigPayload | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
-  const aliveRef = useRef(true);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const { error, isLoading, isMutating, run } = useRequestState();
 
   const load = useCallback(async () => {
     if (!enabled) return;
-    setIsLoading(true);
-    setError(undefined);
-    try {
-      const next = await fetchConfig();
-      if (!aliveRef.current) return;
-      setData(next);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (aliveRef.current) setIsLoading(false);
-    }
-  }, [enabled]);
+    await run(() => fetchConfig(), { busy: "load", apply: setData });
+  }, [enabled, run]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(id);
   }, [load]);
 
-  const setConfig = useCallback(async (key: ConfigKey, value: unknown) => {
-    setIsMutating(true);
-    setError(undefined);
-    try {
-      const next = await apiSetConfig(key, value);
-      if (!aliveRef.current) return;
-      setData(next);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-      throw err;
-    } finally {
-      if (aliveRef.current) setIsMutating(false);
-    }
-  }, []);
+  const setConfig = useCallback(
+    async (key: ConfigKey, value: unknown) => {
+      await run(() => apiSetConfig(key, value), { apply: setData, rethrow: true });
+    },
+    [run],
+  );
 
-  const clearConfig = useCallback(async (key: ConfigKey) => {
-    setIsMutating(true);
-    setError(undefined);
-    try {
-      const next = await apiClearConfig(key);
-      if (!aliveRef.current) return;
-      setData(next);
-    } catch (err) {
-      if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
-      throw err;
-    } finally {
-      if (aliveRef.current) setIsMutating(false);
-    }
-  }, []);
+  const clearConfig = useCallback(
+    async (key: ConfigKey) => {
+      await run(() => apiClearConfig(key), { apply: setData, rethrow: true });
+    },
+    [run],
+  );
 
-  return {
-    data,
-    error,
-    isLoading,
-    isMutating,
-    setConfig,
-    clearConfig,
-    refetch: load,
-  };
+  return { data, error, isLoading, isMutating, setConfig, clearConfig, refetch: load };
 }

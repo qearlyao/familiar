@@ -1,5 +1,17 @@
 import type { Config } from "../config.js";
 
+// A hard split at an arbitrary index can land between the two UTF-16 code units
+// of an astral character (emoji, rare CJK), rendering as a broken � at the seam.
+// Back off by one so the whole surrogate pair moves to the next chunk. Splits at
+// whitespace land on a space and are unaffected.
+function avoidSurrogateSplit(text: string, index: number): number {
+	if (index <= 0 || index >= text.length) return index;
+	const high = text.charCodeAt(index - 1);
+	const low = text.charCodeAt(index);
+	if (high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff) return index - 1;
+	return index;
+}
+
 function chunkDiscordSimple(text: string, limit = 2000): string[] {
 	if (text.length <= limit) return [text || "(empty response)"];
 	const chunks: string[] = [];
@@ -10,7 +22,7 @@ function chunkDiscordSimple(text: string, limit = 2000): string[] {
 			break;
 		}
 		const breakpoint = Math.max(remaining.lastIndexOf("\n", limit), remaining.lastIndexOf(" ", limit));
-		const splitAt = breakpoint > 0 ? breakpoint : limit;
+		const splitAt = breakpoint > 0 ? breakpoint : avoidSurrogateSplit(remaining, limit);
 		chunks.push(remaining.slice(0, splitAt));
 		remaining = remaining.slice(splitAt).trimStart();
 	}
@@ -38,7 +50,7 @@ function splitLongBlock(block: string, limit: number): string[] {
 		let remaining = line;
 		while (remaining.length > limit) {
 			let splitAt = remaining.lastIndexOf(" ", limit);
-			if (splitAt < Math.floor(limit * 0.6)) splitAt = limit;
+			if (splitAt < Math.floor(limit * 0.6)) splitAt = avoidSurrogateSplit(remaining, limit);
 			pieces.push(remaining.slice(0, splitAt));
 			remaining = remaining.slice(splitAt).trimStart();
 		}

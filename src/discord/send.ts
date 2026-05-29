@@ -107,20 +107,17 @@ export async function sendReply(
 		normalizedText,
 		attachments,
 		async (chunk, index) => {
+			if (!message.channel.isSendable()) {
+				throw new Error(`Discord channel is not sendable: ${message.channelId}`);
+			}
 			if (index === 0 && config.discord.replyMode === "reply") {
 				try {
 					const replyTarget = replyToMessageId || message.id;
-					if (!message.channel.isSendable()) {
-						throw new Error(`Discord channel is not sendable: ${message.channelId}`);
-					}
 					const options: MessageCreateOptions = { content: chunk, reply: { messageReference: replyTarget } };
 					return await message.channel.send(options);
 				} catch (error) {
 					console.error("Discord reply failed; falling back to channel send", error);
 				}
-			}
-			if (!message.channel.isSendable()) {
-				throw new Error(`Discord channel is not sendable: ${message.channelId}`);
 			}
 			return message.channel.send(chunk);
 		},

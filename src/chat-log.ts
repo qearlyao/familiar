@@ -266,10 +266,15 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 				if (isEnoent(error)) return [];
 				throw error;
 			}
+			const jsonlFiles = files.filter((entry) => entry.endsWith(".jsonl")).sort();
+			const contents = await Promise.all(
+				jsonlFiles.map(async (file) => {
+					const filePath = resolve(dir, file);
+					return { filePath, content: await readFile(filePath, "utf8") };
+				}),
+			);
 			const records: ChatLogRecord[] = [];
-			for (const file of files.filter((entry) => entry.endsWith(".jsonl")).sort()) {
-				const filePath = resolve(dir, file);
-				const content = await readFile(filePath, "utf8");
+			for (const { filePath, content } of contents) {
 				for (const [index, line] of content.split(/\r?\n/).entries()) {
 					if (!line.trim()) continue;
 					const parsed = JSON.parse(line) as unknown;

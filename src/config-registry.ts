@@ -323,11 +323,7 @@ export function applyConfigOverridesToConfig(config: Config): void {
 	}
 }
 
-export async function commitConfigChange(
-	key: ConfigKey,
-	value: unknown,
-	ctx: RegistryApplyContext,
-): Promise<void> {
+export async function commitConfigChange(key: ConfigKey, value: unknown, ctx: RegistryApplyContext): Promise<void> {
 	const entry = CONFIG_REGISTRY[key];
 	const previous = entry.read(ctx.config);
 	entry.write(ctx.config, value);

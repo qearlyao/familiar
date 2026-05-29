@@ -210,7 +210,13 @@ export async function startWebDaemon(
 				ts,
 			});
 			if (storedEvent.errorMessage) {
-				publish({ type: "model_error", channelKey, messageId: messageIdValue, message: storedEvent.errorMessage, ts });
+				publish({
+					type: "model_error",
+					channelKey,
+					messageId: messageIdValue,
+					message: storedEvent.errorMessage,
+					ts,
+				});
 			}
 		}
 		const tool = toolFromStoredAgentEvent(storedEvent, ts ?? Date.now());

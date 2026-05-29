@@ -173,10 +173,6 @@ structural decomposition. Needs its own task + review — NOT a batch.
   [src/web.ts:888](src/web.ts#L888). **Dropped (non-finding):** `loadAddedModels()` is
   already internally cached (`loaded`/`modelsCache` guard in `added-models.ts`); the
   two calls are cache-hit array spreads on a rare admin POST, not repeated disk reads.
-- **#64 — `buildSiteRunSpec` + `buildSiteArgs` re-validate `site`/`command`.**
-  [src/browser-tools.ts:740-748](src/browser-tools.ts#L740-L748). **Dropped (not pure
-  perf):** the re-validation is pure CPU dwarfed by the subprocess spawn that follows
-  — a DRY concern, not a perf win. Revisit only as a readability cleanup.
 
 ---
 
@@ -204,17 +200,11 @@ structural decomposition. Needs its own task + review — NOT a batch.
 
 Lowest priority; fold in opportunistically when already touching a file.
 
-- **WHAT-comments / phase-narration trims** —
-  [config.ts:738](src/config.ts#L738),
-  [lcm/store.ts:438,473-474](src/memory/lcm/store.ts#L438),
-  [agent.ts:61,394-396](src/agent.ts#L61),
-  [scheduler.ts:144](src/scheduler.ts#L144): "Stage 9" / "v0" / "legacy advisory
-  lineage scheduled for removal" comments narrating past phases. Trim or convert to
-  one-line invariant notes.
-- **`clonePayload` JSON fallback** at
-  [agent.ts:143-146](src/agent.ts#L143-L146) — `structuredClone` is stable in Node 17+;
-  drop the `JSON.parse` fallback.
-- **`scripts/spike.ts:15` uses `Model<any>`** — defeats the generic.
+The first three earlier bullets landed in `77fe5ce` (clonePayload dead-fallback
+drop + inline, `scheduler.ts`/`lcm/store.ts` narration-comment trims,
+`scripts/spike.ts` `Model<any>` → `Model<Api>`). The config.ts/agent.ts
+narration anchors no longer exist (cleaned during decomposition). What remains:
+
 - **Pre-existing latent edges (verified not introduced by the decomp).**
   `src/discord/chunking.ts` `splitLongBlock` UTF-16 fallback can split surrogate
   pairs; `chunkDiscordParagraph` final-fallback `slice(0, limit)` truncates;

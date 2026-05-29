@@ -231,6 +231,45 @@ describe("web history", () => {
 		assert.equal(textStep?.kind === "text" ? textStep.text : "", "[[FAMILIAR_SILENT]]");
 	});
 
+	it("renders a model error as a raw error step instead of plain dialogue text", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			{
+				type: "agent_event",
+				...base(1, "2026-05-26T00:00:00.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_start", role: "assistant" },
+			},
+			{
+				type: "agent_event",
+				...base(2, "2026-05-26T00:00:01.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_end", role: "assistant", errorMessage: "503 Service Unavailable" },
+			},
+			{
+				type: "outbound",
+				...base(3, "2026-05-26T00:00:02.000Z"),
+				messageIds: ["msg-1"],
+				webMessageId: "msg-1",
+				text: "Model error: 503 Service Unavailable",
+				jobId: "job-1",
+			},
+		];
+
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
+
+		assert.ok(message);
+		assert.deepEqual(
+			message.steps?.map((step) => step.kind),
+			["error"],
+		);
+		const errorStep = message.steps?.[0];
+		assert.equal(errorStep?.kind === "error" ? errorStep.text : "", "503 Service Unavailable");
+		assert.ok(!message.steps?.some((step) => step.kind === "text"));
+	});
+
 	it("keeps legit text from earlier turns plus the marker step from a later silent turn", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [

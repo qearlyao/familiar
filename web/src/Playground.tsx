@@ -209,6 +209,48 @@ const fixtures: Message[] = [
   },
 
   {
+    id: "u-5",
+    role: "user",
+    who: "you",
+    ts: now - 40_000,
+    steps: [{ kind: "text", id: "u-5-t", text: "summarize the long thread from last week", complete: true }],
+  },
+  {
+    id: "a-err-1",
+    role: "assistant",
+    who: "ghost",
+    ts: now - 38_000,
+    steps: [
+      {
+        kind: "thinking",
+        id: "a-err-1-think",
+        text: "big context. let me pull the thread and condense it.",
+        startedAt: now - 38_000,
+        endedAt: now - 37_000,
+        complete: true,
+      },
+      {
+        kind: "error",
+        id: "a-err-1-error",
+        text: "503 Service Unavailable · upstream provider overloaded (anthropic/claude-opus-4-8)",
+      },
+    ],
+  },
+  {
+    id: "a-err-2",
+    role: "assistant",
+    who: "ghost",
+    ts: now - 20_000,
+    steps: [
+      {
+        kind: "error",
+        id: "a-err-2-error",
+        text: "429 Too Many Requests · rate_limit_exceeded — retry after 30s",
+      },
+    ],
+  },
+
+  {
     id: "a-5",
     role: "assistant",
     who: "ghost",

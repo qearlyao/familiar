@@ -52,6 +52,11 @@ export type WebStep =
 			id: string;
 			text: string;
 			complete?: boolean;
+	  }
+	| {
+			kind: "error";
+			id: string;
+			text: string;
 	  };
 
 export type WebMessage = {
@@ -122,6 +127,14 @@ export type WebStreamEvent =
 			ts: number;
 			channelKey?: string;
 			code: "rate_limited" | "tool_failed" | "abort" | "unknown";
+			message: string;
+	  }
+	| {
+			type: "model_error";
+			eventId: string;
+			ts: number;
+			channelKey?: string;
+			messageId: string;
 			message: string;
 	  }
 	| {

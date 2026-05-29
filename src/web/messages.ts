@@ -173,6 +173,9 @@ export function applyStoredAgentEventToMessage(
 	if (event.type === "message_end") {
 		closeOpenContentSteps(steps, ts);
 		if (event.usage) message.usage = event.usage;
+		if (event.errorMessage) {
+			steps.push({ kind: "error", id: stepId(message.id, "error", steps.length), text: event.errorMessage });
+		}
 	}
 	const tool = toolFromStoredAgentEvent(event, ts);
 	if (tool) {

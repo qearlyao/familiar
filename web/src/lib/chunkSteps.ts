@@ -4,22 +4,29 @@ export type GutterStep = ThinkingStep | ToolStep;
 
 export type StepChunk =
   | { kind: "stream"; steps: GutterStep[] }
-  | { kind: "text"; step: Extract<Step, { kind: "text" }> };
+  | { kind: "text"; step: Extract<Step, { kind: "text" }> }
+  | { kind: "error"; step: Extract<Step, { kind: "error" }> };
 
 export function chunkSteps(steps: Step[]): StepChunk[] {
   const out: StepChunk[] = [];
   let pending: GutterStep[] = [];
+  const flush = () => {
+    if (pending.length > 0) {
+      out.push({ kind: "stream", steps: pending });
+      pending = [];
+    }
+  };
   for (const step of steps) {
     if (step.kind === "text") {
-      if (pending.length > 0) {
-        out.push({ kind: "stream", steps: pending });
-        pending = [];
-      }
+      flush();
       out.push({ kind: "text", step });
+    } else if (step.kind === "error") {
+      flush();
+      out.push({ kind: "error", step });
     } else {
       pending.push(step);
     }
   }
-  if (pending.length > 0) out.push({ kind: "stream", steps: pending });
+  flush();
   return out;
 }

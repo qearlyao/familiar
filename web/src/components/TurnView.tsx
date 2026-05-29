@@ -1,11 +1,13 @@
 import type { Message, Step } from "../types";
 import { chunkSteps } from "@/lib/chunkSteps";
 import { EventStream } from "./EventStream";
+import { ErrorNotice } from "./steps/ErrorNotice";
 import { TextStep } from "./steps/TextStep";
 
 function isStepFinished(step: Step): boolean {
   if (step.kind === "thinking") return step.complete === true;
   if (step.kind === "text") return step.complete === true;
+  if (step.kind === "error") return true;
   return step.tool.status === "completed" || step.tool.status === "error";
 }
 
@@ -34,6 +36,9 @@ export function TurnView({ message }: { message: Message }) {
               autoCollapse={messageSettled}
             />
           );
+        }
+        if (chunk.kind === "error") {
+          return <ErrorNotice key={chunk.step.id} text={chunk.step.text} />;
         }
         const prev = chunks[i - 1];
         const showLabel = !prev || prev.kind !== "text";

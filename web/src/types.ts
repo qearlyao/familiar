@@ -11,7 +11,7 @@ export interface Message {
   ts: number;
 }
 
-export type Step = ThinkingStep | ToolStep | TextStep;
+export type Step = ThinkingStep | ToolStep | TextStep | ErrorStep;
 
 export interface ThinkingStep {
   kind: "thinking";
@@ -33,6 +33,12 @@ export interface TextStep {
   id: string;
   text: string;
   complete?: boolean;
+}
+
+export interface ErrorStep {
+  kind: "error";
+  id: string;
+  text: string;
 }
 
 export interface Attachment {

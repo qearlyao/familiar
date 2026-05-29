@@ -137,6 +137,14 @@ export type StreamEvent =
       code: "rate_limited" | "tool_failed" | "abort" | "unknown";
       message: string;
     }
+  | {
+      type: "model_error";
+      eventId: string;
+      ts: number;
+      channelKey?: string;
+      messageId: string;
+      message: string;
+    }
   | { type: "replay_window_lost"; eventId: string; ts: number; channelKey?: string };
 
 export type ConnectionState = "connecting" | "open" | "closed" | "error";

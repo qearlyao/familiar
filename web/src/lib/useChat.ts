@@ -214,6 +214,29 @@ export function useChat(): ChatHook {
           break;
         }
 
+        case "model_error": {
+          const now = Date.now();
+          const errorStepId = `${event.messageId}-error`;
+          setMessages((prev) => {
+            const errorStep: Step = { kind: "error", id: errorStepId, text: event.message };
+            const existing = prev.find((m) => m.id === event.messageId);
+            if (!existing) {
+              return [
+                ...prev,
+                { id: event.messageId, role: "assistant", who: personaName, steps: [errorStep], ts: event.ts },
+              ];
+            }
+            return prev.map((m) => {
+              if (m.id !== event.messageId) return m;
+              if (m.steps.some((s) => s.id === errorStepId)) {
+                return { ...m, steps: m.steps.map((s) => (s.id === errorStepId ? errorStep : s)) };
+              }
+              return { ...m, steps: [...closeAllSteps(m.steps, now), errorStep] };
+            });
+          });
+          break;
+        }
+
         case "status": {
           if (event.kind === "idle") setStreaming(false);
           break;

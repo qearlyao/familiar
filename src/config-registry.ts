@@ -1,5 +1,5 @@
 import type { Config } from "./config.js";
-import { loadConfigOverrides } from "./config-overrides.js";
+import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./config-overrides.js";
 import type { DiscordDaemon } from "./discord.js";
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "./models.js";
 
@@ -320,5 +320,35 @@ export function applyConfigOverridesToConfig(config: Config): void {
 		} catch (error) {
 			console.warn(`Skipping invalid config override ${key}:`, error);
 		}
+	}
+}
+
+export async function commitConfigChange(
+	key: ConfigKey,
+	value: unknown,
+	ctx: RegistryApplyContext,
+): Promise<void> {
+	const entry = CONFIG_REGISTRY[key];
+	const previous = entry.read(ctx.config);
+	entry.write(ctx.config, value);
+	try {
+		await setConfigOverride(key, value);
+		await entry.apply?.(ctx);
+	} catch (error) {
+		entry.write(ctx.config, previous);
+		throw error;
+	}
+}
+
+export async function clearConfigChange(key: ConfigKey, ctx: RegistryApplyContext): Promise<void> {
+	const entry = CONFIG_REGISTRY[key];
+	const previous = entry.read(ctx.config);
+	entry.write(ctx.config, getConfigDefault(key));
+	try {
+		await clearConfigOverride(key);
+		await entry.apply?.(ctx);
+	} catch (error) {
+		entry.write(ctx.config, previous);
+		throw error;
 	}
 }

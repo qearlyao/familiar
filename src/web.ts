@@ -16,8 +16,15 @@ import {
 } from "./agent-events.js";
 import type { StoredAgentEvent, StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
-import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./config-overrides.js";
-import { CONFIG_KEYS, CONFIG_REGISTRY, type ConfigKey, getConfigDefault, isConfigKey } from "./config-registry.js";
+import { loadConfigOverrides } from "./config-overrides.js";
+import {
+	CONFIG_KEYS,
+	CONFIG_REGISTRY,
+	type ConfigKey,
+	clearConfigChange,
+	commitConfigChange,
+	isConfigKey,
+} from "./config-registry.js";
 import { getContactNickname, refreshContactNote, setContactNotePath } from "./contact-note.js";
 import type { RestartHandler } from "./control.js";
 import type { DiscordDaemon } from "./discord.js";
@@ -593,12 +600,11 @@ export async function startWebDaemon(
 					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
 					return true;
 				}
-				const entry = CONFIG_REGISTRY[body.key];
+				const key = body.key;
+				const entry = CONFIG_REGISTRY[key];
 				try {
 					const validated = entry.validate(body.value, config);
-					entry.write(config, validated);
-					await setConfigOverride(body.key, validated);
-					await entry.apply?.({ config, discordDaemon });
+					await commitConfigChange(key, validated, { config, discordDaemon });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					sendJson(response, 400, { error: message });
@@ -617,12 +623,9 @@ export async function startWebDaemon(
 					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
 					return true;
 				}
-				const entry = CONFIG_REGISTRY[body.key];
+				const key = body.key;
 				try {
-					const fallback = getConfigDefault(body.key);
-					entry.write(config, fallback);
-					await clearConfigOverride(body.key);
-					await entry.apply?.({ config, discordDaemon });
+					await clearConfigChange(key, { config, discordDaemon });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					sendJson(response, 400, { error: message });

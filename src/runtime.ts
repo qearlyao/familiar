@@ -110,6 +110,9 @@ export class ConversationRuntime {
 	private lastUserInteractionAt = 0;
 	private pendingJobs: QueuedJob[] = [];
 	private activeJob: QueuedJob | undefined;
+	private lastQueuedTriggerRecordId = 0;
+	private lastCompletedTriggerRecordId = 0;
+	private queuedTriggerByJobId = new Map<string, number>();
 	private listeners = new Set<RuntimeRecordListener>();
 	private agentEventListeners = new Set<RuntimeAgentEventListener>();
 
@@ -156,9 +159,13 @@ export class ConversationRuntime {
 	}
 
 	private rebuildPendingJobs(): void {
+		this.lastQueuedTriggerRecordId = 0;
+		this.lastCompletedTriggerRecordId = 0;
+		this.queuedTriggerByJobId.clear();
 		const terminalJobIds = new Set<string>();
 		const queuedJobs: QueuedJob[] = [];
 		for (const record of this.records) {
+			this.indexRecordForTriggers(record);
 			if (record.type === "job_completed" || record.type === "job_failed") terminalJobIds.add(record.jobId);
 			if (record.type === "outbound" && record.jobId) terminalJobIds.add(record.jobId);
 			if (record.type === "job_queued") {
@@ -171,6 +178,22 @@ export class ConversationRuntime {
 			}
 		}
 		this.pendingJobs = queuedJobs.filter((job) => !terminalJobIds.has(job.jobId));
+	}
+
+	private indexRecordForTriggers(record: ChatLogRecord): void {
+		if (record.type === "job_queued") {
+			this.queuedTriggerByJobId.set(record.jobId, record.triggerRecordId);
+			this.lastQueuedTriggerRecordId = Math.max(this.lastQueuedTriggerRecordId, record.triggerRecordId);
+		}
+		if (record.type === "job_completed") {
+			this.lastCompletedTriggerRecordId = Math.max(this.lastCompletedTriggerRecordId, record.triggerRecordId);
+		}
+		if (record.type === "outbound" && record.jobId) {
+			const triggerRecordId = this.queuedTriggerByJobId.get(record.jobId);
+			if (triggerRecordId !== undefined) {
+				this.lastCompletedTriggerRecordId = Math.max(this.lastCompletedTriggerRecordId, triggerRecordId);
+			}
+		}
 	}
 
 	async disconnect(): Promise<void> {
@@ -211,6 +234,7 @@ export class ConversationRuntime {
 
 	private async appendRecord(record: ChatLogRecord, options: { notify?: boolean } = {}): Promise<void> {
 		this.records.push(record);
+		this.indexRecordForTriggers(record);
 		this.nextRecordId = Math.max(this.nextRecordId, record.recordId + 1);
 		if (record.type === "inbound" && this.isOwnerMessage(record)) {
 			const parsed = Date.parse(record.ts);
@@ -253,32 +277,10 @@ export class ConversationRuntime {
 		return input.authorId === this.ownerId;
 	}
 
-	private getLastQueuedTriggerRecordId(): number {
-		let last = 0;
-		for (const record of this.records) {
-			if (record.type === "job_queued") last = Math.max(last, record.triggerRecordId);
-		}
-		return last;
-	}
-
-	private getLastCompletedTriggerRecordId(): number {
-		let last = 0;
-		const queuedTriggerRecordIds = new Map<string, number>();
-		for (const record of this.records) {
-			if (record.type === "job_queued") queuedTriggerRecordIds.set(record.jobId, record.triggerRecordId);
-			if (record.type === "job_completed") last = Math.max(last, record.triggerRecordId);
-			if (record.type === "outbound" && record.jobId) {
-				const triggerRecordId = queuedTriggerRecordIds.get(record.jobId);
-				if (triggerRecordId !== undefined) last = Math.max(last, triggerRecordId);
-			}
-		}
-		return last;
-	}
-
 	private canRecordTrigger(record: InboundChatRecord, options: InboundDispatchOptions = {}): JobTrigger | undefined {
 		if (this.armedAfterRecordId === undefined) return undefined;
 		if (record.recordId <= this.armedAfterRecordId) return undefined;
-		if (record.recordId <= this.getLastQueuedTriggerRecordId()) return undefined;
+		if (record.recordId <= this.lastQueuedTriggerRecordId) return undefined;
 		if (this.channel.scope === "dm" || this.channel.scope === "web") {
 			if (!this.isOwnerMessage(record)) return undefined;
 			return options.mode === "collect" ? undefined : "dm";
@@ -374,7 +376,7 @@ export class ConversationRuntime {
 	}
 
 	private getLatestQueueableInbound(options: CollectDispatchOptions): InboundChatRecord | undefined {
-		const lastQueuedTriggerRecordId = this.getLastQueuedTriggerRecordId();
+		const lastQueuedTriggerRecordId = this.lastQueuedTriggerRecordId;
 		let latest: InboundChatRecord | undefined;
 		let sawMention = false;
 		for (let index = this.records.length - 1; index >= 0; index--) {
@@ -418,32 +420,21 @@ export class ConversationRuntime {
 		if (!job) return undefined;
 		this.activeJob = job;
 		const triggerRecord = getTriggerRecord(this.records, job);
+		const slice = this.triggerInboundSlice(job);
 		return {
 			job,
-			prompt: this.buildPrompt(job),
-			attachments: this.buildPromptAttachments(job),
+			prompt: slice.map(formatPromptRecord).join("\n").trim(),
+			attachments: slice.flatMap((record) => record.attachments),
 			triggerMessageId: triggerRecord?.messageId,
 		};
 	}
 
-	private buildPrompt(job: QueuedJob): string {
-		const completedBoundary = this.getLastCompletedTriggerRecordId();
-		const slice = this.records.filter((record): record is InboundChatRecord => {
-			return (
-				record.type === "inbound" && record.recordId > completedBoundary && record.recordId <= job.triggerRecordId
-			);
-		});
-		return slice.map(formatPromptRecord).join("\n").trim();
-	}
-
-	private buildPromptAttachments(job: QueuedJob): StoredAttachment[] {
-		const completedBoundary = this.getLastCompletedTriggerRecordId();
-		const slice = this.records.filter((record): record is InboundChatRecord => {
-			return (
-				record.type === "inbound" && record.recordId > completedBoundary && record.recordId <= job.triggerRecordId
-			);
-		});
-		return slice.flatMap((record) => record.attachments);
+	private triggerInboundSlice(job: QueuedJob): InboundChatRecord[] {
+		const completedBoundary = this.lastCompletedTriggerRecordId;
+		return this.records.filter(
+			(record): record is InboundChatRecord =>
+				record.type === "inbound" && record.recordId > completedBoundary && record.recordId <= job.triggerRecordId,
+		);
 	}
 
 	async noteOutbound(options: {

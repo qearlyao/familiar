@@ -220,12 +220,20 @@ drop + inline, `scheduler.ts`/`lcm/store.ts` narration-comment trims,
 `scripts/spike.ts` `Model<any>` → `Model<Api>`). The config.ts/agent.ts
 narration anchors no longer exist (cleaned during decomposition). What remains:
 
-- **Pre-existing latent edges (verified not introduced by the decomp).**
-  `src/discord/chunking.ts` `splitLongBlock` UTF-16 fallback can split surrogate
-  pairs; `chunkDiscordParagraph` final-fallback `slice(0, limit)` truncates;
-  `chunkDiscordNewline` returns `[]` for empty input while the other modes return the
-  `(empty response)` sentinel. `src/discord/send.ts` reply first-chunk `try` also
-  catches its own `!isSendable()` throw, then re-checks below (mislabeled log).
-  `src/web/messages.ts` `ensureFallbackSteps` admits `thinkingMs === 0` via `!= null`.
-  `readJsonBody` (`src/web/http.ts`) `JSON.parse` without try/catch (→ 500 on malformed
-  body). All low priority.
+- **Pre-existing latent edges (verified not introduced by the decomp).** Partly
+  resolved in `4fcaec4`:
+  - **DONE** — `chunking.ts` surrogate-pair split (both hard-cut sites now route
+    through `avoidSurrogateSplit`; regression test added) and `send.ts` reply
+    first-chunk `try` (isSendable check hoisted out so the "falling back" log is
+    honest).
+  - **DROPPED** — `chunkDiscordParagraph` `slice(0, limit)` fallback (only
+    reachable with 2000+ chars of pure whitespace — pathological);
+    `chunkDiscordNewline` returns `[]` for empty input (a deliberate
+    decision — silence beats an "(empty response)" placeholder; owner runs
+    newline mode and is fine with it); `web/messages.ts` `ensureFallbackSteps`
+    `thinkingMs === 0` (never observed; `0`+empty-text combination not produced
+    in practice).
+  - **OPEN (mild)** — `readJsonBody` (`src/web/http.ts`) does `JSON.parse`
+    without try/catch. NOT a crash — the `handleApi` outer try/catch (web.ts:774)
+    catches it — but malformed JSON returns 500 instead of 400. Fix is a local
+    try/catch → 400 when the override-apply / web area is next touched.

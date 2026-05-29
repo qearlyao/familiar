@@ -35,14 +35,15 @@ export class LcmSegmentManager {
 
 	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void {
 		const unsubscribe = runtime.subscribe((record) => {
-			this.projectionQueue = this.projectionQueue.then(
-				() => this.projectRuntimeRecord(runtime, record, sessionId),
-				() => this.projectRuntimeRecord(runtime, record, sessionId),
-			);
-			void this.projectionQueue.catch((error) => {
-				this.projectionFailures += 1;
-				console.error(`memory projection failed for ${runtime.channelKey}`, error);
-			});
+			// Serialize projections; the prior link is always non-rejecting (see the .catch
+			// below), so each projection runs once after it. Count + log failures in the same
+			// chain and recover, so the stored queue never carries a rejection forward.
+			this.projectionQueue = this.projectionQueue
+				.then(() => this.projectRuntimeRecord(runtime, record, sessionId))
+				.catch((error) => {
+					this.projectionFailures += 1;
+					console.error(`memory projection failed for ${runtime.channelKey}`, error);
+				});
 		});
 		return unsubscribe;
 	}

@@ -297,8 +297,12 @@ export class LcmContextTransformer {
 			await this.condenseRuntimeSummaries({ state, sessionKey: input.sessionKey, signal: input.signal });
 		};
 
-		input.state.compactionQueue = input.state.compactionQueue.then(run, run);
-		await input.state.compactionQueue;
+		// Serialize compactions per state: run after the prior one settles. Keep the shared
+		// compactionQueue non-rejecting so a failure here can't poison the next caller's link,
+		// and await the real work promise so this caller still surfaces its own error.
+		const settled = input.state.compactionQueue.then(run);
+		input.state.compactionQueue = settled.catch(() => undefined);
+		await settled;
 		return { compacted, tokensSaved };
 	}
 

@@ -194,7 +194,6 @@ A few patterns worth flagging:
     **Risk triage (2026-05-30, for the "pure perf only" pass).** SAFE = behavior-preserving dedup/cache/hoist, land in the batch. DEFER = changes observable behavior, adds bounds/eviction, rewrites SQL/IO, or is a structural decomposition — needs its own task + review, not the batch.
 
     SAFE-now (batched):
-    - #42 web-tools Jina double-fetch — detect Content-Type before re-fetching; output identical.
     - #43 `fetchJson`/`fetchText` share ~25 lines — factor `performFetch`.
     - #44 `parseBrave`/`parseExa`/`parseTavily` share ~50-line skeleton — extract.
     - #45 `getOwnerDmSession` re-`createDM` per tick — cache the stable DM channel.
@@ -208,6 +207,7 @@ A few patterns worth flagging:
     - #65 `defaultBrowserRunner` leaks `timeout` on the abort branch — add `clearTimeout`. (Leak fix, behavior-preserving.)
 
     DEFER-risky (own task + review, NOT in the batch):
+    - #42 web-tools Jina double-fetch — the two fetches use different `Accept` headers (application/json vs text/plain) and Jina serves different bodies per Accept, so reusing the first response could change returned content. Needs care; not a pure dedup.
     - #48 discord `runtimes`/`collectTimers` Maps grow unbounded — needs eviction/lifecycle; behavior change.
     - #52 diary sequential per-file indexing → bounded `Promise.all` — changes index ordering; verify order-independence first.
     - #53 lcm N+1 `getSummaryChildren` — batchable to one query but SQL-correctness-sensitive; do carefully alone.

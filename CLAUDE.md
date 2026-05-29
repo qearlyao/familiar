@@ -16,7 +16,7 @@ Start from this baseline:
 
 Run these four lenses before writing code so `/simplify` review concerns do not become rework:
 
-1. **Reuse**: grep for an existing helper before adding one. Shared utilities already cover common needs:
+1. **Reuse**: rg for an existing helper before adding one. Shared utilities already cover common needs:
    - `src/util/fs.ts` — `isEnoent`, `readFileOrNull`, `atomicWriteJson`, `createWriteQueue`
    - `src/util/guards.ts` — `isRecord`, `readEnum`
    - `src/util/time.ts` — `formatLocalTimestamp`, `formatOffset`

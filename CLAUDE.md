@@ -1,19 +1,4 @@
-# Repository Instructions
-
-## Upstream Check
-
-Before implementing features in subsequent development, first verify the latest status of the upstream projects (`earendil-works/pi` and relevant `pi-chat` refs) to avoid reinventing capabilities that upstream already added or is about to publish.
-
-Use existing local reference clones when available; do not create fresh clones for routine research.
-
-- `earendil-works/pi`: `/Users/qearl/pi`. Remote is `upstream`.
-- `earendil-works/pi-chat`: `/Users/qearl/pi-chat`. Remote is `origin`.
-
-These directories are reference clones, not Familiar worktrees. It is fine to overwrite them with upstream state. Avoid cloning duplicate copies into `/tmp`; clean up any accidental duplicate upstream clones when noticed.
-
-For high-value upstream/local file references, check `PLAN.md` section `## 6. Reference Index`
-
-## Core Prompt
+# Core Prompt
 
 Start from this baseline:
 
@@ -47,9 +32,3 @@ Run these four lenses before writing code so `/simplify` review concerns do not 
 
 - Flexibly and proactively utilize the agent team/sub-agents to enhance work efficiency; when necessary, please review the changes made by the sub-agents.
 - Any test that creates temporary files or directories must register cleanup in the same test (`t.after(() => rm(dir, { recursive: true, force: true }))`). Prefer the helpers in `test/helpers.ts` (`createTempDataDir`, `createWorkspace`, `configWithDataDir`), which self-clean when given the node:test `t` context.
-
-## Commit Messages
-
-Start the title with a conventional header so the log is grep-able. Format: `<type>(<scope>): <subject>` — lowercase, no trailing period, under ~70 chars. Scope is optional but useful in large files (`discord`, `memory`, `web`, etc.).
-
-For nontrivial changes, follow the title with a blank line and a body. Explain the WHY and any non-obvious tradeoffs — the diff already shows the WHAT. Use bullets when the change has multiple coordinated pieces.

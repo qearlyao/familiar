@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconForTool, ThinkingIcon } from "@/lib/toolIcon";
@@ -164,9 +164,9 @@ function ThinkingContent({ step, active }: { step: ThinkingStep; active: boolean
 }
 
 function ToolContent({ tool }: { tool: ToolEvent }) {
-  const formattedArgs = formatValue(tool.args);
+  const formattedArgs = useMemo(() => formatValue(tool.args), [tool.args]);
   const output = tool.status === "running" ? tool.partialResult : tool.result;
-  const formattedOutput = formatValue(output);
+  const formattedOutput = useMemo(() => formatValue(output), [output]);
   return (
     <div className="space-y-2">
       {formattedArgs && (
@@ -269,7 +269,8 @@ export function EventStream({
 }) {
   const active = steps.some(isStepActive);
   const allComplete = !active && steps.length > 0;
-  const showDone = allComplete && steps.length >= 2;
+  const hasError = steps.some((s) => s.kind === "tool" && s.tool.status === "error");
+  const showDone = allComplete && steps.length >= 2 && !hasError;
 
   const [open, setOpen] = useState(active);
   const userTouched = useRef(false);
@@ -330,7 +331,7 @@ export function EventStream({
           "grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
           open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
-        aria-hidden={!open}
+        inert={!open}
       >
         <div className="min-h-0 overflow-hidden">
           {firstHasBody && (

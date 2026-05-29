@@ -181,12 +181,12 @@ A few patterns worth flagging:
    - **C** (config inputs): extracted shared `OnOffToggle`/`MinuteInput`/`NumberInput`/`ModelRefInput` into `config/inputs.tsx` + a `useCommittedInput` hook (#71); the hook resyncs the draft only while unfocused, replacing the `key={…value…}` remount hack that dropped focus (#72); extracted `useIsMounted` + `useRequestState` (`requestState.ts`), folding the mount-guard/busy/error lifecycle out of `useConfig` + `useAgentSettings` (#73).
    - **D** (api/drawer): one `jsonRequest` helper replaces six POST/DELETE fetch-parse-throw bodies in `api.ts` (#74); `MemorySection` now takes the typed `ConfigPayload["values"]` map instead of 18 drilled props, collapsing the `ConfigDrawer` call site (#75).
    - All 638 tests pass; web + backend typecheck + eslint clean; dev server transforms all changed modules without error. Browser click-test of input focus retention not run (no live backend in this env) — verified by typecheck + logic review.
-9. **EventStream + leftover atomicity polish** — small, scoped:
-   - Follow-up #5 (MED, `aria-hidden` over focusable `show more` button) — swap to `inert` while collapsed.
-   - Follow-up #6 (MED, `JSON.stringify` on every render) — `useMemo` keyed by tool id + status.
-   - Follow-up #10 (LOW, `done` check after errored tool) — compute `hasError`, suppress the done row.
-   - Follow-up #3 (MED, config override mutates memory before durable write) — stage + rollback helper in `web.ts`. Unrelated to EventStream but bundles cleanly as a small standalone fix.
-   - Follow-up #8 (LOW, paginated history rebuilds full transcript) — optional; window message ids before folding steps. Defer if transcript size isn't biting yet.
+[x]9. **EventStream + leftover atomicity polish** — small, scoped:
+   - [x] Follow-up #5 (MED, `aria-hidden` over focusable `show more` button) — `inert={!open}` on the collapsed body wrapper now removes it from tab order + a11y tree (subsumes `aria-hidden`); the toggle button stays outside the wrapper so expand/collapse still works.
+   - [x] Follow-up #6 (MED, `JSON.stringify` on every render) — both `formatValue` calls in `ToolContent` are `useMemo`'d on their inputs, so completed tools stop re-stringifying on every streaming re-render. Left the "defer until expansion" idea: the grid expand animation needs content mounted to animate to its height.
+   - [x] Follow-up #10 (LOW, `done` check after errored tool) — `hasError` (any tool step `status === "error"`) suppresses the done row.
+   - [x] Follow-up #3 (MED, config override mutates memory before durable write) — done via Codex + `/simplify` review: commit-or-rollback moved into `config-registry.ts` as `commitConfigChange`/`clearConfigChange` (canonical owner), web.ts handlers now only validate + dispatch. Committed `d00c732`.
+   - [ ] Follow-up #8 (LOW, paginated history rebuilds full transcript) — DEFERRED; transcript size not biting yet. Window message ids before folding steps when it does.
 10. **Backend hot-path inefficiencies (MED #37-68)** — per-call scans, N+1 queries, re-compiled statements, missing timeouts, and a few near-duplicate pipelines across `runtime.ts`, `web.ts`, `web-tools.ts`, `discord.ts`, the memory tree, and media helpers. No single big win; cluster by file and land independently. (#60 overlaps HIGH #5; #66-67 are the agent.ts items.)
 11. **LOW — style/polish** — comment-narration trims, the `clonePayload` JSON fallback, `Model<any>` in `scripts/spike.ts`, plus the long per-file tail not enumerated here. Lowest priority; fold in opportunistically when already touching a file.
 

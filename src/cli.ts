@@ -263,7 +263,7 @@ async function main(): Promise<void> {
 		return;
 	}
 	if (command === "upgrade") {
-		console.log("Upgrading @qearlyao/familiar globally...");
+		console.log("Upgrading @qearlyao/familiar and OpenCLI globally...");
 		await upgradeFamiliar(resolveWorkspaceInput(workspace));
 		return;
 	}

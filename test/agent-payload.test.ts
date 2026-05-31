@@ -12,6 +12,17 @@ const anthropicModel = {
 } as Model<any>;
 
 describe("provider payload normalization", () => {
+	it("filters only the noisy Google Vertex auth debug note", () => {
+		assert.equal(
+			__agentTest.isNoisyProviderDebug([
+				"The user provided project/location will take precedence over the API key from the environment variables.",
+			]),
+			true,
+		);
+		assert.equal(__agentTest.isNoisyProviderDebug(["different debug note"]), false);
+		assert.equal(__agentTest.isNoisyProviderDebug(["debug note", { provider: "google-vertex" }]), false);
+	});
+
 	it("keeps Anthropic cache_control on stable user text before injected memory", () => {
 		const payload = {
 			messages: [

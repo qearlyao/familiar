@@ -5,9 +5,28 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { Config } from "../config.js";
 import { assertModelCanAuthenticate, isAllowedModel, type ModelRef, resolveModelApiKey } from "../models.js";
 
+const NOISY_GOOGLE_VERTEX_AUTH_DEBUG =
+	"The user provided project/location will take precedence over the API key from the environment variables.";
+
+let providerDebugFilterInstalled = false;
+
 export function deriveSessionId(workspacePath: string, sessionKey: string): string {
 	const digest = createHash("sha256").update(`${workspacePath}\0${sessionKey}`).digest("hex").slice(0, 32);
 	return `familiar-${digest}`;
+}
+
+export function isNoisyProviderDebug(args: unknown[]): boolean {
+	return args.length === 1 && args[0] === NOISY_GOOGLE_VERTEX_AUTH_DEBUG;
+}
+
+export function installProviderDebugFilter(): void {
+	if (providerDebugFilterInstalled) return;
+	providerDebugFilterInstalled = true;
+	const debug = console.debug;
+	console.debug = (...args: unknown[]) => {
+		if (isNoisyProviderDebug(args)) return;
+		debug.apply(console, args);
+	};
 }
 
 export function getRequestApiKey(config: Config, model: Model<any>): string | undefined {

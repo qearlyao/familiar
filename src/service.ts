@@ -346,6 +346,7 @@ export async function upgradeFamiliar(workspacePath: string, options: ServiceOpt
 	const npmCommand = currentPlatform === "win32" ? "npm.cmd" : "npm";
 	const familiarCommand = currentPlatform === "win32" ? "familiar.cmd" : "familiar";
 	await runInteractive(npmCommand, ["install", "-g", "@qearlyao/familiar@latest"], options, "npm upgrade");
+	await runInteractive(npmCommand, ["install", "-g", "@jackwener/opencli"], options, "OpenCLI upgrade");
 	await runInteractive(familiarCommand, ["init", workspacePath], options, "workspace default refresh");
 }
 

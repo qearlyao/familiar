@@ -190,6 +190,7 @@ describe("service management", () => {
 
 		assert.deepEqual(calls, [
 			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
+			{ command: "npm", args: ["install", "-g", "@jackwener/opencli"] },
 			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
 		]);
 	});

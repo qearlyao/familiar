@@ -8,6 +8,8 @@ import {
 	formatModel,
 	getLastAssistantText,
 	getRequestApiKey,
+	installProviderDebugFilter,
+	isNoisyProviderDebug,
 	logUsage,
 	resolveModelName,
 	userTextMessage,
@@ -44,6 +46,7 @@ import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics 
 export type { FamiliarAgent, FamiliarAgentOptions, FamiliarAgentReply, FamiliarPromptOptions } from "./agent/types.js";
 
 export const __agentTest = {
+	isNoisyProviderDebug,
 	normalizeProviderPayload,
 };
 
@@ -53,6 +56,7 @@ export async function createFamiliarAgent(
 	memoryService?: MemoryService,
 	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
+	installProviderDebugFilter();
 	setAddedModelsPath(config.workspace.dataDir);
 	setConfigOverridesPath(config.workspace.dataDir);
 	applyConfigOverridesToConfig(config);

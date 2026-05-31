@@ -38,7 +38,7 @@ import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter, pars
 import { isRecord } from "./util/guards.js";
 import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
-import { readJsonBody, sendJson, sendText } from "./web/http.js";
+import { HttpError, readJsonBody, sendJson, sendText } from "./web/http.js";
 import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
 import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload } from "./web/messages.js";
 import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./web/multipart.js";
@@ -772,8 +772,9 @@ export async function startWebDaemon(
 			sendJson(response, 404, { error: "not found" });
 			return true;
 		} catch (error) {
+			const status = error instanceof HttpError ? error.status : 500;
 			const message = error instanceof Error ? error.message : String(error);
-			sendJson(response, 500, { error: message });
+			sendJson(response, status, { error: message });
 			return true;
 		}
 	};

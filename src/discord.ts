@@ -127,15 +127,10 @@ export function startDiscordDaemon(
 	options: { restart?: RestartHandler } = {},
 ): DiscordDaemon {
 	let client: Client<true> | undefined;
+	let session: ConnectedSession | undefined;
 	let stopped = false;
 	let retryTimer: NodeJS.Timeout | undefined;
 	const collectTimers = new Map<string, NodeJS.Timeout>();
-	let ownerDmChannelPromise: Promise<DMChannel> | undefined;
-
-	const requireClient = (): Client<true> => {
-		if (!client) throw new Error("Discord client is not connected");
-		return client;
-	};
 
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
 		return core.getRuntimeForChannel(getChannelRef(message));
@@ -149,163 +144,245 @@ export function startDiscordDaemon(
 		return core.getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
 	};
 
-	const getOwnerDmChannel = (): Promise<DMChannel> => {
-		const liveClient = requireClient();
-		if (!ownerDmChannelPromise) {
-			ownerDmChannelPromise = liveClient.users
-				.createDM(config.discord.ownerId)
-				.then(async (dm) => {
-					try {
-						await saveOwnerIdentity(config.workspace.dataDir, {
-							botUserId: liveClient.user.id,
-							dmChannelId: dm.id,
-						});
-					} catch (error) {
-						console.error("failed to persist owner identity", error);
-					}
-					return dm;
-				})
-				.catch((error) => {
-					ownerDmChannelPromise = undefined;
-					throw error;
-				});
-		}
-		return ownerDmChannelPromise;
-	};
+	interface ConnectedSession {
+		onMessageCreate: (message: Message) => Promise<void>;
+		onInteractionCreate: (interaction: Interaction) => Promise<void>;
+		getOwnerDmSession: () => Promise<{ runtime: ConversationRuntime }>;
+		getWebSessions: () => Promise<DiscordWebSession[]>;
+		liveSink: SchedulerDeliverySink;
+	}
 
-	const getWebSessions = async (): Promise<DiscordWebSession[]> => {
-		const liveClient = requireClient();
-		const dmChannel = await getOwnerDmChannel();
-		const dmRef = buildChannelRef(dmChannel, dmChannel.id);
-		const sessions: DiscordWebSession[] = [
-			{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
-		];
-		const fetched = await Promise.all(
-			config.discord.allowedChannels.map((channelId) => liveClient.channels.fetch(channelId).catch(() => undefined)),
-		);
-		for (const [index, channel] of fetched.entries()) {
-			if (!channel) continue;
-			const ref = buildChannelRef(channel as DiscordChatChannel, config.discord.allowedChannels[index]);
-			sessions.push({
-				key: chatChannelKey(ref),
-				label: ref.channelName || `Discord ${ref.scope}`,
-				channel: ref,
-			});
-		}
-		return sessions;
-	};
+	const createConnectedSession = (client: Client<true>): ConnectedSession => {
+		let ownerDmChannelPromise: Promise<DMChannel> | undefined;
 
-	const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime }> => {
-		const dmChannel = await getOwnerDmChannel();
-		const runtime = await core.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
-		return { runtime };
-	};
-
-	const liveSink: SchedulerDeliverySink = {
-		async deliver({ reply, parsedReply }) {
-			const liveClient = requireClient();
-			const channel = await getOwnerDmChannel();
-			return parsedReply.silent
-				? await sendDiscordAttachments(liveClient.rest, channel.id, reply.attachments)
-				: await sendChannelMessage(config, liveClient.rest, channel, parsedReply.text, reply.attachments);
-		},
-	};
-
-	const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
-		const liveClient = requireClient();
-		for (;;) {
-			const dispatch = runtime.beginNextJob();
-			if (!dispatch) return;
-			const stopTyping = startTypingIndicator(message);
-			try {
-				const turn = await runAgentTurn(dispatch.job.jobId, runtime, (onEvent) =>
-					core.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
-				);
-				if (!turn) return;
-				const { reply, parsedReply, summary, assistantMessageId } = turn;
-				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
-				const messageIds = parsedReply.silent
-					? await sendDiscordAttachments(liveClient.rest, replyAnchor.channelId, reply.attachments)
-					: await sendReply(
-							config,
-							liveClient.rest,
-							replyAnchor,
-							parsedReply.text,
-							dispatch.triggerMessageId,
-							reply.attachments,
-						);
-				await runtime.completeActiveJob({
-					text: parsedReply.text,
-					messageIds,
-					webMessageId: assistantMessageId,
-					attachments: reply.attachments,
-					thinking: summary.thinking,
-					thinkingMs: thinkingDurationMs(summary),
-					silent: parsedReply.silent,
-					replyToMessageId: dispatch.triggerMessageId,
-				});
-			} catch (error) {
-				if (isCanceledJob(error) || !runtime.hasActiveJob(dispatch.job.jobId)) return;
-				const errorText = error instanceof Error ? error.message : String(error);
-				await runtime.failActiveJob(errorText);
-				await runtime.appendError(errorText);
-				const fallback = "I hit an error while handling that message.";
-				const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
-				const messageIds = await sendReply(
-					config,
-					liveClient.rest,
-					replyAnchor,
-					fallback,
-					dispatch.triggerMessageId,
-				);
-				await runtime.noteOutbound({
-					text: fallback,
-					messageIds,
-					replyToMessageId: dispatch.triggerMessageId,
-					jobId: dispatch.job.jobId,
-				});
-			} finally {
-				stopTyping();
+		const getOwnerDmChannel = (): Promise<DMChannel> => {
+			if (!ownerDmChannelPromise) {
+				ownerDmChannelPromise = client.users
+					.createDM(config.discord.ownerId)
+					.then(async (dm) => {
+						try {
+							await saveOwnerIdentity(config.workspace.dataDir, {
+								botUserId: client.user.id,
+								dmChannelId: dm.id,
+							});
+						} catch (error) {
+							console.error("failed to persist owner identity", error);
+						}
+						return dm;
+					})
+					.catch((error) => {
+						ownerDmChannelPromise = undefined;
+						throw error;
+					});
 			}
-		}
-	};
+			return ownerDmChannelPromise;
+		};
 
-	const flushCollected = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
-		collectTimers.delete(runtime.channelKey);
-		try {
-			const isDm = isDmChannel(message.channel);
-			const queued = await runtime.queueLatestTrigger({
-				channelTrigger: getChannelTriggerSetting(config, settings, runtime.channelKey, isDm).value,
-			});
-			if (!queued) return;
-			// The captured message is only a channel handle; drainJobs fetches the trigger record's message id for replies.
-			await drainJobs(message, runtime);
-		} catch (error) {
-			console.error("Discord collect flush failed", error);
-			await runtime.appendError(error instanceof Error ? error.message : String(error));
-		}
-	};
+		const getWebSessions = async (): Promise<DiscordWebSession[]> => {
+			const dmChannel = await getOwnerDmChannel();
+			const dmRef = buildChannelRef(dmChannel, dmChannel.id);
+			const sessions: DiscordWebSession[] = [
+				{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
+			];
+			const fetched = await Promise.all(
+				config.discord.allowedChannels.map((channelId) => client.channels.fetch(channelId).catch(() => undefined)),
+			);
+			for (const [index, channel] of fetched.entries()) {
+				if (!channel) continue;
+				const ref = buildChannelRef(channel as DiscordChatChannel, config.discord.allowedChannels[index]);
+				sessions.push({
+					key: chatChannelKey(ref),
+					label: ref.channelName || `Discord ${ref.scope}`,
+					channel: ref,
+				});
+			}
+			return sessions;
+		};
 
-	const scheduleCollect = (message: Message, runtime: ConversationRuntime): void => {
-		const existing = collectTimers.get(runtime.channelKey);
-		if (existing) clearTimeout(existing);
-		const timer = setTimeout(() => {
-			void flushCollected(message, runtime);
-		}, config.discord.collectDebounceMs);
-		collectTimers.set(runtime.channelKey, timer);
-	};
+		const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime }> => {
+			const dmChannel = await getOwnerDmChannel();
+			const runtime = await core.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
+			return { runtime };
+		};
 
-	const onMessageCreate = async (message: Message) => {
-		const liveClient = client;
-		if (!liveClient || !isAllowedMessage(config, message, liveClient.user.id)) return;
-		let runtime: ConversationRuntime;
-		try {
-			runtime = await getRuntime(message);
-			const isDm = isDmChannel(message.channel);
-			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
-			const input = await toInboundInput(config, message, liveClient.user.id);
-			const control = runtime.parseControlCommand(input);
-			if (control) {
+		const liveSink: SchedulerDeliverySink = {
+			async deliver({ reply, parsedReply }) {
+				const channel = await getOwnerDmChannel();
+				return parsedReply.silent
+					? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
+					: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
+			},
+		};
+
+		const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
+			for (;;) {
+				const dispatch = runtime.beginNextJob();
+				if (!dispatch) return;
+				const stopTyping = startTypingIndicator(message);
+				try {
+					const turn = await runAgentTurn(dispatch.job.jobId, runtime, (onEvent) =>
+						core.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
+					);
+					if (!turn) return;
+					const { reply, parsedReply, summary, assistantMessageId } = turn;
+					const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
+					const messageIds = parsedReply.silent
+						? await sendDiscordAttachments(client.rest, replyAnchor.channelId, reply.attachments)
+						: await sendReply(
+								config,
+								client.rest,
+								replyAnchor,
+								parsedReply.text,
+								dispatch.triggerMessageId,
+								reply.attachments,
+							);
+					await runtime.completeActiveJob({
+						text: parsedReply.text,
+						messageIds,
+						webMessageId: assistantMessageId,
+						attachments: reply.attachments,
+						thinking: summary.thinking,
+						thinkingMs: thinkingDurationMs(summary),
+						silent: parsedReply.silent,
+						replyToMessageId: dispatch.triggerMessageId,
+					});
+				} catch (error) {
+					if (isCanceledJob(error) || !runtime.hasActiveJob(dispatch.job.jobId)) return;
+					const errorText = error instanceof Error ? error.message : String(error);
+					await runtime.failActiveJob(errorText);
+					await runtime.appendError(errorText);
+					const fallback = "I hit an error while handling that message.";
+					const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
+					const messageIds = await sendReply(
+						config,
+						client.rest,
+						replyAnchor,
+						fallback,
+						dispatch.triggerMessageId,
+					);
+					await runtime.noteOutbound({
+						text: fallback,
+						messageIds,
+						replyToMessageId: dispatch.triggerMessageId,
+						jobId: dispatch.job.jobId,
+					});
+				} finally {
+					stopTyping();
+				}
+			}
+		};
+
+		const flushCollected = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
+			collectTimers.delete(runtime.channelKey);
+			try {
+				const isDm = isDmChannel(message.channel);
+				const queued = await runtime.queueLatestTrigger({
+					channelTrigger: getChannelTriggerSetting(config, settings, runtime.channelKey, isDm).value,
+				});
+				if (!queued) return;
+				// The captured message is only a channel handle; drainJobs fetches the trigger record's message id for replies.
+				await drainJobs(message, runtime);
+			} catch (error) {
+				console.error("Discord collect flush failed", error);
+				await runtime.appendError(error instanceof Error ? error.message : String(error));
+			}
+		};
+
+		const scheduleCollect = (message: Message, runtime: ConversationRuntime): void => {
+			const existing = collectTimers.get(runtime.channelKey);
+			if (existing) clearTimeout(existing);
+			const timer = setTimeout(() => {
+				void flushCollected(message, runtime);
+			}, config.discord.collectDebounceMs);
+			collectTimers.set(runtime.channelKey, timer);
+		};
+
+		const onMessageCreate = async (message: Message) => {
+			if (!isAllowedMessage(config, message, client.user.id)) return;
+			let runtime: ConversationRuntime;
+			try {
+				runtime = await getRuntime(message);
+				const isDm = isDmChannel(message.channel);
+				const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
+				const input = await toInboundInput(config, message, client.user.id);
+				const control = runtime.parseControlCommand(input);
+				if (control) {
+					await runtime.noteControlCommand(input, control);
+					const text = await applyControlCommand({
+						control,
+						runtime,
+						familiarAgent,
+						settings,
+						channelTrigger,
+						isDm,
+						activeAgentOwner: core.activeOwner,
+						restart: options.restart,
+					});
+					const messageIds = await sendReply(config, client.rest, message, text);
+					await runtime.noteOutbound({ text, messageIds, control: control.command });
+					return;
+				}
+				const dispatchMode = getDispatchMode(config, message);
+				const shouldTrySteer =
+					dispatchMode === "steer" && runtime.hasActiveJob() && core.activeOwner === runtime.channelKey;
+				const { record } = await runtime.ingestInbound(input, {
+					mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
+					channelTrigger: channelTrigger.value,
+				});
+				const canSteer =
+					shouldTrySteer &&
+					canSteerFromRecord(config, message, runtime, record, core.activeOwner, channelTrigger.value);
+				if (canSteer) {
+					familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
+					return;
+				}
+				if (shouldTrySteer) {
+					await runtime.queueLatestTrigger({ channelTrigger: channelTrigger.value });
+				}
+				if (dispatchMode === "collect") {
+					scheduleCollect(message, runtime);
+					return;
+				}
+				await drainJobs(message, runtime);
+			} catch (error) {
+				console.error("Discord message handling failed", error);
+				const channelKey = runtimeKeyFromMessage(message);
+				const existingRuntime = await core.peekRuntime(channelKey);
+				await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
+				await sendReply(config, client.rest, message, "I hit an error while handling that message.");
+			}
+		};
+
+		const onInteractionCreate = async (interaction: Interaction) => {
+			if (interaction.isAutocomplete()) {
+				if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
+				if (!isAllowedInteractionChannel(config, interaction)) {
+					await interaction.respond([]);
+					return;
+				}
+				await interaction.respond(getAutocompleteChoices(config, interaction)).catch((error) => {
+					console.error("Discord autocomplete response failed", error);
+				});
+				return;
+			}
+			if (!interaction.isChatInputCommand()) return;
+			if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
+			if (!isAllowedInteractionChannel(config, interaction)) {
+				await interaction.reply({
+					content: "This Familiar command is owner-only for configured channels.",
+					flags: EPHEMERAL_REPLY,
+				});
+				return;
+			}
+			let runtime: ConversationRuntime | undefined;
+			try {
+				await interaction.deferReply({ flags: EPHEMERAL_REPLY });
+				runtime = await getInteractionRuntime(interaction);
+				const isDm = isDmChannel(interaction.channel);
+				const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
+				const input = inboundInputFromInteraction(interaction);
+				const control = runtime.parseControlCommand(input);
+				if (!control) throw new Error("Unsupported Familiar command.");
 				await runtime.noteControlCommand(input, control);
 				const text = await applyControlCommand({
 					control,
@@ -317,88 +394,15 @@ export function startDiscordDaemon(
 					activeAgentOwner: core.activeOwner,
 					restart: options.restart,
 				});
-				const messageIds = await sendReply(config, liveClient.rest, message, text);
+				const messageIds = await replyEphemeral(interaction, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
-				return;
+			} catch (error) {
+				await runtime?.appendError(error instanceof Error ? error.message : String(error));
+				await replyInteractionError(interaction, error);
 			}
-			const dispatchMode = getDispatchMode(config, message);
-			const shouldTrySteer =
-				dispatchMode === "steer" && runtime.hasActiveJob() && core.activeOwner === runtime.channelKey;
-			const { record } = await runtime.ingestInbound(input, {
-				mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
-				channelTrigger: channelTrigger.value,
-			});
-			const canSteer =
-				shouldTrySteer &&
-				canSteerFromRecord(config, message, runtime, record, core.activeOwner, channelTrigger.value);
-			if (canSteer) {
-				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
-				return;
-			}
-			if (shouldTrySteer) {
-				await runtime.queueLatestTrigger({ channelTrigger: channelTrigger.value });
-			}
-			if (dispatchMode === "collect") {
-				scheduleCollect(message, runtime);
-				return;
-			}
-			await drainJobs(message, runtime);
-		} catch (error) {
-			console.error("Discord message handling failed", error);
-			const channelKey = runtimeKeyFromMessage(message);
-			const existingRuntime = await core.peekRuntime(channelKey);
-			await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
-			await sendReply(config, liveClient.rest, message, "I hit an error while handling that message.");
-		}
-	};
+		};
 
-	const onInteractionCreate = async (interaction: Interaction) => {
-		if (interaction.isAutocomplete()) {
-			if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
-			if (!isAllowedInteractionChannel(config, interaction)) {
-				await interaction.respond([]);
-				return;
-			}
-			await interaction.respond(getAutocompleteChoices(config, interaction)).catch((error) => {
-				console.error("Discord autocomplete response failed", error);
-			});
-			return;
-		}
-		if (!interaction.isChatInputCommand()) return;
-		if (interaction.commandName !== FAMILIAR_COMMAND_NAME) return;
-		if (!isAllowedInteractionChannel(config, interaction)) {
-			await interaction.reply({
-				content: "This Familiar command is owner-only for configured channels.",
-				flags: EPHEMERAL_REPLY,
-			});
-			return;
-		}
-		let runtime: ConversationRuntime | undefined;
-		try {
-			await interaction.deferReply({ flags: EPHEMERAL_REPLY });
-			runtime = await getInteractionRuntime(interaction);
-			const isDm = isDmChannel(interaction.channel);
-			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
-			const input = inboundInputFromInteraction(interaction);
-			const control = runtime.parseControlCommand(input);
-			if (!control) throw new Error("Unsupported Familiar command.");
-			await runtime.noteControlCommand(input, control);
-			const text = await applyControlCommand({
-				control,
-				runtime,
-				familiarAgent,
-				settings,
-				channelTrigger,
-				isDm,
-				activeAgentOwner: core.activeOwner,
-				restart: options.restart,
-			});
-			const messageIds = await replyEphemeral(interaction, text);
-			await runtime.noteOutbound({ text, messageIds, control: control.command });
-		} catch (error) {
-			await runtime?.appendError(error instanceof Error ? error.message : String(error));
-			await replyInteractionError(interaction, error);
-		}
+		return { onMessageCreate, onInteractionCreate, getOwnerDmSession, getWebSessions, liveSink };
 	};
 
 	const onClientError = (error: Error) => console.error("Discord client error", error);
@@ -412,16 +416,17 @@ export function startDiscordDaemon(
 			client = await withReadyClient(token);
 			console.log(`Discord connected as ${client.user.tag}`);
 			await registerFamiliarApplicationCommand(client);
-			client.on(Events.MessageCreate, onMessageCreate);
-			client.on(Events.InteractionCreate, onInteractionCreate);
+			session = createConnectedSession(client);
+			client.on(Events.MessageCreate, session.onMessageCreate);
+			client.on(Events.InteractionCreate, session.onInteractionCreate);
 			client.on(Events.Error, onClientError);
 			client.on(Events.Warn, onClientWarn);
 			client.ws.on("close" as any, onWsClose);
 			core.attachDiscord({
 				botUserId: client.user.id,
-				resolveDefaultSession: getOwnerDmSession,
-				getWebSessions,
-				delivery: liveSink,
+				resolveDefaultSession: session.getOwnerDmSession,
+				getWebSessions: session.getWebSessions,
+				delivery: session.liveSink,
 			});
 		} catch (error) {
 			console.error("Discord connect failed; retrying in background", error);
@@ -435,9 +440,9 @@ export function startDiscordDaemon(
 			stopped = true;
 			if (retryTimer) clearTimeout(retryTimer);
 			const liveClient = client;
-			if (liveClient) {
-				liveClient.off(Events.MessageCreate, onMessageCreate);
-				liveClient.off(Events.InteractionCreate, onInteractionCreate);
+			if (liveClient && session) {
+				liveClient.off(Events.MessageCreate, session.onMessageCreate);
+				liveClient.off(Events.InteractionCreate, session.onInteractionCreate);
 				liveClient.off(Events.Error, onClientError);
 				liveClient.off(Events.Warn, onClientWarn);
 				liveClient.ws.off("close" as any, onWsClose);

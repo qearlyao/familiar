@@ -148,9 +148,14 @@ Delivery becomes an injected sink that no-ops when there is no live client.
 - ✅ **3b-3** — shared `createAgentCore()` hoisted to cli.ts; web + config-registry
   depend on `AgentCore` not `DiscordDaemon`; daemon attaches live-client glue via
   `attachDiscord()` (`7ac9067`).
-- ⬜ **3c** — the single behavior change (see below).
+- ✅ **3c** — the single behavior change: web/scheduler boot on cached identity,
+  Discord is an optional background-connect adapter (`e027bd5`, see below).
 - ⬜ then **#48** eviction folds into the manager; **#61 / readJsonBody / #8** on
   the web surface; **#36c** on the config surface.
+
+  Deferred from 3c's `/simplify` pass: extract an inner `createConnectedSession(client)`
+  factory in discord.ts to retire the `requireClient()` guards smeared across the
+  daemon body (needs handler-ref hoisting for `stop()`).
 
 ---
 

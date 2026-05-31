@@ -7,6 +7,10 @@ what is still open — deferred, dropped, and low-priority.** Many files have be
 decomposed since the original review, so the `file:line` anchors below have
 drifted — re-locate each finding in current code before acting.
 
+**Web-first cluster:** #48, #61, #36c, readJsonBody→400, and #8 are deferred into
+the Discord-optional / web-first refactor and done there, not standalone. Prep +
+resolved model in [WEB_FIRST.md](WEB_FIRST.md).
+
 ---
 
 ## Done (summary — see `git log` for per-item detail)

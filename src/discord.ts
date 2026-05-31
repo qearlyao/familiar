@@ -11,7 +11,7 @@ import {
 import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "./agent.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { StoredAttachment } from "./chat-log.js";
-import { type ChatChannelRef, chatChannelKey, createChatLog } from "./chat-log.js";
+import { type ChatChannelRef, chatChannelKey } from "./chat-log.js";
 import type { Config } from "./config.js";
 import type { RestartHandler } from "./control.js";
 import {
@@ -48,7 +48,8 @@ import {
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
 import { saveOwnerIdentity } from "./owner-identity.js";
-import { ConversationRuntime } from "./runtime.js";
+import type { ConversationRuntime } from "./runtime.js";
+import { createRuntimeManager } from "./runtime-manager.js";
 import {
 	appendSchedulerLog,
 	buildCronInjectionText,
@@ -165,7 +166,7 @@ export async function startDiscordDaemon(
 ): Promise<DiscordDaemon> {
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
-	const runtimes = new Map<string, Promise<ConversationRuntime>>();
+	const runtimeManager = createRuntimeManager({ config, memoryService, botUserId: client.user.id });
 	const collectTimers = new Map<string, NodeJS.Timeout>();
 	let activeAgentOwner: string | undefined;
 	let agentWorkQueue = Promise.resolve();
@@ -233,31 +234,8 @@ export async function startDiscordDaemon(
 		});
 	};
 
-	const getRuntimeForChannel = async (channel: ChatChannelRef): Promise<ConversationRuntime> => {
-		const channelKey = chatChannelKey(channel);
-		const existing = runtimes.get(channelKey);
-		if (existing) return existing;
-		const runtimePromise = ConversationRuntime.connect({
-			channelKey,
-			log: createChatLog(config, channel),
-			ownerId: config.discord.ownerId,
-			botUserId: client.user.id,
-		}).then(async (runtime) => {
-			memoryService?.subscribeRuntime(runtime, runtime.channelKey);
-			await runtime.armAfterCurrentTail();
-			return runtime;
-		});
-		runtimes.set(channelKey, runtimePromise);
-		try {
-			return await runtimePromise;
-		} catch (error) {
-			runtimes.delete(channelKey);
-			throw error;
-		}
-	};
-
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
-		return getRuntimeForChannel(getChannelRef(message));
+		return runtimeManager.getRuntimeForChannel(getChannelRef(message));
 	};
 
 	const getInteractionRuntime = async (
@@ -265,7 +243,7 @@ export async function startDiscordDaemon(
 	): Promise<ConversationRuntime> => {
 		const channel = interaction.channel;
 		if (!channel || !interaction.channelId) throw new Error("Discord interaction has no channel");
-		return getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
+		return runtimeManager.getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
 	};
 
 	const getOwnerDmChannel = (): Promise<DMChannel> => {
@@ -316,7 +294,7 @@ export async function startDiscordDaemon(
 
 	const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime; channel: DiscordChatChannel }> => {
 		const dmChannel = await getOwnerDmChannel();
-		const runtime = await getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
+		const runtime = await runtimeManager.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
 		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};
 
@@ -341,7 +319,7 @@ export async function startDiscordDaemon(
 		const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
 		if (!session)
 			throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No Discord sessions available");
-		return getRuntimeForChannel(session.channel);
+		return runtimeManager.getRuntimeForChannel(session.channel);
 	};
 
 	const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
@@ -680,7 +658,7 @@ export async function startDiscordDaemon(
 		} catch (error) {
 			console.error("Discord message handling failed", error);
 			const channelKey = runtimeKeyFromMessage(message);
-			const existingRuntime = await runtimes.get(channelKey)?.catch(() => undefined);
+			const existingRuntime = await runtimeManager.peekRuntime(channelKey);
 			await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
 			await sendReply(config, client.rest, message, "I hit an error while handling that message.");
 		}
@@ -788,10 +766,7 @@ export async function startDiscordDaemon(
 			if (cronTimer) clearInterval(cronTimer);
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
-			const resolvedRuntimes = await Promise.all(
-				[...runtimes.values()].map((runtime) => runtime.catch(() => undefined)),
-			);
-			await Promise.all(resolvedRuntimes.flatMap((runtime) => (runtime ? [runtime.disconnect()] : [])));
+			await runtimeManager.disconnectAll();
 			client.destroy();
 		},
 	};

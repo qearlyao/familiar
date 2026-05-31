@@ -64,16 +64,23 @@ export async function loadStoredMessages(dataDir: string, sessionId: string): Pr
 		return [];
 	}
 
+	const jsonlFiles = files.filter((entry) => entry.endsWith(".jsonl")).sort();
+	const reads = await Promise.all(
+		jsonlFiles.map(async (file) => {
+			const path = resolve(transcriptsDir, file);
+			try {
+				return { path, contents: await readFile(path, "utf8") };
+			} catch (error) {
+				console.error(`transcript file read failed: ${path}`, error);
+				return undefined;
+			}
+		}),
+	);
+
 	const records: StoredTranscriptRecord[] = [];
-	for (const file of files.filter((entry) => entry.endsWith(".jsonl")).sort()) {
-		const path = resolve(transcriptsDir, file);
-		let contents: string;
-		try {
-			contents = await readFile(path, "utf8");
-		} catch (error) {
-			console.error(`transcript file read failed: ${path}`, error);
-			continue;
-		}
+	for (const read of reads) {
+		if (!read) continue;
+		const { path, contents } = read;
 		for (const [index, line] of contents.split(/\r?\n/).entries()) {
 			if (!line.trim()) continue;
 			try {

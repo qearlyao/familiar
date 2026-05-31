@@ -12,7 +12,9 @@ export function readString(value: unknown, path: string): string {
 }
 
 export function readOptionalString(value: unknown, fallback: string): string {
-	return typeof value === "string" && value.trim() !== "" ? value : fallback;
+	if (value === undefined) return fallback;
+	if (typeof value !== "string") throw new Error(`Config value must be a string: ${JSON.stringify(value)}`);
+	return value.trim() !== "" ? value : fallback;
 }
 
 export function readOptionalConfigString(value: unknown, path: string): string | undefined {

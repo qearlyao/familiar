@@ -294,6 +294,50 @@ export async function createFamiliarAgent(
 		);
 	};
 
+	// Shared serialization wrapper for prompt/promptMessage: run after the prior turn
+	// settles on the session's promptQueue, keep the stored tail non-rejecting, and run
+	// teardown (onTurnEnd → reference reset → enterTurn's exit → unsubscribe) in a fixed
+	// order regardless of how the turn ends. enterTurn returns its own cleanup so callers
+	// can scope per-turn state (e.g. activePromptOptions) across the exact finally window.
+	const runPromptTurn = async (
+		sessionKey: string,
+		options: FamiliarPromptOptions,
+		eventHandler: ((event: AgentEvent) => void | Promise<void>) | undefined,
+		dispatch: (session: FamiliarAgentSession) => Promise<unknown>,
+		enterTurn?: () => () => void,
+	): Promise<FamiliarAgentReply> => {
+		const session = await getSession(sessionKey);
+		const run = session.promptQueue.then(async () => {
+			softStopRequested.set(sessionKey, false);
+			session.mediaSink.drain();
+			setReferenceAttachments(session, options.referenceAttachments);
+			const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
+			const exitTurn = enterTurn?.();
+			try {
+				await dispatch(session);
+			} finally {
+				try {
+					await options.onTurnEnd?.();
+				} catch (error) {
+					console.error("turn end callback failed", error);
+				} finally {
+					setReferenceAttachments(session);
+					exitTurn?.();
+					unsubscribe?.();
+				}
+			}
+			return {
+				text: getLastAssistantText(session.agent),
+				attachments: session.mediaSink.drain(),
+			};
+		});
+		session.promptQueue = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	};
+
 	return {
 		abort(sessionKey: string): void {
 			const session = sessions.get(sessionKey);
@@ -409,36 +453,9 @@ export async function createFamiliarAgent(
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
-			const session = await getSession(sessionKey);
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
 			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
-			const run = session.promptQueue.then(async () => {
-				softStopRequested.set(sessionKey, false);
-				session.mediaSink.drain();
-				setReferenceAttachments(session, options.referenceAttachments);
-				const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
-				try {
-					await session.agent.prompt(input, images);
-				} finally {
-					try {
-						await options.onTurnEnd?.();
-					} catch (error) {
-						console.error("turn end callback failed", error);
-					} finally {
-						setReferenceAttachments(session);
-						unsubscribe?.();
-					}
-				}
-				return {
-					text: getLastAssistantText(session.agent),
-					attachments: session.mediaSink.drain(),
-				};
-			});
-			session.promptQueue = run.then(
-				() => undefined,
-				() => undefined,
-			);
-			return run;
+			return runPromptTurn(sessionKey, options, eventHandler, (session) => session.agent.prompt(input, images));
 		},
 		async promptMessage(
 			sessionKey: string,
@@ -446,39 +463,21 @@ export async function createFamiliarAgent(
 			onEvent?: (event: AgentEvent) => void | Promise<void>,
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
-			const session = await getSession(sessionKey);
-			const run = session.promptQueue.then(async () => {
-				softStopRequested.set(sessionKey, false);
-				session.mediaSink.drain();
-				setReferenceAttachments(session, options.referenceAttachments);
-				const unsubscribe = onEvent ? session.agent.subscribe((event) => onEvent(event)) : undefined;
-				const previousOptions = activePromptOptions.get(sessionKey);
-				activePromptOptions.set(sessionKey, options);
-				if (options.skipAmbient) skipAmbientMessages.add(message);
-				try {
-					await session.agent.prompt(message);
-				} finally {
-					try {
-						await options.onTurnEnd?.();
-					} catch (error) {
-						console.error("turn end callback failed", error);
-					} finally {
-						setReferenceAttachments(session);
+			return runPromptTurn(
+				sessionKey,
+				options,
+				onEvent,
+				(session) => session.agent.prompt(message),
+				() => {
+					const previousOptions = activePromptOptions.get(sessionKey);
+					activePromptOptions.set(sessionKey, options);
+					if (options.skipAmbient) skipAmbientMessages.add(message);
+					return () => {
 						if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
 						else activePromptOptions.delete(sessionKey);
-						unsubscribe?.();
-					}
-				}
-				return {
-					text: getLastAssistantText(session.agent),
-					attachments: session.mediaSink.drain(),
-				};
-			});
-			session.promptQueue = run.then(
-				() => undefined,
-				() => undefined,
+					};
+				},
 			);
-			return run;
 		},
 		steer(sessionKey: string, input: string): void {
 			const session = sessions.get(sessionKey);

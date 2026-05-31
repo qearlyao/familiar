@@ -6,7 +6,7 @@ import { ConversationRuntime } from "./runtime.js";
 export interface RuntimeManagerDeps {
 	config: Config;
 	memoryService?: MemoryService;
-	botUserId: string;
+	botUserId: () => string;
 }
 
 export function createRuntimeManager(deps: RuntimeManagerDeps) {
@@ -21,7 +21,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps) {
 				channelKey,
 				log: createChatLog(deps.config, channel),
 				ownerId: deps.config.discord.ownerId,
-				botUserId: deps.botUserId,
+				botUserId: deps.botUserId(),
 			}).then(async (runtime) => {
 				deps.memoryService?.subscribeRuntime(runtime, runtime.channelKey);
 				await runtime.armAfterCurrentTail();

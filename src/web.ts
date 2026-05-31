@@ -7,6 +7,7 @@ import { getProviders } from "@earendil-works/pi-ai";
 
 import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "./added-models.js";
 import type { FamiliarAgent } from "./agent.js";
+import type { AgentCore } from "./agent-core.js";
 import {
 	type AgentEventSummary,
 	createAgentEventRecorder,
@@ -27,7 +28,6 @@ import {
 } from "./config-registry.js";
 import { getContactNickname, refreshContactNote, setContactNotePath } from "./contact-note.js";
 import type { RestartHandler } from "./control.js";
-import type { DiscordDaemon } from "./discord.js";
 import { eventId, messageId, toUnixMs } from "./ids.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "./models.js";
@@ -55,7 +55,7 @@ import {
 export async function startWebDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
-	discordDaemon: DiscordDaemon,
+	agentCore: AgentCore,
 	options: { restart?: RestartHandler } = {},
 ): Promise<WebDaemon> {
 	setAddedModelsPath(config.workspace.dataDir);
@@ -286,16 +286,16 @@ export async function startWebDaemon(
 	};
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
-		const runtime = await discordDaemon.getRuntimeForWebChannel(channelKey);
+		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
 		subscribeRuntime(runtime);
 		return runtime;
 	};
 
 	const subscribeKnownRuntimes = async (): Promise<void> => {
-		const sessions = await discordDaemon.getWebSessions();
+		const sessions = await agentCore.getWebSessions();
 		await Promise.all(
 			sessions.map(async (session) => {
-				const runtime = await discordDaemon.getRuntimeForWebChannel(session.key);
+				const runtime = await agentCore.getRuntimeForWebChannel(session.key);
 				subscribeRuntime(runtime);
 			}),
 		);
@@ -373,9 +373,9 @@ export async function startWebDaemon(
 			runtime.noteAgentEvent(jobId, assistantMessageId, storedEvent, { notify: false }),
 		);
 		let started = false;
-		let reply: Awaited<ReturnType<typeof discordDaemon.runPromptForWeb>>;
+		let reply: Awaited<ReturnType<typeof agentCore.promptForRuntime>>;
 		try {
-			reply = await discordDaemon.runPromptForWeb(
+			reply = await agentCore.promptForRuntime(
 				runtime,
 				jobId,
 				prompt,
@@ -523,7 +523,7 @@ export async function startWebDaemon(
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/sessions") {
-				const sessions = await discordDaemon.getWebSessions();
+				const sessions = await agentCore.getWebSessions();
 				sendJson(response, 200, { sessions: sessions.map(sessionDto) });
 				return true;
 			}
@@ -610,7 +610,7 @@ export async function startWebDaemon(
 				const entry = CONFIG_REGISTRY[key];
 				try {
 					const validated = entry.validate(body.value, config);
-					await commitConfigChange(key, validated, { config, discordDaemon });
+					await commitConfigChange(key, validated, { config, scheduler: agentCore });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					sendJson(response, 400, { error: message });
@@ -631,7 +631,7 @@ export async function startWebDaemon(
 				}
 				const key = body.key;
 				try {
-					await clearConfigChange(key, { config, discordDaemon });
+					await clearConfigChange(key, { config, scheduler: agentCore });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					sendJson(response, 400, { error: message });

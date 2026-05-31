@@ -1,18 +1,15 @@
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
 	type AutocompleteInteraction,
 	type ChatInputCommandInteraction,
-	type Client,
 	type DMChannel,
 	Events,
 	type Interaction,
 	type Message,
 } from "discord.js";
-import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
+import type { FamiliarAgent } from "./agent.js";
+import type { AgentCore, DiscordWebSession } from "./agent-core.js";
 import { thinkingDurationMs } from "./agent-events.js";
-import { createAgentWorkQueue } from "./agent-work-queue.js";
-import type { StoredAttachment } from "./chat-log.js";
-import { type ChatChannelRef, chatChannelKey } from "./chat-log.js";
+import { chatChannelKey } from "./chat-log.js";
 import type { Config } from "./config.js";
 import type { RestartHandler } from "./control.js";
 import {
@@ -41,33 +38,10 @@ import { isCanceledJob, runAgentTurn } from "./discord/turn.js";
 import type { MemoryService } from "./memory/service.js";
 import { saveOwnerIdentity } from "./owner-identity.js";
 import type { ConversationRuntime } from "./runtime.js";
-import { createRuntimeManager } from "./runtime-manager.js";
-import { createSchedulerRunner } from "./scheduler-runner.js";
 import { type EffectiveSetting, formatSetting, type SettingsStore } from "./settings.js";
 
 export interface DiscordDaemon {
-	client: Client<true>;
-	getWebSessions(): Promise<DiscordWebSession[]>;
-	getRuntimeForWebChannel(channelKey?: string): Promise<ConversationRuntime>;
-	runPromptForWeb(
-		runtime: ConversationRuntime,
-		jobId: string,
-		prompt: string,
-		attachments?: StoredAttachment[],
-		onEvent?: (event: AgentEvent) => void | Promise<void>,
-		onTurnEnd?: () => void | Promise<void>,
-	): Promise<FamiliarAgentReply>;
-	abortWebRuntime(runtime: ConversationRuntime): void;
-	getActiveRuntimeKey(): string | undefined;
-	rearmHeartbeat(): void;
 	stop(): Promise<void>;
-}
-
-export interface DiscordWebSession {
-	key: string;
-	label: string;
-	channel: ChatChannelRef;
-	isDefault?: boolean;
 }
 
 async function applyControlCommand(options: {
@@ -143,18 +117,17 @@ export async function startDiscordDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
 	settings: SettingsStore,
-	memoryService?: MemoryService,
+	_memoryService: MemoryService | undefined,
+	core: AgentCore,
 	options: { restart?: RestartHandler } = {},
 ): Promise<DiscordDaemon> {
 	const client = await withReadyClient(config.discord.token);
 	console.log(`Discord connected as ${client.user.tag}`);
-	const runtimeManager = createRuntimeManager({ config, memoryService, botUserId: client.user.id });
 	const collectTimers = new Map<string, NodeJS.Timeout>();
-	const agentWork = createAgentWorkQueue({ familiarAgent });
 	let ownerDmChannelPromise: Promise<DMChannel> | undefined;
 
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
-		return runtimeManager.getRuntimeForChannel(getChannelRef(message));
+		return core.getRuntimeForChannel(getChannelRef(message));
 	};
 
 	const getInteractionRuntime = async (
@@ -162,7 +135,7 @@ export async function startDiscordDaemon(
 	): Promise<ConversationRuntime> => {
 		const channel = interaction.channel;
 		if (!channel || !interaction.channelId) throw new Error("Discord interaction has no channel");
-		return runtimeManager.getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
+		return core.getRuntimeForChannel(buildChannelRef(channel, interaction.channelId));
 	};
 
 	const getOwnerDmChannel = (): Promise<DMChannel> => {
@@ -213,14 +186,12 @@ export async function startDiscordDaemon(
 
 	const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime; channel: DiscordChatChannel }> => {
 		const dmChannel = await getOwnerDmChannel();
-		const runtime = await runtimeManager.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
+		const runtime = await core.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
 		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};
 
-	const scheduler = createSchedulerRunner({
-		config,
-		agentWork,
-		familiarAgent,
+	core.attachDiscord({
+		botUserId: client.user.id,
 		resolveDefaultSession: getOwnerDmSession,
 		delivery: {
 			async deliver({ channel, reply, parsedReply }) {
@@ -229,15 +200,8 @@ export async function startDiscordDaemon(
 					: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
 			},
 		},
+		getWebSessions,
 	});
-
-	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
-		const sessions = await getWebSessions();
-		const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
-		if (!session)
-			throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No Discord sessions available");
-		return runtimeManager.getRuntimeForChannel(session.channel);
-	};
 
 	const drainJobs = async (message: Message, runtime: ConversationRuntime): Promise<void> => {
 		for (;;) {
@@ -246,7 +210,7 @@ export async function startDiscordDaemon(
 			const stopTyping = startTypingIndicator(message);
 			try {
 				const turn = await runAgentTurn(dispatch.job.jobId, runtime, (onEvent) =>
-					agentWork.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
+					core.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
 				);
 				if (!turn) return;
 				const { reply, parsedReply, summary, assistantMessageId } = turn;
@@ -334,7 +298,7 @@ export async function startDiscordDaemon(
 					settings,
 					channelTrigger,
 					isDm,
-					activeAgentOwner: agentWork.activeOwner,
+					activeAgentOwner: core.activeOwner,
 					restart: options.restart,
 				});
 				const messageIds = await sendReply(config, client.rest, message, text);
@@ -343,14 +307,14 @@ export async function startDiscordDaemon(
 			}
 			const dispatchMode = getDispatchMode(config, message);
 			const shouldTrySteer =
-				dispatchMode === "steer" && runtime.hasActiveJob() && agentWork.activeOwner === runtime.channelKey;
+				dispatchMode === "steer" && runtime.hasActiveJob() && core.activeOwner === runtime.channelKey;
 			const { record } = await runtime.ingestInbound(input, {
 				mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
 				channelTrigger: channelTrigger.value,
 			});
 			const canSteer =
 				shouldTrySteer &&
-				canSteerFromRecord(config, message, runtime, record, agentWork.activeOwner, channelTrigger.value);
+				canSteerFromRecord(config, message, runtime, record, core.activeOwner, channelTrigger.value);
 			if (canSteer) {
 				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
 				return;
@@ -366,7 +330,7 @@ export async function startDiscordDaemon(
 		} catch (error) {
 			console.error("Discord message handling failed", error);
 			const channelKey = runtimeKeyFromMessage(message);
-			const existingRuntime = await runtimeManager.peekRuntime(channelKey);
+			const existingRuntime = await core.peekRuntime(channelKey);
 			await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
 			await sendReply(config, client.rest, message, "I hit an error while handling that message.");
 		}
@@ -410,7 +374,7 @@ export async function startDiscordDaemon(
 				settings,
 				channelTrigger,
 				isDm,
-				activeAgentOwner: agentWork.activeOwner,
+				activeAgentOwner: core.activeOwner,
 				restart: options.restart,
 			});
 			const messageIds = await replyEphemeral(interaction, text);
@@ -429,27 +393,16 @@ export async function startDiscordDaemon(
 	client.ws.on("close" as any, (event: unknown) => {
 		console.warn("Discord websocket closed; discord.js will reconnect when possible", event);
 	});
-	await scheduler.start();
+	await core.startScheduler();
 
 	return {
-		client,
-		getWebSessions,
-		getRuntimeForWebChannel,
-		runPromptForWeb: agentWork.promptForRuntime,
-		abortWebRuntime(runtime: ConversationRuntime): void {
-			familiarAgent.requestSoftStop(runtime.channelKey);
-		},
-		getActiveRuntimeKey(): string | undefined {
-			return agentWork.activeOwner;
-		},
-		rearmHeartbeat: scheduler.rearmHeartbeat,
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);
-			scheduler.stop();
+			core.stopScheduler();
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
-			await runtimeManager.disconnectAll();
+			await core.disconnectAll();
 			client.destroy();
 		},
 	};

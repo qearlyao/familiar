@@ -1,5 +1,5 @@
 import type { FamiliarAgent } from "../agent.js";
-import type { DiscordWebSession } from "../discord.js";
+import type { DiscordWebSession } from "../agent-core.js";
 import { supportedThinkingLevels } from "../models.js";
 import { isRecord } from "../util/guards.js";
 

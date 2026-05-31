@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 
 import { createFamiliarAgent } from "./agent.js";
+import { createAgentCore } from "./agent-core.js";
 import { loadConfig } from "./config.js";
 import { runDataRetention } from "./data-retention.js";
 import { startDiscordDaemon } from "./discord.js";
@@ -171,10 +172,11 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		setTimeout(() => void stop(75), RESTART_EXIT_DELAY_MS);
 		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
 	};
-	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, {
+	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
+	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, agentCore, {
 		restart: requestRestart,
 	});
-	webDaemon = await startWebDaemon(config, familiarAgent, discordDaemon, { restart: requestRestart });
+	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart });
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
 	console.log(`settings=${settings.path}`);

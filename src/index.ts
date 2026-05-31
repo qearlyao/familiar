@@ -1,4 +1,5 @@
 export { createFamiliarAgent, type FamiliarAgent } from "./agent.js";
+export { type AgentCore, createAgentCore, type DiscordWebSession } from "./agent-core.js";
 export {
 	buildRecordBase,
 	type ChatChannelRef,

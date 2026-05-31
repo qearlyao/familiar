@@ -1,6 +1,5 @@
 import type { Config } from "./config.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./config-overrides.js";
-import type { DiscordDaemon } from "./discord.js";
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "./models.js";
 
 export type ConfigKey =
@@ -30,7 +29,7 @@ export type ConfigKey =
 
 export interface RegistryApplyContext {
 	config: Config;
-	discordDaemon: DiscordDaemon;
+	scheduler: { rearmHeartbeat(): void };
 }
 
 export interface RegistryEntry {
@@ -92,8 +91,8 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		write: (config, value) => {
 			config.heartbeat.enabled = value as boolean;
 		},
-		apply: ({ discordDaemon }) => {
-			discordDaemon.rearmHeartbeat();
+		apply: ({ scheduler }) => {
+			scheduler.rearmHeartbeat();
 		},
 	},
 	"heartbeat.idleThresholdMs": {
@@ -102,8 +101,8 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		write: (config, value) => {
 			config.heartbeat.idleThresholdMs = value as number;
 		},
-		apply: ({ discordDaemon }) => {
-			discordDaemon.rearmHeartbeat();
+		apply: ({ scheduler }) => {
+			scheduler.rearmHeartbeat();
 		},
 	},
 	"heartbeat.intervalMs": {
@@ -112,8 +111,8 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		write: (config, value) => {
 			config.heartbeat.intervalMs = value as number;
 		},
-		apply: ({ discordDaemon }) => {
-			discordDaemon.rearmHeartbeat();
+		apply: ({ scheduler }) => {
+			scheduler.rearmHeartbeat();
 		},
 	},
 	"image_gen.enabled": {

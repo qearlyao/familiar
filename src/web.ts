@@ -286,12 +286,14 @@ export async function startWebDaemon(
 	};
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
+		if (!agentCore.hasSessionSource()) throw new HttpError(503, "Owner identity is not established yet.");
 		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
 		subscribeRuntime(runtime);
 		return runtime;
 	};
 
 	const subscribeKnownRuntimes = async (): Promise<void> => {
+		if (!agentCore.hasSessionSource()) return;
 		const sessions = await agentCore.getWebSessions();
 		await Promise.all(
 			sessions.map(async (session) => {
@@ -523,6 +525,10 @@ export async function startWebDaemon(
 				return true;
 			}
 			if (request.method === "GET" && url.pathname === "/api/web/sessions") {
+				if (!agentCore.hasSessionSource()) {
+					sendJson(response, 200, { sessions: [] });
+					return true;
+				}
 				const sessions = await agentCore.getWebSessions();
 				sendJson(response, 200, { sessions: sessions.map(sessionDto) });
 				return true;

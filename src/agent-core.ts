@@ -37,6 +37,7 @@ const webPersistenceOnlyDelivery: SchedulerDeliverySink = {
 export interface AgentCore {
 	attachDiscord(source: AgentCoreSessionSource): Promise<void>;
 	useCachedIdentity(identity: OwnerIdentity): Promise<void>;
+	hasSessionSource(): boolean;
 	getRuntimeForChannel(channel: ChatChannelRef): Promise<ConversationRuntime>;
 	peekRuntime(channelKey: string): Promise<ConversationRuntime | undefined>;
 	getWebSessions(): Promise<DiscordWebSession[]>;
@@ -104,6 +105,9 @@ export function createAgentCore(deps: {
 				],
 				delivery: webPersistenceOnlyDelivery,
 			});
+		},
+		hasSessionSource(): boolean {
+			return sessionSource !== undefined;
 		},
 		getRuntimeForChannel: runtimeManager.getRuntimeForChannel,
 		peekRuntime: runtimeManager.peekRuntime,

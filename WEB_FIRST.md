@@ -163,9 +163,12 @@ Delivery becomes an injected sink that no-ops when there is no live client.
   have no fallback; readers.ts `read*` is non-coercing + fallback-on-undefined (for
   config.toml). Different contracts — merging would change config.toml parsing or
   drop override coercion. They stay co-located with their only consumer.
+- ✅ **#8** — `webHistoryPayload` no longer rebuilds the full transcript: it locates
+  the cursor, collects only the page's visible messages backward to the limit, and
+  replays agent events over the bounded `[eventStart, end)` window (`a2dbde1`).
+  Cross-page replay is guarded by a paging-backward test the single-page tests missed.
 - ⬜ remaining web-surface items (larger, backend — Codex candidates):
   - **#61** — `handleApi` ~270-line switch → route table.
-  - **#8** — paginated history rebuilds the full transcript ([web.ts:383-434](src/web.ts#L383-L434)).
 
   Deferred from 3c's `/simplify` pass: extract an inner `createConnectedSession(client)`
   factory in discord.ts to retire the `requireClient()` guards smeared across the

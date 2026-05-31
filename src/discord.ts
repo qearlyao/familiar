@@ -47,6 +47,7 @@ import {
 } from "./discord/turn.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
+import { saveOwnerIdentity } from "./owner-identity.js";
 import { ConversationRuntime } from "./runtime.js";
 import {
 	appendSchedulerLog,
@@ -269,10 +270,23 @@ export async function startDiscordDaemon(
 
 	const getOwnerDmChannel = (): Promise<DMChannel> => {
 		if (!ownerDmChannelPromise) {
-			ownerDmChannelPromise = client.users.createDM(config.discord.ownerId).catch((error) => {
-				ownerDmChannelPromise = undefined;
-				throw error;
-			});
+			ownerDmChannelPromise = client.users
+				.createDM(config.discord.ownerId)
+				.then(async (dm) => {
+					try {
+						await saveOwnerIdentity(config.workspace.dataDir, {
+							botUserId: client.user.id,
+							dmChannelId: dm.id,
+						});
+					} catch (error) {
+						console.error("failed to persist owner identity", error);
+					}
+					return dm;
+				})
+				.catch((error) => {
+					ownerDmChannelPromise = undefined;
+					throw error;
+				});
 		}
 		return ownerDmChannelPromise;
 	};

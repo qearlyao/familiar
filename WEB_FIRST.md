@@ -173,9 +173,13 @@ Delivery becomes an injected sink that no-ops when there is no live client.
   handler so thrown `HttpError`s are still caught (an Opus review caught that `return` without
   `await` would let them escape as a hung connection). Also catches the inner WS-abort
   `getRuntime` rejection.
-- ⬜ **#15** — deferred 3c cleanup: extract an inner `createConnectedSession(client)`
-  factory in discord.ts to retire the `requireClient()` guards smeared across the
-  daemon body (needs handler-ref hoisting for `stop()`).
+- ✅ **#15** — `createConnectedSession(client: Client<true>)` factory binds the
+  client-scoped closures, so `requireClient()` is gone and the connected invariant lives in
+  the type; `connect()` stores the session in a hoisted ref `stop()` reads to deregister the
+  dynamic handlers (`ab779cf`). Opus-reviewed byte-equivalent (one intended guard delta).
+
+**Backlog clear.** All web-first refactor items (3a/3b/3c, #48 leaks, readJsonBody, #8, #61,
+#15) are landed; #36c declined with rationale above.
 
 ---
 

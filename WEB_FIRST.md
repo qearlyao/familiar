@@ -37,13 +37,46 @@ two live-Discord values baked into a runtime today:
   `discord-dm-<id>` key → **same runtime and same chat log, automatically**, because
   the key is identical. Autonomous, but connectivity maintained.
 
+### Two distinct "no live Discord" scenarios (clarified 2026-05-31)
+
+These are NOT the same and must be handled distinctly:
+
+| Scenario | Frequency | Token | Behavior |
+|---|---|---|---|
+| Normal | common | present, connects | exactly as today |
+| **Unreachable at boot** | **common** | present; identity already cached | **boot anyway**: web + heartbeat on the cached DM identity; the Discord connection is retried in the background; on connect, attach handlers + add group channels to the session list |
+| No token at boot | rare | absent | run web + heartbeat on cached identity; never attempt Discord |
+
+The common failure is **valid token but Discord/network unreachable**, not
+"never had a token." Today `withReadyClient(token)` ([discord.ts:166](src/discord.ts#L166))
+*blocks boot on a successful connection*, so an unreachable Discord currently
+takes the whole app down (web included). The fix: the live connection becomes
+**optional and non-blocking at boot**.
+
+Both no-live-Discord scenarios converge on one runtime behavior — run on the
+cached DM identity with no live client — differing only in whether a connection
+is ever attempted/retried. So the design is unified: **the shared units (runtime
+manager, agent-work serializer, scheduler) live in cli.ts and run regardless of
+Discord; the Discord adapter attaches when/if it connects.**
+
 ### Seeding assumption (decided: option a)
 
-The **first boot must have a working Discord token** to seed
-`{ botUserId, dmChannelKey }`. A fresh install with no token and no prior connect
-is explicitly **not supported** — it has no DM identity to serve. (This matches
-real usage: Discord is configured and normally connected; outages are the case we
-care about, not never-having-Discord.) No synthetic `web-local` fallback.
+The **first-ever boot must have a working Discord token that connects** to seed
+`{ botUserId, dmChannelId }`. A fresh install that has never connected has no DM
+identity to serve and is explicitly **not supported** — no synthetic `web-local`
+fallback. After the cache exists, neither an unreachable Discord nor an
+absent token blocks boot.
+
+### Decisions (2026-05-31)
+
+- **Agent-work serializer → shared unit (1A).** The single global queue
+  (`enqueueAgentWork` + `activeAgentOwner` + the prompt wrappers) that serializes
+  every agent turn across Discord/web/heartbeat/cron moves to a cli.ts-created
+  unit passed to both the web daemon and the Discord adapter. Preserves global
+  single-threading exactly.
+- **Scheduler extracted; heartbeat survives without a live client (2B).** The
+  heartbeat/cron timers move out of the Discord daemon so the agency core keeps
+  firing on the cached DM identity when Discord is unreachable or untokened.
 
 ---
 
@@ -95,13 +128,35 @@ to the shared manager when present.
 
 ---
 
-## Kickoff
+## Sequence
 
-This is a plan-mode effort. Sequence when we start:
-1. Persist `{ botUserId, dmChannelKey }` on successful connect (extend existing
-   saved state).
-2. `token?: string` + config gate lift.
-3. Extract the runtime manager (absorbs #48).
-4. Rewire cli.ts boot (Discord conditional) and web.ts (consume manager, absorbs
-   #61 / readJsonBody / #8).
-5. #36c on the config surface.
+Three shared units must end up created in cli.ts and run regardless of Discord:
+the **runtime manager** (done, 3a — still daemon-created), the **agent-work
+serializer** (the single global queue), and the **scheduler** (heartbeat + cron).
+
+Key seam (verified): heartbeat ([discord.ts:426](src/discord.ts#L426)) and cron
+([discord.ts:536](src/discord.ts#L536)) each *deliver* to Discord
+(`client.rest` + channel send — Discord-coupled) AND *record* via
+`runtime.noteOutbound` (chat-log → how the WebUI sees the message —
+delivery-agnostic). So Discord coupling in the scheduler is **only at delivery**.
+Delivery becomes an injected sink that no-ops when there is no live client.
+
+- ✅ **Step 1** — owner-identity cache (`6f30484`).
+- ✅ **3a** — runtime registry → `runtime-manager.ts`, botUserId injected,
+  behavior-preserving (`ddd85cb`).
+- ⬜ **3b-1** — extract the agent-work serializer (`enqueueAgentWork` +
+  `activeAgentOwner` + `promptForRuntime`/`promptScheduledMessage` +
+  `getActiveRuntimeKey`) into a standalone unit, still daemon-created.
+  Behavior-preserving.
+- ⬜ **3b-2** — extract the scheduler (heartbeat + cron + scheduler state) into a
+  standalone unit with an injected **delivery sink**; still daemon-created, sink =
+  current Discord delivery. Behavior-preserving. (Shrinks the 773-line discord.ts.)
+- ⬜ **3b-3** — hoist runtime-manager + serializer + scheduler creation to cli.ts;
+  add client-free default-DM resolution from the owner-identity cache; pass shared
+  units into both the (still mandatory) Discord adapter and web. web.ts switches
+  from `DiscordDaemon` to the shared units. Behavior-preserving. Absorbs #61 /
+  readJsonBody / #8.
+- ⬜ **3c** — the single behavior change: `token?: string`, **non-blocking
+  background connect**, delivery sink no-ops while disconnected, group channels
+  appear only once connected. Flag-day isolated.
+- ⬜ then **#48** eviction folds into the manager; **#36c** on the config surface.

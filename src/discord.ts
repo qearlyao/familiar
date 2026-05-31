@@ -37,29 +37,12 @@ import {
 } from "./discord/commands.js";
 import { canSteerFromRecord, getChannelTriggerSetting, getDispatchMode, toInboundInput } from "./discord/inbound.js";
 import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./discord/send.js";
-import {
-	CRON_SKIPPED,
-	HEARTBEAT_SKIPPED,
-	heartbeatStillDue,
-	isCanceledJob,
-	runAgentTurn,
-	scheduledUserMessage,
-} from "./discord/turn.js";
+import { isCanceledJob, runAgentTurn } from "./discord/turn.js";
 import type { MemoryService } from "./memory/service.js";
 import { saveOwnerIdentity } from "./owner-identity.js";
 import type { ConversationRuntime } from "./runtime.js";
 import { createRuntimeManager } from "./runtime-manager.js";
-import {
-	appendSchedulerLog,
-	buildCronInjectionText,
-	buildHeartbeatInjectionText,
-	type CronJobConfig,
-	dueCronSlot,
-	formatIdleDuration,
-	loadSchedulerState,
-	type SchedulerState,
-	saveSchedulerState,
-} from "./scheduler.js";
+import { createSchedulerRunner } from "./scheduler-runner.js";
 import { type EffectiveSetting, formatSetting, type SettingsStore } from "./settings.js";
 
 export interface DiscordDaemon {
@@ -168,11 +151,6 @@ export async function startDiscordDaemon(
 	const runtimeManager = createRuntimeManager({ config, memoryService, botUserId: client.user.id });
 	const collectTimers = new Map<string, NodeJS.Timeout>();
 	const agentWork = createAgentWorkQueue({ familiarAgent });
-	let heartbeatTimer: NodeJS.Timeout | undefined;
-	let cronTimer: NodeJS.Timeout | undefined;
-	let heartbeatQueued = false;
-	let cronRunning = false;
-	let schedulerState: SchedulerState = { cron: {} };
 	let ownerDmChannelPromise: Promise<DMChannel> | undefined;
 
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
@@ -239,21 +217,19 @@ export async function startDiscordDaemon(
 		return { runtime, channel: dmChannel as DiscordChatChannel };
 	};
 
-	const saveScheduler = async (): Promise<void> => {
-		await saveSchedulerState(config.workspace.dataDir, schedulerState);
-	};
-
-	const initializeHeartbeatState = async (runtime: ConversationRuntime): Promise<void> => {
-		if (!config.heartbeat.enabled || schedulerState.heartbeat) return;
-		const now = Date.now();
-		const lastUserInteractionAt = runtime.getLastUserInteractionAt();
-		if (now - lastUserInteractionAt < config.heartbeat.idleThresholdMs) return;
-		// Treat a cold start on an already-idle transcript as "we just fired at boot":
-		// the standard cadence/first-fire branches in isHeartbeatDue then handle user-reply
-		// vs. no-reply correctly without a separate suppression concept.
-		schedulerState.heartbeat = { lastFiredAt: new Date(now).toISOString() };
-		await saveScheduler();
-	};
+	const scheduler = createSchedulerRunner({
+		config,
+		agentWork,
+		familiarAgent,
+		resolveDefaultSession: getOwnerDmSession,
+		delivery: {
+			async deliver({ channel, reply, parsedReply }) {
+				return parsedReply.silent
+					? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
+					: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
+			},
+		},
+	});
 
 	const getRuntimeForWebChannel = async (channelKey?: string): Promise<ConversationRuntime> => {
 		const sessions = await getWebSessions();
@@ -312,215 +288,6 @@ export async function startDiscordDaemon(
 			} finally {
 				stopTyping();
 			}
-		}
-	};
-
-	const runHeartbeat = async (): Promise<void> => {
-		if (!config.heartbeat.enabled) return;
-		if (agentWork.activeOwner) return;
-		if (heartbeatQueued) return;
-		heartbeatQueued = true;
-		let runtime: ConversationRuntime | undefined;
-		try {
-			const session = await getOwnerDmSession();
-			runtime = session.runtime;
-			const heartbeatRuntime = session.runtime;
-			const channel = session.channel;
-			const now = Date.now();
-			if (heartbeatRuntime.hasLiveWork()) return;
-			const lastUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
-			if (!heartbeatStillDue(config, now, lastUserInteractionAt, schedulerState.heartbeat?.lastFiredAt)) {
-				return;
-			}
-
-			const turn = await runAgentTurn("heartbeat", heartbeatRuntime, (onEvent) =>
-				agentWork.promptScheduledMessage(
-					heartbeatRuntime,
-					async () => {
-						const queuedNow = Date.now();
-						const latestUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
-						if (heartbeatRuntime.hasLiveWork()) return HEARTBEAT_SKIPPED;
-						if (
-							!heartbeatStillDue(
-								config,
-								queuedNow,
-								latestUserInteractionAt,
-								schedulerState.heartbeat?.lastFiredAt,
-							)
-						) {
-							return HEARTBEAT_SKIPPED;
-						}
-						schedulerState.heartbeat = { lastFiredAt: new Date(queuedNow).toISOString() };
-						await saveScheduler();
-						const text = buildHeartbeatInjectionText({ now: queuedNow, idleSince: latestUserInteractionAt });
-						await heartbeatRuntime.noteHeartbeat(
-							`heartbeat stirred after ${formatIdleDuration(queuedNow - latestUserInteractionAt)}`,
-						);
-						return scheduledUserMessage(text, queuedNow);
-					},
-					onEvent,
-					{ skipAmbient: true },
-				),
-			);
-			if (!turn) return;
-			const { reply, parsedReply, summary, assistantMessageId } = turn;
-			const messageIds = parsedReply.silent
-				? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
-				: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
-			await heartbeatRuntime.noteOutbound({
-				text: parsedReply.text,
-				messageIds,
-				webMessageId: assistantMessageId,
-				attachments: reply.attachments,
-				thinking: summary.thinking,
-				thinkingMs: thinkingDurationMs(summary),
-				silent: parsedReply.silent,
-				jobId: "heartbeat",
-			});
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			await runtime?.noteHeartbeatFailure(message);
-			await runtime?.appendError(`Heartbeat failed: ${message}`);
-			console.error("Heartbeat failed", error);
-		} finally {
-			heartbeatQueued = false;
-		}
-	};
-
-	const markCronSlotStarted = async (job: CronJobConfig, slot: string): Promise<void> => {
-		schedulerState.cron[job.id] = {
-			lastFiredSlot: slot,
-			lastFiredAt: new Date().toISOString(),
-			...(schedulerState.cron[job.id]?.completed ? { completed: true } : {}),
-		};
-		await saveScheduler();
-	};
-
-	const completeCronSlot = async (job: CronJobConfig, slot: string): Promise<void> => {
-		schedulerState.cron[job.id] = {
-			...schedulerState.cron[job.id],
-			lastFiredSlot: slot,
-			lastFiredAt: schedulerState.cron[job.id]?.lastFiredAt ?? new Date().toISOString(),
-			...(job.frequency === "once" ? { completed: true } : {}),
-		};
-		await saveScheduler();
-	};
-
-	const runCronJob = async (
-		job: CronJobConfig,
-		slot: string,
-		runtime: ConversationRuntime,
-		channel: DiscordChatChannel,
-	): Promise<void> => {
-		await appendSchedulerLog(config.workspace.dataDir, {
-			type: "cron_due",
-			jobId: job.id,
-			slot,
-			deliveryMode: job.deliveryMode,
-		});
-		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
-			const now = Date.now();
-			const text = buildCronInjectionText({ job, slot, now });
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_started",
-				jobId: job.id,
-				slot,
-				deliveryMode: job.deliveryMode,
-			});
-			await markCronSlotStarted(job, slot);
-			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), {
-				skipAmbient: true,
-			});
-			await completeCronSlot(job, slot);
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_completed",
-				jobId: job.id,
-				slot,
-				deliveryMode: job.deliveryMode,
-				detail: "queued as follow-up",
-			});
-			return;
-		}
-
-		const jobKey = `cron:${job.id}`;
-		const turn = await runAgentTurn(jobKey, runtime, (onEvent) =>
-			agentWork.promptScheduledMessage(
-				runtime,
-				async () => {
-					const jobState = schedulerState.cron[job.id];
-					if (jobState?.completed || jobState?.lastFiredSlot === slot) return CRON_SKIPPED;
-					const now = Date.now();
-					await appendSchedulerLog(config.workspace.dataDir, {
-						type: "cron_started",
-						jobId: job.id,
-						slot,
-						deliveryMode: job.deliveryMode,
-					});
-					await markCronSlotStarted(job, slot);
-					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
-				},
-				onEvent,
-				{ skipAmbient: true },
-			),
-		);
-		if (!turn) {
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_skipped",
-				jobId: job.id,
-				slot,
-				deliveryMode: job.deliveryMode,
-				detail: "already completed before prompt",
-			});
-			return;
-		}
-		const { reply, parsedReply, summary, assistantMessageId } = turn;
-		const messageIds = parsedReply.silent
-			? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
-			: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
-		await runtime.noteOutbound({
-			text: parsedReply.text,
-			messageIds,
-			webMessageId: assistantMessageId,
-			attachments: reply.attachments,
-			thinking: summary.thinking,
-			thinkingMs: thinkingDurationMs(summary),
-			silent: parsedReply.silent,
-			jobId: jobKey,
-		});
-		await completeCronSlot(job, slot);
-		await appendSchedulerLog(config.workspace.dataDir, {
-			type: "cron_completed",
-			jobId: job.id,
-			slot,
-			deliveryMode: job.deliveryMode,
-		});
-	};
-
-	const tickCron = async (): Promise<void> => {
-		if (!config.cron.enabled || cronRunning) return;
-		cronRunning = true;
-		try {
-			const session = await getOwnerDmSession();
-			for (const job of config.cron.jobs) {
-				const slot = dueCronSlot(job, schedulerState.cron[job.id], Date.now());
-				if (!slot) continue;
-				try {
-					await runCronJob(job, slot, session.runtime, session.channel);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					await appendSchedulerLog(config.workspace.dataDir, {
-						type: "cron_failed",
-						jobId: job.id,
-						slot,
-						deliveryMode: job.deliveryMode,
-						detail: message,
-					});
-					await session.runtime.appendError(`Cron job ${job.id} failed: ${message}`);
-					console.error(`Cron job ${job.id} failed`, error);
-				}
-			}
-		} finally {
-			cronRunning = false;
 		}
 	};
 
@@ -662,31 +429,7 @@ export async function startDiscordDaemon(
 	client.ws.on("close" as any, (event: unknown) => {
 		console.warn("Discord websocket closed; discord.js will reconnect when possible", event);
 	});
-	schedulerState = await loadSchedulerState(config.workspace.dataDir);
-	const tickHeartbeat = () => {
-		void runHeartbeat().catch((error) => console.error("Heartbeat tick failed", error));
-	};
-	const rearmHeartbeat = (): void => {
-		if (heartbeatTimer) {
-			clearInterval(heartbeatTimer);
-			heartbeatTimer = undefined;
-		}
-		if (config.heartbeat.enabled) {
-			heartbeatTimer = setInterval(tickHeartbeat, Math.min(config.heartbeat.intervalMs, 60_000));
-		}
-	};
-	if (config.heartbeat.enabled) {
-		await initializeHeartbeatState((await getOwnerDmSession()).runtime);
-		rearmHeartbeat();
-		tickHeartbeat();
-	}
-	if (config.cron.enabled && config.cron.jobs.some((job) => job.enabled)) {
-		const runCronTick = () => {
-			void tickCron().catch((error) => console.error("Cron tick failed", error));
-		};
-		cronTimer = setInterval(runCronTick, config.cron.pollMs);
-		runCronTick();
-	}
+	await scheduler.start();
 
 	return {
 		client,
@@ -699,12 +442,11 @@ export async function startDiscordDaemon(
 		getActiveRuntimeKey(): string | undefined {
 			return agentWork.activeOwner;
 		},
-		rearmHeartbeat,
+		rearmHeartbeat: scheduler.rearmHeartbeat,
 		async stop(): Promise<void> {
 			client.off(Events.MessageCreate, onMessageCreate);
 			client.off(Events.InteractionCreate, onInteractionCreate);
-			if (heartbeatTimer) clearInterval(heartbeatTimer);
-			if (cronTimer) clearInterval(cronTimer);
+			scheduler.stop();
 			for (const timer of collectTimers.values()) clearTimeout(timer);
 			collectTimers.clear();
 			await runtimeManager.disconnectAll();

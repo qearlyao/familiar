@@ -510,6 +510,263 @@ export async function startWebDaemon(
 		return "Compact is not wired for this runtime yet. I logged the command, but I won't run lossy compaction here.";
 	};
 
+	type WebRoute = (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
+
+	const webRoutes = new Map<string, WebRoute>();
+	const route = (method: string, pathname: string, handler: WebRoute): void => {
+		webRoutes.set(`${method} ${pathname}`, handler);
+	};
+
+	route("GET", "/api/web/auth/mode", async (_request, response) => {
+		sendJson(response, 200, { mode: config.web.authMode, personaName });
+		return true;
+	});
+	route("GET", "/api/web/sessions", async (_request, response) => {
+		if (!agentCore.hasSessionSource()) {
+			sendJson(response, 200, { sessions: [] });
+			return true;
+		}
+		const sessions = await agentCore.getWebSessions();
+		sendJson(response, 200, { sessions: sessions.map(sessionDto) });
+		return true;
+	});
+	route("GET", "/api/web/history", async (_request, response, url) => {
+		const runtime = await getRuntime(getChannelKeyFromRequest(url));
+		const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
+		const before = url.searchParams.get("before") ?? undefined;
+		sendJson(
+			response,
+			200,
+			webHistoryPayload(config, runtime.getRecords(), personaName, runtime.channelKey, { limit, before }),
+		);
+		return true;
+	});
+	route("GET", "/api/web/agent/settings", async (_request, response, url) => {
+		const runtime = await getRuntime(getChannelKeyFromRequest(url));
+		sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+		return true;
+	});
+	route("GET", "/api/web/agent/models", async (_request, response) => {
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("POST", "/api/web/agent/models", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		const parsed = parseRequestedModel(body.model);
+		if (!parsed.ok) {
+			sendJson(response, 400, { error: parsed.error });
+			return true;
+		}
+		if (
+			!Object.hasOwn(PROVIDER_DEFAULTS, parsed.ref.provider) &&
+			!getProviders().includes(parsed.ref.provider as never)
+		) {
+			sendJson(response, 400, { error: `unsupported provider: ${parsed.ref.provider}` });
+			return true;
+		}
+		if (config.models.allow.includes(parsed.model) || loadAddedModels().includes(parsed.model)) {
+			sendJson(response, 200, getAgentModelsPayload());
+			return true;
+		}
+		await addModel(parsed.model);
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("DELETE", "/api/web/agent/models", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		const parsed = parseRequestedModel(body.model);
+		if (!parsed.ok) {
+			sendJson(response, 400, { error: parsed.error });
+			return true;
+		}
+		if (!loadAddedModels().includes(parsed.model)) {
+			sendJson(response, 400, { error: "model is not user-added" });
+			return true;
+		}
+		await removeModel(parsed.model);
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("GET", "/api/web/config", async (_request, response) => {
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("POST", "/api/web/config", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body) || typeof body.key !== "string") {
+			sendJson(response, 400, { error: "key is required" });
+			return true;
+		}
+		if (!isConfigKey(body.key)) {
+			sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+			return true;
+		}
+		const key = body.key;
+		const entry = CONFIG_REGISTRY[key];
+		try {
+			const validated = entry.validate(body.value, config);
+			await commitConfigChange(key, validated, { config, scheduler: agentCore });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("DELETE", "/api/web/config", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body) || typeof body.key !== "string") {
+			sendJson(response, 400, { error: "key is required" });
+			return true;
+		}
+		if (!isConfigKey(body.key)) {
+			sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+			return true;
+		}
+		const key = body.key;
+		try {
+			await clearConfigChange(key, { config, scheduler: agentCore });
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("GET", "/api/web/memes", async (_request, response) => {
+		try {
+			const markdown = await readFile(memeCatalogPath(config), "utf8");
+			sendJson(response, 200, { families: parseMemeCatalog(markdown) });
+		} catch {
+			sendJson(response, 500, { error: "memes catalog unavailable" });
+		}
+		return true;
+	});
+	route("POST", "/api/web/send", async (request, response, url) => {
+		const contentType = request.headers["content-type"] ?? "";
+		const isMultipart = Array.isArray(contentType)
+			? contentType.some((value) => value.includes("multipart/form-data"))
+			: contentType.includes("multipart/form-data");
+		const body = isMultipart ? await readMultipartBody(request, contentType) : await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body) || typeof body.text !== "string") {
+			sendJson(response, 400, { error: "text is required" });
+			return true;
+		}
+		if (!isMultipart && isRecord(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
+			sendJson(response, 400, { error: "attachments require multipart form data" });
+			return true;
+		}
+		const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+		const attachments = await materializeInboundAttachments(
+			config,
+			rawAttachments
+				.filter((attachment): attachment is WebUploadAttachment => isWebUploadAttachment(attachment))
+				.map((attachment) => ({ ...attachment, source: "web" })),
+		);
+		if (!body.text.trim() && attachments.length === 0) {
+			sendJson(response, 400, { error: "text or attachment is required" });
+			return true;
+		}
+		const id = messageId("user");
+		const ts = Date.now();
+		const input: InboundMessageInput = {
+			messageId: id,
+			authorId: config.discord.ownerId,
+			authorName: getContactNickname(WEB_USER_NAME),
+			text: body.text,
+			isBot: false,
+			mentionedBot: true,
+			remoteTimestamp: new Date(ts).toISOString(),
+			checkpoint: { messageId: id },
+			attachments,
+		};
+		await runtime.ingestInbound(input, { mode: "queue" });
+		void drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
+		sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
+		return true;
+	});
+	route("POST", "/api/web/agent/settings", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		try {
+			if (typeof body.model === "string") await familiarAgent.setModel(runtime.channelKey, body.model);
+			if (typeof body.thinking === "string") await familiarAgent.setThinkingLevel(runtime.channelKey, body.thinking);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+		return true;
+	});
+	route("POST", "/api/web/agent/new", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		await familiarAgent.reset(runtime.channelKey);
+		await runtime.resetConversation("new conversation requested from web");
+		publish({
+			type: "status",
+			channelKey: runtime.channelKey,
+			kind: "idle",
+			detail: "started fresh from web",
+		});
+		sendJson(response, 200, { ok: true });
+		return true;
+	});
+	route("POST", "/api/web/control", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body) || typeof body.command !== "string") {
+			sendJson(response, 400, { error: "command is required" });
+			return true;
+		}
+		if (config.web.authMode === "public-2fa" && body.command === "login") {
+			const token = isRecord(body.args) && typeof body.args.token === "string" ? body.args.token : "";
+			if (!config.web.totpSecret || !verifyTotp(config.web.totpSecret, token)) {
+				sendJson(response, 401, { ok: false, message: "Invalid TOTP token." });
+				return true;
+			}
+			const sessionId = auth.createSession();
+			sendJson(response, 200, { ok: true, message: "Authenticated." }, { "set-cookie": sessionCookie(sessionId) });
+			return true;
+		}
+		const args = commandArgs(body.command, body.args);
+		const input: InboundMessageInput = {
+			messageId: messageId("control"),
+			authorId: config.discord.ownerId,
+			authorName: getContactNickname(WEB_USER_NAME),
+			text: `/${body.command}${args ? ` ${args}` : ""}`,
+			isBot: false,
+			mentionedBot: true,
+			remoteTimestamp: new Date().toISOString(),
+		};
+		const control = runtime.parseControlCommand(input);
+		if (!control) {
+			sendJson(response, 400, { ok: false, message: "Unsupported command." });
+			return true;
+		}
+		await runtime.noteControlCommand(input, control);
+		const message = await applyControlCommand(runtime, control);
+		await runtime.noteOutbound({ text: message, messageIds: [], control: control.command });
+		sendJson(response, 200, { ok: true, message, channelKey: runtime.channelKey });
+		return true;
+	});
+
 	const handleApi = async (request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> => {
 		if (!url.pathname.startsWith("/api/web/")) return false;
 		if (!auth.authorize(request, url.pathname)) {
@@ -520,261 +777,9 @@ export async function startWebDaemon(
 			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
 				return serveAttachment(config, response, url.pathname, request.headers.range);
 			}
-			if (request.method === "GET" && url.pathname === "/api/web/auth/mode") {
-				sendJson(response, 200, { mode: config.web.authMode, personaName });
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/sessions") {
-				if (!agentCore.hasSessionSource()) {
-					sendJson(response, 200, { sessions: [] });
-					return true;
-				}
-				const sessions = await agentCore.getWebSessions();
-				sendJson(response, 200, { sessions: sessions.map(sessionDto) });
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/history") {
-				const runtime = await getRuntime(getChannelKeyFromRequest(url));
-				const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
-				const before = url.searchParams.get("before") ?? undefined;
-				sendJson(
-					response,
-					200,
-					webHistoryPayload(config, runtime.getRecords(), personaName, runtime.channelKey, { limit, before }),
-				);
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/agent/settings") {
-				const runtime = await getRuntime(getChannelKeyFromRequest(url));
-				sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/agent/models") {
-				sendJson(response, 200, getAgentModelsPayload());
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/agent/models") {
-				const body = await readJsonBody(request);
-				if (!isRecord(body)) {
-					sendJson(response, 400, { error: "body is required" });
-					return true;
-				}
-				const parsed = parseRequestedModel(body.model);
-				if (!parsed.ok) {
-					sendJson(response, 400, { error: parsed.error });
-					return true;
-				}
-				if (
-					!Object.hasOwn(PROVIDER_DEFAULTS, parsed.ref.provider) &&
-					!getProviders().includes(parsed.ref.provider as never)
-				) {
-					sendJson(response, 400, { error: `unsupported provider: ${parsed.ref.provider}` });
-					return true;
-				}
-				if (config.models.allow.includes(parsed.model) || loadAddedModels().includes(parsed.model)) {
-					sendJson(response, 200, getAgentModelsPayload());
-					return true;
-				}
-				await addModel(parsed.model);
-				sendJson(response, 200, getAgentModelsPayload());
-				return true;
-			}
-			if (request.method === "DELETE" && url.pathname === "/api/web/agent/models") {
-				const body = await readJsonBody(request);
-				if (!isRecord(body)) {
-					sendJson(response, 400, { error: "body is required" });
-					return true;
-				}
-				const parsed = parseRequestedModel(body.model);
-				if (!parsed.ok) {
-					sendJson(response, 400, { error: parsed.error });
-					return true;
-				}
-				if (!loadAddedModels().includes(parsed.model)) {
-					sendJson(response, 400, { error: "model is not user-added" });
-					return true;
-				}
-				await removeModel(parsed.model);
-				sendJson(response, 200, getAgentModelsPayload());
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/config") {
-				sendJson(response, 200, getConfigPayload());
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/config") {
-				const body = await readJsonBody(request);
-				if (!isRecord(body) || typeof body.key !== "string") {
-					sendJson(response, 400, { error: "key is required" });
-					return true;
-				}
-				if (!isConfigKey(body.key)) {
-					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
-					return true;
-				}
-				const key = body.key;
-				const entry = CONFIG_REGISTRY[key];
-				try {
-					const validated = entry.validate(body.value, config);
-					await commitConfigChange(key, validated, { config, scheduler: agentCore });
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					sendJson(response, 400, { error: message });
-					return true;
-				}
-				sendJson(response, 200, getConfigPayload());
-				return true;
-			}
-			if (request.method === "DELETE" && url.pathname === "/api/web/config") {
-				const body = await readJsonBody(request);
-				if (!isRecord(body) || typeof body.key !== "string") {
-					sendJson(response, 400, { error: "key is required" });
-					return true;
-				}
-				if (!isConfigKey(body.key)) {
-					sendJson(response, 400, { error: `unknown config key: ${body.key}` });
-					return true;
-				}
-				const key = body.key;
-				try {
-					await clearConfigChange(key, { config, scheduler: agentCore });
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					sendJson(response, 400, { error: message });
-					return true;
-				}
-				sendJson(response, 200, getConfigPayload());
-				return true;
-			}
-			if (request.method === "GET" && url.pathname === "/api/web/memes") {
-				try {
-					const markdown = await readFile(memeCatalogPath(config), "utf8");
-					sendJson(response, 200, { families: parseMemeCatalog(markdown) });
-				} catch {
-					sendJson(response, 500, { error: "memes catalog unavailable" });
-				}
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/send") {
-				const contentType = request.headers["content-type"] ?? "";
-				const isMultipart = Array.isArray(contentType)
-					? contentType.some((value) => value.includes("multipart/form-data"))
-					: contentType.includes("multipart/form-data");
-				const body = isMultipart ? await readMultipartBody(request, contentType) : await readJsonBody(request);
-				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isRecord(body) || typeof body.text !== "string") {
-					sendJson(response, 400, { error: "text is required" });
-					return true;
-				}
-				if (!isMultipart && isRecord(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
-					sendJson(response, 400, { error: "attachments require multipart form data" });
-					return true;
-				}
-				const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
-				const attachments = await materializeInboundAttachments(
-					config,
-					rawAttachments
-						.filter((attachment): attachment is WebUploadAttachment => isWebUploadAttachment(attachment))
-						.map((attachment) => ({ ...attachment, source: "web" })),
-				);
-				if (!body.text.trim() && attachments.length === 0) {
-					sendJson(response, 400, { error: "text or attachment is required" });
-					return true;
-				}
-				const id = messageId("user");
-				const ts = Date.now();
-				const input: InboundMessageInput = {
-					messageId: id,
-					authorId: config.discord.ownerId,
-					authorName: getContactNickname(WEB_USER_NAME),
-					text: body.text,
-					isBot: false,
-					mentionedBot: true,
-					remoteTimestamp: new Date(ts).toISOString(),
-					checkpoint: { messageId: id },
-					attachments,
-				};
-				await runtime.ingestInbound(input, { mode: "queue" });
-				void drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
-				sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/agent/settings") {
-				const body = await readJsonBody(request);
-				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isRecord(body)) {
-					sendJson(response, 400, { error: "body is required" });
-					return true;
-				}
-				try {
-					if (typeof body.model === "string") await familiarAgent.setModel(runtime.channelKey, body.model);
-					if (typeof body.thinking === "string")
-						await familiarAgent.setThinkingLevel(runtime.channelKey, body.thinking);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					sendJson(response, 400, { error: message });
-					return true;
-				}
-				sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/agent/new") {
-				const body = await readJsonBody(request);
-				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				await familiarAgent.reset(runtime.channelKey);
-				await runtime.resetConversation("new conversation requested from web");
-				publish({
-					type: "status",
-					channelKey: runtime.channelKey,
-					kind: "idle",
-					detail: "started fresh from web",
-				});
-				sendJson(response, 200, { ok: true });
-				return true;
-			}
-			if (request.method === "POST" && url.pathname === "/api/web/control") {
-				const body = await readJsonBody(request);
-				const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
-				if (!isRecord(body) || typeof body.command !== "string") {
-					sendJson(response, 400, { error: "command is required" });
-					return true;
-				}
-				if (config.web.authMode === "public-2fa" && body.command === "login") {
-					const token = isRecord(body.args) && typeof body.args.token === "string" ? body.args.token : "";
-					if (!config.web.totpSecret || !verifyTotp(config.web.totpSecret, token)) {
-						sendJson(response, 401, { ok: false, message: "Invalid TOTP token." });
-						return true;
-					}
-					const sessionId = auth.createSession();
-					sendJson(
-						response,
-						200,
-						{ ok: true, message: "Authenticated." },
-						{ "set-cookie": sessionCookie(sessionId) },
-					);
-					return true;
-				}
-				const args = commandArgs(body.command, body.args);
-				const input: InboundMessageInput = {
-					messageId: messageId("control"),
-					authorId: config.discord.ownerId,
-					authorName: getContactNickname(WEB_USER_NAME),
-					text: `/${body.command}${args ? ` ${args}` : ""}`,
-					isBot: false,
-					mentionedBot: true,
-					remoteTimestamp: new Date().toISOString(),
-				};
-				const control = runtime.parseControlCommand(input);
-				if (!control) {
-					sendJson(response, 400, { ok: false, message: "Unsupported command." });
-					return true;
-				}
-				await runtime.noteControlCommand(input, control);
-				const message = await applyControlCommand(runtime, control);
-				await runtime.noteOutbound({ text: message, messageIds: [], control: control.command });
-				sendJson(response, 200, { ok: true, message, channelKey: runtime.channelKey });
-				return true;
-			}
+			const handler = webRoutes.get(`${request.method} ${url.pathname}`);
+			// await is load-bearing: it keeps handler rejections inside this try so the catch maps HttpError to a status.
+			if (handler) return await handler(request, response, url);
 			sendJson(response, 404, { error: "not found" });
 			return true;
 		} catch (error) {
@@ -830,9 +835,11 @@ export async function startWebDaemon(
 								);
 							}
 							if (isRecord(message) && message.type === "abort") {
-								void getRuntime(client.channelKey).then(async (runtime) => {
-									familiarAgent.requestSoftStop(runtime.channelKey);
-								});
+								void getRuntime(client.channelKey)
+									.then((runtime) => {
+										familiarAgent.requestSoftStop(runtime.channelKey);
+									})
+									.catch((error) => console.error("WebSocket abort runtime lookup failed", error));
 							}
 						}
 					} catch (error) {

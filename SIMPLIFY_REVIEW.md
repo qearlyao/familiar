@@ -107,12 +107,16 @@ structural decomposition. Needs its own task + review — NOT a batch.
 - **#63 — multipart `Buffer.toString("binary")` round-trip → streaming / work on
   `Buffer`.** [src/web.ts:144-189](src/web.ts#L144-L189) (now `src/web/multipart.ts`).
   Fragile, behavior-sensitive on large uploads.
-- **#66 — `loadStoredMessages` O(N×files) dir scan + full read per session.**
-  [src/agent.ts:225-273](src/agent.ts#L225-L273). Bound by mtime/since-last-reset;
-  behavior-sensitive (which messages load).
-- **#67 — agent `prompt` / `promptMessage` ~70-line structural dup**
-  (queue/subscribe/teardown). [src/agent.ts:728-805](src/agent.ts#L728-L805).
-  Safe in principle but concurrency/teardown-sensitive; own task.
+- **#66 — half done (`2d3de8e`).** `loadStoredMessages` (now
+  `src/agent/transcript-log.ts`) reads transcript `.jsonl` files via `Promise.all`,
+  parsing in filename order (same pattern as #56). **Still open:** the O(N×files)
+  full scan itself — bound reads by mtime/since-last-reset so a session load doesn't
+  parse the entire transcript history. Behavior-sensitive (which messages load);
+  defer until transcript volume bites.
+- **#67 — done (`2d3de8e`).** `prompt`/`promptMessage` ~70-line dup collapsed into a
+  shared `runPromptTurn` closure (queue serialization + non-rejecting tail + fixed
+  teardown order; `promptMessage` scopes `activePromptOptions` via an enter/exit hook
+  landing at the exact original finally points). Codex-reviewed behavior-preserving.
 - **#68 — hot-reload watcher not re-attached on error.**
   [src/hot-reload.ts:147-150](src/hot-reload.ts#L147-L150). On transient EMFILE the
   daemon silently loses hot-reload. Adds retry logic; behavior change.
@@ -134,35 +138,26 @@ structural decomposition. Needs its own task + review — NOT a batch.
   Deferred (P5): the named sites already use `insertRecordReturningStored()`;
   changing `insertRecord()` itself is now mostly API churn across tests and
   non-hot-path callers.
-- **#36a — `stableHash` duplicated.**
-  [src/memory/lcm/context.ts:82-84](src/memory/lcm/context.ts#L82-L84)
-  `fingerprintRecords` is byte-identical to `stableHash`
-  ([store/serialization.ts:30-32](src/memory/lcm/store/serialization.ts#L30-L32)).
-  Import `stableHash` instead.
-- **#36b — `readOptionalString` is type-lenient.**
-  [src/config/readers.ts:8-10](src/config/readers.ts#L8-L10) silently returns the
-  fallback for non-string values instead of throwing like the other `read*`
-  validators. A misconfigured non-string in the TOML is swallowed. **Decide:** throw
-  on wrong-type, or document the lenience.
+- **#36a — RESOLVED (already done in current code).** `fingerprintRecords` no longer
+  exists; `stableHash` (`store/serialization.ts`) is the single owner.
+- **#36b — done (`2d3de8e`).** `readOptionalString` now throws on a present
+  wrong-type value (undefined / empty-string still fall back). Chose fail-fast over
+  documenting the lenience — silent fallback is a design smell and all 44 call sites
+  read TOML fields that are always strings. (Full consolidation onto
+  `readConfigString` for path-tagged errors remains available but is 44 edits of
+  churn — not worth it now.)
 - **#36c — `config-registry.ts` parallel `require*` readers.**
   [src/config-registry.ts:43-86](src/config-registry.ts#L43-L86)
   (`requireBoolean`/`requireInt`/`requireNumberInRange`/…) reimplement the
   coercion-and-throw logic of `src/config/readers.ts` with a `require`-prefix/`key`-arg
   convention. Overlaps #29. Consolidate onto the `src/config/readers.ts` set next
   time the override-apply path is touched.
-- **`webMessageId()` duplicates `messageId()`.**
-  [src/discord/turn.ts:31](src/discord/turn.ts#L31) returns `msg_${uuid}`, identical
-  to [src/web/ids.ts:12](src/web/ids.ts#L12). Cleanest fix is a shared `src/ids.ts`;
-  folding turn.ts into `../web/ids.js` would be a discord→web layer crossing. Defer
-  to a dedicated id-module consolidation.
-- **`parseAgentReply` name collision.**
-  [src/silent-marker.ts:7](src/silent-marker.ts#L7) exports a raw `parseAgentReply`
-  (no normalization); [src/discord/send.ts:67](src/discord/send.ts#L67) exports a
-  *normalizing* wrapper of the same name. `discord/turn.ts` imports the normalizing
-  one; `web.ts` imports the raw one. Same name, different semantics, different paths
-  — a future consolidator could silently route web through the normalizing variant
-  and leak `(empty response)` placeholders into the web UI. Rename the send.ts
-  wrapper (e.g. `parseOutboundReply`) when next touching that area.
+- **`webMessageId()` / `messageId()` — RESOLVED (already done in current code).** The
+  duplicate id *function* is gone; `discord/turn.ts` imports the shared `messageId`
+  from `src/ids.js`. (`webMessageId` survives only as a record *field* name.)
+- **`parseAgentReply` name collision — RESOLVED (already done in current code).**
+  `discord/send.ts` now exports `parseOutboundReply` and imports the raw
+  `silent-marker.ts` one as `parseSilentMarker`; the same-name footgun is closed.
 - **`__test` / `__webTest` re-export objects now redundant.**
   [src/discord.ts:94](src/discord.ts#L94) and [src/web.ts:859](src/web.ts#L859) —
   every member is now an independent export of its real module; the umbrella objects

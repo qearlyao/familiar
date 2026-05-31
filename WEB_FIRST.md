@@ -150,8 +150,22 @@ Delivery becomes an injected sink that no-ops when there is no live client.
   `attachDiscord()` (`7ac9067`).
 - ✅ **3c** — the single behavior change: web/scheduler boot on cached identity,
   Discord is an optional background-connect adapter (`e027bd5`, see below).
-- ⬜ then **#48** eviction folds into the manager; **#61 / readJsonBody / #8** on
-  the web surface; **#36c** on the config surface.
+- ✅ **#48 (leaks)** — runtime manager now pairs the memory-subscription release
+  with `runtime.disconnect()` in one `release()`; connect rollback + disconnectAll
+  no longer leak (`24624a0`). **Eviction trigger deferred** (low severity; chose
+  "ship leak fixes, defer trigger" 2026-05-31) — release is centralized so adding
+  it later is isolated.
+- ✅ **readJsonBody** — malformed body → 400, oversized → 413 via `HttpError` the
+  dispatcher honors; reader takes the structural `AsyncIterable` it consumes and is
+  now unit-tested (`68dbe3b`).
+- ❌ **#36c — declined (not a real consolidation).** config-registry's `require*`
+  validators coerce (`Number(value)`, for string-encoded WebUI override values) and
+  have no fallback; readers.ts `read*` is non-coercing + fallback-on-undefined (for
+  config.toml). Different contracts — merging would change config.toml parsing or
+  drop override coercion. They stay co-located with their only consumer.
+- ⬜ remaining web-surface items (larger, backend — Codex candidates):
+  - **#61** — `handleApi` ~270-line switch → route table.
+  - **#8** — paginated history rebuilds the full transcript ([web.ts:383-434](src/web.ts#L383-L434)).
 
   Deferred from 3c's `/simplify` pass: extract an inner `createConnectedSession(client)`
   factory in discord.ts to retire the `requireClient()` guards smeared across the

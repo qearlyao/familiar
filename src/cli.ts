@@ -16,6 +16,7 @@ import { cleanupGeneratedAttachments } from "./generated-media.js";
 import { startWorkspaceHotReload } from "./hot-reload.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
+import { loadOwnerIdentity } from "./owner-identity.js";
 import { formatServiceResult, installService, serviceStatus, uninstallService, upgradeFamiliar } from "./service.js";
 import { loadSettingsStore } from "./settings.js";
 import { startWebDaemon } from "./web.js";
@@ -155,8 +156,9 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	memoryService.watchDiaries();
 	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig });
 	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
+	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
 	let stopping = false;
-	let discordDaemon: Awaited<ReturnType<typeof startDiscordDaemon>> | undefined;
+	let discordDaemon: ReturnType<typeof startDiscordDaemon> | undefined;
 	let webDaemon: Awaited<ReturnType<typeof startWebDaemon>> | undefined;
 	const stop = async (exitCode = 0) => {
 		if (stopping) return;
@@ -164,6 +166,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		console.log("Stopping familiar");
 		hotReload.close();
 		await Promise.all([webDaemon?.stop(), discordDaemon?.stop()]);
+		await agentCore.stop();
 		memoryService.close();
 		process.exit(exitCode);
 	};
@@ -172,11 +175,22 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		setTimeout(() => void stop(75), RESTART_EXIT_DELAY_MS);
 		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
 	};
-	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
-	discordDaemon = await startDiscordDaemon(config, familiarAgent, settings, memoryService, agentCore, {
-		restart: requestRestart,
-	});
+	const identity = await loadOwnerIdentity(config.workspace.dataDir);
+	const token = config.discord.token;
+	if (!identity && !token) {
+		throw new Error(
+			"First-time setup needs a DISCORD_TOKEN to establish owner identity. Set DISCORD_TOKEN and run again.",
+		);
+	}
+	// The scheduler starts with the first session source to arrive: the cached identity
+	// here, or the live Discord connection below when there is no cache yet.
+	if (identity) await agentCore.useCachedIdentity(identity);
 	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart });
+	if (token) {
+		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {
+			restart: requestRestart,
+		});
+	}
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");
 	console.log(`settings=${settings.path}`);

@@ -250,7 +250,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	return {
 		workspacePath,
 		discord: {
-			token: readString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN"),
+			token: readOptionalConfigString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN"),
 			ownerId,
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
 			replyMode: readEnum(

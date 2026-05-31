@@ -24,7 +24,7 @@ export interface TtsVoiceSettings {
 export interface Config {
 	workspacePath: string;
 	discord: {
-		token: string;
+		token?: string;
 		ownerId: string;
 		allowedChannels: string[];
 		replyMode: DiscordReplyMode;

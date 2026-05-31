@@ -37,20 +37,16 @@ type SchedulerAgentWork = {
 	readonly activeOwner: string | undefined;
 };
 
-export interface SchedulerDeliverySink<Channel> {
-	deliver(options: {
-		channel: Channel;
-		reply: FamiliarAgentReply;
-		parsedReply: { text: string; silent: boolean };
-	}): Promise<string[]>;
+export interface SchedulerDeliverySink {
+	deliver(options: { reply: FamiliarAgentReply; parsedReply: { text: string; silent: boolean } }): Promise<string[]>;
 }
 
-export interface SchedulerRunnerDeps<Channel> {
+export interface SchedulerRunnerDeps {
 	config: Config;
 	agentWork: SchedulerAgentWork;
 	familiarAgent: FamiliarAgent;
-	resolveDefaultSession: () => Promise<{ runtime: ConversationRuntime; channel: Channel }>;
-	delivery: SchedulerDeliverySink<Channel>;
+	resolveDefaultSession: () => Promise<{ runtime: ConversationRuntime }>;
+	delivery: SchedulerDeliverySink;
 }
 
 export interface SchedulerRunner {
@@ -59,7 +55,7 @@ export interface SchedulerRunner {
 	stop(): void;
 }
 
-export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel>): SchedulerRunner {
+export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunner {
 	const { config, agentWork, familiarAgent, resolveDefaultSession, delivery } = deps;
 	let heartbeatTimer: NodeJS.Timeout | undefined;
 	let cronTimer: NodeJS.Timeout | undefined;
@@ -93,7 +89,6 @@ export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel
 			const session = await resolveDefaultSession();
 			runtime = session.runtime;
 			const heartbeatRuntime = session.runtime;
-			const channel = session.channel;
 			const now = Date.now();
 			if (heartbeatRuntime.hasLiveWork()) return;
 			const lastUserInteractionAt = heartbeatRuntime.getLastUserInteractionAt();
@@ -132,7 +127,7 @@ export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel
 			);
 			if (!turn) return;
 			const { reply, parsedReply, summary, assistantMessageId } = turn;
-			const messageIds = await delivery.deliver({ channel, reply, parsedReply });
+			const messageIds = await delivery.deliver({ reply, parsedReply });
 			await heartbeatRuntime.noteOutbound({
 				text: parsedReply.text,
 				messageIds,
@@ -172,12 +167,7 @@ export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel
 		await saveScheduler();
 	};
 
-	const runCronJob = async (
-		job: CronJobConfig,
-		slot: string,
-		runtime: ConversationRuntime,
-		channel: Channel,
-	): Promise<void> => {
+	const runCronJob = async (job: CronJobConfig, slot: string, runtime: ConversationRuntime): Promise<void> => {
 		await appendSchedulerLog(config.workspace.dataDir, {
 			type: "cron_due",
 			jobId: job.id,
@@ -240,7 +230,7 @@ export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel
 			return;
 		}
 		const { reply, parsedReply, summary, assistantMessageId } = turn;
-		const messageIds = await delivery.deliver({ channel, reply, parsedReply });
+		const messageIds = await delivery.deliver({ reply, parsedReply });
 		await runtime.noteOutbound({
 			text: parsedReply.text,
 			messageIds,
@@ -269,7 +259,7 @@ export function createSchedulerRunner<Channel>(deps: SchedulerRunnerDeps<Channel
 				const slot = dueCronSlot(job, schedulerState.cron[job.id], Date.now());
 				if (!slot) continue;
 				try {
-					await runCronJob(job, slot, session.runtime, session.channel);
+					await runCronJob(job, slot, session.runtime);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					await appendSchedulerLog(config.workspace.dataDir, {

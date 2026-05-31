@@ -2,10 +2,10 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
 import { createAgentWorkQueue } from "./agent-work-queue.js";
-import type { ChatChannelRef, StoredAttachment } from "./chat-log.js";
+import { type ChatChannelRef, chatChannelKey, type StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
-import type { DiscordChatChannel } from "./discord/channel.js";
 import type { MemoryService } from "./memory/service.js";
+import type { OwnerIdentity } from "./owner-identity.js";
 import type { ConversationRuntime } from "./runtime.js";
 import { createRuntimeManager } from "./runtime-manager.js";
 import { createSchedulerRunner, type SchedulerDeliverySink } from "./scheduler-runner.js";
@@ -17,15 +17,26 @@ export interface DiscordWebSession {
 	isDefault?: boolean;
 }
 
-interface AgentCoreDiscordBindings {
+// A session source supplies both how to resolve the default runtime and how to push
+// outbound to it. The web-only source (no live Discord) pushes nowhere: outbound is
+// still recorded via runtime.noteOutbound and rendered by the WebUI, so the sink just
+// returns no message ids.
+interface AgentCoreSessionSource {
 	botUserId: string;
-	resolveDefaultSession: () => Promise<{ runtime: ConversationRuntime; channel: DiscordChatChannel }>;
-	delivery: SchedulerDeliverySink<DiscordChatChannel>;
+	resolveDefaultSession: () => Promise<{ runtime: ConversationRuntime }>;
 	getWebSessions(): Promise<DiscordWebSession[]>;
+	delivery: SchedulerDeliverySink;
 }
 
+const webPersistenceOnlyDelivery: SchedulerDeliverySink = {
+	async deliver() {
+		return [];
+	},
+};
+
 export interface AgentCore {
-	attachDiscord(bindings: AgentCoreDiscordBindings): void;
+	attachDiscord(source: AgentCoreSessionSource): Promise<void>;
+	useCachedIdentity(identity: OwnerIdentity): Promise<void>;
 	getRuntimeForChannel(channel: ChatChannelRef): Promise<ConversationRuntime>;
 	peekRuntime(channelKey: string): Promise<ConversationRuntime | undefined>;
 	getWebSessions(): Promise<DiscordWebSession[]>;
@@ -39,10 +50,8 @@ export interface AgentCore {
 		onTurnEnd?: () => void | Promise<void>,
 	): Promise<FamiliarAgentReply>;
 	readonly activeOwner: string | undefined;
-	startScheduler(): Promise<void>;
 	rearmHeartbeat(): void;
-	stopScheduler(): void;
-	disconnectAll(): Promise<void>;
+	stop(): Promise<void>;
 }
 
 export function createAgentCore(deps: {
@@ -50,38 +59,59 @@ export function createAgentCore(deps: {
 	familiarAgent: FamiliarAgent;
 	memoryService?: MemoryService;
 }): AgentCore {
-	let discordBindings: AgentCoreDiscordBindings | undefined;
-	const requireDiscordBindings = (): AgentCoreDiscordBindings => {
-		if (!discordBindings) throw new Error("Discord bindings are not attached");
-		return discordBindings;
+	let sessionSource: AgentCoreSessionSource | undefined;
+	const requireSessionSource = (): AgentCoreSessionSource => {
+		if (!sessionSource) throw new Error("Owner identity is not established");
+		return sessionSource;
 	};
+	let schedulerStarted = false;
 	const runtimeManager = createRuntimeManager({
 		config: deps.config,
 		memoryService: deps.memoryService,
-		botUserId: () => requireDiscordBindings().botUserId,
+		botUserId: () => requireSessionSource().botUserId,
 	});
 	const agentWork = createAgentWorkQueue({ familiarAgent: deps.familiarAgent });
 	const scheduler = createSchedulerRunner({
 		config: deps.config,
 		agentWork,
 		familiarAgent: deps.familiarAgent,
-		resolveDefaultSession: () => requireDiscordBindings().resolveDefaultSession(),
+		resolveDefaultSession: () => requireSessionSource().resolveDefaultSession(),
 		delivery: {
-			deliver: (options) => requireDiscordBindings().delivery.deliver(options),
+			deliver: (options) => requireSessionSource().delivery.deliver(options),
 		},
 	});
+	// The scheduler can only run once a session source exists; start it with the first
+	// source to arrive (cached identity at boot, or the live Discord connection).
+	const setSessionSource = async (source: AgentCoreSessionSource): Promise<void> => {
+		sessionSource = source;
+		if (!schedulerStarted) {
+			await scheduler.start();
+			schedulerStarted = true;
+		}
+	};
 
 	return {
-		attachDiscord(bindings: AgentCoreDiscordBindings): void {
-			discordBindings = bindings;
+		attachDiscord(source: AgentCoreSessionSource): Promise<void> {
+			return setSessionSource(source);
+		},
+		useCachedIdentity(identity: OwnerIdentity): Promise<void> {
+			const dmRef: ChatChannelRef = { service: "discord", scope: "dm", channelId: identity.dmChannelId };
+			return setSessionSource({
+				botUserId: identity.botUserId,
+				resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(dmRef) }),
+				getWebSessions: async () => [
+					{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
+				],
+				delivery: webPersistenceOnlyDelivery,
+			});
 		},
 		getRuntimeForChannel: runtimeManager.getRuntimeForChannel,
 		peekRuntime: runtimeManager.peekRuntime,
 		getWebSessions(): Promise<DiscordWebSession[]> {
-			return requireDiscordBindings().getWebSessions();
+			return requireSessionSource().getWebSessions();
 		},
 		async getRuntimeForWebChannel(channelKey?: string): Promise<ConversationRuntime> {
-			const sessions = await requireDiscordBindings().getWebSessions();
+			const sessions = await requireSessionSource().getWebSessions();
 			const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
 			if (!session) throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No sessions available");
 			return runtimeManager.getRuntimeForChannel(session.channel);
@@ -90,9 +120,10 @@ export function createAgentCore(deps: {
 		get activeOwner(): string | undefined {
 			return agentWork.activeOwner;
 		},
-		startScheduler: scheduler.start,
 		rearmHeartbeat: scheduler.rearmHeartbeat,
-		stopScheduler: scheduler.stop,
-		disconnectAll: runtimeManager.disconnectAll,
+		stop(): Promise<void> {
+			scheduler.stop();
+			return runtimeManager.disconnectAll();
+		},
 	};
 }

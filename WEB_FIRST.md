@@ -142,21 +142,62 @@ delivery-agnostic). So Discord coupling in the scheduler is **only at delivery**
 Delivery becomes an injected sink that no-ops when there is no live client.
 
 - ✅ **Step 1** — owner-identity cache (`6f30484`).
-- ✅ **3a** — runtime registry → `runtime-manager.ts`, botUserId injected,
-  behavior-preserving (`ddd85cb`).
-- ⬜ **3b-1** — extract the agent-work serializer (`enqueueAgentWork` +
-  `activeAgentOwner` + `promptForRuntime`/`promptScheduledMessage` +
-  `getActiveRuntimeKey`) into a standalone unit, still daemon-created.
-  Behavior-preserving.
-- ⬜ **3b-2** — extract the scheduler (heartbeat + cron + scheduler state) into a
-  standalone unit with an injected **delivery sink**; still daemon-created, sink =
-  current Discord delivery. Behavior-preserving. (Shrinks the 773-line discord.ts.)
-- ⬜ **3b-3** — hoist runtime-manager + serializer + scheduler creation to cli.ts;
-  add client-free default-DM resolution from the owner-identity cache; pass shared
-  units into both the (still mandatory) Discord adapter and web. web.ts switches
-  from `DiscordDaemon` to the shared units. Behavior-preserving. Absorbs #61 /
-  readJsonBody / #8.
-- ⬜ **3c** — the single behavior change: `token?: string`, **non-blocking
-  background connect**, delivery sink no-ops while disconnected, group channels
-  appear only once connected. Flag-day isolated.
-- ⬜ then **#48** eviction folds into the manager; **#36c** on the config surface.
+- ✅ **3a** — runtime registry → `runtime-manager.ts`, botUserId injected (`ddd85cb`).
+- ✅ **3b-1** — agent-work serializer → `agent-work-queue.ts` (`11af2f1`).
+- ✅ **3b-2** — scheduler runner + injected delivery sink → `scheduler-runner.ts` (`ab2c648`).
+- ✅ **3b-3** — shared `createAgentCore()` hoisted to cli.ts; web + config-registry
+  depend on `AgentCore` not `DiscordDaemon`; daemon attaches live-client glue via
+  `attachDiscord()` (`7ac9067`).
+- ⬜ **3c** — the single behavior change (see below).
+- ⬜ then **#48** eviction folds into the manager; **#61 / readJsonBody / #8** on
+  the web surface; **#36c** on the config surface.
+
+---
+
+## 3c — design (resolved)
+
+The `/simplify` altitude review on 3b-3 set the shape: the `attachDiscord()`
+bundle conflates two lifetimes. 3c splits it along the real axis —
+**identity/session source (always present) vs live delivery (optional)**.
+
+### The linchpin
+The owner DM `ChatChannelRef` is `{ service: "discord", scope: "dm", channelId:
+dmChannelId }` (channelName/threadId are undefined for a DM). It is fully
+reconstructible from the cached `owner-identity.json` (`{ botUserId, dmChannelId }`)
+with NO live client. Its `chatChannelKey` is `discord-dm-<id>` — identical to the
+live path — so a web-only runtime and the later reconnected Discord adapter land
+on the **same runtime + same chat log**. That identity-equality IS the
+continuity guarantee.
+
+### Changes
+1. **`config.discord.token` becomes optional.** [config.ts:253](src/config.ts#L253)
+   `readString(...)` → an optional read (`token?: string`); the rest of
+   `config.discord` stays. (Token absent ⇒ run web-only; token present but
+   unreachable ⇒ see #4.)
+2. **Split the core's `attachDiscord` bundle into two seams:**
+   - **Session/identity source** — always set at core construction in cli.ts.
+     - *No cache yet* (first-ever boot): the source is empty until Discord seeds
+       it; this is the unsupported "never-connected, no token" case — fail clear.
+     - *Cache present*: build the default session from `loadOwnerIdentity` →
+       the DM ref above. `botUserId` comes from the cache; `getWebSessions`
+       returns just the one DM session; `resolveDefaultSession` mints the DM
+       runtime via the runtime manager — all client-free.
+   - **Live delivery sink** — optional; only attached when a client connects.
+     When absent, scheduler/web turns still run and `noteOutbound` still records
+     to the chat log (the WebUI sees everything); the Discord *send* is simply
+     skipped. (No-op sink returns empty messageIds.)
+   When Discord connects, it *upgrades* the source (adds group channels, refreshes
+   identity) and attaches the live delivery sink.
+3. **`getRuntimeForWebChannel` already lives in the core** (3b-3 simplify fix) and
+   needs only `getWebSessions` — so it works unchanged on the client-free source.
+4. **Non-blocking background connect.** cli.ts no longer `await`s
+   `withReadyClient` before starting web. When a token is present, the Discord
+   connect runs in the background with retry; on success it attaches the live
+   delivery sink + upgrades the session source. Boot completes (web up, scheduler
+   running on cached identity) regardless of whether/when Discord connects. The
+   common "valid token, Discord unreachable at boot" case now boots fine.
+
+### Ride-along
+- **#48 eviction** folds into the runtime manager here (lifecycle is now its own).
+- Web-surface items (#61 route table, readJsonBody→400, #8 history) can follow
+  separately — not required for 3c.

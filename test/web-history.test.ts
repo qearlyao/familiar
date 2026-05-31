@@ -94,6 +94,123 @@ function interleavedAssistantRecords(): ChatLogRecord[] {
 	];
 }
 
+function twoTurnRecords(): ChatLogRecord[] {
+	return [
+		{
+			type: "inbound",
+			...base(1, "2026-05-26T00:00:00.000Z"),
+			messageId: "u1",
+			authorId: "owner",
+			authorName: "Q",
+			text: "first ask",
+			isBot: false,
+			mentionedBot: true,
+			attachments: [],
+		},
+		{
+			type: "agent_event",
+			...base(2, "2026-05-26T00:00:01.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "message_start", role: "assistant" },
+		},
+		{
+			type: "agent_event",
+			...base(3, "2026-05-26T00:00:02.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "ponder" } },
+		},
+		{
+			type: "agent_event",
+			...base(4, "2026-05-26T00:00:03.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "tool_execution_start", toolCallId: "tool-a", toolName: "alpha", args: {} },
+		},
+		{
+			type: "agent_event",
+			...base(5, "2026-05-26T00:00:04.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "tool_execution_end", toolCallId: "tool-a", toolName: "alpha", result: "ok", isError: false },
+		},
+		{
+			type: "agent_event",
+			...base(6, "2026-05-26T00:00:05.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "first reply" } },
+		},
+		{
+			type: "agent_event",
+			...base(7, "2026-05-26T00:00:06.000Z"),
+			jobId: "job-a",
+			messageId: "msg-a",
+			event: { type: "message_end", role: "assistant" },
+		},
+		{
+			type: "outbound",
+			...base(8, "2026-05-26T00:00:07.000Z"),
+			messageIds: ["msg-a"],
+			webMessageId: "msg-a",
+			text: "first reply",
+			thinking: "ponder",
+			thinkingMs: 1000,
+			jobId: "job-a",
+		},
+		{
+			type: "inbound",
+			...base(9, "2026-05-26T00:00:08.000Z"),
+			messageId: "u2",
+			authorId: "owner",
+			authorName: "Q",
+			text: "second ask",
+			isBot: false,
+			mentionedBot: true,
+			attachments: [],
+		},
+		{
+			type: "agent_event",
+			...base(10, "2026-05-26T00:00:09.000Z"),
+			jobId: "job-b",
+			messageId: "msg-b",
+			event: { type: "message_start", role: "assistant" },
+		},
+		{
+			type: "agent_event",
+			...base(11, "2026-05-26T00:00:10.000Z"),
+			jobId: "job-b",
+			messageId: "msg-b",
+			event: { type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "muse" } },
+		},
+		{
+			type: "agent_event",
+			...base(12, "2026-05-26T00:00:11.000Z"),
+			jobId: "job-b",
+			messageId: "msg-b",
+			event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "second reply" } },
+		},
+		{
+			type: "agent_event",
+			...base(13, "2026-05-26T00:00:12.000Z"),
+			jobId: "job-b",
+			messageId: "msg-b",
+			event: { type: "message_end", role: "assistant" },
+		},
+		{
+			type: "outbound",
+			...base(14, "2026-05-26T00:00:13.000Z"),
+			messageIds: ["msg-b"],
+			webMessageId: "msg-b",
+			text: "second reply",
+			thinking: "muse",
+			thinkingMs: 1000,
+			jobId: "job-b",
+		},
+	];
+}
+
 describe("web history", () => {
 	it("keeps local text attachment previews out of visible user text", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
@@ -395,5 +512,32 @@ describe("web history", () => {
 		assert.equal(realText?.kind === "text" ? realText.text : "", "real text");
 		const markerText = message.steps?.[4];
 		assert.equal(markerText?.kind === "text" ? markerText.text : "", "[[FAMILIAR_SILENT]]");
+	});
+
+	it("replays agent events for the page when paging backward past a cursor", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records = twoTurnRecords();
+
+		const first = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 2 });
+		assert.equal(first.hasMore, true);
+		assert.deepEqual(first.messages.map((message) => message.id), ["u2", "msg-b"]);
+		const newest = first.messages[1];
+		assert.equal(newest?.thinking, "muse");
+		assert.deepEqual(newest?.steps?.map((step) => step.kind), ["thinking", "text"]);
+
+		const second = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", {
+			limit: 2,
+			before: "msg-b",
+		});
+		assert.equal(second.hasMore, true);
+		assert.deepEqual(second.messages.map((message) => message.id), ["msg-a", "u2"]);
+		const older = second.messages[0];
+		assert.equal(older?.text, "first reply");
+		assert.equal(older?.thinking, "ponder");
+		assert.deepEqual(older?.steps?.map((step) => step.kind), ["thinking", "tool", "text"]);
+		assert.deepEqual(
+			older?.steps?.map((step) => (step.kind === "tool" ? step.tool.name : step.text)),
+			["ponder", "alpha", "first reply"],
+		);
 	});
 });

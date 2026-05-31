@@ -259,11 +259,56 @@ export function webHistoryPayload(
 	channelKey: string,
 	options: { limit: number; before?: string },
 ): { messages: WebMessage[]; hasMore: boolean; channelKey: string } {
-	const messages = webMessagesFromRecords(config, records, assistantName);
-	const end = options.before ? messages.findIndex((message) => message.id === options.before) : messages.length;
-	const safeEnd = end >= 0 ? end : messages.length;
-	const page = messages.slice(Math.max(0, safeEnd - options.limit), safeEnd);
-	return { messages: page, hasMore: safeEnd - options.limit > 0, channelKey };
+	let end = records.length;
+	if (options.before) {
+		let cursorIndex: number | undefined;
+		for (let index = records.length - 1; index >= 0; index -= 1) {
+			const message = webMessageFromRecord(config, records[index], assistantName);
+			if (message?.id === options.before) {
+				cursorIndex = index;
+				break;
+			}
+		}
+		end = cursorIndex ?? records.length;
+	}
+
+	const pageEntries: { message: WebMessage; recordIndex: number }[] = [];
+	let scanIndex = end - 1;
+	for (; scanIndex >= 0 && pageEntries.length < options.limit; scanIndex -= 1) {
+		const message = webMessageFromRecord(config, records[scanIndex], assistantName);
+		if (message) pageEntries.push({ message, recordIndex: scanIndex });
+	}
+
+	let hasMore = false;
+	let eventStart = 0;
+	for (; scanIndex >= 0; scanIndex -= 1) {
+		const message = webMessageFromRecord(config, records[scanIndex], assistantName);
+		if (message) {
+			hasMore = true;
+			eventStart = scanIndex + 1;
+			break;
+		}
+	}
+
+	const messagesById = new Map<string, { message: WebMessage; recordIndex: number }>();
+	for (const entry of pageEntries) messagesById.set(entry.message.id, entry);
+	for (let index = eventStart; index < end; index += 1) {
+		const record = records[index];
+		if (record.type !== "agent_event") continue;
+		const entry = messagesById.get(record.messageId);
+		if (!entry) continue;
+		applyStoredAgentEventToMessage(entry.message, record, {
+			applyTextDeltas:
+				index < entry.recordIndex ? !entry.message.text && !entry.message.silent : !entry.message.silent,
+			applyThinkingDeltas: index < entry.recordIndex ? !entry.message.thinking : true,
+		});
+	}
+
+	const page = pageEntries.reverse().map((entry) => {
+		ensureFallbackSteps(entry.message);
+		return entry.message;
+	});
+	return { messages: page, hasMore, channelKey };
 }
 
 export function webMessageFromRecord(

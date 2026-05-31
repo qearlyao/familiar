@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
 	type AutocompleteInteraction,
 	type ChatInputCommandInteraction,
@@ -8,8 +8,9 @@ import {
 	type Interaction,
 	type Message,
 } from "discord.js";
-import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "./agent.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
 import { thinkingDurationMs } from "./agent-events.js";
+import { createAgentWorkQueue } from "./agent-work-queue.js";
 import type { StoredAttachment } from "./chat-log.js";
 import { type ChatChannelRef, chatChannelKey } from "./chat-log.js";
 import type { Config } from "./config.js";
@@ -38,14 +39,12 @@ import { canSteerFromRecord, getChannelTriggerSetting, getDispatchMode, toInboun
 import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./discord/send.js";
 import {
 	CRON_SKIPPED,
-	canceledJobError,
 	HEARTBEAT_SKIPPED,
 	heartbeatStillDue,
 	isCanceledJob,
 	runAgentTurn,
 	scheduledUserMessage,
 } from "./discord/turn.js";
-import { promptImagesFromAttachments } from "./inbound-attachments.js";
 import type { MemoryService } from "./memory/service.js";
 import { saveOwnerIdentity } from "./owner-identity.js";
 import type { ConversationRuntime } from "./runtime.js";
@@ -168,71 +167,13 @@ export async function startDiscordDaemon(
 	console.log(`Discord connected as ${client.user.tag}`);
 	const runtimeManager = createRuntimeManager({ config, memoryService, botUserId: client.user.id });
 	const collectTimers = new Map<string, NodeJS.Timeout>();
-	let activeAgentOwner: string | undefined;
-	let agentWorkQueue = Promise.resolve();
+	const agentWork = createAgentWorkQueue({ familiarAgent });
 	let heartbeatTimer: NodeJS.Timeout | undefined;
 	let cronTimer: NodeJS.Timeout | undefined;
 	let heartbeatQueued = false;
 	let cronRunning = false;
 	let schedulerState: SchedulerState = { cron: {} };
 	let ownerDmChannelPromise: Promise<DMChannel> | undefined;
-
-	const enqueueAgentWork = <T>(work: () => Promise<T>): Promise<T> => {
-		const run = agentWorkQueue.then(work);
-		agentWorkQueue = run.then(
-			() => undefined,
-			() => undefined,
-		);
-		return run;
-	};
-
-	const promptForRuntime = async (
-		runtime: ConversationRuntime,
-		jobId: string,
-		prompt: string,
-		attachments: StoredAttachment[] = [],
-		onEvent?: (event: AgentEvent) => void | Promise<void>,
-		onTurnEnd?: () => void | Promise<void>,
-	): Promise<FamiliarAgentReply> => {
-		return enqueueAgentWork(async () => {
-			if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
-			activeAgentOwner = runtime.channelKey;
-			try {
-				const promptImages = await promptImagesFromAttachments(attachments);
-				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
-				const reply = await familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent, {
-					referenceAttachments: attachments,
-					onTurnEnd,
-				});
-				if (!runtime.hasActiveJob(jobId)) throw canceledJobError();
-				return reply;
-			} finally {
-				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
-			}
-		});
-	};
-
-	const promptScheduledMessage = async (
-		runtime: ConversationRuntime,
-		buildMessage: () =>
-			| AgentMessage
-			| typeof HEARTBEAT_SKIPPED
-			| typeof CRON_SKIPPED
-			| Promise<AgentMessage | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED>,
-		onEvent?: (event: AgentEvent) => void | Promise<void>,
-		options?: FamiliarPromptOptions,
-	): Promise<FamiliarAgentReply | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED> => {
-		return enqueueAgentWork(async () => {
-			const message = await buildMessage();
-			if (message === HEARTBEAT_SKIPPED || message === CRON_SKIPPED) return message;
-			activeAgentOwner = runtime.channelKey;
-			try {
-				return await familiarAgent.promptMessage(runtime.channelKey, message, onEvent, options);
-			} finally {
-				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
-			}
-		});
-	};
 
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
 		return runtimeManager.getRuntimeForChannel(getChannelRef(message));
@@ -329,7 +270,7 @@ export async function startDiscordDaemon(
 			const stopTyping = startTypingIndicator(message);
 			try {
 				const turn = await runAgentTurn(dispatch.job.jobId, runtime, (onEvent) =>
-					promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
+					agentWork.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
 				);
 				if (!turn) return;
 				const { reply, parsedReply, summary, assistantMessageId } = turn;
@@ -376,7 +317,7 @@ export async function startDiscordDaemon(
 
 	const runHeartbeat = async (): Promise<void> => {
 		if (!config.heartbeat.enabled) return;
-		if (activeAgentOwner) return;
+		if (agentWork.activeOwner) return;
 		if (heartbeatQueued) return;
 		heartbeatQueued = true;
 		let runtime: ConversationRuntime | undefined;
@@ -393,7 +334,7 @@ export async function startDiscordDaemon(
 			}
 
 			const turn = await runAgentTurn("heartbeat", heartbeatRuntime, (onEvent) =>
-				promptScheduledMessage(
+				agentWork.promptScheduledMessage(
 					heartbeatRuntime,
 					async () => {
 						const queuedNow = Date.now();
@@ -477,7 +418,7 @@ export async function startDiscordDaemon(
 			slot,
 			deliveryMode: job.deliveryMode,
 		});
-		if (job.deliveryMode === "follow_up" && activeAgentOwner === runtime.channelKey) {
+		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
 			const now = Date.now();
 			const text = buildCronInjectionText({ job, slot, now });
 			await appendSchedulerLog(config.workspace.dataDir, {
@@ -503,7 +444,7 @@ export async function startDiscordDaemon(
 
 		const jobKey = `cron:${job.id}`;
 		const turn = await runAgentTurn(jobKey, runtime, (onEvent) =>
-			promptScheduledMessage(
+			agentWork.promptScheduledMessage(
 				runtime,
 				async () => {
 					const jobState = schedulerState.cron[job.id];
@@ -626,7 +567,7 @@ export async function startDiscordDaemon(
 					settings,
 					channelTrigger,
 					isDm,
-					activeAgentOwner,
+					activeAgentOwner: agentWork.activeOwner,
 					restart: options.restart,
 				});
 				const messageIds = await sendReply(config, client.rest, message, text);
@@ -635,14 +576,14 @@ export async function startDiscordDaemon(
 			}
 			const dispatchMode = getDispatchMode(config, message);
 			const shouldTrySteer =
-				dispatchMode === "steer" && runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey;
+				dispatchMode === "steer" && runtime.hasActiveJob() && agentWork.activeOwner === runtime.channelKey;
 			const { record } = await runtime.ingestInbound(input, {
 				mode: dispatchMode === "collect" || shouldTrySteer ? "collect" : "queue",
 				channelTrigger: channelTrigger.value,
 			});
 			const canSteer =
 				shouldTrySteer &&
-				canSteerFromRecord(config, message, runtime, record, activeAgentOwner, channelTrigger.value);
+				canSteerFromRecord(config, message, runtime, record, agentWork.activeOwner, channelTrigger.value);
 			if (canSteer) {
 				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
 				return;
@@ -702,7 +643,7 @@ export async function startDiscordDaemon(
 				settings,
 				channelTrigger,
 				isDm,
-				activeAgentOwner,
+				activeAgentOwner: agentWork.activeOwner,
 				restart: options.restart,
 			});
 			const messageIds = await replyEphemeral(interaction, text);
@@ -751,12 +692,12 @@ export async function startDiscordDaemon(
 		client,
 		getWebSessions,
 		getRuntimeForWebChannel,
-		runPromptForWeb: promptForRuntime,
+		runPromptForWeb: agentWork.promptForRuntime,
 		abortWebRuntime(runtime: ConversationRuntime): void {
 			familiarAgent.requestSoftStop(runtime.channelKey);
 		},
 		getActiveRuntimeKey(): string | undefined {
-			return activeAgentOwner;
+			return agentWork.activeOwner;
 		},
 		rearmHeartbeat,
 		async stop(): Promise<void> {

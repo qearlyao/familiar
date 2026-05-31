@@ -167,10 +167,13 @@ Delivery becomes an injected sink that no-ops when there is no live client.
   the cursor, collects only the page's visible messages backward to the limit, and
   replays agent events over the bounded `[eventStart, end)` window (`a2dbde1`).
   Cross-page replay is guarded by a paging-backward test the single-page tests missed.
-- ⬜ remaining web-surface items (larger, backend — Codex candidates):
-  - **#61** — `handleApi` ~270-line switch → route table.
-
-  Deferred from 3c's `/simplify` pass: extract an inner `createConnectedSession(client)`
+- ✅ **#61** — `handleApi`'s ~270-line if-chain is now a `webRoutes` map keyed by
+  `"METHOD pathname"` with handlers as closures; auth gate, `HttpError`→status mapping,
+  attachments prefix, and 404 fallback stay centralized (`f989e53`). Dispatch `await`s the
+  handler so thrown `HttpError`s are still caught (an Opus review caught that `return` without
+  `await` would let them escape as a hung connection). Also catches the inner WS-abort
+  `getRuntime` rejection.
+- ⬜ **#15** — deferred 3c cleanup: extract an inner `createConnectedSession(client)`
   factory in discord.ts to retire the `requireClient()` guards smeared across the
   daemon body (needs handler-ref hoisting for `stop()`).
 

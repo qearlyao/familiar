@@ -473,8 +473,8 @@ export async function startWebDaemon(
 
 	const applyControlCommand = async (runtime: ConversationRuntime, control: ParsedControlCommand): Promise<string> => {
 		if (control.command === "stop") {
-			familiarAgent.requestSoftStop(runtime.channelKey);
-			return "Stopped after current step. Conversation preserved.";
+			await familiarAgent.abort(runtime.channelKey);
+			return "Stopped current work.";
 		}
 		if (control.command === "new") {
 			await familiarAgent.reset(runtime.channelKey);
@@ -836,9 +836,7 @@ export async function startWebDaemon(
 							}
 							if (isRecord(message) && message.type === "abort") {
 								void getRuntime(client.channelKey)
-									.then((runtime) => {
-										familiarAgent.requestSoftStop(runtime.channelKey);
-									})
+									.then((runtime) => familiarAgent.abort(runtime.channelKey))
 									.catch((error) => console.error("WebSocket abort runtime lookup failed", error));
 							}
 						}

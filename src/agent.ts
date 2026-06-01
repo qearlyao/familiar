@@ -74,23 +74,8 @@ export async function createFamiliarAgent(
 	// activePromptOptions covers the synchronous promptMessage window; skipAmbientMessages
 	// tags message identities so followUpMessage's fire-and-forget path also opts out.
 	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
-	const softStopRequested = new Map<string, boolean>();
 	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
 	let reloadInProgress: Promise<void> | undefined;
-
-	const installSoftStopHook = (sessionKey: string, agent: Agent): void => {
-		const agentWithLoopConfig = agent as unknown as {
-			createLoopConfig?: (options?: { skipInitialSteeringPoll?: boolean }) => Record<string, unknown>;
-		};
-		const createLoopConfig = agentWithLoopConfig.createLoopConfig?.bind(agent);
-		if (!createLoopConfig) return;
-		agentWithLoopConfig.createLoopConfig = ((options?: { skipInitialSteeringPoll?: boolean }) => {
-			return {
-				...createLoopConfig(options),
-				shouldStopAfterTurn: async () => softStopRequested.get(sessionKey) === true,
-			};
-		}) as typeof agentWithLoopConfig.createLoopConfig;
-	};
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
 		const override = settings.getChannelModel(sessionKey);
@@ -198,8 +183,6 @@ export async function createFamiliarAgent(
 					}
 				: undefined,
 		});
-		installSoftStopHook(sessionKey, agent);
-
 		agent.subscribe((event) => {
 			logUsage(event);
 			if (event.type === "message_end") {
@@ -312,7 +295,6 @@ export async function createFamiliarAgent(
 	): Promise<FamiliarAgentReply> => {
 		const session = await getSession(sessionKey);
 		const run = session.promptQueue.then(async () => {
-			softStopRequested.set(sessionKey, false);
 			session.mediaSink.drain();
 			setReferenceAttachments(session, options.referenceAttachments);
 			const unsubscribe = eventHandler ? session.agent.subscribe((event) => eventHandler(event)) : undefined;
@@ -343,23 +325,22 @@ export async function createFamiliarAgent(
 	};
 
 	return {
-		abort(sessionKey: string): void {
+		async abort(sessionKey: string): Promise<void> {
 			const session = sessions.get(sessionKey);
-			void session
-				?.then((resolved) => {
-					resolved.agent.abort();
-					resolved.agent.clearAllQueues();
-				})
-				.catch((error) => console.error(`failed to abort familiar session ${sessionKey}`, error));
-		},
-		requestSoftStop(sessionKey: string): void {
-			softStopRequested.set(sessionKey, true);
+			if (!session) return;
+			try {
+				const resolved = await session;
+				resolved.agent.abort();
+				resolved.agent.clearAllQueues();
+				await resolved.agent.waitForIdle();
+			} catch (error) {
+				console.error(`failed to abort familiar session ${sessionKey}`, error);
+			}
 		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);
 			if (!existing) return;
 			const session = await existing;
-			softStopRequested.set(sessionKey, false);
 			resetSession(session);
 		},
 		async reload(): Promise<string> {

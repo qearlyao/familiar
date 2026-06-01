@@ -36,8 +36,7 @@ export interface FamiliarAgent {
 	// Stage 9 scheduled jobs use message-shaped injections to preserve timestamps without faking user identity.
 	steerMessage(sessionKey: string, message: AgentMessage): void;
 	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
-	abort(sessionKey: string): void;
-	requestSoftStop(sessionKey: string): void;
+	abort(sessionKey: string): Promise<void>;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
 	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };

@@ -214,13 +214,18 @@ function CollapsibleBody({ children }: { children: ReactNode }) {
   return (
     <>
       <div
-        className="relative overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-        style={{ maxHeight: truncated ? `${COLLAPSED_HEIGHT_PX}px` : "9999px" }}
+        className="relative overflow-hidden"
+        style={{
+          maxHeight: truncated ? `${COLLAPSED_HEIGHT_PX}px` : "9999px",
+          WebkitMaskImage: truncated
+            ? "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)"
+            : undefined,
+          maskImage: truncated
+            ? "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)"
+            : undefined,
+        }}
       >
         <div ref={ref}>{children}</div>
-        {truncated && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-muted via-muted/80 to-transparent" />
-        )}
       </div>
       {overflows && (
         <button
@@ -329,14 +334,8 @@ export function EventStream({
         </div>
       </button>
 
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-        inert={!open}
-      >
-        <div className="min-h-0 overflow-hidden">
+      {open && (
+        <div>
           {firstHasBody && (
             <StepBodyRow step={first} threadContinues={more > 0 || showDone} />
           )}
@@ -371,7 +370,7 @@ export function EventStream({
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

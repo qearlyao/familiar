@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.0 - 2026-06-02
+
+### Added
+
+- Run the WebUI without a live Discord connection, including Discord-outage boot paths and no-cached-identity startup.
+- Add live WebUI model-error notices in the message timeline.
+- Add WebUI retry and delete actions for the latest assistant reply.
+- Preview chat images inline in the WebUI composer.
+- Add `familiar --version` and `familiar --help`.
+- Persist the Discord owner identity cache after DM resolution.
+
+### Changed
+
+- Bump the pi dependency set to `0.78.0`.
+- Update the default Claude Opus example model to `claude-opus-4-8`.
+- Improve WebUI history loading with paginated transcript reads.
+- Make WebUI config commits atomic across config and override writes.
+- Keep Discord attachment delivery tied to direct REST delivery, awaited sends, and persisted message IDs.
+- Cache static WebUI paths, attachment roots, trigger lookups, and hot-path prompt/transcript reads more efficiently.
+- Consolidate WebUI config inputs, request state, event streams, and error handling.
+
+### Fixed
+
+- Install OpenCLI during `familiar upgrade` when browser helper setup is requested.
+- Serve built WebUI assets correctly from the backend.
+- Return `400` or `413` for malformed WebUI request bodies instead of `500`.
+- Hard-abort WebUI stop requests instead of leaving turns running.
+- Hide retry controls until a message has an interaction.
+- Wrap long URLs and right-anchor user messages in the WebUI.
+- Prevent WebUI dialog focus outlines after close and quiet detector animation warnings.
+- Stop LCM async queues from becoming poisoned after a failed link.
+- Release memory subscriptions while holding the chat-log lock.
+- Split Discord messages without breaking surrogate pairs and make reply-fallback logging accurate.
+- Bump WebUI `qs` past the security advisory.
+
+### Maintenance
+
+- Decompose the large Discord, Web, web-tool, config, agent, and LCM store modules into focused owners while preserving compatibility exports.
+- Extract shared agent-core, runtime-manager, scheduler-runner, agent-work-queue, transcript-log, owner-identity, and Web stream/event plumbing.
+- Share test helpers for environment setup, media fixtures, memory fakes, transcript replay, Web HTTP handling, runtime-manager cleanup, and Discord chunking.
+- Reduce duplicate backend hot-path code across browser tools, web tools, memory index storage, scheduler prompts, and agent payload normalization.
+
 ## 0.2.5 - 2026-05-28
 
 ### Changed

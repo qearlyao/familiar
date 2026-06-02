@@ -12,8 +12,10 @@ allow_bot_messages = true
 [web]
 port = 8787
 auth_mode = "tailscale-only" # tailscale-only | bearer | public-2fa
+# bearer mode uses this token as the WebUI login secret, then issues device cookies.
 bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN:-}"
 totp_secret = "${FAMILIAR_WEB_TOTP_SECRET:-}"
+# keep 127.0.0.1 when exposing through nginx/caddy on a VPS.
 bind_address = "127.0.0.1"
 
 [browser]

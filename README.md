@@ -153,6 +153,35 @@ The WebUI listens on the configured `[web]` port and bind address. The default
 `tailscale-only` auth mode currently means "trust the network boundary"; it does
 not verify Tailscale identity yet.
 
+For a VPS behind nginx or another HTTPS reverse proxy, keep Familiar bound to
+loopback and use bearer login:
+
+```toml
+[web]
+port = 8787
+bind_address = "127.0.0.1"
+auth_mode = "bearer"
+bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN}"
+```
+
+Familiar treats `FAMILIAR_WEB_BEARER_TOKEN` as the WebUI login secret. A
+successful browser login creates an HttpOnly device cookie; the token is not
+stored in the browser. Nginx should terminate HTTPS and pass WebSocket upgrades:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8787;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+Familiar trusts forwarded IP/proto headers only when the direct proxy connection
+comes from loopback.
+
 ## Service Management
 
 macOS and Linux users can install a user-level service after configuring the

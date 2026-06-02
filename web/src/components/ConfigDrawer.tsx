@@ -13,13 +13,18 @@ import { ThemeSection } from "./config/ThemeSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
+import { DevicesSection } from "./config/DevicesSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { useConfig } from "@/lib/useConfig";
+import type { WebAuthDevice } from "@/lib/api";
 
 interface ConfigDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   channelKey: string | undefined;
+  authMode?: string;
+  authDevice?: WebAuthDevice;
+  onSignedOut?: () => void;
 }
 
 interface SectionProps {
@@ -54,7 +59,14 @@ function Section({ title, description, defaultOpen = false, children }: SectionP
   );
 }
 
-export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerProps) {
+export function ConfigDrawer({
+  open,
+  onOpenChange,
+  channelKey,
+  authMode,
+  authDevice,
+  onSignedOut,
+}: ConfigDrawerProps) {
   const {
     data,
     models,
@@ -155,6 +167,11 @@ export function ConfigDrawer({ open, onOpenChange, channelKey }: ConfigDrawerPro
           <Section title="theme" description="light, dark, or follow your system.">
             <ThemeSection />
           </Section>
+          {authMode === "bearer" && onSignedOut ? (
+            <Section title="devices" description="where this web room is still open.">
+              <DevicesSection currentDevice={authDevice} onSignedOut={onSignedOut} />
+            </Section>
+          ) : null}
           {error ? (
             <p className="mt-4 font-serif text-xs italic text-destructive">{error}</p>
           ) : null}

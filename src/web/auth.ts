@@ -1,12 +1,19 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
 import type { Config } from "../config.js";
+import { isRecord } from "../util/guards.js";
+import { requestAuthContext } from "./request-context.js";
+import { SESSION_TTL_MS, type WebAuthDevice, type WebSessionStore } from "./session-store.js";
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_LOCKOUT_MS = 30 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
 
-interface SessionRecord {
-	expiresAt: number;
+interface LoginBucket {
+	count: number;
+	windowStartedAt: number;
+	lockedUntil?: number;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -75,15 +82,47 @@ function readBearerToken(request: IncomingMessage): string | undefined {
 	return match?.[1];
 }
 
-export function createAuth(config: Config) {
-	const sessions = new Map<string, SessionRecord>();
+function readSessionToken(request: IncomingMessage): string | undefined {
+	return parseCookies(request.headers.cookie).familiar_session;
+}
 
-	const pruneSessions = () => {
-		const now = Date.now();
-		for (const [id, session] of sessions) {
-			if (session.expiresAt <= now) sessions.delete(id);
-		}
-	};
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function tokenFingerprint(token: string): string {
+	return sha256(token).slice(0, 24);
+}
+
+export function sessionCookie(sessionToken: string, secure: boolean, maxAgeMs = SESSION_TTL_MS): string {
+	return [
+		`familiar_session=${encodeURIComponent(sessionToken)}`,
+		"HttpOnly",
+		"SameSite=Lax",
+		`Max-Age=${Math.floor(maxAgeMs / 1000)}`,
+		"Path=/api/web",
+		...(secure ? ["Secure"] : []),
+	].join("; ");
+}
+
+export function clearSessionCookie(secure: boolean): string {
+	return [
+		"familiar_session=",
+		"HttpOnly",
+		"SameSite=Lax",
+		"Max-Age=0",
+		"Path=/api/web",
+		...(secure ? ["Secure"] : []),
+	].join("; ");
+}
+
+export function createAuth(config: Config, sessions: WebSessionStore) {
+	const ipBuckets = new Map<string, LoginBucket>();
+	const tokenBuckets = new Map<string, LoginBucket>();
 
 	const hasBearer = (request: IncomingMessage): boolean => {
 		if (!config.web.bearerToken) return false;
@@ -91,32 +130,107 @@ export function createAuth(config: Config) {
 		return token !== undefined && safeEqual(token, config.web.bearerToken);
 	};
 
-	const hasSession = (request: IncomingMessage): boolean => {
-		pruneSessions();
-		const sessionId = parseCookies(request.headers.cookie).familiar_session;
-		if (!sessionId) return false;
-		return sessions.has(sessionId);
+	const checkBucket = (bucket: LoginBucket | undefined, now: number): boolean => {
+		if (!bucket) return false;
+		if (bucket.lockedUntil && bucket.lockedUntil > now) return true;
+		if (now - bucket.windowStartedAt > LOGIN_WINDOW_MS) {
+			bucket.count = 0;
+			bucket.windowStartedAt = now;
+			bucket.lockedUntil = undefined;
+		}
+		return false;
 	};
 
-	const authorize = (request: IncomingMessage, pathname: string): boolean => {
-		if (pathname === "/api/web/auth/mode") return true;
+	const recordFailure = (map: Map<string, LoginBucket>, key: string, now: number): void => {
+		const current = map.get(key);
+		const bucket =
+			current && now - current.windowStartedAt <= LOGIN_WINDOW_MS ? current : { count: 0, windowStartedAt: now };
+		bucket.count += 1;
+		if (bucket.count >= LOGIN_MAX_FAILURES) bucket.lockedUntil = now + LOGIN_LOCKOUT_MS;
+		map.set(key, bucket);
+	};
+
+	const clearFailures = (clientIp: string, token: string): void => {
+		ipBuckets.delete(clientIp);
+		tokenBuckets.delete(tokenFingerprint(token));
+	};
+
+	const publicPath = (method: string | undefined, pathname: string): boolean => {
+		if (method === "GET" && pathname === "/api/web/auth/mode") return true;
+		if (method === "POST" && pathname === "/api/web/auth/login") return config.web.authMode === "bearer";
+		return false;
+	};
+
+	const authorize = async (request: IncomingMessage, pathname: string): Promise<boolean> => {
+		if (publicPath(request.method, pathname)) return true;
 		if (config.web.authMode === "tailscale-only") return true;
-		if (config.web.authMode === "bearer") return hasBearer(request);
-		return hasSession(request) || hasBearer(request);
+		if (hasBearer(request)) return true;
+		const token = readSessionToken(request);
+		return !!(await sessions.authenticateSession(token, requestAuthContext(request)));
 	};
 
-	const createSession = (): string => {
-		pruneSessions();
-		const id = randomBytes(32).toString("base64url");
-		sessions.set(id, { expiresAt: Date.now() + SESSION_TTL_MS });
-		return id;
+	const currentDevice = (request: IncomingMessage): Promise<WebAuthDevice | undefined> =>
+		sessions.authenticateSession(readSessionToken(request), requestAuthContext(request));
+
+	const login = async (
+		request: IncomingMessage,
+		body: unknown,
+	): Promise<{ status: number; body: unknown; cookie?: string }> => {
+		const context = requestAuthContext(request);
+		const token = isRecord(body) && typeof body.token === "string" ? body.token : "";
+		const fingerprint = tokenFingerprint(token);
+		if (
+			checkBucket(ipBuckets.get(context.clientIp), context.now) ||
+			checkBucket(tokenBuckets.get(fingerprint), context.now)
+		) {
+			return { status: 429, body: { error: "too many login attempts" } };
+		}
+		if (!config.web.bearerToken || !safeEqual(token, config.web.bearerToken)) {
+			recordFailure(ipBuckets, context.clientIp, context.now);
+			recordFailure(tokenBuckets, fingerprint, context.now);
+			return { status: 401, body: { error: "unauthorized" } };
+		}
+		clearFailures(context.clientIp, token);
+		const { token: sessionToken, device } = await sessions.createSession({
+			deviceName: isRecord(body) ? normalizeString(body.deviceName) : undefined,
+			context,
+		});
+		return {
+			status: 200,
+			body: { device },
+			cookie: sessionCookie(sessionToken, context.secure),
+		};
 	};
 
-	return { authorize, createSession };
+	const createSession = (
+		request: IncomingMessage,
+		deviceName?: string,
+	): Promise<{ token: string; device: WebAuthDevice }> =>
+		sessions.createSession({ deviceName, context: requestAuthContext(request) });
+
+	return {
+		authorize,
+		currentDevice,
+		createSession,
+		hasBearer,
+		login,
+		listDevices(request: IncomingMessage): WebAuthDevice[] {
+			return sessions.listDevices(readSessionToken(request));
+		},
+		revokeDevice(id: string): Promise<boolean> {
+			return sessions.revokeDevice(id);
+		},
+		revokeOthers(request: IncomingMessage): Promise<number> {
+			return sessions.revokeOthers(readSessionToken(request));
+		},
+		logout(request: IncomingMessage): Promise<boolean> {
+			return sessions.revokeCurrent(readSessionToken(request));
+		},
+		clearFailures,
+	};
 }
 
-export function sessionCookie(sessionId: string): string {
-	return `familiar_session=${encodeURIComponent(sessionId)}; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(
-		SESSION_TTL_MS / 1000,
-	)}; Path=/api/web`;
-}
+export type WebAuth = ReturnType<typeof createAuth>;
+
+export { requestAuthContext } from "./request-context.js";
+export { loadWebSessionStore, type WebAuthDevice, type WebSessionStore } from "./session-store.js";

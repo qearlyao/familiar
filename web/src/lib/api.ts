@@ -177,6 +177,63 @@ export async function fetchAuthMode(): Promise<{ mode: string; personaName: stri
   return { mode: body.mode, personaName: body.personaName ?? "Familiar" };
 }
 
+export interface WebAuthDevice {
+  id: string;
+  deviceName: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  lastIp?: string;
+  userAgent?: string;
+  current?: boolean;
+}
+
+export async function fetchAuthSession(): Promise<WebAuthDevice | undefined> {
+  const res = await fetch("/api/web/auth/session");
+  if (res.status === 401) return undefined;
+  if (!res.ok) throw new Error(`auth/session: ${res.status}`);
+  const body = (await res.json()) as { device: WebAuthDevice };
+  return body.device;
+}
+
+export async function loginWithBearerToken(
+  token: string,
+  deviceName?: string,
+): Promise<WebAuthDevice> {
+  const body = await jsonRequest<{ device: WebAuthDevice }>(
+    "/api/web/auth/login",
+    "POST",
+    { token, deviceName: deviceName?.trim() || undefined },
+    "auth/login",
+  );
+  return body.device;
+}
+
+export async function fetchAuthDevices(): Promise<WebAuthDevice[]> {
+  const res = await fetch("/api/web/auth/devices");
+  if (!res.ok) throw new Error(`auth/devices: ${res.status}`);
+  const body = (await res.json()) as { devices: WebAuthDevice[] };
+  return body.devices;
+}
+
+export async function revokeAuthDevice(id: string): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/auth/devices", "DELETE", { id }, "auth/devices");
+}
+
+export async function revokeOtherAuthDevices(): Promise<number> {
+  const body = await jsonRequest<{ ok: true; revoked: number }>(
+    "/api/web/auth/devices/revoke-others",
+    "POST",
+    {},
+    "auth/devices/revoke-others",
+  );
+  return body.revoked;
+}
+
+export async function logoutAuthSession(): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/auth/logout", "POST", {}, "auth/logout");
+}
+
 export async function fetchSessions(): Promise<SessionInfo[]> {
   const res = await fetch("/api/web/sessions");
   if (!res.ok) throw new Error(`sessions: ${res.status}`);

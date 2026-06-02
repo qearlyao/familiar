@@ -11,7 +11,7 @@ type StreamAction = (runtime: ConversationRuntime) => Promise<void>;
 export function attachWebSocketStream(
 	server: Server,
 	options: {
-		authorize(request: IncomingMessage, pathname: string): boolean;
+		authorize(request: IncomingMessage, pathname: string): Promise<boolean>;
 		eventHub: WebEventHub;
 		getRuntime(channelKey?: string): Promise<ConversationRuntime>;
 		abort: StreamAction;
@@ -45,14 +45,22 @@ export function attachWebSocketStream(
 	server.on("upgrade", (request, socket) => {
 		const netSocket = socket as Socket;
 		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-		if (url.pathname !== "/api/web/stream" || !authorize(request, url.pathname)) {
+		if (url.pathname !== "/api/web/stream") {
 			netSocket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
 			netSocket.destroy();
 			return;
 		}
-		const requestedChannelKey = url.searchParams.get("channelKey") || undefined;
-		void getRuntime(requestedChannelKey)
+		void authorize(request, url.pathname)
+			.then((authorized) => {
+				if (!authorized) {
+					netSocket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+					netSocket.destroy();
+					return;
+				}
+				return getRuntime(url.searchParams.get("channelKey") || undefined);
+			})
 			.then((runtime) => {
+				if (!runtime) return;
 				if (netSocket.destroyed) return;
 				if (!acceptWebSocket(request, netSocket)) return;
 				netSocket.setNoDelay(true);

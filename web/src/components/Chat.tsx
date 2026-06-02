@@ -4,8 +4,17 @@ import { ConfigDrawer } from "./ConfigDrawer";
 import { Header } from "./Header";
 import { MessageList } from "./MessageList";
 import { useChat } from "@/lib/useChat";
+import type { WebAuthDevice } from "@/lib/api";
 
-export function Chat() {
+export function Chat({
+  authMode,
+  authDevice,
+  onSignedOut,
+}: {
+  authMode?: string;
+  authDevice?: WebAuthDevice;
+  onSignedOut?: () => void;
+}) {
   const {
     messages,
     connection,
@@ -55,6 +64,9 @@ export function Chat() {
         open={configOpen}
         onOpenChange={setConfigOpen}
         channelKey={activeSessionKey}
+        authMode={authMode}
+        authDevice={authDevice}
+        onSignedOut={onSignedOut}
       />
     </div>
   );

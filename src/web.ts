@@ -36,7 +36,8 @@ import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } f
 import { formatSetting } from "./settings.js";
 import { parseAgentReply } from "./silent-marker.js";
 import { isRecord } from "./util/guards.js";
-import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
+import { createAuth, loadWebSessionStore, requestAuthContext, sessionCookie, verifyTotp } from "./web/auth.js";
+import { registerWebAuthRoutes } from "./web/auth-routes.js";
 import { createWebEventHub } from "./web/event-hub.js";
 import { HttpError, readJsonBody, sendJson, sendText } from "./web/http.js";
 import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
@@ -62,7 +63,8 @@ export async function startWebDaemon(
 	await refreshContactNote();
 	const persona = await loadPersona(config);
 	const personaName = parsePersonaName(persona.soul);
-	const auth = createAuth(config);
+	const webSessions = await loadWebSessionStore(config);
+	const auth = createAuth(config, webSessions);
 	const eventHub = createWebEventHub(config, personaName);
 	const { appendAndPublishError, publish, publishDelta } = eventHub;
 
@@ -382,10 +384,7 @@ export async function startWebDaemon(
 		webRoutes.set(`${method} ${pathname}`, handler);
 	};
 
-	route("GET", "/api/web/auth/mode", async (_request, response) => {
-		sendJson(response, 200, { mode: config.web.authMode, personaName });
-		return true;
-	});
+	registerWebAuthRoutes(route, auth, { authMode: config.web.authMode, personaName });
 	route("GET", "/api/web/sessions", async (_request, response) => {
 		if (!agentCore.hasSessionSource()) {
 			sendJson(response, 200, { sessions: [] });
@@ -620,8 +619,13 @@ export async function startWebDaemon(
 				sendJson(response, 401, { ok: false, message: "Invalid TOTP token." });
 				return true;
 			}
-			const sessionId = auth.createSession();
-			sendJson(response, 200, { ok: true, message: "Authenticated." }, { "set-cookie": sessionCookie(sessionId) });
+			const session = await auth.createSession(request, "2fa login");
+			sendJson(
+				response,
+				200,
+				{ ok: true, message: "Authenticated.", device: session.device },
+				{ "set-cookie": sessionCookie(session.token, requestAuthContext(request).secure) },
+			);
 			return true;
 		}
 		const args = commandArgs(body.command, body.args);
@@ -648,7 +652,7 @@ export async function startWebDaemon(
 
 	const handleApi = async (request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> => {
 		if (!url.pathname.startsWith("/api/web/")) return false;
-		if (!auth.authorize(request, url.pathname)) {
+		if (!(await auth.authorize(request, url.pathname))) {
 			sendJson(response, 401, { error: "unauthorized" });
 			return true;
 		}

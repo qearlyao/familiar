@@ -1,5 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  ChevronRight,
+  Database,
+  HeartPulse,
+  Image,
+  MonitorSmartphone,
+  Palette,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -30,32 +40,46 @@ interface ConfigDrawerProps {
 interface SectionProps {
   title: string;
   description: string;
+  icon: LucideIcon;
   defaultOpen?: boolean;
   children: ReactNode;
 }
 
-function Section({ title, description, defaultOpen = false, children }: SectionProps) {
+function Section({ title, description, icon: Icon, defaultOpen = false, children }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 py-3 text-left">
+      <CollapsibleTrigger className="group flex w-full items-start gap-4 rounded-md px-2 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+        <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-serif text-base leading-tight tracking-tight text-foreground">
+            {title}
+          </span>
+          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </span>
+        </span>
         <ChevronRight
           className={cn(
-            "size-3.5 text-muted-foreground transition-transform duration-150 group-hover:text-foreground",
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:text-foreground",
             open && "rotate-90",
           )}
         />
-        <h3 className="font-serif text-lg leading-tight tracking-tight text-foreground">
-          {title}
-        </h3>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="pb-4">
-          <p className="font-serif text-xs italic text-muted-foreground">{description}</p>
+        <div className="px-2 pb-5">
           <div className="mt-4">{children}</div>
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function GroupLabel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={cn("px-2 pt-4 pb-1 font-serif text-xs italic text-muted-foreground", className)}>
+      {children}
+    </p>
   );
 }
 
@@ -104,10 +128,12 @@ export function ConfigDrawer({
             settings
           </SheetTitle>
         </SheetHeader>
-        <div className="flex flex-col overflow-y-auto px-6 pt-2 pb-8">
+        <div className="flex flex-col overflow-y-auto px-5 pt-1 pb-8">
+          <GroupLabel className="pt-1">conversation</GroupLabel>
           <Section
             title="model"
             description="which language model carries this conversation."
+            icon={Bot}
             defaultOpen
           >
             <ModelSection
@@ -124,6 +150,7 @@ export function ConfigDrawer({
           <Section
             title="thinking"
             description="how long the model deliberates before answering."
+            icon={Brain}
           >
             <ThinkingSection
               current={data?.thinking.value}
@@ -132,9 +159,11 @@ export function ConfigDrawer({
               onChange={(level) => void setThinking(level)}
             />
           </Section>
+          <GroupLabel>companion</GroupLabel>
           <Section
             title="heartbeat"
             description="your companion's pulse when you've gone quiet."
+            icon={HeartPulse}
           >
             <HeartbeatSection
               values={configData?.values}
@@ -145,6 +174,7 @@ export function ConfigDrawer({
           <Section
             title="image generation"
             description="which model your companion uses to paint."
+            icon={Image}
           >
             <ImageGenSection
               values={configData?.values}
@@ -155,6 +185,7 @@ export function ConfigDrawer({
           <Section
             title="memory"
             description="how older conversation is condensed and how earlier memories return."
+            icon={Database}
           >
             <MemorySection
               values={configData?.values}
@@ -164,11 +195,16 @@ export function ConfigDrawer({
               onClear={clearConfig}
             />
           </Section>
-          <Section title="theme" description="light, dark, or follow your system.">
+          <GroupLabel>room</GroupLabel>
+          <Section title="theme" description="light, dark, or follow your system." icon={Palette}>
             <ThemeSection />
           </Section>
           {authMode === "bearer" && onSignedOut ? (
-            <Section title="devices" description="where this web room is still open.">
+            <Section
+              title="devices"
+              description="where this web room is still open."
+              icon={MonitorSmartphone}
+            >
               <DevicesSection currentDevice={authDevice} onSignedOut={onSignedOut} />
             </Section>
           ) : null}

@@ -5,17 +5,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
+import { MediaPreview } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 
 function AttachmentItem({ attachment }: { attachment: Attachment }) {
   if (!attachment.url) return null;
   const isImage = attachment.kind === "image" || attachment.mimeType?.startsWith("image/");
   if (isImage) {
-    return (
-      <a href={attachment.url} className="inline-block">
-        <img src={attachment.url} alt={attachment.name} className="max-h-72 max-w-[24rem] rounded-md" />
-      </a>
-    );
+    return <MediaPreview src={attachment.url} alt={attachment.name} />;
   }
   if (attachment.mimeType?.startsWith("audio/")) {
     return <AudioPlayer src={attachment.url} name={attachment.name} />;

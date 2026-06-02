@@ -78,6 +78,15 @@ const fixtures: Message[] = [
     role: "assistant",
     who: "ghost",
     ts: now - 5 * minute + 500,
+    attachments: [
+      {
+        id: "demo-image",
+        name: "cat-loaf.png",
+        kind: "image",
+        mimeType: "image/svg+xml",
+        url: "/familiar.svg",
+      },
+    ],
     steps: [
       {
         kind: "thinking",

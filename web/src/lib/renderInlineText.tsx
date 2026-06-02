@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { MediaPreview } from "@/components/MediaPreview";
 import { collapseInlineSegments, parseInlineSegments } from "@/lib/inlineSegments";
 import { cn } from "@/lib/utils";
 
@@ -43,14 +44,7 @@ export function renderInlineText(text: string, opts: RenderOptions = {}): ReactN
         }
         return (
           <div key={i} className={cn("flex flex-col", alignEnd && "items-end")}>
-            <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-block">
-              <img
-                src={item.url}
-                alt={item.alt || "meme"}
-                loading="lazy"
-                className="max-h-72 max-w-[24rem] rounded-md"
-              />
-            </a>
+            <MediaPreview src={item.url} alt={item.alt || "meme"} />
             {trailingCursor && isLast && (
               <div className="leading-relaxed text-foreground">{cursor}</div>
             )}

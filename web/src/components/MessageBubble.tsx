@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import type { Attachment, Message } from "../types";
 import { Button } from "@/components/ui/button";
@@ -70,14 +70,25 @@ function SystemTurn({ message }: { message: Message }) {
 }
 
 export const MessageBubble = memo(function MessageBubble({ message, onRetry }: { message: Message; onRetry?: () => void }) {
+  const [actionsRevealed, setActionsRevealed] = useState(false);
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
   return (
-    <div className="group flex w-full flex-col">
+    <div
+      className="group flex w-full flex-col"
+      onPointerDown={(event) => {
+        if (event.pointerType !== "mouse") setActionsRevealed(true);
+      }}
+    >
       <TurnView message={message} />
       <AttachmentList attachments={message.attachments ?? []} align="left" />
       {onRetry && (
-        <div className="mt-2 flex">
+        <div
+          className={cn(
+            "pointer-events-none mt-2 flex opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+            actionsRevealed && "pointer-events-auto opacity-100",
+          )}
+        >
           <Button
             type="button"
             variant="ghost"

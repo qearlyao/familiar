@@ -10,6 +10,7 @@ import {
 	type JobTrigger,
 	type StoredAgentEvent,
 	type StoredAttachment,
+	supersededWebMessageIds,
 } from "./chat-log.js";
 import type { DiscordChannelTrigger } from "./config.js";
 import { promptAttachmentNotes } from "./inbound-attachments.js";
@@ -429,6 +430,36 @@ export class ConversationRuntime {
 		};
 	}
 
+	latestAssistantRetryTarget():
+		| { messageId: string; triggerRecordId: number; attachments: StoredAttachment[] }
+		| undefined {
+		const superseded = supersededWebMessageIds(this.records);
+		for (let index = this.records.length - 1; index >= 0; index--) {
+			const record = this.records[index];
+			if (!record) continue;
+			if (record.type === "runtime" && record.event === "reset") return undefined;
+			if (record.type === "inbound") return undefined;
+			if (record.type !== "outbound" || record.control || !record.jobId) continue;
+			const messageId = record.webMessageId || record.messageIds[0];
+			if (!messageId || superseded.has(messageId)) continue;
+			if (this.assistantMessageWasAborted(messageId)) return undefined;
+			const triggerRecordId = this.queuedTriggerByJobId.get(record.jobId);
+			if (triggerRecordId === undefined) return undefined;
+			return { messageId, triggerRecordId, attachments: record.attachments ?? [] };
+		}
+		return undefined;
+	}
+
+	private assistantMessageWasAborted(messageId: string): boolean {
+		return this.records.some(
+			(record) =>
+				record.type === "agent_event" &&
+				record.messageId === messageId &&
+				record.event.type === "message_end" &&
+				record.event.stopReason === "aborted",
+		);
+	}
+
 	private triggerInboundSlice(job: QueuedJob): InboundChatRecord[] {
 		const completedBoundary = this.lastCompletedTriggerRecordId;
 		return this.records.filter(
@@ -518,6 +549,22 @@ export class ConversationRuntime {
 			},
 			options,
 		);
+	}
+
+	async noteAssistantRetry(options: {
+		oldMessageId: string;
+		newMessageId: string;
+		jobId: string;
+		triggerRecordId: number;
+	}): Promise<void> {
+		await this.appendRecord({
+			type: "assistant_retry",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			oldMessageId: options.oldMessageId,
+			newMessageId: options.newMessageId,
+			jobId: options.jobId,
+			triggerRecordId: options.triggerRecordId,
+		});
 	}
 
 	async failActiveJob(error: string): Promise<void> {

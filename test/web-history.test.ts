@@ -540,4 +540,53 @@ describe("web history", () => {
 			["ponder", "alpha", "first reply"],
 		);
 	});
+
+	it("hides superseded assistant turns after retry", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			...twoTurnRecords(),
+			{
+				type: "assistant_retry",
+				...base(15, "2026-05-26T00:00:14.000Z"),
+				oldMessageId: "msg-b",
+				newMessageId: "msg-c",
+				jobId: "job-c",
+				triggerRecordId: 9,
+			},
+			{
+				type: "agent_event",
+				...base(16, "2026-05-26T00:00:15.000Z"),
+				jobId: "job-c",
+				messageId: "msg-c",
+				event: { type: "message_start", role: "assistant" },
+			},
+			{
+				type: "agent_event",
+				...base(17, "2026-05-26T00:00:16.000Z"),
+				jobId: "job-c",
+				messageId: "msg-c",
+				event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "retry reply" } },
+			},
+			{
+				type: "agent_event",
+				...base(18, "2026-05-26T00:00:17.000Z"),
+				jobId: "job-c",
+				messageId: "msg-c",
+				event: { type: "message_end", role: "assistant" },
+			},
+			{
+				type: "outbound",
+				...base(19, "2026-05-26T00:00:18.000Z"),
+				messageIds: ["msg-c"],
+				webMessageId: "msg-c",
+				text: "retry reply",
+				jobId: "job-c",
+			},
+		];
+
+		const messages = webMessagesFromRecords(config, records, "Ghost");
+
+		assert.deepEqual(messages.map((message) => message.id), ["u1", "msg-a", "u2", "msg-c"]);
+		assert.equal(messages.at(-1)?.text, "retry reply");
+	});
 });

@@ -1,4 +1,9 @@
-import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../chat-log.js";
+import {
+	type ChatLogRecord,
+	type StoredAgentEvent,
+	type StoredAttachment,
+	supersededWebMessageIds,
+} from "../chat-log.js";
 import type { Config } from "../config.js";
 import { getContactNickname } from "../contact-note.js";
 import { publicAttachmentPath } from "../generated-media.js";
@@ -217,11 +222,13 @@ export function webMessagesFromRecords(
 	records: readonly ChatLogRecord[],
 	assistantName: string,
 ): WebMessage[] {
+	const superseded = supersededWebMessageIds(records);
 	const messages: WebMessage[] = [];
 	const messagesById = new Map<string, WebMessage>();
 	const pendingAgentEvents = new Map<string, Extract<ChatLogRecord, { type: "agent_event" }>[]>();
 	for (const record of records) {
 		const message = webMessageFromRecord(config, record, assistantName);
+		if (message && superseded.has(message.id)) continue;
 		if (message) {
 			messages.push(message);
 			messagesById.set(message.id, message);
@@ -235,6 +242,7 @@ export function webMessagesFromRecords(
 			pendingAgentEvents.delete(message.id);
 		}
 		if (record.type === "agent_event") {
+			if (superseded.has(record.messageId)) continue;
 			const existing = messagesById.get(record.messageId);
 			if (existing) {
 				applyStoredAgentEventToMessage(existing, record, {
@@ -259,11 +267,13 @@ export function webHistoryPayload(
 	channelKey: string,
 	options: { limit: number; before?: string },
 ): { messages: WebMessage[]; hasMore: boolean; channelKey: string } {
+	const superseded = supersededWebMessageIds(records);
 	let end = records.length;
 	if (options.before) {
 		let cursorIndex: number | undefined;
 		for (let index = records.length - 1; index >= 0; index -= 1) {
 			const message = webMessageFromRecord(config, records[index], assistantName);
+			if (message && superseded.has(message.id)) continue;
 			if (message?.id === options.before) {
 				cursorIndex = index;
 				break;
@@ -276,6 +286,7 @@ export function webHistoryPayload(
 	let scanIndex = end - 1;
 	for (; scanIndex >= 0 && pageEntries.length < options.limit; scanIndex -= 1) {
 		const message = webMessageFromRecord(config, records[scanIndex], assistantName);
+		if (message && superseded.has(message.id)) continue;
 		if (message) pageEntries.push({ message, recordIndex: scanIndex });
 	}
 
@@ -283,6 +294,7 @@ export function webHistoryPayload(
 	let eventStart = 0;
 	for (; scanIndex >= 0; scanIndex -= 1) {
 		const message = webMessageFromRecord(config, records[scanIndex], assistantName);
+		if (message && superseded.has(message.id)) continue;
 		if (message) {
 			hasMore = true;
 			eventStart = scanIndex + 1;
@@ -295,6 +307,7 @@ export function webHistoryPayload(
 	for (let index = eventStart; index < end; index += 1) {
 		const record = records[index];
 		if (record.type !== "agent_event") continue;
+		if (superseded.has(record.messageId)) continue;
 		const entry = messagesById.get(record.messageId);
 		if (!entry) continue;
 		applyStoredAgentEventToMessage(entry.message, record, {

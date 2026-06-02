@@ -106,6 +106,14 @@ export type WebStreamEvent =
 			silent?: boolean;
 	  }
 	| {
+			type: "message_replaced";
+			eventId: string;
+			ts: number;
+			channelKey?: string;
+			oldMessageId: string;
+			newMessageId: string;
+	  }
+	| {
 			type: "tool_event";
 			eventId: string;
 			ts: number;

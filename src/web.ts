@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
@@ -6,7 +7,7 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getProviders } from "@earendil-works/pi-ai";
 
 import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "./added-models.js";
-import type { FamiliarAgent } from "./agent.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "./agent.js";
 import type { AgentCore } from "./agent-core.js";
 import {
 	type AgentEventSummary,
@@ -369,7 +370,29 @@ export async function startWebDaemon(
 		attachments?: StoredAttachment[];
 		silent?: boolean;
 	}> => {
-		const assistantMessageId = messageId();
+		return promptAssistantMessage({
+			runtime,
+			jobId,
+			assistantMessageId: messageId(),
+			dispatch: (onEvent) => agentCore.promptForRuntime(runtime, jobId, prompt, attachments, onEvent, onTurnEnd),
+		});
+	};
+
+	const promptAssistantMessage = async (options: {
+		runtime: ConversationRuntime;
+		jobId: string;
+		assistantMessageId: string;
+		dispatch: (onEvent: (event: AgentEvent) => void | Promise<void>) => Promise<FamiliarAgentReply>;
+		onAssistantStart?: () => void;
+	}): Promise<{
+		text: string;
+		messageId: string;
+		thinking: string;
+		thinkingMs?: number;
+		attachments?: StoredAttachment[];
+		silent?: boolean;
+	}> => {
+		const { runtime, jobId, assistantMessageId } = options;
 		const summary: AgentEventSummary = { thinking: "" };
 		const recorder = createAgentEventRecorder((storedEvent) =>
 			runtime.noteAgentEvent(jobId, assistantMessageId, storedEvent, { notify: false }),
@@ -377,39 +400,36 @@ export async function startWebDaemon(
 		let started = false;
 		let reply: Awaited<ReturnType<typeof agentCore.promptForRuntime>>;
 		try {
-			reply = await agentCore.promptForRuntime(
-				runtime,
-				jobId,
-				prompt,
-				attachments,
-				async (event: AgentEvent) => {
-					if (event.type === "message_start" && event.message.role === "assistant" && !started) {
-						started = true;
-					}
-					updateAgentEventSummary(summary, event);
-					const storedEvent = storedAgentEventFromAgentEvent(event);
-					if (storedEvent) {
-						runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
-						await recorder.record(storedEvent);
-					}
-				},
-				onTurnEnd,
-			);
+			reply = await options.dispatch(async (event: AgentEvent) => {
+				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+					started = true;
+					options.onAssistantStart?.();
+				}
+				updateAgentEventSummary(summary, event);
+				const storedEvent = storedAgentEventFromAgentEvent(event);
+				if (storedEvent) {
+					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+					await recorder.record(storedEvent);
+				}
+			});
 		} finally {
 			await recorder.flush();
 		}
 		const parsed = parseAgentReply(reply.text);
 		const finalText = parsed.silent ? "" : reply.text;
-		if (!started && !parsed.silent) {
-			publish({
-				type: "message_started",
-				channelKey: runtime.channelKey,
-				messageId: assistantMessageId,
-				role: "assistant",
-				who: personaName,
-			});
-			if (finalText) {
-				publishDelta(runtime.channelKey, assistantMessageId, "text", finalText);
+		if (!started) {
+			options.onAssistantStart?.();
+			if (!parsed.silent) {
+				publish({
+					type: "message_started",
+					channelKey: runtime.channelKey,
+					messageId: assistantMessageId,
+					role: "assistant",
+					who: personaName,
+				});
+				if (finalText) {
+					publishDelta(runtime.channelKey, assistantMessageId, "text", finalText);
+				}
 			}
 		}
 		const thinkingMs = thinkingDurationMs(summary);
@@ -431,6 +451,61 @@ export async function startWebDaemon(
 			attachments: reply.attachments,
 			silent: parsed.silent,
 		};
+	};
+
+	const retryLatestAssistant = async (runtime: ConversationRuntime): Promise<void> => {
+		if (runtime.hasActiveJob()) throw new Error("Cannot retry while a turn is running");
+		const target = runtime.latestAssistantRetryTarget();
+		if (!target) throw new Error("No assistant message to retry");
+		const jobId = randomUUID();
+		const assistantMessageId = messageId();
+		const replaceMessage = (): void => {
+			publish({
+				type: "message_replaced",
+				channelKey: runtime.channelKey,
+				oldMessageId: target.messageId,
+				newMessageId: assistantMessageId,
+			});
+		};
+		try {
+			const reply = await promptAssistantMessage({
+				runtime,
+				jobId,
+				assistantMessageId,
+				onAssistantStart: replaceMessage,
+				dispatch: (onEvent) =>
+					familiarAgent.retryLastAssistant(runtime.channelKey, onEvent, {
+						onTurnEnd: () => {
+							publish({
+								type: "status",
+								channelKey: runtime.channelKey,
+								kind: "idle",
+							});
+						},
+					}),
+			});
+			await runtime.noteAssistantRetry({
+				oldMessageId: target.messageId,
+				newMessageId: assistantMessageId,
+				jobId,
+				triggerRecordId: target.triggerRecordId,
+			});
+			await runtime.noteOutbound({
+				text: reply.text,
+				messageIds: [reply.messageId],
+				webMessageId: reply.messageId,
+				attachments: reply.attachments,
+				thinking: reply.thinking,
+				thinkingMs: reply.thinkingMs,
+				silent: reply.silent,
+				replyToMessageId: target.messageId,
+				jobId,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await runtime.appendError(message);
+			publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
+		}
 	};
 
 	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
@@ -696,6 +771,13 @@ export async function startWebDaemon(
 		sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
 		return true;
 	});
+	route("POST", "/api/web/retry", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		void retryLatestAssistant(runtime).catch((error) => console.error("Web retry failed", error));
+		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+		return true;
+	});
 	route("POST", "/api/web/agent/settings", async (request, response, url) => {
 		const body = await readJsonBody(request);
 		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
@@ -838,6 +920,11 @@ export async function startWebDaemon(
 								void getRuntime(client.channelKey)
 									.then((runtime) => familiarAgent.abort(runtime.channelKey))
 									.catch((error) => console.error("WebSocket abort runtime lookup failed", error));
+							}
+							if (isRecord(message) && message.type === "retry") {
+								void getRuntime(client.channelKey)
+									.then((runtime) => retryLatestAssistant(runtime))
+									.catch((error) => console.error("WebSocket retry runtime lookup failed", error));
 							}
 						}
 					} catch (error) {

@@ -1,5 +1,7 @@
 import { memo } from "react";
+import { RotateCcw } from "lucide-react";
 import type { Attachment, Message } from "../types";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
@@ -67,13 +69,28 @@ function SystemTurn({ message }: { message: Message }) {
   );
 }
 
-export const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
+export const MessageBubble = memo(function MessageBubble({ message, onRetry }: { message: Message; onRetry?: () => void }) {
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
   return (
-    <div className="flex w-full flex-col">
+    <div className="group flex w-full flex-col">
       <TurnView message={message} />
       <AttachmentList attachments={message.attachments ?? []} align="left" />
+      {onRetry && (
+        <div className="mt-2 flex">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRetry}
+            aria-label="retry latest reply"
+            title="retry latest reply"
+            className="h-7 px-2 text-muted-foreground opacity-70 transition-opacity hover:text-foreground group-hover:opacity-100"
+          >
+            <RotateCcw className="size-3.5" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 });

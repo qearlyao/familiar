@@ -39,7 +39,14 @@ type StoredResetRecord = {
 	type: "reset";
 };
 
-type StoredTranscriptRecord = StoredMessageRecord | StoredResetRecord;
+type StoredSupersedeRecord = {
+	ts: string;
+	sessionId: string;
+	type: "supersede";
+	messageTimestamp: number;
+};
+
+type StoredTranscriptRecord = StoredMessageRecord | StoredResetRecord | StoredSupersedeRecord;
 
 function isStoredMessageRecord(value: unknown): value is StoredMessageRecord {
 	if (!value || typeof value !== "object") return false;
@@ -51,6 +58,17 @@ function isStoredResetRecord(value: unknown): value is StoredResetRecord {
 	if (!value || typeof value !== "object") return false;
 	const record = value as Record<string, unknown>;
 	return record.type === "reset" && typeof record.ts === "string" && typeof record.sessionId === "string";
+}
+
+function isStoredSupersedeRecord(value: unknown): value is StoredSupersedeRecord {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		record.type === "supersede" &&
+		typeof record.ts === "string" &&
+		typeof record.sessionId === "string" &&
+		typeof record.messageTimestamp === "number"
+	);
 }
 
 export async function loadStoredMessages(dataDir: string, sessionId: string): Promise<AgentMessage[]> {
@@ -79,7 +97,7 @@ export async function loadStoredMessages(dataDir: string, sessionId: string): Pr
 			if (!line.trim()) continue;
 			try {
 				const parsed = JSON.parse(line) as unknown;
-				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed)) {
+				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed) && !isStoredSupersedeRecord(parsed)) {
 					console.error(`skipping malformed transcript line: ${path}:${index + 1}`);
 					continue;
 				}
@@ -101,5 +119,12 @@ export async function loadStoredMessages(dataDir: string, sessionId: string): Pr
 		}
 	}
 	const activeRecords = lastResetIndex >= 0 ? records.slice(lastResetIndex + 1) : records;
-	return activeRecords.flatMap((record) => ("message" in record ? [record.message] : []));
+	const superseded = new Set(
+		activeRecords.flatMap((record) =>
+			"type" in record && record.type === "supersede" ? [record.messageTimestamp] : [],
+		),
+	);
+	return activeRecords.flatMap((record) =>
+		"message" in record && !superseded.has(record.message.timestamp) ? [record.message] : [],
+	);
 }

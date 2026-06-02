@@ -37,6 +37,11 @@ export interface FamiliarAgent {
 	steerMessage(sessionKey: string, message: AgentMessage): void;
 	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
 	abort(sessionKey: string): Promise<void>;
+	retryLastAssistant(
+		sessionKey: string,
+		onEvent?: (event: AgentEvent) => void | Promise<void>,
+		options?: FamiliarPromptOptions,
+	): Promise<FamiliarAgentReply>;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
 	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };

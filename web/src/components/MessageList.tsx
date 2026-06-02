@@ -37,13 +37,18 @@ export function MessageList({
   personaName,
   historyLoaded,
   streaming = false,
+  onRetry,
 }: {
   messages: Message[];
   personaName: string;
   historyLoaded: boolean;
   streaming?: boolean;
+  onRetry?: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const latestRetryableAssistantIndex = streaming
+    ? -1
+    : messages.findLastIndex((message) => message.role === "assistant");
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth", block: "end" });
@@ -73,7 +78,7 @@ export function MessageList({
                 </span>
               </div>
             )}
-            <MessageBubble message={m} />
+            <MessageBubble message={m} onRetry={i === latestRetryableAssistantIndex ? onRetry : undefined} />
           </div>
         );
       })}

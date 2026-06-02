@@ -50,6 +50,9 @@ export const __agentTest = {
 	normalizeProviderPayload,
 };
 
+const PROVIDER_MAX_RETRIES = 2;
+const PROVIDER_MAX_RETRY_DELAY_MS = 60_000;
+
 export async function createFamiliarAgent(
 	config: Config,
 	settings: SettingsStore,
@@ -146,6 +149,8 @@ export async function createFamiliarAgent(
 					...options,
 					apiKey: getRequestApiKey(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
+					maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
+					maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,
 					onPayload: (payload, payloadModel) => {
 						const requestPayload = normalizeProviderPayload(payload, payloadModel);
 						writePayloadLog(config, {
@@ -324,6 +329,24 @@ export async function createFamiliarAgent(
 		return run;
 	};
 
+	const removeLastAssistantForRetry = (session: FamiliarAgentSession): void => {
+		const messages = session.agent.state.messages;
+		const message = messages.at(-1);
+		if (!message || message.role !== "assistant") {
+			throw new Error("No assistant message to retry");
+		}
+		if (message.stopReason === "aborted") {
+			throw new Error("Cannot retry an aborted assistant message");
+		}
+		session.agent.state.messages = messages.slice(0, -1);
+		writeTranscriptLog(config, {
+			ts: new Date().toISOString(),
+			sessionId: session.sessionId,
+			type: "supersede",
+			messageTimestamp: message.timestamp,
+		});
+	};
+
 	return {
 		async abort(sessionKey: string): Promise<void> {
 			const session = sessions.get(sessionKey);
@@ -336,6 +359,16 @@ export async function createFamiliarAgent(
 			} catch (error) {
 				console.error(`failed to abort familiar session ${sessionKey}`, error);
 			}
+		},
+		async retryLastAssistant(
+			sessionKey: string,
+			eventHandler?: (event: AgentEvent) => void | Promise<void>,
+			options: FamiliarPromptOptions = {},
+		): Promise<FamiliarAgentReply> {
+			return runPromptTurn(sessionKey, options, eventHandler, async (session) => {
+				removeLastAssistantForRetry(session);
+				await session.agent.continue();
+			});
 		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);

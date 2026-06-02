@@ -104,6 +104,7 @@ export interface ChatHook {
   selectSession: (key: string) => void;
   send: (text: string, attachments?: File[]) => Promise<void>;
   abort: () => void;
+  retry: () => void;
   notifyNewChat: () => void;
 }
 
@@ -144,6 +145,12 @@ export function useChat(): ChatHook {
               },
             ];
           });
+          break;
+        }
+
+        case "message_replaced": {
+          setStreaming(true);
+          setMessages((prev) => prev.filter((m) => m.id !== event.oldMessageId));
           break;
         }
 
@@ -379,6 +386,14 @@ export function useChat(): ChatHook {
     }
   }, []);
 
+  const retry = useCallback(() => {
+    const sock = wsRef.current;
+    if (sock?.readyState === WebSocket.OPEN) {
+      setStreaming(true);
+      sock.send(JSON.stringify({ type: "retry" }));
+    }
+  }, []);
+
   const notifyNewChat = useCallback(() => {
     setMessages((prev) => [
       ...prev,
@@ -394,5 +409,5 @@ export function useChat(): ChatHook {
     ]);
   }, []);
 
-  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, streaming, selectSession, send, abort, notifyNewChat };
+  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, streaming, selectSession, send, abort, retry, notifyNewChat };
 }

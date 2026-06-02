@@ -17,6 +17,7 @@ export function Chat() {
     selectSession,
     send,
     abort,
+    retry,
     notifyNewChat,
   } = useChat();
   const [configOpen, setConfigOpen] = useState(false);
@@ -34,7 +35,7 @@ export function Chat() {
         onNewChatStarted={notifyNewChat}
       />
       <main className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} personaName={personaName} historyLoaded={historyLoaded} streaming={streaming} />
+        <MessageList messages={messages} personaName={personaName} historyLoaded={historyLoaded} streaming={streaming} onRetry={retry} />
       </main>
       <Composer
         onSend={(text, attachments) => void send(text, attachments)}

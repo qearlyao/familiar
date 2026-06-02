@@ -180,6 +180,14 @@ export interface ErrorChatRecord extends ChatRecordBase {
 	message: string;
 }
 
+export interface AssistantRetryChatRecord extends ChatRecordBase {
+	type: "assistant_retry";
+	oldMessageId: string;
+	newMessageId: string;
+	jobId: string;
+	triggerRecordId: number;
+}
+
 export type ChatLogRecord =
 	| InboundChatRecord
 	| ControlChatRecord
@@ -190,7 +198,12 @@ export type ChatLogRecord =
 	| AgentEventChatRecord
 	| CheckpointChatRecord
 	| RuntimeChatRecord
-	| ErrorChatRecord;
+	| ErrorChatRecord
+	| AssistantRetryChatRecord;
+
+export function supersededWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
+	return new Set(records.flatMap((record) => (record.type === "assistant_retry" ? [record.oldMessageId] : [])));
+}
 
 export interface ChatLog {
 	channel: ChatChannelRef;

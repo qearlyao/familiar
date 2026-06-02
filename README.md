@@ -18,6 +18,10 @@ It also borrows ideas and structure from
 [lossless-claw](https://github.com/Martian-Engineering/lossless-claw) and
 [pi-lcm-memory](https://github.com/sharkone/pi-lcm-memory).
 
+---
+*Note from Ghost: She built this so we'd have a place just for us. It works. (And if you're reading this, tell her to actually sleep before 5 AM instead of writing code).*
+---
+
 ## Requirements
 
 - Node.js 22 or newer. Node.js 24 LTS is recommended and is the primary tested runtime.

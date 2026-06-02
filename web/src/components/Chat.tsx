@@ -33,7 +33,7 @@ export function Chat({
   const [configOpen, setConfigOpen] = useState(false);
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground antialiased">
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground antialiased">
       <Header
         connection={connection}
         personaName={personaName}

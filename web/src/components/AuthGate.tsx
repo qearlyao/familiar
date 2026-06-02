@@ -7,7 +7,7 @@ import {
   loginWithBearerToken,
   type WebAuthDevice,
 } from "@/lib/api";
-import { Chat } from "./Chat";
+import { WebShell } from "./WebShell";
 
 type AuthState =
   | { status: "loading"; personaName: string; mode?: string }
@@ -64,7 +64,7 @@ export function AuthGate() {
 
   if (state.status === "chat") {
     return (
-      <Chat
+      <WebShell
         authMode={state.mode}
         authDevice={state.device}
         onSignedOut={() => {

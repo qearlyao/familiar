@@ -65,20 +65,27 @@ export function DevicesSection({
   const [busyId, setBusyId] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
-      setDevices(await fetchAuthDevices());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
+  const load = useCallback((options: { showLoading?: boolean } = {}) => {
+    if (options.showLoading) {
+      setLoading(true);
+      setError(undefined);
     }
+    void fetchAuthDevices()
+      .then((nextDevices) => {
+        setDevices(nextDevices);
+        setError(undefined);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
-    void load();
+    const id = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(id);
   }, [load]);
 
   const sorted = useMemo(
@@ -126,7 +133,7 @@ export function DevicesSection({
       setDevices((prev) => prev.filter((device) => device.current));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      void load();
+      load({ showLoading: true });
     } finally {
       setBusyId(undefined);
     }

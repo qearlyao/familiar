@@ -589,4 +589,23 @@ describe("web history", () => {
 		assert.deepEqual(messages.map((message) => message.id), ["u1", "msg-a", "u2", "msg-c"]);
 		assert.equal(messages.at(-1)?.text, "retry reply");
 	});
+
+	it("hides deleted assistant turns and their agent events", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			...twoTurnRecords(),
+			{
+				type: "message_delete",
+				...base(15, "2026-05-26T00:00:14.000Z"),
+				messageId: "msg-b",
+			},
+		];
+
+		const messages = webMessagesFromRecords(config, records, "Ghost");
+		const page = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 10 });
+
+		assert.deepEqual(messages.map((message) => message.id), ["u1", "msg-a", "u2"]);
+		assert.deepEqual(page.messages.map((message) => message.id), ["u1", "msg-a", "u2"]);
+		assert.equal(messages.some((message) => message.text === "second reply"), false);
+	});
 });

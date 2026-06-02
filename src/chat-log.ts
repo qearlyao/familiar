@@ -188,6 +188,11 @@ export interface AssistantRetryChatRecord extends ChatRecordBase {
 	triggerRecordId: number;
 }
 
+export interface MessageDeleteChatRecord extends ChatRecordBase {
+	type: "message_delete";
+	messageId: string;
+}
+
 export type ChatLogRecord =
 	| InboundChatRecord
 	| ControlChatRecord
@@ -199,10 +204,17 @@ export type ChatLogRecord =
 	| CheckpointChatRecord
 	| RuntimeChatRecord
 	| ErrorChatRecord
-	| AssistantRetryChatRecord;
+	| AssistantRetryChatRecord
+	| MessageDeleteChatRecord;
 
-export function supersededWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
-	return new Set(records.flatMap((record) => (record.type === "assistant_retry" ? [record.oldMessageId] : [])));
+export function hiddenWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
+	return new Set(
+		records.flatMap((record) => {
+			if (record.type === "assistant_retry") return [record.oldMessageId];
+			if (record.type === "message_delete") return [record.messageId];
+			return [];
+		}),
+	);
 }
 
 export interface ChatLog {

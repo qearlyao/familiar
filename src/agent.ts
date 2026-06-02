@@ -329,13 +329,13 @@ export async function createFamiliarAgent(
 		return run;
 	};
 
-	const removeLastAssistantForRetry = (session: FamiliarAgentSession): void => {
+	const popLastAssistant = (session: FamiliarAgentSession, action: "retry" | "delete"): void => {
 		const messages = session.agent.state.messages;
 		const message = messages.at(-1);
 		if (!message || message.role !== "assistant") {
-			throw new Error("No assistant message to retry");
+			throw new Error(`No assistant message to ${action}`);
 		}
-		if (message.stopReason === "aborted") {
+		if (action === "retry" && message.stopReason === "aborted") {
 			throw new Error("Cannot retry an aborted assistant message");
 		}
 		session.agent.state.messages = messages.slice(0, -1);
@@ -366,9 +366,14 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			return runPromptTurn(sessionKey, options, eventHandler, async (session) => {
-				removeLastAssistantForRetry(session);
+				popLastAssistant(session, "retry");
 				await session.agent.continue();
 			});
+		},
+		async deleteLastAssistant(sessionKey: string): Promise<void> {
+			const session = await getSession(sessionKey);
+			await session.promptQueue;
+			popLastAssistant(session, "delete");
 		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);

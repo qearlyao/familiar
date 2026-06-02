@@ -114,6 +114,13 @@ export type WebStreamEvent =
 			newMessageId: string;
 	  }
 	| {
+			type: "message_deleted";
+			eventId: string;
+			ts: number;
+			channelKey?: string;
+			messageId: string;
+	  }
+	| {
 			type: "tool_event";
 			eventId: string;
 			ts: number;

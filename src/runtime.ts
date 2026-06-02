@@ -6,11 +6,12 @@ import {
 	type ChatLog,
 	type ChatLogRecord,
 	type ControlCommand,
+	hiddenWebMessageIds,
 	type InboundChatRecord,
 	type JobTrigger,
+	type OutboundChatRecord,
 	type StoredAgentEvent,
 	type StoredAttachment,
-	supersededWebMessageIds,
 } from "./chat-log.js";
 import type { DiscordChannelTrigger } from "./config.js";
 import { promptAttachmentNotes } from "./inbound-attachments.js";
@@ -430,10 +431,8 @@ export class ConversationRuntime {
 		};
 	}
 
-	latestAssistantRetryTarget():
-		| { messageId: string; triggerRecordId: number; attachments: StoredAttachment[] }
-		| undefined {
-		const superseded = supersededWebMessageIds(this.records);
+	private latestLiveAssistantOutbound(): { record: OutboundChatRecord; messageId: string } | undefined {
+		const hidden = hiddenWebMessageIds(this.records);
 		for (let index = this.records.length - 1; index >= 0; index--) {
 			const record = this.records[index];
 			if (!record) continue;
@@ -441,13 +440,27 @@ export class ConversationRuntime {
 			if (record.type === "inbound") return undefined;
 			if (record.type !== "outbound" || record.control || !record.jobId) continue;
 			const messageId = record.webMessageId || record.messageIds[0];
-			if (!messageId || superseded.has(messageId)) continue;
-			if (this.assistantMessageWasAborted(messageId)) return undefined;
-			const triggerRecordId = this.queuedTriggerByJobId.get(record.jobId);
-			if (triggerRecordId === undefined) return undefined;
-			return { messageId, triggerRecordId, attachments: record.attachments ?? [] };
+			if (!messageId || hidden.has(messageId)) continue;
+			return { record, messageId };
 		}
 		return undefined;
+	}
+
+	latestAssistantRetryTarget():
+		| { messageId: string; triggerRecordId: number; attachments: StoredAttachment[] }
+		| undefined {
+		const found = this.latestLiveAssistantOutbound();
+		if (!found) return undefined;
+		const { record, messageId } = found;
+		if (this.assistantMessageWasAborted(messageId)) return undefined;
+		const triggerRecordId = record.jobId ? this.queuedTriggerByJobId.get(record.jobId) : undefined;
+		if (triggerRecordId === undefined) return undefined;
+		return { messageId, triggerRecordId, attachments: record.attachments ?? [] };
+	}
+
+	latestAssistantDeleteTarget(): { messageId: string } | undefined {
+		const found = this.latestLiveAssistantOutbound();
+		return found ? { messageId: found.messageId } : undefined;
 	}
 
 	private assistantMessageWasAborted(messageId: string): boolean {
@@ -564,6 +577,14 @@ export class ConversationRuntime {
 			newMessageId: options.newMessageId,
 			jobId: options.jobId,
 			triggerRecordId: options.triggerRecordId,
+		});
+	}
+
+	async noteMessageDelete(messageId: string): Promise<void> {
+		await this.appendRecord({
+			type: "message_delete",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			messageId,
 		});
 	}
 

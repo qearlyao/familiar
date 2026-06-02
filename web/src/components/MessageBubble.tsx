@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { type LucideIcon, RotateCcw, Trash2 } from "lucide-react";
 import type { Attachment, Message } from "../types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,44 @@ function SystemTurn({ message }: { message: Message }) {
   );
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, onRetry }: { message: Message; onRetry?: () => void }) {
+function ActionButton({
+  icon: Icon,
+  label,
+  onClick,
+  hoverClass,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  hoverClass: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "h-7 px-2 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100",
+        hoverClass,
+      )}
+    >
+      <Icon className="size-3.5" />
+    </Button>
+  );
+}
+
+export const MessageBubble = memo(function MessageBubble({
+  message,
+  onRetry,
+  onDelete,
+}: {
+  message: Message;
+  onRetry?: () => void;
+  onDelete?: () => void;
+}) {
   const [actionsRevealed, setActionsRevealed] = useState(false);
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
@@ -82,24 +119,29 @@ export const MessageBubble = memo(function MessageBubble({ message, onRetry }: {
     >
       <TurnView message={message} />
       <AttachmentList attachments={message.attachments ?? []} align="left" />
-      {onRetry && (
+      {(onRetry || onDelete) && (
         <div
           className={cn(
             "pointer-events-none mt-2 flex opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
             actionsRevealed && "pointer-events-auto opacity-100",
           )}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRetry}
-            aria-label="retry latest reply"
-            title="retry latest reply"
-            className="h-7 px-2 text-muted-foreground opacity-70 transition-opacity hover:text-foreground group-hover:opacity-100"
-          >
-            <RotateCcw className="size-3.5" />
-          </Button>
+          {onRetry && (
+            <ActionButton
+              icon={RotateCcw}
+              label="retry latest reply"
+              onClick={onRetry}
+              hoverClass="hover:text-foreground"
+            />
+          )}
+          {onDelete && (
+            <ActionButton
+              icon={Trash2}
+              label="delete latest reply"
+              onClick={onDelete}
+              hoverClass="hover:text-destructive"
+            />
+          )}
         </div>
       )}
     </div>

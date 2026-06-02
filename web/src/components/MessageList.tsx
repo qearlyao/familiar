@@ -38,15 +38,17 @@ export function MessageList({
   historyLoaded,
   streaming = false,
   onRetry,
+  onDelete,
 }: {
   messages: Message[];
   personaName: string;
   historyLoaded: boolean;
   streaming?: boolean;
   onRetry?: () => void;
+  onDelete?: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
-  const latestRetryableAssistantIndex = streaming
+  const latestAssistantIndex = streaming
     ? -1
     : messages.findLastIndex((message) => message.role === "assistant");
 
@@ -78,7 +80,11 @@ export function MessageList({
                 </span>
               </div>
             )}
-            <MessageBubble message={m} onRetry={i === latestRetryableAssistantIndex ? onRetry : undefined} />
+            <MessageBubble
+              message={m}
+              onRetry={i === latestAssistantIndex ? onRetry : undefined}
+              onDelete={i === latestAssistantIndex ? onDelete : undefined}
+            />
           </div>
         );
       })}

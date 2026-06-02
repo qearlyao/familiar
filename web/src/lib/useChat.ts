@@ -105,6 +105,7 @@ export interface ChatHook {
   send: (text: string, attachments?: File[]) => Promise<void>;
   abort: () => void;
   retry: () => void;
+  deleteLatest: () => void;
   notifyNewChat: () => void;
 }
 
@@ -151,6 +152,11 @@ export function useChat(): ChatHook {
         case "message_replaced": {
           setStreaming(true);
           setMessages((prev) => prev.filter((m) => m.id !== event.oldMessageId));
+          break;
+        }
+
+        case "message_deleted": {
+          setMessages((prev) => prev.filter((m) => m.id !== event.messageId));
           break;
         }
 
@@ -379,20 +385,24 @@ export function useChat(): ChatHook {
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
 
-  const abort = useCallback(() => {
+  const sendControlFrame = useCallback((type: string): boolean => {
     const sock = wsRef.current;
-    if (sock?.readyState === WebSocket.OPEN) {
-      sock.send(JSON.stringify({ type: "abort" }));
-    }
+    if (sock?.readyState !== WebSocket.OPEN) return false;
+    sock.send(JSON.stringify({ type }));
+    return true;
   }, []);
 
+  const abort = useCallback(() => {
+    sendControlFrame("abort");
+  }, [sendControlFrame]);
+
   const retry = useCallback(() => {
-    const sock = wsRef.current;
-    if (sock?.readyState === WebSocket.OPEN) {
-      setStreaming(true);
-      sock.send(JSON.stringify({ type: "retry" }));
-    }
-  }, []);
+    if (sendControlFrame("retry")) setStreaming(true);
+  }, [sendControlFrame]);
+
+  const deleteLatest = useCallback(() => {
+    sendControlFrame("delete");
+  }, [sendControlFrame]);
 
   const notifyNewChat = useCallback(() => {
     setMessages((prev) => [
@@ -409,5 +419,19 @@ export function useChat(): ChatHook {
     ]);
   }, []);
 
-  return { messages, connection, personaName, sessions, activeSessionKey, historyLoaded, streaming, selectSession, send, abort, retry, notifyNewChat };
+  return {
+    messages,
+    connection,
+    personaName,
+    sessions,
+    activeSessionKey,
+    historyLoaded,
+    streaming,
+    selectSession,
+    send,
+    abort,
+    retry,
+    deleteLatest,
+    notifyNewChat,
+  };
 }

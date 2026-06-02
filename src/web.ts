@@ -508,6 +508,25 @@ export async function startWebDaemon(
 		}
 	};
 
+	const deleteLatestAssistant = async (runtime: ConversationRuntime): Promise<void> => {
+		if (runtime.hasActiveJob()) throw new Error("Cannot delete while a turn is running");
+		const target = runtime.latestAssistantDeleteTarget();
+		if (!target) throw new Error("No assistant message to delete");
+		try {
+			await familiarAgent.deleteLastAssistant(runtime.channelKey);
+			await runtime.noteMessageDelete(target.messageId);
+			publish({
+				type: "message_deleted",
+				channelKey: runtime.channelKey,
+				messageId: target.messageId,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await runtime.appendError(message);
+			publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
+		}
+	};
+
 	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
 		for (;;) {
 			const dispatch = runtime.beginNextJob();
@@ -778,6 +797,13 @@ export async function startWebDaemon(
 		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
 		return true;
 	});
+	route("POST", "/api/web/delete", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		void deleteLatestAssistant(runtime).catch((error) => console.error("Web delete failed", error));
+		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+		return true;
+	});
 	route("POST", "/api/web/agent/settings", async (request, response, url) => {
 		const body = await readJsonBody(request);
 		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
@@ -925,6 +951,11 @@ export async function startWebDaemon(
 								void getRuntime(client.channelKey)
 									.then((runtime) => retryLatestAssistant(runtime))
 									.catch((error) => console.error("WebSocket retry runtime lookup failed", error));
+							}
+							if (isRecord(message) && message.type === "delete") {
+								void getRuntime(client.channelKey)
+									.then((runtime) => deleteLatestAssistant(runtime))
+									.catch((error) => console.error("WebSocket delete runtime lookup failed", error));
 							}
 						}
 					} catch (error) {

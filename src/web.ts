@@ -53,6 +53,10 @@ import {
 	type WebStreamEvent,
 } from "./web/types.js";
 
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 export async function startWebDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
@@ -118,6 +122,11 @@ export async function startWebDaemon(
 			}
 		}
 		return fullEvent;
+	};
+
+	const appendAndPublishError = async (runtime: ConversationRuntime, message: string): Promise<void> => {
+		await runtime.appendError(message);
+		publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
 	};
 
 	const publishDelta = (
@@ -502,9 +511,8 @@ export async function startWebDaemon(
 				jobId,
 			});
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			await runtime.appendError(message);
-			publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
+			const message = errorMessage(error);
+			await appendAndPublishError(runtime, message);
 		}
 	};
 
@@ -521,9 +529,8 @@ export async function startWebDaemon(
 				messageId: target.messageId,
 			});
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			await runtime.appendError(message);
-			publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
+			const message = errorMessage(error);
+			await appendAndPublishError(runtime, message);
 		}
 	};
 
@@ -557,10 +564,9 @@ export async function startWebDaemon(
 				});
 			} catch (error) {
 				if (!runtime.hasActiveJob(dispatch.job.jobId)) return;
-				const message = error instanceof Error ? error.message : String(error);
+				const message = errorMessage(error);
 				await runtime.failActiveJob(message);
-				await runtime.appendError(message);
-				publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
+				await appendAndPublishError(runtime, message);
 			}
 		}
 	};
@@ -709,7 +715,7 @@ export async function startWebDaemon(
 			const validated = entry.validate(body.value, config);
 			await commitConfigChange(key, validated, { config, scheduler: agentCore });
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			sendJson(response, 400, { error: message });
 			return true;
 		}
@@ -730,7 +736,7 @@ export async function startWebDaemon(
 		try {
 			await clearConfigChange(key, { config, scheduler: agentCore });
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			sendJson(response, 400, { error: message });
 			return true;
 		}
@@ -815,7 +821,7 @@ export async function startWebDaemon(
 			if (typeof body.model === "string") await familiarAgent.setModel(runtime.channelKey, body.model);
 			if (typeof body.thinking === "string") await familiarAgent.setThinkingLevel(runtime.channelKey, body.thinking);
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			sendJson(response, 400, { error: message });
 			return true;
 		}
@@ -892,7 +898,7 @@ export async function startWebDaemon(
 			return true;
 		} catch (error) {
 			const status = error instanceof HttpError ? error.status : 500;
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			sendJson(response, status, { error: message });
 			return true;
 		}

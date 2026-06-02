@@ -33,7 +33,11 @@ export function SessionPicker({
         <span className="font-medium">{label}</span>
         <ChevronDown className="size-3 opacity-70" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[180px]">
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[180px]"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         {sessions.map((s) => {
           const isActive = s.key === activeKey;
           return (

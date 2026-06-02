@@ -33,7 +33,10 @@ export function MediaPreview({
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/90 data-closed:animate-out data-closed:fade-out-0 data-open:animate-in data-open:fade-in-0" />
-        <DialogPrimitive.Content className="fixed inset-0 z-50 flex items-center justify-center p-3 outline-none sm:p-6">
+        <DialogPrimitive.Content
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 outline-none sm:p-6"
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
           <DialogPrimitive.Title className="sr-only">{alt}</DialogPrimitive.Title>
           <img
             src={src}

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { Socket } from "node:net";
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getProviders } from "@earendil-works/pi-ai";
@@ -16,7 +15,7 @@ import {
 	thinkingDurationMs,
 	updateAgentEventSummary,
 } from "./agent-events.js";
-import type { StoredAgentEvent, StoredAttachment } from "./chat-log.js";
+import type { StoredAttachment } from "./chat-log.js";
 import type { Config, WebAuthMode } from "./config.js";
 import { loadConfigOverrides } from "./config-overrides.js";
 import {
@@ -29,29 +28,24 @@ import {
 } from "./config-registry.js";
 import { getContactNickname, refreshContactNote, setContactNotePath } from "./contact-note.js";
 import type { RestartHandler } from "./control.js";
-import { eventId, messageId, toUnixMs } from "./ids.js";
+import { messageId } from "./ids.js";
 import { materializeInboundAttachments } from "./inbound-attachments.js";
 import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "./models.js";
 import { loadPersona, parsePersonaName } from "./persona.js";
 import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "./runtime.js";
 import { formatSetting } from "./settings.js";
-import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter, parseAgentReply } from "./silent-marker.js";
+import { parseAgentReply } from "./silent-marker.js";
 import { isRecord } from "./util/guards.js";
 import { createAuth, sessionCookie, verifyTotp } from "./web/auth.js";
-import { acceptWebSocket, decodeFrames, encodeFrame, replayEvents, type WebSocketClient } from "./web/events.js";
+import { createWebEventHub } from "./web/event-hub.js";
 import { HttpError, readJsonBody, sendJson, sendText } from "./web/http.js";
 import { memeCatalogPath, parseMemeCatalog } from "./web/memes.js";
-import { toolFromStoredAgentEvent, webAttachments, webHistoryPayload } from "./web/messages.js";
+import { webAttachments, webHistoryPayload } from "./web/messages.js";
 import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./web/multipart.js";
 import { agentSettingsPayload, commandArgs, sessionDto } from "./web/payloads.js";
 import { serveAttachment, serveStatic } from "./web/static.js";
-import {
-	EVENT_REPLAY_LIMIT,
-	WEB_USER_NAME,
-	type WebDaemon,
-	type WebPublishEvent,
-	type WebStreamEvent,
-} from "./web/types.js";
+import { attachWebSocketStream } from "./web/stream.js";
+import { WEB_USER_NAME, type WebDaemon } from "./web/types.js";
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -69,236 +63,13 @@ export async function startWebDaemon(
 	const persona = await loadPersona(config);
 	const personaName = parsePersonaName(persona.soul);
 	const auth = createAuth(config);
-	const clients = new Set<WebSocketClient>();
-	const eventsByChannel = new Map<string, WebStreamEvent[]>();
-	const runtimeSubscriptions = new Map<string, () => void>();
-	type InFlightMessage = {
-		silentFilter?: ReturnType<typeof createSilentFilterState>;
-		pendingStartTs?: number;
-		locallyStreamed: boolean;
-		startedSilent: boolean;
-		lastActiveAt: number;
-	};
-	const IN_FLIGHT_TTL_MS = 10 * 60 * 1000;
-	const inFlightMessages = new Map<string, InFlightMessage>();
-	const getOrCreateInFlight = (messageIdValue: string): InFlightMessage => {
-		let entry = inFlightMessages.get(messageIdValue);
-		if (!entry) {
-			entry = { locallyStreamed: false, startedSilent: false, lastActiveAt: Date.now() };
-			inFlightMessages.set(messageIdValue, entry);
-		} else {
-			entry.lastActiveAt = Date.now();
-		}
-		return entry;
-	};
-	const touchInFlight = (messageIdValue: string): void => {
-		const entry = inFlightMessages.get(messageIdValue);
-		if (entry) entry.lastActiveAt = Date.now();
-	};
-	const inFlightGcTimer = setInterval(() => {
-		const cutoff = Date.now() - IN_FLIGHT_TTL_MS;
-		for (const [id, entry] of inFlightMessages) {
-			if (entry.lastActiveAt < cutoff) inFlightMessages.delete(id);
-		}
-	}, 60 * 1000);
-	inFlightGcTimer.unref?.();
-
-	const publish = (event: WebPublishEvent): WebStreamEvent => {
-		const fullEvent = { ...event, eventId: eventId(), ts: event.ts ?? Date.now() } as WebStreamEvent;
-		const events = eventsByChannel.get(fullEvent.channelKey ?? "") ?? [];
-		events.push(fullEvent);
-		if (events.length > EVENT_REPLAY_LIMIT) events.shift();
-		eventsByChannel.set(fullEvent.channelKey ?? "", events);
-		const frame = encodeFrame(JSON.stringify(fullEvent));
-		for (const client of clients) {
-			if (client.channelKey === fullEvent.channelKey && !client.socket.destroyed) {
-				if (client.authed) {
-					client.socket.write(frame);
-				} else {
-					const pendingEvents = client.pendingEvents ?? [];
-					pendingEvents.push(fullEvent);
-					client.pendingEvents = pendingEvents;
-				}
-			}
-		}
-		return fullEvent;
-	};
-
-	const appendAndPublishError = async (runtime: ConversationRuntime, message: string): Promise<void> => {
-		await runtime.appendError(message);
-		publish({ type: "error", channelKey: runtime.channelKey, code: "unknown", message });
-	};
-
-	const publishDelta = (
-		channelKey: string,
-		messageIdValue: string,
-		part: "thinking" | "text",
-		text: string,
-		ts?: number,
-	): WebStreamEvent =>
-		publish({ type: "delta", channelKey, messageId: messageIdValue, part, content: text, text, ts });
-
-	const publishStoredAgentEvent = (
-		channelKey: string,
-		messageIdValue: string,
-		storedEvent: StoredAgentEvent,
-		ts?: number,
-	): void => {
-		touchInFlight(messageIdValue);
-		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
-			const entry = getOrCreateInFlight(messageIdValue);
-			entry.locallyStreamed = true;
-			entry.silentFilter = createSilentFilterState();
-			entry.pendingStartTs = ts;
-			entry.startedSilent = false;
-		}
-		const startedSilentMessage = (): boolean => {
-			const entry = inFlightMessages.get(messageIdValue);
-			if (!entry || entry.startedSilent) return false;
-			const startTs = entry.pendingStartTs;
-			entry.pendingStartTs = undefined;
-			entry.startedSilent = true;
-			publish({
-				type: "message_started",
-				channelKey,
-				messageId: messageIdValue,
-				role: "assistant",
-				who: personaName,
-				ts: startTs,
-			});
-			return true;
-		};
-		if (storedEvent.type === "message_update") {
-			const assistantEvent = storedEvent.assistantMessageEvent;
-			if (assistantEvent.type === "thinking_delta") {
-				startedSilentMessage();
-				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
-			}
-			if (assistantEvent.type === "text_delta") {
-				const filter = inFlightMessages.get(messageIdValue)?.silentFilter;
-				if (!filter) {
-					startedSilentMessage();
-					publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
-				} else {
-					const result = consumeSilentDelta(filter, assistantEvent.delta);
-					if (result.kind === "emit" && result.text) {
-						startedSilentMessage();
-						publishDelta(channelKey, messageIdValue, "text", result.text, ts);
-					}
-				}
-			}
-		}
-		if (storedEvent.type === "tool_execution_start") {
-			startedSilentMessage();
-		}
-		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
-			const entry = inFlightMessages.get(messageIdValue);
-			const filter = entry?.silentFilter;
-			let silent = false;
-			if (filter && entry) {
-				const final = finalizeSilentFilter(filter);
-				silent = final.silent;
-				if (!silent) {
-					startedSilentMessage();
-					if (final.flush) {
-						publishDelta(channelKey, messageIdValue, "text", final.flush, ts);
-					}
-				} else {
-					entry.startedSilent = true;
-					entry.pendingStartTs = undefined;
-				}
-				entry.silentFilter = undefined;
-			} else {
-				startedSilentMessage();
-			}
-			publish({
-				type: "message_completed",
-				channelKey,
-				messageId: messageIdValue,
-				usage: storedEvent.usage,
-				silent: silent || undefined,
-				ts,
-			});
-			if (storedEvent.errorMessage) {
-				publish({
-					type: "model_error",
-					channelKey,
-					messageId: messageIdValue,
-					message: storedEvent.errorMessage,
-					ts,
-				});
-			}
-		}
-		const tool = toolFromStoredAgentEvent(storedEvent, ts ?? Date.now());
-		if (tool) publish({ type: "tool_event", channelKey, messageId: messageIdValue, tool, ts });
-	};
-
-	const subscribeRuntime = (runtime: ConversationRuntime): void => {
-		if (runtimeSubscriptions.has(runtime.channelKey)) return;
-		const unsubscribeRecords = runtime.subscribe((record) => {
-			if (record.type === "inbound") {
-				publish({
-					type: "message_started",
-					channelKey: runtime.channelKey,
-					messageId: record.messageId,
-					role: "user",
-					who: record.authorName || getContactNickname(WEB_USER_NAME),
-					ts: toUnixMs(record.ts),
-				});
-				publishDelta(runtime.channelKey, record.messageId, "text", record.text, toUnixMs(record.ts));
-				publish({
-					type: "message_completed",
-					channelKey: runtime.channelKey,
-					messageId: record.messageId,
-					attachments: webAttachments(config, record.attachments),
-					ts: toUnixMs(record.ts),
-				});
-			}
-			if (record.type === "outbound" && !record.control) {
-				const outboundId = record.webMessageId || record.messageIds[0] || `out_${record.recordId}`;
-				const completion = {
-					type: "message_completed" as const,
-					channelKey: runtime.channelKey,
-					messageId: outboundId,
-					thinkingMs: record.thinkingMs,
-					attachments: webAttachments(config, record.attachments),
-					silent: record.silent || undefined,
-					ts: toUnixMs(record.ts),
-				};
-				if (inFlightMessages.get(outboundId)?.locallyStreamed) {
-					inFlightMessages.delete(outboundId);
-					publish(completion);
-					return;
-				}
-				if (!record.silent) {
-					publish({
-						type: "message_started",
-						channelKey: runtime.channelKey,
-						messageId: outboundId,
-						role: "assistant",
-						who: personaName,
-						ts: toUnixMs(record.ts),
-					});
-					if (record.thinking)
-						publishDelta(runtime.channelKey, outboundId, "thinking", record.thinking, toUnixMs(record.ts));
-					if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
-				}
-				publish(completion);
-			}
-		});
-		const unsubscribeAgentEvents = runtime.subscribeAgentEvents((agentEvent) => {
-			publishStoredAgentEvent(runtime.channelKey, agentEvent.messageId, agentEvent.event, agentEvent.ts);
-		});
-		runtimeSubscriptions.set(runtime.channelKey, () => {
-			unsubscribeRecords();
-			unsubscribeAgentEvents();
-		});
-	};
+	const eventHub = createWebEventHub(config, personaName);
+	const { appendAndPublishError, publish, publishDelta } = eventHub;
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
 		if (!agentCore.hasSessionSource()) throw new HttpError(503, "Owner identity is not established yet.");
 		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
-		subscribeRuntime(runtime);
+		eventHub.subscribeRuntime(runtime);
 		return runtime;
 	};
 
@@ -308,7 +79,7 @@ export async function startWebDaemon(
 		await Promise.all(
 			sessions.map(async (session) => {
 				const runtime = await agentCore.getRuntimeForWebChannel(session.key);
-				subscribeRuntime(runtime);
+				eventHub.subscribeRuntime(runtime);
 			}),
 		);
 	};
@@ -358,11 +129,6 @@ export async function startWebDaemon(
 		const ref = parseModelRef(value);
 		if (!ref) return { ok: false, error: "format must be provider/model-id" };
 		return { ok: true, model: ref.key, ref };
-	};
-
-	const replay = (client: WebSocketClient, channelKey: string, lastEventId: string | null | undefined): void => {
-		const events = eventsByChannel.get(channelKey) ?? [];
-		replayEvents(client, events, lastEventId, () => publish({ type: "replay_window_lost", channelKey }));
 	};
 
 	const promptForRuntime = async (
@@ -450,8 +216,7 @@ export async function startWebDaemon(
 			attachments: webAttachments(config, reply.attachments),
 			silent: parsed.silent || undefined,
 		});
-		const entry = getOrCreateInFlight(assistantMessageId);
-		entry.locallyStreamed = true;
+		eventHub.markLocallyStreamed(assistantMessageId);
 		return {
 			text: finalText,
 			messageId: assistantMessageId,
@@ -915,70 +680,13 @@ export async function startWebDaemon(
 		});
 	});
 
-	server.on("upgrade", (request, socket) => {
-		const netSocket = socket as Socket;
-		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-		if (url.pathname !== "/api/web/stream" || !auth.authorize(request, url.pathname)) {
-			netSocket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-			netSocket.destroy();
-			return;
-		}
-		const requestedChannelKey = url.searchParams.get("channelKey") || undefined;
-		void getRuntime(requestedChannelKey)
-			.then((runtime) => {
-				if (netSocket.destroyed) return;
-				if (!acceptWebSocket(request, netSocket)) return;
-				netSocket.setNoDelay(true);
-				const client: WebSocketClient = { socket: netSocket, channelKey: runtime.channelKey, authed: false };
-				clients.add(client);
-				let frameBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-				netSocket.on("data", (chunk: Buffer) => {
-					try {
-						frameBuffer = Buffer.concat([frameBuffer, chunk]);
-						const decoded = decodeFrames(frameBuffer);
-						frameBuffer = decoded.remaining;
-						if (decoded.close) netSocket.destroy();
-						for (const raw of decoded.messages) {
-							const message = JSON.parse(raw) as unknown;
-							if (isRecord(message) && message.type === "hello") {
-								if (!client.channelKey) continue;
-								replay(
-									client,
-									client.channelKey,
-									typeof message.lastEventId === "string" ? message.lastEventId : null,
-								);
-							}
-							if (isRecord(message) && message.type === "abort") {
-								void getRuntime(client.channelKey)
-									.then((runtime) => familiarAgent.abort(runtime.channelKey))
-									.catch((error) => console.error("WebSocket abort runtime lookup failed", error));
-							}
-							if (isRecord(message) && message.type === "retry") {
-								void getRuntime(client.channelKey)
-									.then((runtime) => retryLatestAssistant(runtime))
-									.catch((error) => console.error("WebSocket retry runtime lookup failed", error));
-							}
-							if (isRecord(message) && message.type === "delete") {
-								void getRuntime(client.channelKey)
-									.then((runtime) => deleteLatestAssistant(runtime))
-									.catch((error) => console.error("WebSocket delete runtime lookup failed", error));
-							}
-						}
-					} catch (error) {
-						console.error("WebSocket frame handling failed", error);
-						netSocket.destroy();
-					}
-				});
-				netSocket.on("close", () => clients.delete(client));
-				netSocket.on("error", () => clients.delete(client));
-			})
-			.catch((error) => {
-				console.error("WebSocket runtime lookup failed", error);
-				if (!netSocket.destroyed) {
-					netSocket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
-					netSocket.destroy();
-				}
-			});
+	attachWebSocketStream(server, {
+		authorize: (request, pathname) => auth.authorize(request, pathname),
+		eventHub,
+		getRuntime,
+		abort: (runtime) => familiarAgent.abort(runtime.channelKey),
+		retry: retryLatestAssistant,
+		deleteLatest: deleteLatestAssistant,
 	});
 
 	await new Promise<void>((resolveListen, rejectListen) => {
@@ -993,11 +701,7 @@ export async function startWebDaemon(
 	return {
 		server,
 		async stop(): Promise<void> {
-			clearInterval(inFlightGcTimer);
-			for (const client of clients) client.socket.destroy();
-			clients.clear();
-			for (const unsubscribe of runtimeSubscriptions.values()) unsubscribe();
-			runtimeSubscriptions.clear();
+			eventHub.stop();
 			await new Promise<void>((resolveClose, rejectClose) => {
 				server.close((error) => (error ? rejectClose(error) : resolveClose()));
 			});

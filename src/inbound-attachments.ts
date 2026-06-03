@@ -4,24 +4,21 @@ import { basename, extname, resolve } from "node:path";
 
 import type { ImageContent } from "@earendil-works/pi-ai";
 
+import { MAX_INBOUND_ATTACHMENT_BYTES, MAX_INBOUND_ATTACHMENTS, MAX_INBOUND_TOTAL_BYTES } from "./attachment-limits.js";
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
 import { ensureInlineImageDerivative, MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 import { deriveInboundAttachmentText } from "./media-understanding.js";
 import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "./util/image-mime.js";
-import {
-	MAX_INBOUND_ATTACHMENT_BYTES,
-	MAX_INBOUND_ATTACHMENTS,
-	MAX_INBOUND_TOTAL_BYTES,
-} from "./attachment-limits.js";
 
-export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 export {
 	MAX_INBOUND_ATTACHMENT_BYTES,
 	MAX_INBOUND_ATTACHMENTS,
 	MAX_INBOUND_TOTAL_BYTES,
 } from "./attachment-limits.js";
+export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
+
 const TEXT_ATTACHMENT_PREVIEW_LINES = 2;
 const TEXT_ATTACHMENT_PREVIEW_CHARS = 1000;
 const MP4_FILE_TYPE_BRANDS = new Set(["avc1", "dash", "iso2", "isom", "M4V ", "mp41", "mp42", "MSNV"]);

@@ -1,15 +1,18 @@
 import { readFile } from "node:fs/promises";
 
-import { createPartFromBase64, createUserContent, GoogleGenAI } from "@google/genai";
+import { createPartFromUri, createUserContent, FileState, GoogleGenAI } from "@google/genai";
 
 import type { StoredAttachment } from "./chat-log.js";
 import type { Config } from "./config.js";
 import { parseModelRef, resolveModel } from "./models.js";
 
 type DerivedText = NonNullable<StoredAttachment["derived"]>["text"];
+type GeminiFile = Awaited<ReturnType<GoogleGenAI["files"]["upload"]>>;
 const GEMINI_API_VERSION_PATTERN = /\/(v1(?:beta|alpha)?|v\d+beta\d*)\/?$/;
 const AUDIO_UNDERSTANDING_TIMEOUT_MS = 30_000;
 const VIDEO_UNDERSTANDING_TIMEOUT_MS = 5 * 60_000;
+const GEMINI_FILE_POLL_INTERVAL_MS = 2_000;
+const GEMINI_FILE_DELETE_TIMEOUT_MS = 5_000;
 
 function normalizeDerivedText(text: string): string {
 	return text.trim().replace(/\n{3,}/g, "\n\n");
@@ -36,7 +39,36 @@ function geminiHttpOptions(config: Config): { baseUrl?: string; apiVersion?: str
 }
 
 function timedOut(error: unknown): boolean {
-	return error instanceof Error && /timed out|timeout/i.test(error.message);
+	return (
+		error instanceof Error &&
+		(/timed out|timeout/i.test(error.message) || error.name === "AbortError" || error.name === "TimeoutError")
+	);
+}
+
+function videoTimeoutError(): Error {
+	return new Error(
+		`Gemini video understanding timed out after ${Math.round(VIDEO_UNDERSTANDING_TIMEOUT_MS / 60_000)} minutes.`,
+	);
+}
+
+function remainingVideoUnderstandingMs(deadline: number): number {
+	const remaining = deadline - Date.now();
+	if (remaining <= 0) throw videoTimeoutError();
+	return remaining;
+}
+
+class VideoUnderstandingDeadline {
+	readonly expiresAt = Date.now() + VIDEO_UNDERSTANDING_TIMEOUT_MS;
+
+	signal(): AbortSignal {
+		return AbortSignal.timeout(remainingVideoUnderstandingMs(this.expiresAt));
+	}
+
+	async sleep(ms: number): Promise<void> {
+		const delay = Math.min(ms, remainingVideoUnderstandingMs(this.expiresAt));
+		await new Promise((resolve) => setTimeout(resolve, delay));
+		remainingVideoUnderstandingMs(this.expiresAt);
+	}
 }
 
 function fallbackDerivedText(attachment: StoredAttachment, error: unknown): DerivedText | undefined {
@@ -50,6 +82,36 @@ function fallbackDerivedText(attachment: StoredAttachment, error: unknown): Deri
 		label: "note",
 		text: detail,
 	};
+}
+
+async function waitForGeminiFileActive(
+	ai: GoogleGenAI,
+	uploaded: GeminiFile,
+	deadline: VideoUnderstandingDeadline,
+): Promise<GeminiFile> {
+	let file = uploaded;
+	let polled = false;
+	for (;;) {
+		if (file.state === FileState.ACTIVE) return file;
+		if (file.state === FileState.FAILED) {
+			throw new Error(file.error?.message ?? "Gemini file processing failed");
+		}
+		if (!file.name) throw new Error("Gemini file upload did not return a file name");
+		if (polled) await deadline.sleep(GEMINI_FILE_POLL_INTERVAL_MS);
+		file = await ai.files.get({
+			name: file.name,
+			config: { abortSignal: deadline.signal() },
+		});
+		polled = true;
+	}
+}
+
+async function deleteGeminiFile(ai: GoogleGenAI, name: string): Promise<void> {
+	try {
+		await ai.files.delete({ name, config: { abortSignal: AbortSignal.timeout(GEMINI_FILE_DELETE_TIMEOUT_MS) } });
+	} catch (error) {
+		console.warn("Gemini file cleanup failed", error);
+	}
 }
 
 async function transcribeAudioAttachment(
@@ -96,24 +158,42 @@ async function summarizeVideoAttachment(
 		return undefined;
 	}
 	const ai = new GoogleGenAI({ apiKey, httpOptions: geminiHttpOptions(config) });
-	const video = await readFile(attachment.localPath);
-	const response = await ai.models.generateContent({
-		model: config.mediaUnderstanding.video.model,
-		contents: createUserContent([
-			{
-				text: "Provide a concise description of this video, including any spoken content if present, and summarize the key visible events.",
+	const deadline = new VideoUnderstandingDeadline();
+	let uploadedName: string | undefined;
+	try {
+		const uploaded = await ai.files.upload({
+			file: attachment.localPath,
+			config: {
+				mimeType: attachment.mimeType,
+				displayName: attachment.name,
+				abortSignal: deadline.signal(),
 			},
-			createPartFromBase64(video.toString("base64"), attachment.mimeType),
-		]),
-	});
-	const text = response.text?.trim();
-	if (!text) return undefined;
-	return {
-		provider: "google",
-		model: config.mediaUnderstanding.video.model,
-		text: normalizeDerivedText(text),
-		label: labelForAttachment(attachment.kind),
-	};
+		});
+		uploadedName = uploaded.name;
+		const file = await waitForGeminiFileActive(ai, uploaded, deadline);
+		const fileUri = file.uri ?? uploaded.uri;
+		if (!fileUri) throw new Error("Gemini file upload did not return a file URI");
+		const response = await ai.models.generateContent({
+			model: config.mediaUnderstanding.video.model,
+			contents: createUserContent([
+				{
+					text: "Provide a concise description of this video, including any spoken content if present, and summarize the key visible events.",
+				},
+				createPartFromUri(fileUri, file.mimeType ?? uploaded.mimeType ?? attachment.mimeType),
+			]),
+			config: { abortSignal: deadline.signal() },
+		});
+		const text = response.text?.trim();
+		if (!text) return undefined;
+		return {
+			provider: "google",
+			model: config.mediaUnderstanding.video.model,
+			text: normalizeDerivedText(text),
+			label: labelForAttachment(attachment.kind),
+		};
+	} finally {
+		if (uploadedName) await deleteGeminiFile(ai, uploadedName);
+	}
 }
 
 export async function deriveInboundAttachmentText(

@@ -14,6 +14,88 @@ import { attachmentsDir } from "../src/generated-media.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 import { mp4Bytes, noisyPngBytes, pngBytes } from "./media-fixtures.js";
 
+type GeminiMockFile = {
+	name: string;
+	uri: string;
+	mimeType: string;
+	state: "PROCESSING" | "ACTIVE" | "FAILED";
+	error?: { message?: string };
+};
+
+function geminiVideoFile(state: GeminiMockFile["state"], error?: GeminiMockFile["error"]): GeminiMockFile {
+	return {
+		name: "files/gemini-video-1",
+		uri: "https://generativelanguage.googleapis.com/v1beta/files/gemini-video-1",
+		mimeType: "video/mp4",
+		state,
+		error,
+	};
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
+	const headers = new Headers(init.headers);
+	headers.set("content-type", "application/json");
+	return new Response(JSON.stringify(body), { ...init, headers });
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+	if (typeof input === "string") return input;
+	if (input instanceof URL) return input.toString();
+	return input.url;
+}
+
+function installGeminiVideoFetchMock(options: {
+	requestedUrls: string[];
+	generateText?: string;
+	startThrows?: Error;
+	uploadFile?: GeminiMockFile;
+	pollFiles?: GeminiMockFile[];
+	pollThrows?: Error;
+	deleteStatus?: number;
+	deleteThrows?: boolean;
+}): typeof fetch {
+	const uploadFile = options.uploadFile ?? geminiVideoFile("PROCESSING");
+	const pollFiles = [...(options.pollFiles ?? [geminiVideoFile("ACTIVE")])];
+	return (async (input, init) => {
+		const url = requestUrl(input);
+		const method = init?.method ?? "GET";
+		options.requestedUrls.push(url);
+		if (method === "POST" && url.endsWith("/upload/v1beta/files")) {
+			if (options.startThrows) throw options.startThrows;
+			return new Response("{}", {
+				status: 200,
+				headers: { "x-goog-upload-url": "https://upload.example.test/upload-session" },
+			});
+		}
+		if (method === "POST" && url === "https://example.test/upload-session") {
+			return jsonResponse(
+				{ file: uploadFile },
+				{ status: 200, headers: { "x-goog-upload-status": "final" } },
+			);
+		}
+		if (method === "GET" && /\/v1beta\/files\/gemini-video-1$/.test(url)) {
+			if (options.pollThrows) throw options.pollThrows;
+			return jsonResponse(pollFiles.shift() ?? geminiVideoFile("ACTIVE"));
+		}
+		if (method === "POST" && /\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url)) {
+			return jsonResponse({
+				candidates: [
+					{
+						content: { parts: [{ text: options.generateText ?? "A short clip with visible motion." }] },
+						finishReason: "STOP",
+						index: 0,
+					},
+				],
+			});
+		}
+		if (method === "DELETE" && /\/v1beta\/files\/gemini-video-1$/.test(url)) {
+			if (options.deleteThrows) throw new Error("delete failed");
+			return jsonResponse({}, { status: options.deleteStatus ?? 200 });
+		}
+		throw new Error(`unexpected Gemini request: ${method} ${url}`);
+	}) as typeof fetch;
+}
+
 describe("inbound attachments", () => {
 	it("materializes image attachments with canonical extensions and derived metadata", async (t) => {
 		const dataDir = await createTempDataDir(t);
@@ -251,24 +333,7 @@ describe("inbound attachments", () => {
 		const previousGemini = process.env.GEMINI_API_KEY;
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = (async (input) => {
-			requestedUrls.push(String(input));
-			return new Response(
-				JSON.stringify({
-					candidates: [
-						{
-							content: { parts: [{ text: "A short clip with visible motion." }] },
-							finishReason: "STOP",
-							index: 0,
-						},
-					],
-				}),
-				{
-					status: 200,
-					headers: { "content-type": "application/json" },
-				},
-			);
-		}) as typeof fetch;
+		globalThis.fetch = installGeminiVideoFetchMock({ requestedUrls });
 		try {
 			const attachments = await materializeInboundAttachments(config, [
 				{
@@ -281,10 +346,14 @@ describe("inbound attachments", () => {
 
 			assert.equal(attachments[0]?.derived?.text?.label, "summary");
 			assert.equal(attachments[0]?.derived?.text?.text, "A short clip with visible motion.");
-			assert.equal(requestedUrls.length, 1);
-			assert.match(
-				requestedUrls[0] ?? "",
-				/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/,
+			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/upload\/v1beta\/files/.test(url)), true);
+			assert.equal(requestedUrls.includes("https://example.test/upload-session"), true);
+			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/v1beta\/files\/gemini-video-1/.test(url)), true);
+			assert.equal(
+				requestedUrls.some((url) =>
+					/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url),
+				),
+				true,
 			);
 		} finally {
 			globalThis.fetch = previousFetch;
@@ -293,15 +362,21 @@ describe("inbound attachments", () => {
 		}
 	});
 
-	it("preserves a prompt-visible note when video understanding times out", async (t) => {
+	it("preserves a prompt-visible note when Gemini video upload times out before creating a file", async (t) => {
 		const dataDir = await createTempDataDir(t);
-		const config = await configWithDataDir(t, dataDir);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
 		const previousFetch = globalThis.fetch;
 		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = (async () => {
-			throw new Error("request timed out");
-		}) as typeof fetch;
+		globalThis.fetch = installGeminiVideoFetchMock({
+			requestedUrls,
+			startThrows: new DOMException("The operation timed out.", "TimeoutError"),
+		});
 		try {
 			const attachments = await materializeInboundAttachments(config, [
 				{
@@ -314,7 +389,121 @@ describe("inbound attachments", () => {
 
 			assert.equal(attachments[0]?.derived?.text?.label, "note");
 			assert.match(attachments[0]?.derived?.text?.text ?? "", /timed out after 5 minutes/i);
+			assert.equal(requestedUrls.some((url) => /\/v1beta\/files\/gemini-video-1/.test(url)), false);
 		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
+	it("preserves a prompt-visible note when Gemini video processing times out", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = installGeminiVideoFetchMock({
+			requestedUrls,
+			uploadFile: geminiVideoFile("PROCESSING"),
+			pollThrows: new Error("request timed out"),
+		});
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "note");
+			assert.match(attachments[0]?.derived?.text?.text ?? "", /timed out after 5 minutes/i);
+			assert.equal(requestedUrls.some((url) => /generateContent/.test(url)), false);
+			assert.equal(requestedUrls.some((url) => /\/v1beta\/files\/gemini-video-1/.test(url)), true);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
+	it("preserves a prompt-visible note when Gemini video processing fails", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = installGeminiVideoFetchMock({
+			requestedUrls,
+			uploadFile: geminiVideoFile("PROCESSING"),
+			pollFiles: [geminiVideoFile("FAILED", { message: "video processing failed" })],
+		});
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "note");
+			assert.match(attachments[0]?.derived?.text?.text ?? "", /failed before a summary/i);
+			assert.equal(requestedUrls.some((url) => /generateContent/.test(url)), false);
+			assert.equal(requestedUrls.some((url) => /\/v1beta\/files\/gemini-video-1/.test(url)), true);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
+	it("keeps a Gemini video summary when cleanup fails", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const previousWarn = console.warn;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		console.warn = () => undefined;
+		globalThis.fetch = installGeminiVideoFetchMock({
+			requestedUrls,
+			generateText: "A summary survives cleanup failure.",
+			deleteStatus: 500,
+		});
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "summary");
+			assert.equal(attachments[0]?.derived?.text?.text, "A summary survives cleanup failure.");
+			assert.equal(requestedUrls.some((url) => /\/v1beta\/files\/gemini-video-1/.test(url)), true);
+		} finally {
+			console.warn = previousWarn;
 			globalThis.fetch = previousFetch;
 			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
 			else process.env.GEMINI_API_KEY = previousGemini;

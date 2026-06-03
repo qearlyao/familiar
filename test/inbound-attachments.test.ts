@@ -48,7 +48,7 @@ describe("inbound attachments", () => {
 					{
 						name: "two.bin",
 						mimeType: "text/plain",
-						buffer: Buffer.alloc(13 * 1024 * 1024, 2),
+						buffer: Buffer.alloc(33 * 1024 * 1024, 2),
 						source: "web",
 					},
 				]),
@@ -90,6 +90,42 @@ describe("inbound attachments", () => {
 		assert.equal(attachment?.kind, "file");
 		assert.equal(attachment?.mimeType, "text/plain");
 		assert.ok(attachment?.localPath?.startsWith(resolve(attachmentsDir(config), "inbound", "discord")));
+	});
+
+	it("infers video attachments when browser upload metadata is generic", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		config.mediaUnderstanding.video.apiKeyEnv = "FAMILIAR_TEST_GEMINI_DISABLED";
+
+		const attachments = await materializeInboundAttachments(config, [
+			{
+				name: "clip.bin",
+				mimeType: "application/octet-stream",
+				buffer: mp4Bytes(),
+				source: "web",
+			},
+			{
+				name: "movie.mov",
+				mimeType: "application/octet-stream",
+				buffer: Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from("ftypqt  ", "ascii")]),
+				source: "web",
+			},
+			{
+				name: "capture.webm",
+				mimeType: "application/octet-stream",
+				buffer: Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(8)]),
+				source: "web",
+			},
+		]);
+
+		assert.deepEqual(
+			attachments.map((attachment) => [attachment.name, attachment.kind, attachment.mimeType]),
+			[
+				["clip.mp4", "video", "video/mp4"],
+				["movie.mov", "video", "video/quicktime"],
+				["capture.webm", "video", "video/webm"],
+			],
+		);
 	});
 
 	it("filters non-image attachments out of prompt images", async (t) => {
@@ -250,6 +286,34 @@ describe("inbound attachments", () => {
 				requestedUrls[0] ?? "",
 				/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/,
 			);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
+	it("preserves a prompt-visible note when video understanding times out", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = (async () => {
+			throw new Error("request timed out");
+		}) as typeof fetch;
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "note");
+			assert.match(attachments[0]?.derived?.text?.text ?? "", /timed out after 5 minutes/i);
 		} finally {
 			globalThis.fetch = previousFetch;
 			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;

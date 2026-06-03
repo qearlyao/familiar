@@ -266,7 +266,10 @@ export async function sendMessage(
   if (channelKey) body.set("channelKey", channelKey);
   for (const attachment of attachments) body.append("attachments", attachment, attachment.name);
   const res = await fetch("/api/web/send", { method: "POST", body });
-  if (!res.ok) throw new Error(`send: ${res.status}`);
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errBody.error ?? `send: ${res.status}`);
+  }
   return (await res.json()) as { id: string; ts: number; channelKey: string };
 }
 

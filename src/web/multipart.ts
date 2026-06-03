@@ -1,5 +1,7 @@
 import type { IncomingMessage } from "node:http";
 
+import { MAX_INBOUND_TOTAL_BYTES } from "../attachment-limits.js";
+
 export interface WebUploadAttachment {
 	name?: string;
 	mimeType?: string;
@@ -46,7 +48,7 @@ export async function readMultipartBody(
 	contentType: string | string[],
 ): Promise<Record<string, unknown>> {
 	const boundary = multipartBoundary(contentType);
-	const raw = await readRawBody(request, 32 * 1024 * 1024);
+	const raw = await readRawBody(request, MAX_INBOUND_TOTAL_BYTES);
 	const binary = raw.toString("binary");
 	const marker = `--${boundary}`;
 	const attachments: WebUploadAttachment[] = [];

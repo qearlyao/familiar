@@ -48,6 +48,10 @@ export interface Attachment {
   mimeType?: string;
   size?: number;
   url?: string;
+  derivedText?: {
+    label?: string;
+    text: string;
+  };
 }
 
 export interface ToolEvent {

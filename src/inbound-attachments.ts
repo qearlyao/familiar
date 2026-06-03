@@ -10,14 +10,21 @@ import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
 import { ensureInlineImageDerivative, MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 import { deriveInboundAttachmentText } from "./media-understanding.js";
 import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "./util/image-mime.js";
+import {
+	MAX_INBOUND_ATTACHMENT_BYTES,
+	MAX_INBOUND_ATTACHMENTS,
+	MAX_INBOUND_TOTAL_BYTES,
+} from "./attachment-limits.js";
 
 export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
-
-export const MAX_INBOUND_ATTACHMENTS = 4;
-export const MAX_INBOUND_ATTACHMENT_BYTES = 12 * 1024 * 1024;
-export const MAX_INBOUND_TOTAL_BYTES = 24 * 1024 * 1024;
+export {
+	MAX_INBOUND_ATTACHMENT_BYTES,
+	MAX_INBOUND_ATTACHMENTS,
+	MAX_INBOUND_TOTAL_BYTES,
+} from "./attachment-limits.js";
 const TEXT_ATTACHMENT_PREVIEW_LINES = 2;
 const TEXT_ATTACHMENT_PREVIEW_CHARS = 1000;
+const MP4_FILE_TYPE_BRANDS = new Set(["avc1", "dash", "iso2", "isom", "M4V ", "mp41", "mp42", "MSNV"]);
 
 type AttachmentSource = "discord" | "web";
 
@@ -36,45 +43,39 @@ export interface PromptImages {
 	images: ImageContent[];
 }
 
-const ALLOWED_MIME_TYPES = new Set([
-	"image/jpeg",
-	"image/png",
-	"image/gif",
-	"image/webp",
-	"audio/mpeg",
-	"audio/ogg",
-	"audio/wav",
-	"audio/webm",
-	"video/mp4",
-	"video/webm",
-	"application/pdf",
-	"text/plain",
-]);
+const ATTACHMENT_MIME_POLICY = {
+	...Object.fromEntries(
+		Object.entries(IMAGE_EXTENSION_BY_MIME).map(([mimeType, extension]) => [
+			mimeType,
+			{ kind: "image" as const, extension },
+		]),
+	),
+	"audio/mpeg": { kind: "audio", extension: ".mp3" },
+	"audio/ogg": { kind: "audio", extension: ".ogg" },
+	"audio/wav": { kind: "audio", extension: ".wav" },
+	"audio/webm": { kind: "audio", extension: ".webm" },
+	"video/mp4": { kind: "video", extension: ".mp4" },
+	"video/quicktime": { kind: "video", extension: ".mov" },
+	"video/webm": { kind: "video", extension: ".webm" },
+	"application/pdf": { kind: "file", extension: ".pdf" },
+	"text/plain": { kind: "file", extension: ".txt" },
+} satisfies Record<string, { kind: StoredAttachment["kind"]; extension: string }>;
 
-const EXTENSIONS_BY_MIME: Record<string, string> = {
-	...IMAGE_EXTENSION_BY_MIME,
-	"audio/mpeg": ".mp3",
-	"audio/ogg": ".ogg",
-	"audio/wav": ".wav",
-	"audio/webm": ".webm",
-	"video/mp4": ".mp4",
-	"video/webm": ".webm",
-	"application/pdf": ".pdf",
-	"text/plain": ".txt",
-};
+const MIME_TYPE_BY_EXTENSION = Object.fromEntries(
+	Object.entries(ATTACHMENT_MIME_POLICY)
+		.filter(([, policy]) => policy.kind === "video")
+		.map(([mimeType, policy]) => [policy.extension, mimeType]),
+) as Record<string, keyof typeof ATTACHMENT_MIME_POLICY>;
+
+function mimePolicy(mimeType: string) {
+	return ATTACHMENT_MIME_POLICY[mimeType as keyof typeof ATTACHMENT_MIME_POLICY];
+}
 
 function safeName(name: string | undefined, fallback: string): string {
 	const base = basename(name || fallback)
 		.replace(/[^A-Za-z0-9._=-]+/g, "_")
 		.slice(0, 120);
 	return base || fallback;
-}
-
-function kindFromMime(mimeType: string): StoredAttachment["kind"] {
-	if (mimeType.startsWith("image/")) return "image";
-	if (mimeType.startsWith("audio/")) return "audio";
-	if (mimeType.startsWith("video/")) return "video";
-	return "file";
 }
 
 function textAttachmentPreview(buffer: Buffer, mimeType: string): string | undefined {
@@ -105,7 +106,20 @@ function sniffText(buffer: Buffer): string | undefined {
 	return "text/plain";
 }
 
-function sniffMimeType(buffer: Buffer, declared?: string): string {
+function mimeFromExtension(name?: string): string | undefined {
+	if (!name) return undefined;
+	return MIME_TYPE_BY_EXTENSION[extname(name).toLowerCase()];
+}
+
+function sniffVideoMimeType(buffer: Buffer): string | undefined {
+	if (buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return "video/webm";
+	if (buffer.length < 12 || buffer.subarray(4, 8).toString("ascii") !== "ftyp") return undefined;
+	const brand = buffer.subarray(8, 12).toString("ascii");
+	if (brand === "qt  ") return "video/quicktime";
+	return MP4_FILE_TYPE_BRANDS.has(brand) ? "video/mp4" : undefined;
+}
+
+function sniffMimeType(buffer: Buffer, declared?: string, name?: string): string {
 	let detected = sniffImageMimeType(buffer);
 	if (!detected && buffer.subarray(0, 4).toString("ascii") === "%PDF") detected = "application/pdf";
 	else if (
@@ -117,8 +131,10 @@ function sniffMimeType(buffer: Buffer, declared?: string): string {
 	else if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WAVE") {
 		detected = "audio/wav";
 	}
-	const mime = detected ?? sniffText(buffer) ?? declared;
-	if (!mime || !ALLOWED_MIME_TYPES.has(mime)) {
+	detected ??= sniffVideoMimeType(buffer);
+	const declaredMime = declared && mimePolicy(declared) ? declared : undefined;
+	const mime = detected ?? sniffText(buffer) ?? declaredMime ?? mimeFromExtension(name);
+	if (!mime || !mimePolicy(mime)) {
 		throw new Error(`Unsupported attachment type: ${declared || detected || "unknown"}`);
 	}
 	return mime;
@@ -127,7 +143,7 @@ function sniffMimeType(buffer: Buffer, declared?: string): string {
 function canonicalName(name: string | undefined, fallbackStem: string, mimeType: string): string {
 	const current = safeName(name, fallbackStem);
 	const stem = current.replace(/\.[^.]+$/, "");
-	return `${stem}${EXTENSIONS_BY_MIME[mimeType] || extname(current) || ""}`;
+	return `${stem}${mimePolicy(mimeType)?.extension || extname(current) || ""}`;
 }
 
 interface PreparedAttachment {
@@ -210,14 +226,14 @@ export async function materializeInboundAttachments(
 		if (totalBytes > MAX_INBOUND_TOTAL_BYTES) {
 			throw new Error(`Attachments are too large: max ${MAX_INBOUND_TOTAL_BYTES} bytes total`);
 		}
-		const mimeType = sniffMimeType(buffer, input.mimeType);
+		const mimeType = sniffMimeType(buffer, input.mimeType, input.name);
 		const id = input.id || randomUUID();
 		const cleanName = canonicalName(input.name, `attachment-${index + 1}`, mimeType);
 		const sha256 = createHash("sha256").update(buffer).digest("hex");
 		prepared.push({
 			id,
 			name: cleanName,
-			kind: kindFromMime(mimeType),
+			kind: mimePolicy(mimeType)?.kind ?? "file",
 			mimeType,
 			size: buffer.byteLength,
 			sha256,

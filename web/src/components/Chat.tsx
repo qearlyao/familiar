@@ -55,7 +55,7 @@ export function Chat({
         />
       </main>
       <Composer
-        onSend={(text, attachments) => void send(text, attachments)}
+        onSend={send}
         onAbort={abort}
         streaming={streaming}
         personaName={personaName}

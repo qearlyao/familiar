@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, type ReactNode, useState } from "react";
 import { type LucideIcon, RotateCcw, Trash2 } from "lucide-react";
 import type { Attachment, Message } from "../types";
 import { Button } from "@/components/ui/button";
@@ -8,22 +8,65 @@ import { AudioPlayer } from "./AudioPlayer";
 import { MediaPreview } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 
-function AttachmentItem({ attachment }: { attachment: Attachment }) {
-  if (!attachment.url) return null;
+function AttachmentContext({ derived }: { derived: NonNullable<Attachment["derivedText"]> }) {
+  return (
+    <div className="mt-2 border-l border-border/80 pl-3 text-left font-serif text-xs italic leading-relaxed text-muted-foreground">
+      {derived.label ? <span>{derived.label}: </span> : null}
+      {derived.text}
+    </div>
+  );
+}
+
+function attachmentPreview(attachment: Attachment): { align?: "right"; content: ReactNode } | undefined {
+  if (!attachment.url) return undefined;
   const isImage = attachment.kind === "image" || attachment.mimeType?.startsWith("image/");
   if (isImage) {
-    return <MediaPreview src={attachment.url} alt={attachment.name} />;
+    return { content: <MediaPreview src={attachment.url} alt={attachment.name} /> };
+  }
+  if (attachment.mimeType?.startsWith("video/")) {
+    return {
+      content: (
+        <div className="w-full max-w-[24rem]">
+          <video
+            src={attachment.url}
+            controls
+            preload="metadata"
+            className="aspect-video w-full rounded-md bg-muted object-contain"
+          />
+        </div>
+      ),
+    };
   }
   if (attachment.mimeType?.startsWith("audio/")) {
-    return <AudioPlayer src={attachment.url} name={attachment.name} />;
+    return {
+      content: (
+        <div className="max-w-full">
+          <AudioPlayer src={attachment.url} name={attachment.name} />
+        </div>
+      ),
+    };
   }
+  return {
+    align: "right",
+    content: (
+      <a
+        href={attachment.url}
+        className="text-sm italic text-muted-foreground underline-offset-4 hover:underline"
+      >
+        {attachment.name}
+      </a>
+    ),
+  };
+}
+
+function AttachmentItem({ attachment }: { attachment: Attachment }) {
+  const preview = attachmentPreview(attachment);
+  if (!preview) return null;
   return (
-    <a
-      href={attachment.url}
-      className="text-sm italic text-muted-foreground underline-offset-4 hover:underline"
-    >
-      {attachment.name}
-    </a>
+    <div className={cn("max-w-full", preview.align === "right" && "text-right")}>
+      {preview.content}
+      {attachment.derivedText ? <AttachmentContext derived={attachment.derivedText} /> : null}
+    </div>
   );
 }
 

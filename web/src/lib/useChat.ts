@@ -369,7 +369,6 @@ export function useChat(): ChatHook {
     sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
-      setStreaming(true);
       await sendMessageApi(trimmed, uid(), activeSessionKey, attachments);
     };
 
@@ -397,7 +396,7 @@ export function useChat(): ChatHook {
   }, [sendControlFrame]);
 
   const retry = useCallback(() => {
-    if (sendControlFrame("retry")) setStreaming(true);
+    sendControlFrame("retry");
   }, [sendControlFrame]);
 
   const deleteLatest = useCallback(() => {

@@ -4,22 +4,46 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MemePicker } from "./MemePicker";
 
+type Draft = {
+  value: string;
+  attachments: File[];
+  revision: number;
+};
+
+const EMPTY_DRAFT: Draft = { value: "", attachments: [], revision: 0 };
+
+function sendErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : "send failed";
+  const normalized = message ? `${message.charAt(0).toLowerCase()}${message.slice(1)}` : "send failed";
+  return normalized.startsWith("send failed") ? normalized : `send failed: ${normalized}`;
+}
+
+function emptyNextDraft(draft: Draft): Draft {
+  return { value: "", attachments: [], revision: draft.revision + 1 };
+}
+
+function isClearedDraft(draft: Draft, revision: number): boolean {
+  return draft.revision === revision && draft.value.length === 0 && draft.attachments.length === 0;
+}
+
 export function Composer({
   onSend,
   onAbort,
   streaming,
   personaName,
 }: {
-  onSend: (text: string, attachments: File[]) => void;
+  onSend: (text: string, attachments: File[]) => Promise<void>;
   onAbort: () => void;
   streaming: boolean;
   personaName: string;
 }) {
-  const [value, setValue] = useState("");
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [dragging, setDragging] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | undefined>();
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { value, attachments } = draft;
 
   useEffect(() => {
     const el = ref.current;
@@ -28,23 +52,44 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [value]);
 
-  const send = () => {
+  const send = async () => {
+    if (sending) return;
+    const submittedDraft = draft;
     const text = value.trim();
     if (!text && attachments.length === 0) return;
-    onSend(text, attachments);
-    setValue("");
-    setAttachments([]);
+    const clearedRevision = submittedDraft.revision + 1;
+    setError(undefined);
+    setSending(true);
+    setDraft(emptyNextDraft);
+    try {
+      await onSend(text, submittedDraft.attachments);
+    } catch (err) {
+      setDraft((current) => (isClearedDraft(current, clearedRevision) ? submittedDraft : current));
+      setError(sendErrorMessage(err));
+    } finally {
+      setSending(false);
+    }
   };
 
   const insertMeme = (meme: { name: string; url: string }) => {
     const token = `meme: ${meme.name} (${meme.url})`;
-    setValue((prev) => (prev.trim() ? `${prev.trimEnd()}\n${token}` : token));
+    setDraft((prev) => ({
+      ...prev,
+      value: prev.value.trim() ? `${prev.value.trimEnd()}\n${token}` : token,
+      revision: prev.revision + 1,
+    }));
+    setError(undefined);
     window.setTimeout(() => ref.current?.focus(), 0);
   };
 
   const addAttachments = (files: File[]) => {
     if (files.length === 0) return;
-    setAttachments((prev) => [...prev, ...files]);
+    setError(undefined);
+    setDraft((prev) => ({
+      ...prev,
+      attachments: [...prev.attachments, ...files],
+      revision: prev.revision + 1,
+    }));
   };
 
   const droppedFiles = (items: DataTransferItemList, fallback: FileList): File[] => {
@@ -55,7 +100,8 @@ export function Composer({
     return files.length > 0 ? files : Array.from(fallback);
   };
 
-  const sendDisabled = !streaming && !value.trim() && attachments.length === 0;
+  const sendDisabled = sending || (!streaming && !value.trim() && attachments.length === 0);
+  const showAbort = streaming && !sending;
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
@@ -99,7 +145,14 @@ export function Composer({
                 <button
                   key={`${file.name}-${index}`}
                   type="button"
-                  onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
+                  onClick={() => {
+                    setError(undefined);
+                    setDraft((prev) => ({
+                      ...prev,
+                      attachments: prev.attachments.filter((_, i) => i !== index),
+                      revision: prev.revision + 1,
+                    }));
+                  }}
                   className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground"
                 >
                   {file.name}
@@ -123,7 +176,10 @@ export function Composer({
             <textarea
               ref={ref}
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setError(undefined);
+                setDraft((prev) => ({ ...prev, value: e.target.value, revision: prev.revision + 1 }));
+              }}
               onPaste={(event) => {
                 const files = Array.from(event.clipboardData.files);
                 if (files.length > 0) addAttachments(files);
@@ -131,7 +187,7 @@ export function Composer({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  send();
+                  void send();
                 }
               }}
               placeholder={`write to ${personaName}…`}
@@ -142,12 +198,12 @@ export function Composer({
             <Button
               type="button"
               size="sm"
-              onClick={streaming ? onAbort : send}
+              onClick={showAbort ? onAbort : () => void send()}
               disabled={sendDisabled}
-              aria-label={streaming ? "stop" : "send"}
+              aria-label={showAbort ? "stop" : "send"}
               className="h-8 px-3"
             >
-              {streaming ? (
+              {showAbort ? (
                 <Square className="size-3 fill-current" strokeWidth={0} />
               ) : (
                 <SendHorizontal className="size-4" />
@@ -155,6 +211,7 @@ export function Composer({
             </Button>
           </div>
         </div>
+        {error ? <p className="mt-1.5 text-center font-serif text-xs italic text-destructive">{error}</p> : null}
         <p className="mt-1.5 text-center text-[11px] tracking-wide text-muted-foreground">
           enter to send · shift+enter for newline
         </p>

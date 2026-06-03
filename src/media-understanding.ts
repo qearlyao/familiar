@@ -8,6 +8,8 @@ import { parseModelRef, resolveModel } from "./models.js";
 
 type DerivedText = NonNullable<StoredAttachment["derived"]>["text"];
 const GEMINI_API_VERSION_PATTERN = /\/(v1(?:beta|alpha)?|v\d+beta\d*)\/?$/;
+const AUDIO_UNDERSTANDING_TIMEOUT_MS = 30_000;
+const VIDEO_UNDERSTANDING_TIMEOUT_MS = 5 * 60_000;
 
 function normalizeDerivedText(text: string): string {
 	return text.trim().replace(/\n{3,}/g, "\n\n");
@@ -23,13 +25,30 @@ function geminiHttpOptions(config: Config): { baseUrl?: string; apiVersion?: str
 	const ref = parseModelRef(`google/${config.mediaUnderstanding.video.model}`);
 	const model = ref ? resolveModel(ref, config) : undefined;
 	const baseUrl = model?.baseUrl;
-	if (!baseUrl) return { timeout: 60_000 };
+	if (!baseUrl) return { timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS };
 	const match = baseUrl.match(GEMINI_API_VERSION_PATTERN);
-	if (!match) return { baseUrl, timeout: 60_000 };
+	if (!match) return { baseUrl, timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS };
 	return {
 		baseUrl: baseUrl.slice(0, match.index),
 		apiVersion: match[1],
-		timeout: 60_000,
+		timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS,
+	};
+}
+
+function timedOut(error: unknown): boolean {
+	return error instanceof Error && /timed out|timeout/i.test(error.message);
+}
+
+function fallbackDerivedText(attachment: StoredAttachment, error: unknown): DerivedText | undefined {
+	if (!attachment.mimeType?.startsWith("video/")) return undefined;
+	const detail = timedOut(error)
+		? `Automatic video understanding timed out after ${Math.round(VIDEO_UNDERSTANDING_TIMEOUT_MS / 60_000)} minutes.`
+		: "Automatic video understanding failed before a summary was produced.";
+	return {
+		provider: "local",
+		model: "media-understanding-note",
+		label: "note",
+		text: detail,
 	};
 }
 
@@ -52,7 +71,7 @@ async function transcribeAudioAttachment(
 			Authorization: `Bearer ${apiKey}`,
 		},
 		body: form,
-		signal: AbortSignal.timeout(30_000),
+		signal: AbortSignal.timeout(AUDIO_UNDERSTANDING_TIMEOUT_MS),
 	});
 	if (!response.ok) throw new Error(`Groq transcription failed: HTTP ${response.status}`);
 	const parsed = (await response.json()) as { text?: string };
@@ -124,6 +143,11 @@ export async function deriveInboundAttachmentText(
 			}
 		} catch (error) {
 			console.error("media understanding failed", error);
+			const fallback = fallbackDerivedText(attachment, error);
+			if (fallback) {
+				next.push({ ...attachment, derived: { ...(attachment.derived ?? {}), text: fallback } });
+				continue;
+			}
 		}
 		next.push(attachment);
 	}

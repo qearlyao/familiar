@@ -22,12 +22,18 @@ export function webAttachments(
 		mimeType: attachment.mimeType,
 		size: attachment.size,
 		url: attachment.localPath ? publicAttachmentPath(config, attachment.localPath) : attachment.remoteUrl,
+		derivedText: attachmentDerivedText(attachment),
 	}));
 }
 
-export function attachmentDerivedText(attachment: StoredAttachment): string | undefined {
+export function attachmentDerivedText(attachment: StoredAttachment): WebAttachment["derivedText"] | undefined {
 	if (attachment.derived?.text?.label === "preview") return undefined;
-	return attachment.derived?.text?.text;
+	const text = attachment.derived?.text?.text.trim();
+	if (!text) return undefined;
+	return {
+		label: attachment.derived?.text?.label,
+		text,
+	};
 }
 
 export function toolError(result: unknown): string | undefined {
@@ -326,15 +332,11 @@ export function webMessageFromRecord(
 ): WebMessage | undefined {
 	if (!isUserVisibleRuntimeRecord(record)) return undefined;
 	if (record.type === "inbound") {
-		const attachmentText = record.attachments
-			.map((attachment) => attachmentDerivedText(attachment))
-			.filter((text): text is string => !!text)
-			.join("\n");
 		return {
 			id: record.messageId,
 			role: "user",
 			who: record.authorName || getContactNickname(WEB_USER_NAME),
-			text: [record.text, attachmentText].filter(Boolean).join("\n"),
+			text: record.text,
 			attachments: webAttachments(config, record.attachments),
 			ts: toUnixMs(record.ts),
 		};

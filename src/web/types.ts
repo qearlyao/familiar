@@ -10,6 +10,10 @@ export type WebAttachment = {
 	mimeType?: string;
 	size?: number;
 	url?: string;
+	derivedText?: {
+		label?: string;
+		text: string;
+	};
 };
 
 export type WebToolEvent = {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BookOpen, RefreshCw } from "lucide-react";
+import { BookOpen, ChevronLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -345,6 +345,7 @@ export function DiariesPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingEntry, setLoadingEntry] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [mobileReader, setMobileReader] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -435,23 +436,44 @@ export function DiariesPage() {
       ) : diaries.length === 0 ? (
         <EmptyState onRefresh={() => void loadList()} />
       ) : (
-        <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-5 overflow-hidden px-4 py-5 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
-          <aside className="min-h-0 rounded-md border border-border bg-card py-2">
-            <ScrollArea className="h-full max-h-72 md:max-h-none">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8">
+          <aside
+            className={cn(
+              "min-h-0 flex-col rounded-md border border-border bg-card py-2 md:flex md:w-72 md:flex-none",
+              mobileReader ? "hidden md:flex" : "flex flex-1",
+            )}
+          >
+            <ScrollArea className="min-h-0 flex-1">
               <div className="grid gap-1 px-2">
                 {diaries.map((diary) => (
                   <DiaryListButton
                     key={diary.date}
                     diary={diary}
                     active={diary.date === selectedDate}
-                    onSelect={() => setSelectedDate(diary.date)}
+                    onSelect={() => {
+                      setSelectedDate(diary.date);
+                      setMobileReader(true);
+                    }}
                   />
                 ))}
               </div>
             </ScrollArea>
           </aside>
-          <main className="min-h-0 overflow-hidden rounded-md border border-border bg-card">
-            <ScrollArea className="h-full">
+          <main
+            className={cn(
+              "min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card md:flex md:flex-1",
+              mobileReader ? "flex flex-1" : "hidden md:flex",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => setMobileReader(false)}
+              className="flex items-center gap-1.5 border-b border-border px-4 py-2.5 text-left font-serif text-xs italic text-muted-foreground transition-colors hover:text-foreground md:hidden"
+            >
+              <ChevronLeft className="size-3.5" />
+              all days
+            </button>
+            <ScrollArea className="min-h-0 flex-1">
               <DiaryReader
                 summary={selectedSummary}
                 content={currentContent}

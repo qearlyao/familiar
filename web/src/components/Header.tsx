@@ -40,8 +40,8 @@ export function Header({
   const live = connection === "open";
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background">
-      <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-3">
+    <header className="sticky top-0 z-10 border-b border-border bg-background px-5 py-3 pl-14 md:px-8 md:pl-16">
+      <div className="mx-auto flex max-w-3xl items-center gap-3">
         <span
           aria-label={STATUS_LABEL[connection]}
           title={STATUS_LABEL[connection]}

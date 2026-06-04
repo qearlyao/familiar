@@ -3,15 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import type { RawFile } from "@discordjs/rest";
-import { REST } from "discord.js";
-
 import type { StoredAttachment } from "../src/chat-log.js";
-import { buildRawFiles, postDiscordAttachments } from "../src/discord/send.js";
+import { buildDiscordAttachmentFiles, postDiscordAttachments } from "../src/discord/send.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("discord attachment payloads", () => {
-	it("builds RawFile list from stored attachments (Buffer data, no extra copy)", async (t) => {
+	it("builds multipart attachment files from stored attachments", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		await configWithDataDir(t, dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_test.mp3");
@@ -24,7 +21,7 @@ describe("discord attachment payloads", () => {
 			localPath: attachmentPath,
 		};
 
-		const files = await buildRawFiles([attachment]);
+		const files = await buildDiscordAttachmentFiles([attachment]);
 
 		assert.equal(files.length, 1);
 		assert.equal(files[0].name, "tts_test.mp3");
@@ -38,14 +35,14 @@ describe("discord attachment payloads", () => {
 		await configWithDataDir(t, dataDir);
 		const attachment: StoredAttachment = { id: "no-path", name: "missing.mp3" };
 
-		const files = await buildRawFiles([attachment]);
+		const files = await buildDiscordAttachmentFiles([attachment]);
 
 		assert.equal(files.length, 0);
 	});
 
-	it("posts generated attachments via client.rest.post and returns message id", async (t) => {
+	it("posts generated attachments through Discord REST multipart and returns message id", async (t) => {
 		const dataDir = await createTempDataDir(t);
-		await configWithDataDir(t, dataDir);
+		const config = await configWithDataDir(t, dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_rest.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
 		await writeFile(attachmentPath, Buffer.from("fake audio"));
@@ -56,32 +53,44 @@ describe("discord attachment payloads", () => {
 			localPath: attachmentPath,
 		};
 
-		let capturedRoute = "";
-		let capturedFiles: RawFile[] | undefined;
-		const originalPost = REST.prototype.post;
-		REST.prototype.post = async function (fullRoute, options) {
-			capturedRoute = String(fullRoute);
-			capturedFiles = (options as { files?: RawFile[] }).files;
-			return { id: "discord-file-message" };
-		};
+		const previousFetch = globalThis.fetch;
+		let capturedUrl = "";
+		let capturedAuthorization = "";
+		let capturedBody: FormData | undefined;
+		let capturedSignal: AbortSignal | null | undefined;
+		globalThis.fetch = (async (url, init) => {
+			capturedUrl = String(url);
+			capturedAuthorization = String(new Headers(init?.headers).get("authorization"));
+			capturedBody = init?.body as FormData;
+			capturedSignal = init?.signal;
+			return new Response(JSON.stringify({ id: "discord-file-message" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		}) as typeof fetch;
 		try {
-			const rest = new REST();
-			const ids = await postDiscordAttachments(rest, "channel-1", [attachment]);
+			const botToken = config.discord.token;
+			assert.ok(botToken);
+			const ids = await postDiscordAttachments(botToken, "channel-1", [attachment]);
 
 			assert.deepEqual(ids, ["discord-file-message"]);
-			assert.equal(capturedRoute, "/channels/channel-1/messages");
-			assert.equal(capturedFiles?.length, 1);
-			assert.equal(capturedFiles?.[0].name, "tts_rest.mp3");
-			assert.equal(capturedFiles?.[0].contentType, "audio/mpeg");
-			assert.equal((capturedFiles?.[0].data as Buffer).toString("utf8"), "fake audio");
+			assert.equal(capturedUrl, "https://discord.com/api/v10/channels/channel-1/messages");
+			assert.equal(capturedAuthorization, `Bot ${botToken}`);
+			assert.ok(capturedSignal instanceof AbortSignal);
+			assert.equal(capturedSignal.aborted, false);
+			assert.ok(capturedBody?.get("payload_json"));
+			const file = capturedBody?.get("files[0]") as File;
+			assert.equal(file.name, "tts_rest.mp3");
+			assert.equal(file.type, "audio/mpeg");
+			assert.equal(await file.text(), "fake audio");
 		} finally {
-			REST.prototype.post = originalPost;
+			globalThis.fetch = previousFetch;
 		}
 	});
 
 	it("attachment message ids are appended to messageIds before persistence", async (t) => {
 		const dataDir = await createTempDataDir(t);
-		await configWithDataDir(t, dataDir);
+		const config = await configWithDataDir(t, dataDir);
 		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_atom.mp3");
 		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
 		await writeFile(attachmentPath, Buffer.from("fake audio"));
@@ -92,25 +101,27 @@ describe("discord attachment payloads", () => {
 			localPath: attachmentPath,
 		};
 
-		const originalPost = REST.prototype.post;
-		REST.prototype.post = async function () {
-			return { id: "attachment-msg-id" };
-		};
+		const previousFetch = globalThis.fetch;
+		globalThis.fetch = (async () =>
+			new Response(JSON.stringify({ id: "attachment-msg-id" }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			})) as typeof fetch;
 		try {
-			const rest = new REST();
-			const ids = await postDiscordAttachments(rest, "channel-2", [attachment]);
+			const botToken = config.discord.token;
+			assert.ok(botToken);
+			const ids = await postDiscordAttachments(botToken, "channel-2", [attachment]);
 			// The returned id must be present so callers can include it in messageIds for persistence.
 			assert.ok(ids.includes("attachment-msg-id"), "attachment message id must be returned for persistence");
 		} finally {
-			REST.prototype.post = originalPost;
+			globalThis.fetch = previousFetch;
 		}
 	});
 
 	it("returns empty array and does not throw when no attachments have a local path", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		await configWithDataDir(t, dataDir);
-		const rest = new REST();
-		const ids = await postDiscordAttachments(rest, "channel-3", []);
+		const ids = await postDiscordAttachments("discord-token", "channel-3", []);
 		assert.deepEqual(ids, []);
 	});
 });

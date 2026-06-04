@@ -1,9 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
-import type { RawFile } from "@discordjs/rest";
 import type { Message, MessageCreateOptions } from "discord.js";
-import { type REST, Routes } from "discord.js";
 
 import type { StoredAttachment } from "../chat-log.js";
 import type { Config } from "../config.js";
@@ -12,7 +10,14 @@ import type { DiscordChatChannel } from "./channel.js";
 import { chunkDiscord } from "./chunking.js";
 
 const NEWLINE_BURST_DELAY_MS = 500;
-const DISCORD_ATTACHMENT_SEND_TIMEOUT_MS = 20_000;
+const DISCORD_ATTACHMENT_SEND_TIMEOUT_MS = 120_000;
+const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
+
+interface DiscordAttachmentFile {
+	data: Buffer;
+	name: string;
+	contentType: string;
+}
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,8 +39,8 @@ function fallbackMimeType(name: string): string {
 	return extname(name).toLowerCase() === ".mp3" ? "audio/mpeg" : "application/octet-stream";
 }
 
-export async function buildRawFiles(attachments: StoredAttachment[]): Promise<RawFile[]> {
-	const files: RawFile[] = [];
+export async function buildDiscordAttachmentFiles(attachments: StoredAttachment[]): Promise<DiscordAttachmentFile[]> {
+	const files: DiscordAttachmentFile[] = [];
 	for (const attachment of attachments) {
 		if (!attachment.localPath) continue;
 		const data = await readFile(attachment.localPath);
@@ -49,18 +54,27 @@ export async function buildRawFiles(attachments: StoredAttachment[]): Promise<Ra
 }
 
 export async function postDiscordAttachments(
-	rest: REST,
+	botToken: string,
 	channelId: string,
 	attachments: StoredAttachment[],
 ): Promise<string[]> {
-	const files = await buildRawFiles(attachments);
+	const files = await buildDiscordAttachmentFiles(attachments);
 	if (files.length === 0) return [];
-	const data = (await rest.post(Routes.channelMessages(channelId), {
-		files,
-		body: {},
+	const form = new FormData();
+	form.set("payload_json", JSON.stringify({}));
+	for (const [index, file] of files.entries()) {
+		const bytes = new Uint8Array(file.data.byteLength);
+		bytes.set(file.data);
+		form.set(`files[${index}]`, new Blob([bytes], { type: file.contentType }), file.name);
+	}
+	const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages`, {
+		method: "POST",
+		headers: { Authorization: `Bot ${botToken}` },
+		body: form,
 		signal: AbortSignal.timeout(DISCORD_ATTACHMENT_SEND_TIMEOUT_MS),
-	})) as { id?: string };
-	if (!data.id) throw new Error("Discord attachment send failed: no message id returned");
+	});
+	const data = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
+	if (!response.ok || !data.id) throw new Error(data.message || `Discord attachment send failed (${response.status})`);
 	return [data.id];
 }
 
@@ -72,7 +86,7 @@ export function parseOutboundReply(text: string): { text: string; silent: boolea
 
 async function sendChunkedMessage(
 	config: Config,
-	rest: REST,
+	botToken: string,
 	channel: DiscordChatChannel,
 	channelId: string,
 	normalizedText: string,
@@ -86,13 +100,13 @@ async function sendChunkedMessage(
 		const sent = await sendChunk(chunk, index);
 		sentIds.push(sent.id);
 	}
-	const attachmentIds = await sendDiscordAttachments(rest, channelId, attachments);
+	const attachmentIds = await sendDiscordAttachments(botToken, channelId, attachments);
 	return [...sentIds, ...attachmentIds];
 }
 
 export async function sendReply(
 	config: Config,
-	rest: REST,
+	botToken: string,
 	message: Message,
 	text: string,
 	replyToMessageId?: string,
@@ -101,7 +115,7 @@ export async function sendReply(
 	const normalizedText = normalizeOutboundText(text);
 	return sendChunkedMessage(
 		config,
-		rest,
+		botToken,
 		message.channel,
 		message.channelId,
 		normalizedText,
@@ -126,7 +140,7 @@ export async function sendReply(
 
 export async function sendChannelMessage(
 	config: Config,
-	rest: REST,
+	botToken: string,
 	channel: DiscordChatChannel,
 	text: string,
 	attachments: StoredAttachment[] = [],
@@ -135,19 +149,19 @@ export async function sendChannelMessage(
 		throw new Error("Discord channel is not sendable");
 	}
 	const normalizedText = normalizeOutboundText(text);
-	return sendChunkedMessage(config, rest, channel, channel.id, normalizedText, attachments, (chunk) =>
+	return sendChunkedMessage(config, botToken, channel, channel.id, normalizedText, attachments, (chunk) =>
 		channel.send(chunk),
 	);
 }
 
 export async function sendDiscordAttachments(
-	rest: REST,
+	botToken: string,
 	channelId: string,
 	attachments: StoredAttachment[],
 ): Promise<string[]> {
 	if (attachments.length === 0) return [];
 	try {
-		return await postDiscordAttachments(rest, channelId, attachments);
+		return await postDiscordAttachments(botToken, channelId, attachments);
 	} catch (error) {
 		console.error("Discord attachment send failed", error);
 		return [];

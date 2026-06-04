@@ -209,8 +209,8 @@ export function startDiscordDaemon(
 			async deliver({ reply, parsedReply }) {
 				const channel = await getOwnerDmChannel();
 				return parsedReply.silent
-					? await sendDiscordAttachments(client.rest, channel.id, reply.attachments)
-					: await sendChannelMessage(config, client.rest, channel, parsedReply.text, reply.attachments);
+					? await sendDiscordAttachments(token, channel.id, reply.attachments)
+					: await sendChannelMessage(config, token, channel, parsedReply.text, reply.attachments);
 			},
 		};
 
@@ -227,10 +227,10 @@ export function startDiscordDaemon(
 					const { reply, parsedReply, summary, assistantMessageId } = turn;
 					const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
 					const messageIds = parsedReply.silent
-						? await sendDiscordAttachments(client.rest, replyAnchor.channelId, reply.attachments)
+						? await sendDiscordAttachments(token, replyAnchor.channelId, reply.attachments)
 						: await sendReply(
 								config,
-								client.rest,
+								token,
 								replyAnchor,
 								parsedReply.text,
 								dispatch.triggerMessageId,
@@ -253,13 +253,7 @@ export function startDiscordDaemon(
 					await runtime.appendError(errorText);
 					const fallback = "I hit an error while handling that message.";
 					const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
-					const messageIds = await sendReply(
-						config,
-						client.rest,
-						replyAnchor,
-						fallback,
-						dispatch.triggerMessageId,
-					);
+					const messageIds = await sendReply(config, token, replyAnchor, fallback, dispatch.triggerMessageId);
 					await runtime.noteOutbound({
 						text: fallback,
 						messageIds,
@@ -318,7 +312,7 @@ export function startDiscordDaemon(
 						activeAgentOwner: core.activeOwner,
 						restart: options.restart,
 					});
-					const messageIds = await sendReply(config, client.rest, message, text);
+					const messageIds = await sendReply(config, token, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
 					return;
 				}
@@ -349,7 +343,7 @@ export function startDiscordDaemon(
 				const channelKey = runtimeKeyFromMessage(message);
 				const existingRuntime = await core.peekRuntime(channelKey);
 				await existingRuntime?.appendError(error instanceof Error ? error.message : String(error));
-				await sendReply(config, client.rest, message, "I hit an error while handling that message.");
+				await sendReply(config, token, message, "I hit an error while handling that message.");
 			}
 		};
 

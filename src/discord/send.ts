@@ -12,7 +12,6 @@ import type { DiscordChatChannel } from "./channel.js";
 import { chunkDiscord } from "./chunking.js";
 
 const NEWLINE_BURST_DELAY_MS = 500;
-const DISCORD_ATTACHMENT_SEND_TIMEOUT_MS = 20_000;
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -58,7 +57,6 @@ export async function postDiscordAttachments(
 	const data = (await rest.post(Routes.channelMessages(channelId), {
 		files,
 		body: {},
-		signal: AbortSignal.timeout(DISCORD_ATTACHMENT_SEND_TIMEOUT_MS),
 	})) as { id?: string };
 	if (!data.id) throw new Error("Discord attachment send failed: no message id returned");
 	return [data.id];

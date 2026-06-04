@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import type { RawFile } from "@discordjs/rest";
+import type { RawFile, RequestData } from "@discordjs/rest";
 import { REST } from "discord.js";
 
 import type { StoredAttachment } from "../src/chat-log.js";
@@ -58,10 +58,12 @@ describe("discord attachment payloads", () => {
 
 		let capturedRoute = "";
 		let capturedFiles: RawFile[] | undefined;
+		let capturedOptions: RequestData | undefined;
 		const originalPost = REST.prototype.post;
 		REST.prototype.post = async function (fullRoute, options) {
 			capturedRoute = String(fullRoute);
-			capturedFiles = (options as { files?: RawFile[] }).files;
+			capturedOptions = options;
+			capturedFiles = options?.files;
 			return { id: "discord-file-message" };
 		};
 		try {
@@ -74,6 +76,7 @@ describe("discord attachment payloads", () => {
 			assert.equal(capturedFiles?.[0].name, "tts_rest.mp3");
 			assert.equal(capturedFiles?.[0].contentType, "audio/mpeg");
 			assert.equal((capturedFiles?.[0].data as Buffer).toString("utf8"), "fake audio");
+			assert.equal(capturedOptions?.signal, undefined);
 		} finally {
 			REST.prototype.post = originalPost;
 		}

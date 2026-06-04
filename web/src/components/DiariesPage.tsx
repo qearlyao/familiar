@@ -338,7 +338,7 @@ function DiaryReader({
   );
 }
 
-export function DiariesPage() {
+export function DiariesPage({ nav }: { nav?: ReactNode }) {
   const [diaries, setDiaries] = useState<DiarySummary[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [entry, setEntry] = useState<DiaryEntry | undefined>();
@@ -394,11 +394,12 @@ export function DiariesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="border-b border-border bg-background px-5 py-4 pl-14 md:px-8 md:pl-16">
-        <div className="mx-auto flex max-w-6xl items-center gap-4">
+      <header className="border-b border-border bg-background px-3 py-3 md:px-8">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
+          {nav}
           <div className="min-w-0 flex-1">
             <p className="font-serif text-2xl leading-tight tracking-tight">diaries</p>
-            <p className="mt-1 font-serif text-xs italic text-muted-foreground">written days, kept close</p>
+            <p className="mt-0.5 font-serif text-xs italic text-muted-foreground">written days, kept close</p>
           </div>
           <Button
             type="button"
@@ -414,7 +415,7 @@ export function DiariesPage() {
         </div>
       </header>
       {error ? (
-        <p className="border-b border-border bg-card px-6 py-2 pl-14 font-serif text-xs italic text-destructive md:pl-16">
+        <p className="border-b border-border bg-card px-3 py-2 font-serif text-xs italic text-destructive md:px-8">
           {error}
         </p>
       ) : null}

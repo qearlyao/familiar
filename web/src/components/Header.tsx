@@ -1,4 +1,5 @@
 import { Settings2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { NewChatButton } from "./NewChatButton";
 import { SessionPicker } from "./SessionPicker";
@@ -19,6 +20,7 @@ const STATUS_VOICE: Record<Exclude<ConnectionState, "open">, string> = {
 };
 
 export function Header({
+  nav,
   connection,
   personaName,
   sessions,
@@ -28,6 +30,7 @@ export function Header({
   onOpenConfig,
   onNewChatStarted,
 }: {
+  nav?: ReactNode;
   connection: ConnectionState;
   personaName: string;
   sessions: SessionInfo[];
@@ -40,8 +43,9 @@ export function Header({
   const live = connection === "open";
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background px-5 py-3 pl-14 md:px-8 md:pl-16">
+    <header className="sticky top-0 z-10 border-b border-border bg-background px-3 py-3 md:px-5">
       <div className="mx-auto flex max-w-3xl items-center gap-3">
+        {nav}
         <span
           aria-label={STATUS_LABEL[connection]}
           title={STATUS_LABEL[connection]}

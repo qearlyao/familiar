@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Composer } from "./Composer";
 import { ConfigDrawer } from "./ConfigDrawer";
 import { Header } from "./Header";
@@ -7,10 +7,12 @@ import { useChat } from "@/lib/useChat";
 import type { WebAuthDevice } from "@/lib/api";
 
 export function Chat({
+  nav,
   authMode,
   authDevice,
   onSignedOut,
 }: {
+  nav?: ReactNode;
   authMode?: string;
   authDevice?: WebAuthDevice;
   onSignedOut?: () => void;
@@ -35,6 +37,7 @@ export function Chat({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground antialiased">
       <Header
+        nav={nav}
         connection={connection}
         personaName={personaName}
         sessions={sessions}

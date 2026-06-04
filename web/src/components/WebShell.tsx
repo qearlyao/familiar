@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
 import { Chat } from "./Chat";
+import { DiariesPage } from "./DiariesPage";
 
 type ShellPage = "chat" | "diaries" | "skills" | "files" | "gallery";
 
@@ -21,6 +22,7 @@ interface ShellNavItem {
   label: string;
   description: string;
   icon: LucideIcon;
+  enabled?: boolean;
 }
 
 const NAV_ITEMS: ShellNavItem[] = [
@@ -29,12 +31,14 @@ const NAV_ITEMS: ShellNavItem[] = [
     label: "chat",
     description: "where you two are",
     icon: MessageCircle,
+    enabled: true,
   },
   {
     id: "diaries",
     label: "diaries",
     description: "written days",
     icon: BookOpen,
+    enabled: true,
   },
   {
     id: "skills",
@@ -66,18 +70,22 @@ function ShellButton({
   onClick: () => void;
 }) {
   const Icon = item.icon;
+  const enabled = item.enabled === true;
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={!enabled}
       className={cn(
         "flex h-11 w-full items-center gap-3 rounded-md px-3 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         active
           ? "bg-primary text-primary-foreground hover:bg-primary"
-          : "text-sidebar-foreground/70 hover:bg-primary/20 hover:text-sidebar-foreground",
+          : enabled
+            ? "text-sidebar-foreground/70 hover:bg-primary/20 hover:text-sidebar-foreground"
+            : "cursor-default text-sidebar-foreground/35",
       )}
       aria-current={active ? "page" : undefined}
-      title={item.label}
+      title={enabled ? item.label : `${item.label} soon`}
     >
       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background/55 text-current">
         <Icon className="size-4" />
@@ -153,6 +161,7 @@ export function WebShell({
                   item={item}
                   active={selectedPage === item.id}
                   onClick={() => {
+                    if (item.enabled !== true) return;
                     setSelectedPage(item.id);
                     setPagePanelOpen(false);
                   }}
@@ -162,9 +171,14 @@ export function WebShell({
           </PopoverPrimitive.Content>
         </PopoverPrimitive.Portal>
       </PopoverPrimitive.Root>
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className={cn("min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>
         <Chat authMode={authMode} authDevice={authDevice} onSignedOut={onSignedOut} />
       </section>
+      {selectedPage === "diaries" ? (
+        <section className="flex min-w-0 flex-1 flex-col animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+          <DiariesPage />
+        </section>
+      ) : null}
     </div>
   );
 }

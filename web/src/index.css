@@ -71,6 +71,7 @@
     --shadow-opacity: var(--shadow-opacity);
     --color-shadow-color: var(--shadow-color);
     --color-destructive-foreground: var(--destructive-foreground);
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 :root {
@@ -204,4 +205,47 @@
     -moz-appearance: textfield;
     appearance: textfield;
     }
+}
+
+@layer components {
+  .diary-prose {
+    @apply max-w-[70ch] text-[0.95rem] leading-relaxed text-foreground;
+  }
+
+  .diary-prose > * + * {
+    @apply mt-5;
+  }
+
+  .diary-prose h2 {
+    @apply mt-8 font-serif text-2xl leading-tight tracking-tight text-foreground first:mt-0;
+  }
+
+  .diary-prose h3 {
+    @apply mt-7 font-serif text-xl leading-tight tracking-tight text-foreground first:mt-0;
+  }
+
+  .diary-prose p {
+    @apply whitespace-pre-wrap wrap-anywhere;
+  }
+
+  .diary-prose ul,
+  .diary-prose ol {
+    @apply grid gap-2 pl-5;
+  }
+
+  .diary-prose ul {
+    @apply list-disc;
+  }
+
+  .diary-prose ol {
+    @apply list-decimal;
+  }
+
+  .diary-prose blockquote {
+    @apply border-l border-border pl-4 font-serif italic text-muted-foreground;
+  }
+
+  .diary-prose code {
+    @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground;
+  }
 }

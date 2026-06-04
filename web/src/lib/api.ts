@@ -170,6 +170,19 @@ export interface HistoryResponse {
   channelKey: string;
 }
 
+export interface DiarySummary {
+  date: string;
+  sourceId: string;
+  title: string;
+  excerpt: string;
+  mtimeMs: number;
+  sizeBytes: number;
+}
+
+export interface DiaryEntry extends DiarySummary {
+  content: string;
+}
+
 export async function fetchAuthMode(): Promise<{ mode: string; personaName: string }> {
   const res = await fetch("/api/web/auth/mode");
   if (!res.ok) throw new Error(`auth/mode: ${res.status}`);
@@ -252,6 +265,21 @@ export async function fetchHistory(channelKey?: string, limit = 50): Promise<His
     hasMore: body.hasMore,
     channelKey: body.channelKey,
   };
+}
+
+export async function fetchDiaries(): Promise<DiarySummary[]> {
+  const res = await fetch("/api/web/diaries");
+  if (!res.ok) throw new Error(`diaries: ${res.status}`);
+  const body = (await res.json()) as { diaries: DiarySummary[] };
+  return body.diaries;
+}
+
+export async function fetchDiary(date: string): Promise<DiaryEntry> {
+  const params = new URLSearchParams({ date });
+  const res = await fetch(`/api/web/diary?${params.toString()}`);
+  if (!res.ok) throw new Error(`diary: ${res.status}`);
+  const body = (await res.json()) as { diary: DiaryEntry };
+  return body.diary;
 }
 
 export async function sendMessage(

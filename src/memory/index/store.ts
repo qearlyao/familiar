@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import Database from "better-sqlite3";
 
-import type { Config } from "../../config.js";
+import type { Config } from "../../config/index.js";
 import { normalizeFtsMatchQuery } from "./fts-query.js";
 import { readMeta, runMemoryIndexMigrations } from "./schema.js";
 import type { VectorCapability } from "./vec.js";

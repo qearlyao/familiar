@@ -1,4 +1,4 @@
-import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models.js";
+import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
 import type { Config } from "./index.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
 

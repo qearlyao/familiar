@@ -6,11 +6,11 @@ import { resolve } from "node:path";
 
 import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai";
 
-import type { StoredAttachment } from "../src/chat-log.js";
-import { attachmentsDir } from "../src/generated-media.js";
-import { createGeneratedMediaSink, generatedAttachmentsDir } from "../src/generated-media.js";
-import { createImageGenTool, imageExtension, resolveImageModel } from "../src/image-gen.js";
-import { MAX_INLINE_IMAGE_BASE64_BYTES } from "../src/inbound-attachments.js";
+import type { StoredAttachment } from "../src/conversation/chat-log.js";
+import { attachmentsDir } from "../src/media/generated-media.js";
+import { createGeneratedMediaSink, generatedAttachmentsDir } from "../src/media/generated-media.js";
+import { createImageGenTool, imageExtension, resolveImageModel } from "../src/media/image-gen.js";
+import { MAX_INLINE_IMAGE_BASE64_BYTES } from "../src/media/inbound-attachments.js";
 import { configWithDataDir, createTempDataDir, withEnv, withoutEnv } from "./helpers.js";
 import { noisyPngBytes, pngBytes } from "./media-fixtures.js";
 

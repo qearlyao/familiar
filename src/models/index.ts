@@ -8,7 +8,7 @@ import {
 	type ModelThinkingLevel,
 	type Provider,
 } from "@earendil-works/pi-ai";
-import type { Config, ThinkingLevel } from "../config.js";
+import type { Config, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
 
 export interface ModelRef {

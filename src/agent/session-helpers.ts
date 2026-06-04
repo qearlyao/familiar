@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import type { Config } from "../config.js";
-import { assertModelCanAuthenticate, isAllowedModel, type ModelRef, resolveModelApiKey } from "../models.js";
+import type { Config } from "../config/index.js";
+import { assertModelCanAuthenticate, isAllowedModel, type ModelRef, resolveModelApiKey } from "../models/index.js";
 
 const NOISY_GOOGLE_VERTEX_AUTH_DEBUG =
 	"The user provided project/location will take precedence over the API key from the environment variables.";

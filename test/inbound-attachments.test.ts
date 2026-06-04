@@ -9,8 +9,8 @@ import {
 	materializeInboundAttachments,
 	promptAttachmentNotes,
 	promptImagesFromAttachments,
-} from "../src/inbound-attachments.js";
-import { attachmentsDir } from "../src/generated-media.js";
+} from "../src/media/inbound-attachments.js";
+import { attachmentsDir } from "../src/media/generated-media.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 import { mp4Bytes, noisyPngBytes, pngBytes } from "./media-fixtures.js";
 

@@ -2,7 +2,7 @@ import type { Dirent } from "node:fs";
 import { lstat, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { isEnoent } from "../util/fs.js";
 
 export interface DataRetentionReport {

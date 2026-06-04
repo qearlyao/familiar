@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAgentEventRecorder } from "../src/agent-events.js";
-import type { StoredAgentEvent } from "../src/chat-log.js";
+import { createAgentEventRecorder } from "../src/runtime/agent-events.js";
+import type { StoredAgentEvent } from "../src/conversation/chat-log.js";
 
 function textDelta(delta: string): StoredAgentEvent {
 	return { type: "message_update", assistantMessageEvent: { type: "text_delta", delta } };

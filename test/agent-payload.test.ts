@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { Model } from "@earendil-works/pi-ai";
 
-import { __agentTest } from "../src/agent.js";
+import { __agentTest } from "../src/agent/factory.js";
 
 const anthropicModel = {
 	id: "claude-test",

@@ -4,8 +4,8 @@ import { basename, resolve } from "node:path";
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 
-import type { Config } from "../config.js";
-import type { ConversationRuntime } from "../runtime.js";
+import type { Config } from "../config/index.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
 import { __ambientDiaryInjectorTest, AmbientDiaryInjector } from "./diary/ambient-injector.js";
 import { DIARY_INDEX_FILE_RE, indexAllDiaryFiles, indexDiaryFile, removeDiaryFileIndex } from "./diary/indexer.js";

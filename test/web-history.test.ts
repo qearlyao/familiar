@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ChatLogRecord } from "../src/chat-log.js";
-import { materializeInboundAttachments } from "../src/inbound-attachments.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
+import { materializeInboundAttachments } from "../src/media/inbound-attachments.js";
 import { webHistoryPayload, webMessagesFromRecords } from "../src/web/messages.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 

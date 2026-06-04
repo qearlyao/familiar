@@ -1,7 +1,7 @@
 import type { AutocompleteInteraction, ChatInputCommandInteraction, Message, MessageResolvable } from "discord.js";
 import { ChannelType } from "discord.js";
 
-import { type ChatChannelRef, chatChannelKey } from "../chat-log.js";
+import { type ChatChannelRef, chatChannelKey } from "../conversation/chat-log.js";
 
 export type DiscordInteractionChannel = NonNullable<
 	ChatInputCommandInteraction["channel"] | AutocompleteInteraction["channel"]

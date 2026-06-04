@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 
 export interface WebMeme {
 	name: string;

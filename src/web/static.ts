@@ -4,8 +4,8 @@ import type { ServerResponse } from "node:http";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Config } from "../config.js";
-import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../generated-media.js";
+import type { Config } from "../config/index.js";
+import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../media/generated-media.js";
 import { sendText } from "./http.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");

@@ -1,10 +1,9 @@
 import type { Message } from "discord.js";
-
-import type { InboundChatRecord } from "../chat-log.js";
-import type { Config } from "../config.js";
-import { materializeInboundAttachments } from "../inbound-attachments.js";
-import type { ConversationRuntime, InboundMessageInput } from "../runtime.js";
-import type { EffectiveSetting, SettingsStore } from "../settings.js";
+import type { Config } from "../config/index.js";
+import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
+import type { InboundChatRecord } from "../conversation/chat-log.js";
+import { materializeInboundAttachments } from "../media/inbound-attachments.js";
+import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import { isDmChannel, messageMentionsBot } from "./channel.js";
 
 export function getDispatchMode(config: Config, message: Message): "steer" | "queue" | "collect" {

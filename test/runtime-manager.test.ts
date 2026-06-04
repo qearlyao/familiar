@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ChatChannelRef } from "../src/chat-log.js";
+import type { ChatChannelRef } from "../src/conversation/chat-log.js";
 import type { MemoryService } from "../src/memory/service.js";
-import { createRuntimeManager } from "../src/runtime-manager.js";
+import { createRuntimeManager } from "../src/runtime/runtime-manager.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function spyMemoryService(): {

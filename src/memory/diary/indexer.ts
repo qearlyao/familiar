@@ -2,7 +2,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
-import type { Config } from "../../config.js";
+import type { Config } from "../../config/index.js";
 import { isEnoent } from "../../util/fs.js";
 import type { ChunkIndexer, ChunkIndexResult } from "../index/chunk-indexer.js";
 import type { MemoryIndexStore } from "../index/store.js";

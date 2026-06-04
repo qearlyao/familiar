@@ -1,13 +1,13 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
-import { createBrowserTools } from "../browser-tools.js";
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
-import type { GeneratedMediaSink } from "../generated-media.js";
-import { createImageGenTool } from "../image-gen.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import type { GeneratedMediaSink } from "../media/generated-media.js";
+import { createImageGenTool } from "../media/image-gen.js";
+import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
-import { createTtsTool } from "../tts.js";
-import { createWebTools } from "../web-tools.js";
+import { createBrowserTools } from "../tools/browser-tools.js";
+import { createWebTools } from "../web-tools/index.js";
 import { BASH_DESCRIPTION, EDIT_DESCRIPTION, READ_DESCRIPTION, WRITE_DESCRIPTION } from "./tool-descriptions.js";
 import type { FamiliarAgentSession } from "./types.js";
 

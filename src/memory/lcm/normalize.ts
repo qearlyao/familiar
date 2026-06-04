@@ -1,4 +1,4 @@
-import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../../chat-log.js";
+import type { ChatLogRecord, StoredAgentEvent, StoredAttachment } from "../../conversation/chat-log.js";
 import type {
 	LcmAttachmentNote,
 	LcmRecordInput,

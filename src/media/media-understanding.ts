@@ -1,10 +1,9 @@
 import { readFile } from "node:fs/promises";
 
 import { createPartFromUri, createUserContent, FileState, GoogleGenAI } from "@google/genai";
-
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
-import { parseModelRef, resolveModel } from "../models.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import { parseModelRef, resolveModel } from "../models/index.js";
 
 type DerivedText = NonNullable<StoredAttachment["derived"]>["text"];
 type GeminiFile = Awaited<ReturnType<GoogleGenAI["files"]["upload"]>>;

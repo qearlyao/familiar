@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { isRecord } from "../util/guards.js";
 import { requestAuthContext } from "./request-context.js";
 import { SESSION_TTL_MS, type WebAuthDevice, type WebSessionStore } from "./session-store.js";

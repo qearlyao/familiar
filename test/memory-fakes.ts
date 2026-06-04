@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 
-import type { Config } from "../src/config.js";
+import type { Config } from "../src/config/index.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import type { MemoryRetrievalSearchOptions, MemoryRetrievalStore } from "../src/memory/index/retrieval.js";
 import type { MemorySearchHit, StoredMemoryChunk } from "../src/memory/index/store.js";

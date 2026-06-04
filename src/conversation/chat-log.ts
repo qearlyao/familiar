@@ -1,7 +1,7 @@
 import { appendFile, mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { isEnoent, readFileOrNull } from "../util/fs.js";
 
 export type ChatService = "discord" | "web";

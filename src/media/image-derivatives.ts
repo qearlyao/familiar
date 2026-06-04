@@ -3,9 +3,8 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
 import sharp from "sharp";
-
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
 import { attachmentsDir } from "./generated-media.js";
 
 type DerivedImage = NonNullable<NonNullable<StoredAttachment["derived"]>["image"]>;

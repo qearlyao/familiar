@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { __hotReloadTest, startWorkspaceHotReload } from "../src/hot-reload.js";
+import { __hotReloadTest, startWorkspaceHotReload } from "../src/lifecycle/hot-reload.js";
 
 function waitForReload(timeoutMs = 1000): { promise: Promise<void>; resolve: () => void } {
 	let resolveReload: () => void = () => undefined;

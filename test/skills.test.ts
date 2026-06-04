@@ -5,9 +5,9 @@ import { describe, it } from "node:test";
 
 import { createSyntheticSourceInfo } from "@earendil-works/pi-coding-agent";
 
-import { loadConfig } from "../src/config.js";
-import { buildSystemPrompt, loadPersona } from "../src/persona.js";
-import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../src/skills.js";
+import { loadConfig } from "../src/config/index.js";
+import { buildSystemPrompt, loadPersona } from "../src/prompting/persona.js";
+import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../src/prompting/skills.js";
 import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 
 describe("Familiar skills", () => {

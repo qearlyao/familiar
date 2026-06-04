@@ -1,4 +1,4 @@
-import { parseModelRef } from "../models.js";
+import { parseModelRef } from "../models/index.js";
 
 export function parseProviderModelRef(value: string, path: string): { provider: string; modelId: string; key: string } {
 	const parsed = maybeParseProviderModelRef(value);

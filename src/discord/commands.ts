@@ -12,10 +12,10 @@ import {
 	MessageFlags,
 } from "discord.js";
 
-import type { FamiliarAgent } from "../agent.js";
-import type { Config } from "../config.js";
-import type { ConversationRuntime, InboundMessageInput } from "../runtime.js";
-import { type EffectiveSetting, formatSetting } from "../settings.js";
+import type { FamiliarAgent } from "../agent/factory.js";
+import type { Config } from "../config/index.js";
+import { type EffectiveSetting, formatSetting } from "../config/settings.js";
+import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import { normalizeOutboundText } from "./send.js";
 
 export const FAMILIAR_COMMAND_NAME = "familiar";

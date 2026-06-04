@@ -1,6 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { PageCache } from "./cache.js";
 import { loadWebConfig } from "./config.js";
 import { createJinaProvider, createTinyfishProvider } from "./fetch-providers.js";

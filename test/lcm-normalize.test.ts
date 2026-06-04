@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ChatLogRecord } from "../src/chat-log.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import { normalizeChatRecords } from "../src/memory/lcm/normalize.js";
 
 const base = {

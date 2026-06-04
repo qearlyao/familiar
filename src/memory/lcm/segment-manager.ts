@@ -1,5 +1,5 @@
-import type { ChatLogRecord } from "../../chat-log.js";
-import type { ConversationRuntime } from "../../runtime.js";
+import type { ChatLogRecord } from "../../conversation/chat-log.js";
+import type { ConversationRuntime } from "../../runtime/conversation-runtime.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { projectNormalizedLcmBatch } from "./indexer.js";

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import type { ChatLogRecord } from "../src/chat-log.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import {

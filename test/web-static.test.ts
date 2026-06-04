@@ -3,7 +3,7 @@ import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
-import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/generated-media.js";
+import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/media/generated-media.js";
 import { serveAttachment, serveStatic } from "../src/web/static.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 

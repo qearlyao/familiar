@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createChatLog } from "../src/chat-log.js";
-import { ConversationRuntime } from "../src/runtime.js";
+import { createChatLog } from "../src/conversation/chat-log.js";
+import { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("ConversationRuntime", () => {

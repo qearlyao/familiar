@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { readFileOrNull } from "../util/fs.js";
 
 export interface Persona {

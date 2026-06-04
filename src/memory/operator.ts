@@ -3,7 +3,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
-import type { Config as FamiliarConfig } from "../config.js";
+import type { Config as FamiliarConfig } from "../config/index.js";
 import { indexAllDiaryFiles } from "./diary/indexer.js";
 import { applyDoctorFixes, type DoctorFinding, runDoctor } from "./doctor.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";

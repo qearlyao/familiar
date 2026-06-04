@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { WebAuthMode } from "../config.js";
+import type { WebAuthMode } from "../config/index.js";
 import { isRecord } from "../util/guards.js";
 import { clearSessionCookie, requestAuthContext, type WebAuth } from "./auth.js";
 import { readJsonBody, sendJson } from "./http.js";

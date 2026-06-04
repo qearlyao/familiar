@@ -4,9 +4,9 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { createFamiliarAgent } from "../src/agent.js";
-import { loadConfig } from "../src/config.js";
-import { loadSettingsStore } from "../src/settings.js";
+import { createFamiliarAgent } from "../src/agent/factory.js";
+import { loadConfig } from "../src/config/index.js";
+import { loadSettingsStore } from "../src/config/settings.js";
 import { createTempDataDir, createWorkspace, minimalConfigToml, withDiscordToken, withEnv, withoutEnv } from "./helpers.js";
 
 describe("FamiliarAgent reload", () => {

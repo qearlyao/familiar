@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import { type LoadSkillsResult, loadSkills, type Skill } from "@earendil-works/pi-coding-agent";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 
 export type FamiliarSkillsResult = LoadSkillsResult;
 

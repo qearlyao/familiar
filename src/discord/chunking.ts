@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 
 // A hard split at an arbitrary index can land between the two UTF-16 code units
 // of an astral character (emoji, rare CJK), rendering as a broken � at the seam.

@@ -7,17 +7,17 @@ import {
 	type Interaction,
 	type Message,
 } from "discord.js";
-import type { FamiliarAgent } from "../agent.js";
-import type { AgentCore, DiscordWebSession } from "../agent-core.js";
-import { thinkingDurationMs } from "../agent-events.js";
-import { chatChannelKey } from "../chat-log.js";
-import type { Config } from "../config.js";
-import type { RestartHandler } from "../control.js";
+import type { FamiliarAgent } from "../agent/factory.js";
+import type { Config } from "../config/index.js";
+import { type EffectiveSetting, formatSetting, type SettingsStore } from "../config/settings.js";
+import { chatChannelKey } from "../conversation/chat-log.js";
+import { saveOwnerIdentity } from "../conversation/owner-identity.js";
+import type { RestartHandler } from "../lifecycle/control.js";
 import type { MemoryService } from "../memory/service.js";
-import { saveOwnerIdentity } from "../owner-identity.js";
-import type { ConversationRuntime } from "../runtime.js";
-import type { SchedulerDeliverySink } from "../scheduler-runner.js";
-import { type EffectiveSetting, formatSetting, type SettingsStore } from "../settings.js";
+import type { AgentCore, DiscordWebSession } from "../runtime/agent-core.js";
+import { thinkingDurationMs } from "../runtime/agent-events.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
+import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
 import {
 	buildChannelRef,
 	type DiscordChatChannel,

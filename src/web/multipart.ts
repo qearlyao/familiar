@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 
-import { MAX_INBOUND_TOTAL_BYTES } from "../attachment-limits.js";
+import { MAX_INBOUND_TOTAL_BYTES } from "../media/attachment-limits.js";
 
 export interface WebUploadAttachment {
 	name?: string;

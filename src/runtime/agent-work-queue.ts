@@ -1,9 +1,9 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
-import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent.js";
-import type { StoredAttachment } from "../chat-log.js";
+import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
 import { CRON_SKIPPED, canceledJobError, HEARTBEAT_SKIPPED } from "../discord/turn.js";
-import { promptImagesFromAttachments } from "../inbound-attachments.js";
+import { promptImagesFromAttachments } from "../media/inbound-attachments.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 
 export function createAgentWorkQueue(deps: { familiarAgent: FamiliarAgent }) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { audioExtension, audioMimeType, buildElevenLabsVoiceSettings } from "../src/tts.js";
+import { audioExtension, audioMimeType, buildElevenLabsVoiceSettings } from "../src/media/tts.js";
 import { configWithDataDir } from "./helpers.js";
 
 describe("tts audio formats", () => {

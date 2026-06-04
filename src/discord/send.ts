@@ -2,10 +2,9 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
 import type { Message, MessageCreateOptions } from "discord.js";
-
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
-import { parseAgentReply as parseSilentMarker } from "../silent-marker.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import { parseAgentReply as parseSilentMarker } from "../runtime/silent-marker.js";
 import type { DiscordChatChannel } from "./channel.js";
 import { chunkDiscord } from "./chunking.js";
 

@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { buildRecordBase, type ChatChannelRef } from "../src/chat-log.js";
+import { buildRecordBase, type ChatChannelRef } from "../src/conversation/chat-log.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
 import { MemoryService, createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
-import { ConversationRuntime } from "../src/runtime.js";
+import { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 import { contentText, renderMessages, withMemoryService, zeroUsage } from "./memory-fakes.js";
 

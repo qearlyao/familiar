@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { loadConfig } from "../src/config.js";
+import { loadConfig } from "../src/config/index.js";
 import { createWorkspace, minimalConfigToml } from "./helpers.js";
 
 describe("loadConfig tts", () => {

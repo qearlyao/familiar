@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-
+import type { DiscordChannelTrigger } from "../config/index.js";
 import {
 	buildRecordBase,
 	type ChatChannelRef,
@@ -12,9 +12,8 @@ import {
 	type OutboundChatRecord,
 	type StoredAgentEvent,
 	type StoredAttachment,
-} from "../chat-log.js";
-import type { DiscordChannelTrigger } from "../config.js";
-import { promptAttachmentNotes } from "../inbound-attachments.js";
+} from "../conversation/chat-log.js";
+import { promptAttachmentNotes } from "../media/inbound-attachments.js";
 import { formatLocalTimestamp } from "../util/time.js";
 
 export interface InboundMessageInput {

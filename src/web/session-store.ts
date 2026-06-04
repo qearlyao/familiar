@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { atomicWriteJson, createWriteQueue, readFileOrNull } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import type { RequestAuthContext } from "./request-context.js";

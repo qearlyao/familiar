@@ -16,10 +16,9 @@ import {
 	type ImagesModel,
 } from "@earendil-works/pi-ai";
 import { type Static, Type } from "typebox";
-
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config, ImageGenApi } from "../config.js";
-import { type ModelRef, parseModelRef } from "../models.js";
+import type { Config, ImageGenApi } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import { type ModelRef, parseModelRef } from "../models/index.js";
 import { imageMimeTypeFromPath, sniffImageMimeType } from "../util/image-mime.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";

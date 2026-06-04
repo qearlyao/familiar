@@ -1,8 +1,13 @@
-import { type ChatLogRecord, hiddenWebMessageIds, type StoredAgentEvent, type StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
-import { getContactNickname } from "../contact-note.js";
-import { publicAttachmentPath } from "../generated-media.js";
-import { toUnixMs } from "../ids.js";
+import type { Config } from "../config/index.js";
+import {
+	type ChatLogRecord,
+	hiddenWebMessageIds,
+	type StoredAgentEvent,
+	type StoredAttachment,
+} from "../conversation/chat-log.js";
+import { getContactNickname } from "../conversation/contact-note.js";
+import { toUnixMs } from "../conversation/ids.js";
+import { publicAttachmentPath } from "../media/generated-media.js";
 import { isRecord } from "../util/guards.js";
 import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "./types.js";
 

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 

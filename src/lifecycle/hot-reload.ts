@@ -2,8 +2,8 @@ import { watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
-import type { FamiliarAgent } from "../agent.js";
-import { refreshContactNote } from "../contact-note.js";
+import type { FamiliarAgent } from "../agent/factory.js";
+import { refreshContactNote } from "../conversation/contact-note.js";
 import { isEnoent } from "../util/fs.js";
 
 type WatchListener = (eventType: string, filename: string | Buffer | null) => void;

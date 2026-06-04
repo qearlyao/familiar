@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import type { StoredAttachment } from "../src/chat-log.js";
+import type { StoredAttachment } from "../src/conversation/chat-log.js";
 import { buildDiscordAttachmentFiles, postDiscordAttachments } from "../src/discord/send.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 

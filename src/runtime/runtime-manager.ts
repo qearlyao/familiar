@@ -1,5 +1,5 @@
-import { type ChatChannelRef, chatChannelKey, createChatLog } from "../chat-log.js";
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
+import { type ChatChannelRef, chatChannelKey, createChatLog } from "../conversation/chat-log.js";
 import type { MemoryService } from "../memory/service.js";
 import { ConversationRuntime } from "./conversation-runtime.js";
 

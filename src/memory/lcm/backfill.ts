@@ -1,8 +1,8 @@
 import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import type { ChatLogRecord } from "../../chat-log.js";
-import type { Config } from "../../config.js";
+import type { Config } from "../../config/index.js";
+import type { ChatLogRecord } from "../../conversation/chat-log.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";

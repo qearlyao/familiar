@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { isThinkingLevel } from "../models.js";
+import { isThinkingLevel } from "../models/index.js";
 import { atomicWriteJson, createWriteQueue, readFileOrNull } from "../util/fs.js";
 import type { Config, DiscordChannelTrigger, ThinkingLevel } from "./index.js";
 

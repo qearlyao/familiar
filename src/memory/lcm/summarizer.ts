@@ -9,8 +9,8 @@ import {
 	type Provider,
 } from "@earendil-works/pi-ai";
 
-import type { Config } from "../../config.js";
-import { assertModelCanAuthenticate, parseModelRef, resolveModel, resolveModelApiKey } from "../../models.js";
+import type { Config } from "../../config/index.js";
+import { assertModelCanAuthenticate, parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
 
 export type LcmSummaryMode = "normal" | "aggressive";
 

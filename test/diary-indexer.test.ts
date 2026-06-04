@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import type { Config } from "../src/config.js";
+import type { Config } from "../src/config/index.js";
 import {
 	indexAllDiaryFiles,
 	indexDiaryFile,

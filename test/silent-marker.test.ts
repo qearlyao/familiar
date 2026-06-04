@@ -6,7 +6,7 @@ import {
 	createSilentFilterState,
 	finalizeSilentFilter,
 	parseAgentReply,
-} from "../src/silent-marker.js";
+} from "../src/runtime/silent-marker.js";
 
 describe("parseAgentReply", () => {
 	it("treats the bare marker as silent", () => {

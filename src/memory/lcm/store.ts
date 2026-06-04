@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 
 import Database from "better-sqlite3";
 
-import type { Config } from "../../config.js";
+import type { Config } from "../../config/index.js";
 import { normalizeFtsMatchQuery } from "../index/fts-query.js";
 import { runInTransaction } from "../util.js";
 import { readMeta, runLcmMigrations } from "./schema.js";

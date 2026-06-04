@@ -2,7 +2,7 @@ import { once } from "node:events";
 
 import { ChannelType, Client, Events, GatewayIntentBits, type Message, Partials } from "discord.js";
 
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 
 export async function withReadyClient(token: string): Promise<Client<true>> {
 	const client = new Client({

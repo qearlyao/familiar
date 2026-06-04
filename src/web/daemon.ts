@@ -4,20 +4,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getProviders } from "@earendil-works/pi-ai";
-
-import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "../added-models.js";
-import type { FamiliarAgent, FamiliarAgentReply } from "../agent.js";
-import type { AgentCore } from "../agent-core.js";
-import {
-	type AgentEventSummary,
-	createAgentEventRecorder,
-	storedAgentEventFromAgentEvent,
-	thinkingDurationMs,
-	updateAgentEventSummary,
-} from "../agent-events.js";
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config, WebAuthMode } from "../config.js";
-import { loadConfigOverrides } from "../config-overrides.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "../agent/factory.js";
+import type { Config, WebAuthMode } from "../config/index.js";
+import { loadConfigOverrides } from "../config/overrides.js";
 import {
 	CONFIG_KEYS,
 	CONFIG_REGISTRY,
@@ -25,16 +14,30 @@ import {
 	clearConfigChange,
 	commitConfigChange,
 	isConfigKey,
-} from "../config-registry.js";
-import { getContactNickname, refreshContactNote, setContactNotePath } from "../contact-note.js";
-import type { RestartHandler } from "../control.js";
-import { messageId } from "../ids.js";
-import { materializeInboundAttachments } from "../inbound-attachments.js";
-import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "../models.js";
-import { loadPersona, parsePersonaName } from "../persona.js";
-import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "../runtime.js";
-import { formatSetting } from "../settings.js";
-import { parseAgentReply } from "../silent-marker.js";
+} from "../config/registry.js";
+import { formatSetting } from "../config/settings.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import { getContactNickname, refreshContactNote, setContactNotePath } from "../conversation/contact-note.js";
+import { messageId } from "../conversation/ids.js";
+import type { RestartHandler } from "../lifecycle/control.js";
+import { materializeInboundAttachments } from "../media/inbound-attachments.js";
+import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "../models/added-models.js";
+import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "../models/index.js";
+import { loadPersona, parsePersonaName } from "../prompting/persona.js";
+import type { AgentCore } from "../runtime/agent-core.js";
+import {
+	type AgentEventSummary,
+	createAgentEventRecorder,
+	storedAgentEventFromAgentEvent,
+	thinkingDurationMs,
+	updateAgentEventSummary,
+} from "../runtime/agent-events.js";
+import type {
+	ConversationRuntime,
+	InboundMessageInput,
+	ParsedControlCommand,
+} from "../runtime/conversation-runtime.js";
+import { parseAgentReply } from "../runtime/silent-marker.js";
 import { isRecord } from "../util/guards.js";
 import { createAuth, loadWebSessionStore, requestAuthContext, sessionCookie, verifyTotp } from "./auth.js";
 import { registerWebAuthRoutes } from "./auth-routes.js";

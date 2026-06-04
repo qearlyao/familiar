@@ -8,8 +8,8 @@ import {
 	createBrowserTools,
 	type BrowserCommandResult,
 	type BrowserRunSpec,
-} from "../src/browser-tools.js";
-import { browserScreenshotsDir, createGeneratedMediaSink } from "../src/generated-media.js";
+} from "../src/tools/browser-tools.js";
+import { browserScreenshotsDir, createGeneratedMediaSink } from "../src/media/generated-media.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function textFrom(result: Awaited<ReturnType<ReturnType<typeof createBrowserTools>[number]["execute"]>>): string {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { Config } from "../src/config.js";
+import type { Config } from "../src/config/index.js";
 import { chunkDiscord } from "../src/discord/chunking.js";
 
 const LIMIT = 2000;

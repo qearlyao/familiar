@@ -3,7 +3,7 @@ import { mkdir, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { runDataRetention } from "../src/data-retention.js";
+import { runDataRetention } from "../src/lifecycle/data-retention.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("data retention", () => {

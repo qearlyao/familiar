@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import { loadOwnerIdentity, ownerIdentityPath, saveOwnerIdentity } from "../src/owner-identity.js";
+import { loadOwnerIdentity, ownerIdentityPath, saveOwnerIdentity } from "../src/conversation/owner-identity.js";
 import { createTempDataDir } from "./helpers.js";
 
 test("owner identity round-trips through persisted cache", async (t) => {

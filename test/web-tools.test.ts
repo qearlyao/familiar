@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createFetchProviders, createWebTools, webContentWarning } from "../src/web-tools.js";
+import { createFetchProviders, createWebTools, webContentWarning } from "../src/web-tools/index.js";
 import { PageCache } from "../src/web-tools/cache.js";
 import { parseTinyfishResponse } from "../src/web-tools/fetch-providers.js";
 import { formatFetchContent, formatSearchResults, paginateContent } from "../src/web-tools/format.js";

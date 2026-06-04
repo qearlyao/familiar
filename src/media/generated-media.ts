@@ -1,8 +1,7 @@
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
 import { isEnoent } from "../util/fs.js";
 
 export interface GeneratedAttachment extends StoredAttachment {

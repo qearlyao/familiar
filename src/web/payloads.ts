@@ -1,6 +1,6 @@
-import type { FamiliarAgent } from "../agent.js";
-import type { DiscordWebSession } from "../agent-core.js";
-import { supportedThinkingLevels } from "../models.js";
+import type { FamiliarAgent } from "../agent/factory.js";
+import { supportedThinkingLevels } from "../models/index.js";
+import type { DiscordWebSession } from "../runtime/agent-core.js";
 import { isRecord } from "../util/guards.js";
 
 export function commandArgs(command: string, args: unknown): string {

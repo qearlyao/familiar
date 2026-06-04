@@ -1,4 +1,4 @@
-import type { Config } from "../../config.js";
+import type { Config } from "../../config/index.js";
 
 export type EmbeddingPart = { type: "text"; text: string } | { type: "inlineData"; mimeType: string; data: string };
 

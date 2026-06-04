@@ -1,16 +1,16 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
-import type { FamiliarAgentReply } from "../agent.js";
+import type { FamiliarAgentReply } from "../agent/factory.js";
+import type { Config } from "../config/index.js";
+import { messageId } from "../conversation/ids.js";
 import {
 	type AgentEventSummary,
 	createAgentEventRecorder,
 	storedAgentEventFromAgentEvent,
 	updateAgentEventSummary,
-} from "../agent-events.js";
-import type { Config } from "../config.js";
-import { messageId } from "../ids.js";
-import type { ConversationRuntime } from "../runtime.js";
-import { isHeartbeatDue } from "../scheduler.js";
+} from "../runtime/agent-events.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
+import { isHeartbeatDue } from "../runtime/scheduler.js";
 import { parseOutboundReply } from "./send.js";
 
 export const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");

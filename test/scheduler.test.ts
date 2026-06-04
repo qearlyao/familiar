@@ -9,7 +9,7 @@ import {
 	formatLocalTimestamp,
 	isHeartbeatDue,
 	type CronJobConfig,
-} from "../src/scheduler.js";
+} from "../src/runtime/scheduler.js";
 
 describe("scheduler helpers", () => {
 	it("formats local timestamps in the runtime shape", () => {

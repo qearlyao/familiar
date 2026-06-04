@@ -2,7 +2,7 @@ import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
 import { isEnoent } from "../util/fs.js";
 
 function dailyLogPath(dataDir: string, streamName: "payloads" | "transcripts", now = new Date()): string {

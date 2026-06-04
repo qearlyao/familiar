@@ -1,10 +1,10 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-import type { FamiliarAgent, FamiliarAgentReply } from "../agent.js";
-import { type ChatChannelRef, chatChannelKey, type StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "../agent/factory.js";
+import type { Config } from "../config/index.js";
+import { type ChatChannelRef, chatChannelKey, type StoredAttachment } from "../conversation/chat-log.js";
+import type { OwnerIdentity } from "../conversation/owner-identity.js";
 import type { MemoryService } from "../memory/service.js";
-import type { OwnerIdentity } from "../owner-identity.js";
 import { createAgentWorkQueue } from "./agent-work-queue.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 import { createRuntimeManager } from "./runtime-manager.js";

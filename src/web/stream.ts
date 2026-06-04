@@ -1,7 +1,7 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Socket } from "node:net";
 
-import type { ConversationRuntime } from "../runtime.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isRecord } from "../util/guards.js";
 import type { WebEventHub } from "./event-hub.js";
 import { acceptWebSocket, decodeFrames, type WebSocketClient } from "./events.js";

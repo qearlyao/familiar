@@ -9,7 +9,7 @@ import {
 	createGeneratedMediaSink,
 	generatedAttachmentsDir,
 	publicAttachmentPath,
-} from "../src/generated-media.js";
+} from "../src/media/generated-media.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("generated media", () => {

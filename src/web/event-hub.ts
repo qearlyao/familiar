@@ -1,9 +1,9 @@
-import type { StoredAgentEvent } from "../chat-log.js";
-import type { Config } from "../config.js";
-import { getContactNickname } from "../contact-note.js";
-import { eventId, toUnixMs } from "../ids.js";
-import type { ConversationRuntime } from "../runtime.js";
-import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter } from "../silent-marker.js";
+import type { Config } from "../config/index.js";
+import type { StoredAgentEvent } from "../conversation/chat-log.js";
+import { getContactNickname } from "../conversation/contact-note.js";
+import { eventId, toUnixMs } from "../conversation/ids.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
+import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter } from "../runtime/silent-marker.js";
 import { encodeFrame, replayEvents, type WebSocketClient } from "./events.js";
 import { toolFromStoredAgentEvent, webAttachments } from "./messages.js";
 import { EVENT_REPLAY_LIMIT, WEB_USER_NAME, type WebPublishEvent, type WebStreamEvent } from "./types.js";

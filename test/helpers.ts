@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import { type Config, loadConfig } from "../src/config.js";
+import { type Config, loadConfig } from "../src/config/index.js";
 
 export type TestAfter = { after(fn: () => void | Promise<void>): void };
 

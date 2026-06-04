@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-import type { StoredAgentEvent, StoredAssistantMessageEvent } from "../chat-log.js";
+import type { StoredAgentEvent, StoredAssistantMessageEvent } from "../conversation/chat-log.js";
 import { isRecord } from "../util/guards.js";
 
 export interface AgentEventSummary {

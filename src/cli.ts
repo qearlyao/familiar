@@ -7,19 +7,25 @@ import { fileURLToPath } from "node:url";
 
 import { config as loadDotenv } from "dotenv";
 
-import { createFamiliarAgent } from "./agent.js";
-import { createAgentCore } from "./agent-core.js";
-import { loadConfig } from "./config.js";
-import { runDataRetention } from "./data-retention.js";
-import { startDiscordDaemon } from "./discord.js";
-import { cleanupGeneratedAttachments } from "./generated-media.js";
-import { startWorkspaceHotReload } from "./hot-reload.js";
+import { createFamiliarAgent } from "./agent/factory.js";
+import { loadConfig } from "./config/index.js";
+import { loadSettingsStore } from "./config/settings.js";
+import { loadOwnerIdentity } from "./conversation/owner-identity.js";
+import { startDiscordDaemon } from "./discord/daemon.js";
+import { runDataRetention } from "./lifecycle/data-retention.js";
+import { startWorkspaceHotReload } from "./lifecycle/hot-reload.js";
+import {
+	formatServiceResult,
+	installService,
+	serviceStatus,
+	uninstallService,
+	upgradeFamiliar,
+} from "./lifecycle/service.js";
+import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
-import { loadOwnerIdentity } from "./owner-identity.js";
-import { formatServiceResult, installService, serviceStatus, uninstallService, upgradeFamiliar } from "./service.js";
-import { loadSettingsStore } from "./settings.js";
-import { startWebDaemon } from "./web.js";
+import { createAgentCore } from "./runtime/agent-core.js";
+import { startWebDaemon } from "./web/daemon.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");

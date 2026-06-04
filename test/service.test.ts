@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { posix, resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { __serviceTest, installService, serviceStatus, uninstallService, upgradeFamiliar } from "../src/service.js";
+import { __serviceTest, installService, serviceStatus, uninstallService, upgradeFamiliar } from "../src/lifecycle/service.js";
 
 describe("service management", () => {
 	it("renders launchd plist with escaped paths", () => {

@@ -3,8 +3,8 @@ import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config } from "../config.js";
+import type { Config } from "../config/index.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
 import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "../util/image-mime.js";
 import { MAX_INBOUND_ATTACHMENT_BYTES, MAX_INBOUND_ATTACHMENTS, MAX_INBOUND_TOTAL_BYTES } from "./attachment-limits.js";
 import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";

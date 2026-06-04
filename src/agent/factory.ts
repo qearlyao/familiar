@@ -1,12 +1,13 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
-import { setAddedModelsPath } from "../added-models.js";
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config, ThinkingLevel } from "../config.js";
-import { setConfigOverridesPath } from "../config-overrides.js";
-import { applyConfigOverridesToConfig } from "../config-registry.js";
-import { createGeneratedMediaSink } from "../generated-media.js";
+import type { Config, ThinkingLevel } from "../config/index.js";
+import { setConfigOverridesPath } from "../config/overrides.js";
+import { applyConfigOverridesToConfig } from "../config/registry.js";
+import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import { createGeneratedMediaSink } from "../media/generated-media.js";
 import type { MemoryService } from "../memory/service.js";
+import { setAddedModelsPath } from "../models/added-models.js";
 import {
 	clampConfiguredThinkingLevel,
 	createConfiguredModel,
@@ -14,10 +15,9 @@ import {
 	parseModelRef,
 	resolveModel,
 	supportedThinkingLevels,
-} from "../models.js";
-import { buildSystemPrompt, loadPersona } from "../persona.js";
-import type { EffectiveSetting, SettingsStore } from "../settings.js";
-import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../skills.js";
+} from "../models/index.js";
+import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
+import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
 	assertModelAllowed,

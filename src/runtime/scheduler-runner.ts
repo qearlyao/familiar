@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
-import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent.js";
-import type { Config } from "../config.js";
+import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
+import type { Config } from "../config/index.js";
 import {
 	CRON_SKIPPED,
 	HEARTBEAT_SKIPPED,

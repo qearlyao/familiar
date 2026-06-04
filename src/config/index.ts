@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
-import { resolveProviderSetting } from "../models.js";
+import { resolveProviderSetting } from "../models/index.js";
 import { readEnum } from "../util/guards.js";
 import {
 	BROWSER_BACKENDS,

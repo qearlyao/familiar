@@ -1,11 +1,11 @@
 import type { Agent, AgentEvent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
-import type { StoredAttachment } from "../chat-log.js";
-import type { Config, ThinkingLevel } from "../config.js";
-import type { GeneratedAttachment, GeneratedMediaSink } from "../generated-media.js";
-import type { loadPersona } from "../persona.js";
-import type { EffectiveSetting } from "../settings.js";
-import type { loadFamiliarSkills } from "../skills.js";
+import type { Config, ThinkingLevel } from "../config/index.js";
+import type { EffectiveSetting } from "../config/settings.js";
+import type { StoredAttachment } from "../conversation/chat-log.js";
+import type { GeneratedAttachment, GeneratedMediaSink } from "../media/generated-media.js";
+import type { loadPersona } from "../prompting/persona.js";
+import type { loadFamiliarSkills } from "../prompting/skills.js";
 
 export interface FamiliarAgentReply {
 	text: string;

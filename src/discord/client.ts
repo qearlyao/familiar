@@ -4,10 +4,8 @@ import { ChannelType, Client, Events, GatewayIntentBits, type Message, Partials 
 
 import type { Config } from "../config.js";
 
-export const DISCORD_REST_REQUEST_TIMEOUT_MS = 60_000;
-
-export function createDiscordClient(): Client {
-	return new Client({
+export async function withReadyClient(token: string): Promise<Client<true>> {
+	const client = new Client({
 		intents: [
 			GatewayIntentBits.Guilds,
 			GatewayIntentBits.GuildMessages,
@@ -15,12 +13,7 @@ export function createDiscordClient(): Client {
 			GatewayIntentBits.MessageContent,
 		],
 		partials: [Partials.Channel],
-		rest: { timeout: DISCORD_REST_REQUEST_TIMEOUT_MS },
 	});
-}
-
-export async function withReadyClient(token: string): Promise<Client<true>> {
-	const client = createDiscordClient();
 	const readyPromise = once(client, Events.ClientReady);
 	try {
 		await client.login(token);

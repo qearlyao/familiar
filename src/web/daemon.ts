@@ -1,0 +1,716 @@
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { getProviders } from "@earendil-works/pi-ai";
+
+import { addModel, loadAddedModels, removeModel, setAddedModelsPath } from "../added-models.js";
+import type { FamiliarAgent, FamiliarAgentReply } from "../agent.js";
+import type { AgentCore } from "../agent-core.js";
+import {
+	type AgentEventSummary,
+	createAgentEventRecorder,
+	storedAgentEventFromAgentEvent,
+	thinkingDurationMs,
+	updateAgentEventSummary,
+} from "../agent-events.js";
+import type { StoredAttachment } from "../chat-log.js";
+import type { Config, WebAuthMode } from "../config.js";
+import { loadConfigOverrides } from "../config-overrides.js";
+import {
+	CONFIG_KEYS,
+	CONFIG_REGISTRY,
+	type ConfigKey,
+	clearConfigChange,
+	commitConfigChange,
+	isConfigKey,
+} from "../config-registry.js";
+import { getContactNickname, refreshContactNote, setContactNotePath } from "../contact-note.js";
+import type { RestartHandler } from "../control.js";
+import { messageId } from "../ids.js";
+import { materializeInboundAttachments } from "../inbound-attachments.js";
+import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "../models.js";
+import { loadPersona, parsePersonaName } from "../persona.js";
+import type { ConversationRuntime, InboundMessageInput, ParsedControlCommand } from "../runtime.js";
+import { formatSetting } from "../settings.js";
+import { parseAgentReply } from "../silent-marker.js";
+import { isRecord } from "../util/guards.js";
+import { createAuth, loadWebSessionStore, requestAuthContext, sessionCookie, verifyTotp } from "./auth.js";
+import { registerWebAuthRoutes } from "./auth-routes.js";
+import { createWebEventHub } from "./event-hub.js";
+import { HttpError, readJsonBody, sendJson, sendText } from "./http.js";
+import { memeCatalogPath, parseMemeCatalog } from "./memes.js";
+import { webAttachments, webHistoryPayload } from "./messages.js";
+import { isWebUploadAttachment, readMultipartBody, type WebUploadAttachment } from "./multipart.js";
+import { agentSettingsPayload, commandArgs, sessionDto } from "./payloads.js";
+import { serveAttachment, serveStatic } from "./static.js";
+import { attachWebSocketStream } from "./stream.js";
+import { WEB_USER_NAME, type WebDaemon } from "./types.js";
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+export async function startWebDaemon(
+	config: Config,
+	familiarAgent: FamiliarAgent,
+	agentCore: AgentCore,
+	options: { restart?: RestartHandler } = {},
+): Promise<WebDaemon> {
+	setAddedModelsPath(config.workspace.dataDir);
+	setContactNotePath(config.persona.contact);
+	await refreshContactNote();
+	const persona = await loadPersona(config);
+	const personaName = parsePersonaName(persona.soul);
+	const webSessions = await loadWebSessionStore(config);
+	const auth = createAuth(config, webSessions);
+	const eventHub = createWebEventHub(config, personaName);
+	const { appendAndPublishError, publish, publishDelta } = eventHub;
+
+	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
+		if (!agentCore.hasSessionSource()) throw new HttpError(503, "Owner identity is not established yet.");
+		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
+		eventHub.subscribeRuntime(runtime);
+		return runtime;
+	};
+
+	const subscribeKnownRuntimes = async (): Promise<void> => {
+		if (!agentCore.hasSessionSource()) return;
+		const sessions = await agentCore.getWebSessions();
+		await Promise.all(
+			sessions.map(async (session) => {
+				const runtime = await agentCore.getRuntimeForWebChannel(session.key);
+				eventHub.subscribeRuntime(runtime);
+			}),
+		);
+	};
+
+	const getChannelKeyFromRequest = (url: URL, body?: unknown): string | undefined => {
+		const queryKey = url.searchParams.get("channelKey");
+		if (queryKey) return queryKey;
+		if (isRecord(body) && typeof body.channelKey === "string") return body.channelKey;
+		return undefined;
+	};
+
+	const getAgentModelsPayload = (): { models: string[]; added: string[] } => {
+		const models: string[] = [];
+		const added: string[] = [];
+		const seen = new Set<string>();
+		for (const model of config.models.allow) {
+			if (seen.has(model)) continue;
+			seen.add(model);
+			models.push(model);
+		}
+		for (const model of loadAddedModels()) {
+			if (seen.has(model)) continue;
+			seen.add(model);
+			models.push(model);
+			added.push(model);
+		}
+		return { models, added };
+	};
+
+	const getConfigPayload = (): { values: Record<ConfigKey, { value: unknown; source: "config" | "override" }> } => {
+		const overrides = loadConfigOverrides();
+		const values = {} as Record<ConfigKey, { value: unknown; source: "config" | "override" }>;
+		for (const key of CONFIG_KEYS) {
+			const entry = CONFIG_REGISTRY[key];
+			values[key] = {
+				value: entry.read(config),
+				source: key in overrides ? "override" : "config",
+			};
+		}
+		return { values };
+	};
+
+	const parseRequestedModel = (
+		value: unknown,
+	): { ok: true; model: string; ref: ModelRef } | { ok: false; error: string } => {
+		if (typeof value !== "string") return { ok: false, error: "format must be provider/model-id" };
+		const ref = parseModelRef(value);
+		if (!ref) return { ok: false, error: "format must be provider/model-id" };
+		return { ok: true, model: ref.key, ref };
+	};
+
+	const promptForRuntime = async (
+		runtime: ConversationRuntime,
+		jobId: string,
+		prompt: string,
+		attachments: StoredAttachment[] = [],
+		onTurnEnd?: () => void | Promise<void>,
+	): Promise<{
+		text: string;
+		messageId: string;
+		thinking: string;
+		thinkingMs?: number;
+		attachments?: StoredAttachment[];
+		silent?: boolean;
+	}> => {
+		return promptAssistantMessage({
+			runtime,
+			jobId,
+			assistantMessageId: messageId(),
+			dispatch: (onEvent) => agentCore.promptForRuntime(runtime, jobId, prompt, attachments, onEvent, onTurnEnd),
+		});
+	};
+
+	const promptAssistantMessage = async (options: {
+		runtime: ConversationRuntime;
+		jobId: string;
+		assistantMessageId: string;
+		dispatch: (onEvent: (event: AgentEvent) => void | Promise<void>) => Promise<FamiliarAgentReply>;
+		onAssistantStart?: () => void;
+	}): Promise<{
+		text: string;
+		messageId: string;
+		thinking: string;
+		thinkingMs?: number;
+		attachments?: StoredAttachment[];
+		silent?: boolean;
+	}> => {
+		const { runtime, jobId, assistantMessageId } = options;
+		const summary: AgentEventSummary = { thinking: "" };
+		const recorder = createAgentEventRecorder((storedEvent) =>
+			runtime.noteAgentEvent(jobId, assistantMessageId, storedEvent, { notify: false }),
+		);
+		let started = false;
+		let reply: Awaited<ReturnType<typeof agentCore.promptForRuntime>>;
+		try {
+			reply = await options.dispatch(async (event: AgentEvent) => {
+				if (event.type === "message_start" && event.message.role === "assistant" && !started) {
+					started = true;
+					options.onAssistantStart?.();
+				}
+				updateAgentEventSummary(summary, event);
+				const storedEvent = storedAgentEventFromAgentEvent(event);
+				if (storedEvent) {
+					runtime.publishAgentEvent(jobId, assistantMessageId, storedEvent);
+					await recorder.record(storedEvent);
+				}
+			});
+		} finally {
+			await recorder.flush();
+		}
+		const parsed = parseAgentReply(reply.text);
+		const finalText = parsed.silent ? "" : reply.text;
+		if (!started) {
+			options.onAssistantStart?.();
+			if (!parsed.silent) {
+				publish({
+					type: "message_started",
+					channelKey: runtime.channelKey,
+					messageId: assistantMessageId,
+					role: "assistant",
+					who: personaName,
+				});
+				if (finalText) {
+					publishDelta(runtime.channelKey, assistantMessageId, "text", finalText);
+				}
+			}
+		}
+		const thinkingMs = thinkingDurationMs(summary);
+		publish({
+			type: "message_completed",
+			channelKey: runtime.channelKey,
+			messageId: assistantMessageId,
+			thinkingMs,
+			attachments: webAttachments(config, reply.attachments),
+			silent: parsed.silent || undefined,
+		});
+		eventHub.markLocallyStreamed(assistantMessageId);
+		return {
+			text: finalText,
+			messageId: assistantMessageId,
+			thinking: summary.thinking,
+			thinkingMs,
+			attachments: reply.attachments,
+			silent: parsed.silent,
+		};
+	};
+
+	const retryLatestAssistant = async (runtime: ConversationRuntime): Promise<void> => {
+		if (runtime.hasActiveJob()) throw new Error("Cannot retry while a turn is running");
+		const target = runtime.latestAssistantRetryTarget();
+		if (!target) throw new Error("No assistant message to retry");
+		const jobId = randomUUID();
+		const assistantMessageId = messageId();
+		const replaceMessage = (): void => {
+			publish({
+				type: "message_replaced",
+				channelKey: runtime.channelKey,
+				oldMessageId: target.messageId,
+				newMessageId: assistantMessageId,
+			});
+		};
+		try {
+			const reply = await promptAssistantMessage({
+				runtime,
+				jobId,
+				assistantMessageId,
+				onAssistantStart: replaceMessage,
+				dispatch: (onEvent) =>
+					familiarAgent.retryLastAssistant(runtime.channelKey, onEvent, {
+						onTurnEnd: () => {
+							publish({
+								type: "status",
+								channelKey: runtime.channelKey,
+								kind: "idle",
+							});
+						},
+					}),
+			});
+			await runtime.noteAssistantRetry({
+				oldMessageId: target.messageId,
+				newMessageId: assistantMessageId,
+				jobId,
+				triggerRecordId: target.triggerRecordId,
+			});
+			await runtime.noteOutbound({
+				text: reply.text,
+				messageIds: [reply.messageId],
+				webMessageId: reply.messageId,
+				attachments: reply.attachments,
+				thinking: reply.thinking,
+				thinkingMs: reply.thinkingMs,
+				silent: reply.silent,
+				replyToMessageId: target.messageId,
+				jobId,
+			});
+		} catch (error) {
+			const message = errorMessage(error);
+			await appendAndPublishError(runtime, message);
+		}
+	};
+
+	const deleteLatestAssistant = async (runtime: ConversationRuntime): Promise<void> => {
+		if (runtime.hasActiveJob()) throw new Error("Cannot delete while a turn is running");
+		const target = runtime.latestAssistantDeleteTarget();
+		if (!target) throw new Error("No assistant message to delete");
+		try {
+			await familiarAgent.deleteLastAssistant(runtime.channelKey);
+			await runtime.noteMessageDelete(target.messageId);
+			publish({
+				type: "message_deleted",
+				channelKey: runtime.channelKey,
+				messageId: target.messageId,
+			});
+		} catch (error) {
+			const message = errorMessage(error);
+			await appendAndPublishError(runtime, message);
+		}
+	};
+
+	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
+		for (;;) {
+			const dispatch = runtime.beginNextJob();
+			if (!dispatch) return;
+			try {
+				const reply = await promptForRuntime(
+					runtime,
+					dispatch.job.jobId,
+					dispatch.prompt,
+					dispatch.attachments,
+					() => {
+						publish({
+							type: "status",
+							channelKey: runtime.channelKey,
+							kind: "idle",
+						});
+					},
+				);
+				await runtime.completeActiveJob({
+					text: reply.text,
+					messageIds: [reply.messageId],
+					webMessageId: reply.messageId,
+					attachments: reply.attachments,
+					thinking: reply.thinking,
+					thinkingMs: reply.thinkingMs,
+					silent: reply.silent,
+					replyToMessageId: dispatch.triggerMessageId,
+				});
+			} catch (error) {
+				if (!runtime.hasActiveJob(dispatch.job.jobId)) return;
+				const message = errorMessage(error);
+				await runtime.failActiveJob(message);
+				await appendAndPublishError(runtime, message);
+			}
+		}
+	};
+
+	const applyControlCommand = async (runtime: ConversationRuntime, control: ParsedControlCommand): Promise<string> => {
+		if (control.command === "stop") {
+			await familiarAgent.abort(runtime.channelKey);
+			return "Stopped current work.";
+		}
+		if (control.command === "new") {
+			await familiarAgent.reset(runtime.channelKey);
+			await runtime.resetConversation("new conversation requested");
+			return "Started a fresh agent transcript for this channel.";
+		}
+		if (control.command === "reload") {
+			return familiarAgent.reload();
+		}
+		if (control.command === "restart") {
+			return options.restart
+				? await options.restart()
+				: "Restart requested, but no restart handler is configured. Please restart the Familiar process manually.";
+		}
+		if (control.command === "model") {
+			return control.args
+				? await familiarAgent.setModel(runtime.channelKey, control.args)
+				: `Current model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`;
+		}
+		if (control.command === "thinking") {
+			return control.args
+				? await familiarAgent.setThinkingLevel(runtime.channelKey, control.args)
+				: `Current thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`;
+		}
+		if (control.command === "channel-trigger") return "Use Discord /familiar channel-trigger in the channel for now.";
+		if (control.command === "status") {
+			return [
+				runtime.formatStatus(),
+				`model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`,
+				`thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`,
+			].join("\n");
+		}
+		return "Compact is not wired for this runtime yet. I logged the command, but I won't run lossy compaction here.";
+	};
+
+	type WebRoute = (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
+
+	const webRoutes = new Map<string, WebRoute>();
+	const route = (method: string, pathname: string, handler: WebRoute): void => {
+		webRoutes.set(`${method} ${pathname}`, handler);
+	};
+
+	registerWebAuthRoutes(route, auth, { authMode: config.web.authMode, personaName });
+	route("GET", "/api/web/sessions", async (_request, response) => {
+		if (!agentCore.hasSessionSource()) {
+			sendJson(response, 200, { sessions: [] });
+			return true;
+		}
+		const sessions = await agentCore.getWebSessions();
+		sendJson(response, 200, { sessions: sessions.map(sessionDto) });
+		return true;
+	});
+	route("GET", "/api/web/history", async (_request, response, url) => {
+		const runtime = await getRuntime(getChannelKeyFromRequest(url));
+		const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
+		const before = url.searchParams.get("before") ?? undefined;
+		sendJson(
+			response,
+			200,
+			webHistoryPayload(config, runtime.getRecords(), personaName, runtime.channelKey, { limit, before }),
+		);
+		return true;
+	});
+	route("GET", "/api/web/agent/settings", async (_request, response, url) => {
+		const runtime = await getRuntime(getChannelKeyFromRequest(url));
+		sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+		return true;
+	});
+	route("GET", "/api/web/agent/models", async (_request, response) => {
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("POST", "/api/web/agent/models", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		const parsed = parseRequestedModel(body.model);
+		if (!parsed.ok) {
+			sendJson(response, 400, { error: parsed.error });
+			return true;
+		}
+		if (
+			!Object.hasOwn(PROVIDER_DEFAULTS, parsed.ref.provider) &&
+			!getProviders().includes(parsed.ref.provider as never)
+		) {
+			sendJson(response, 400, { error: `unsupported provider: ${parsed.ref.provider}` });
+			return true;
+		}
+		if (config.models.allow.includes(parsed.model) || loadAddedModels().includes(parsed.model)) {
+			sendJson(response, 200, getAgentModelsPayload());
+			return true;
+		}
+		await addModel(parsed.model);
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("DELETE", "/api/web/agent/models", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		const parsed = parseRequestedModel(body.model);
+		if (!parsed.ok) {
+			sendJson(response, 400, { error: parsed.error });
+			return true;
+		}
+		if (!loadAddedModels().includes(parsed.model)) {
+			sendJson(response, 400, { error: "model is not user-added" });
+			return true;
+		}
+		await removeModel(parsed.model);
+		sendJson(response, 200, getAgentModelsPayload());
+		return true;
+	});
+	route("GET", "/api/web/config", async (_request, response) => {
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("POST", "/api/web/config", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body) || typeof body.key !== "string") {
+			sendJson(response, 400, { error: "key is required" });
+			return true;
+		}
+		if (!isConfigKey(body.key)) {
+			sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+			return true;
+		}
+		const key = body.key;
+		const entry = CONFIG_REGISTRY[key];
+		try {
+			const validated = entry.validate(body.value, config);
+			await commitConfigChange(key, validated, { config, scheduler: agentCore });
+		} catch (error) {
+			const message = errorMessage(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("DELETE", "/api/web/config", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body) || typeof body.key !== "string") {
+			sendJson(response, 400, { error: "key is required" });
+			return true;
+		}
+		if (!isConfigKey(body.key)) {
+			sendJson(response, 400, { error: `unknown config key: ${body.key}` });
+			return true;
+		}
+		const key = body.key;
+		try {
+			await clearConfigChange(key, { config, scheduler: agentCore });
+		} catch (error) {
+			const message = errorMessage(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, getConfigPayload());
+		return true;
+	});
+	route("GET", "/api/web/memes", async (_request, response) => {
+		try {
+			const markdown = await readFile(memeCatalogPath(config), "utf8");
+			sendJson(response, 200, { families: parseMemeCatalog(markdown) });
+		} catch {
+			sendJson(response, 500, { error: "memes catalog unavailable" });
+		}
+		return true;
+	});
+	route("POST", "/api/web/send", async (request, response, url) => {
+		const contentType = request.headers["content-type"] ?? "";
+		const isMultipart = Array.isArray(contentType)
+			? contentType.some((value) => value.includes("multipart/form-data"))
+			: contentType.includes("multipart/form-data");
+		const body = isMultipart ? await readMultipartBody(request, contentType) : await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body) || typeof body.text !== "string") {
+			sendJson(response, 400, { error: "text is required" });
+			return true;
+		}
+		if (!isMultipart && isRecord(body) && Array.isArray(body.attachments) && body.attachments.length > 0) {
+			sendJson(response, 400, { error: "attachments require multipart form data" });
+			return true;
+		}
+		const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+		const attachments = await materializeInboundAttachments(
+			config,
+			rawAttachments
+				.filter((attachment): attachment is WebUploadAttachment => isWebUploadAttachment(attachment))
+				.map((attachment) => ({ ...attachment, source: "web" })),
+		);
+		if (!body.text.trim() && attachments.length === 0) {
+			sendJson(response, 400, { error: "text or attachment is required" });
+			return true;
+		}
+		const id = messageId("user");
+		const ts = Date.now();
+		const input: InboundMessageInput = {
+			messageId: id,
+			authorId: config.discord.ownerId,
+			authorName: getContactNickname(WEB_USER_NAME),
+			text: body.text,
+			isBot: false,
+			mentionedBot: true,
+			remoteTimestamp: new Date(ts).toISOString(),
+			checkpoint: { messageId: id },
+			attachments,
+		};
+		await runtime.ingestInbound(input, { mode: "queue" });
+		void drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
+		sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
+		return true;
+	});
+	route("POST", "/api/web/retry", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		void retryLatestAssistant(runtime).catch((error) => console.error("Web retry failed", error));
+		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+		return true;
+	});
+	route("POST", "/api/web/delete", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		void deleteLatestAssistant(runtime).catch((error) => console.error("Web delete failed", error));
+		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+		return true;
+	});
+	route("POST", "/api/web/agent/settings", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body)) {
+			sendJson(response, 400, { error: "body is required" });
+			return true;
+		}
+		try {
+			if (typeof body.model === "string") await familiarAgent.setModel(runtime.channelKey, body.model);
+			if (typeof body.thinking === "string") await familiarAgent.setThinkingLevel(runtime.channelKey, body.thinking);
+		} catch (error) {
+			const message = errorMessage(error);
+			sendJson(response, 400, { error: message });
+			return true;
+		}
+		sendJson(response, 200, agentSettingsPayload(familiarAgent, runtime.channelKey, personaName));
+		return true;
+	});
+	route("POST", "/api/web/agent/new", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		await familiarAgent.reset(runtime.channelKey);
+		await runtime.resetConversation("new conversation requested from web");
+		publish({
+			type: "status",
+			channelKey: runtime.channelKey,
+			kind: "idle",
+			detail: "started fresh from web",
+		});
+		sendJson(response, 200, { ok: true });
+		return true;
+	});
+	route("POST", "/api/web/control", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body) || typeof body.command !== "string") {
+			sendJson(response, 400, { error: "command is required" });
+			return true;
+		}
+		if (config.web.authMode === "public-2fa" && body.command === "login") {
+			const token = isRecord(body.args) && typeof body.args.token === "string" ? body.args.token : "";
+			if (!config.web.totpSecret || !verifyTotp(config.web.totpSecret, token)) {
+				sendJson(response, 401, { ok: false, message: "Invalid TOTP token." });
+				return true;
+			}
+			const session = await auth.createSession(request, "2fa login");
+			sendJson(
+				response,
+				200,
+				{ ok: true, message: "Authenticated.", device: session.device },
+				{ "set-cookie": sessionCookie(session.token, requestAuthContext(request).secure) },
+			);
+			return true;
+		}
+		const args = commandArgs(body.command, body.args);
+		const input: InboundMessageInput = {
+			messageId: messageId("control"),
+			authorId: config.discord.ownerId,
+			authorName: getContactNickname(WEB_USER_NAME),
+			text: `/${body.command}${args ? ` ${args}` : ""}`,
+			isBot: false,
+			mentionedBot: true,
+			remoteTimestamp: new Date().toISOString(),
+		};
+		const control = runtime.parseControlCommand(input);
+		if (!control) {
+			sendJson(response, 400, { ok: false, message: "Unsupported command." });
+			return true;
+		}
+		await runtime.noteControlCommand(input, control);
+		const message = await applyControlCommand(runtime, control);
+		await runtime.noteOutbound({ text: message, messageIds: [], control: control.command });
+		sendJson(response, 200, { ok: true, message, channelKey: runtime.channelKey });
+		return true;
+	});
+
+	const handleApi = async (request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> => {
+		if (!url.pathname.startsWith("/api/web/")) return false;
+		if (!(await auth.authorize(request, url.pathname))) {
+			sendJson(response, 401, { error: "unauthorized" });
+			return true;
+		}
+		try {
+			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
+				return serveAttachment(config, response, url.pathname, request.headers.range);
+			}
+			const handler = webRoutes.get(`${request.method} ${url.pathname}`);
+			// await is load-bearing: it keeps handler rejections inside this try so the catch maps HttpError to a status.
+			if (handler) return await handler(request, response, url);
+			sendJson(response, 404, { error: "not found" });
+			return true;
+		} catch (error) {
+			const status = error instanceof HttpError ? error.status : 500;
+			const message = errorMessage(error);
+			sendJson(response, status, { error: message });
+			return true;
+		}
+	};
+
+	await subscribeKnownRuntimes();
+
+	const server = createServer((request, response) => {
+		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+		void handleApi(request, response, url).then(async (handled) => {
+			if (handled) return;
+			if (await serveStatic(response, url.pathname)) return;
+			sendText(response, 404, "Not found");
+		});
+	});
+
+	attachWebSocketStream(server, {
+		authorize: (request, pathname) => auth.authorize(request, pathname),
+		eventHub,
+		getRuntime,
+		abort: (runtime) => familiarAgent.abort(runtime.channelKey),
+		retry: retryLatestAssistant,
+		deleteLatest: deleteLatestAssistant,
+	});
+
+	await new Promise<void>((resolveListen, rejectListen) => {
+		server.once("error", rejectListen);
+		server.listen(config.web.port, config.web.bindAddress, () => {
+			server.off("error", rejectListen);
+			resolveListen();
+		});
+	});
+	console.log(`Web side-door listening on http://${config.web.bindAddress}:${config.web.port}`);
+
+	return {
+		server,
+		async stop(): Promise<void> {
+			eventHub.stop();
+			await new Promise<void>((resolveClose, rejectClose) => {
+				server.close((error) => (error ? rejectClose(error) : resolveClose()));
+			});
+		},
+	};
+}
+
+export type { WebAuthMode, WebDaemon };

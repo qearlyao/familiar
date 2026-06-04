@@ -1,1 +1,1 @@
-export type RestartHandler = () => string | Promise<string>;
+export * from "./lifecycle/control.js";

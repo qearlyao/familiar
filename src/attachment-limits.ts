@@ -1,3 +1,1 @@
-export const MAX_INBOUND_ATTACHMENTS = 4;
-export const MAX_INBOUND_ATTACHMENT_BYTES = 32 * 1024 * 1024;
-export const MAX_INBOUND_TOTAL_BYTES = 96 * 1024 * 1024;
+export * from "./media/attachment-limits.js";

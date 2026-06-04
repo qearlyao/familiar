@@ -13,6 +13,12 @@ export function isWebUploadAttachment(value: unknown): value is WebUploadAttachm
 	return !!value && typeof value === "object" && Buffer.isBuffer((value as { buffer?: unknown }).buffer);
 }
 
+export function isMultipartContentType(contentType: string | string[]): boolean {
+	return Array.isArray(contentType)
+		? contentType.some((value) => value.includes("multipart/form-data"))
+		: contentType.includes("multipart/form-data");
+}
+
 export async function readRawBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {
 	const chunks: Buffer[] = [];
 	let total = 0;

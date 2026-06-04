@@ -1,36 +1,83 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BookOpen, CalendarDays, FileText, RefreshCw } from "lucide-react";
+import { BookOpen, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { fetchDiaries, fetchDiary, type DiaryEntry, type DiarySummary } from "@/lib/api";
 
-function formatDiaryDate(date: string, style: "short" | "long" = "long"): string {
+function parseDiaryDate(date: string): Date | null {
   const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDiaryDate(date: string): string {
+  const parsed = parseDiaryDate(date);
+  if (!parsed) return date;
   return new Intl.DateTimeFormat(undefined, {
-    weekday: style === "long" ? "long" : undefined,
-    month: style === "long" ? "long" : "short",
+    weekday: "long",
+    month: "long",
     day: "numeric",
-    year: style === "long" ? "numeric" : undefined,
+    year: "numeric",
   })
     .format(parsed)
     .toLowerCase();
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} b`;
-  return `${Math.round(bytes / 1024)} kb`;
+function diaryDateParts(date: string): { weekday: string; day: string; month: string } {
+  const parsed = parseDiaryDate(date);
+  if (!parsed) return { weekday: "", day: date, month: "" };
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(undefined, options).format(parsed).toLowerCase();
+  return {
+    weekday: part({ weekday: "short" }),
+    day: part({ day: "numeric" }),
+    month: part({ month: "short" }),
+  };
+}
+
+function daysSince(date: string): number | null {
+  const parsed = parseDiaryDate(date);
+  if (!parsed) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((today.getTime() - parsed.getTime()) / 86_400_000);
+}
+
+function diaryRecency(date: string): string | undefined {
+  const diff = daysSince(date);
+  if (diff === null || diff < 0) return undefined;
+  if (diff === 0) return "today";
+  if (diff === 1) return "yesterday";
+  if (diff < 7) return `${diff} days ago`;
+  if (diff < 14) return "last week";
+  if (diff < 30) return `${Math.round(diff / 7)} weeks ago`;
+  if (diff < 60) return "last month";
+  if (diff < 365) return `${Math.round(diff / 30)} months ago`;
+  return undefined;
+}
+
+function readingTime(content: string): string {
+  const words = content.trim().split(/\s+/).filter(Boolean).length;
+  if (words === 0) return "";
+  const minutes = Math.max(1, Math.round(words / 200));
+  return minutes === 1 ? "a minute’s read" : `a ${minutes}-minute read`;
 }
 
 function LoadingRows() {
   return (
-    <div className="grid gap-2 px-2 py-1">
+    <div className="grid gap-1 px-2 py-1">
       {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="rounded-md bg-muted/70 px-3 py-3">
-          <div className="h-3 w-24 rounded-sm bg-muted-foreground/15" />
-          <div className="mt-3 h-2 w-full rounded-sm bg-muted-foreground/10" />
-          <div className="mt-2 h-2 w-2/3 rounded-sm bg-muted-foreground/10" />
+        <div key={index} className="flex gap-3 rounded-md px-2 py-3">
+          <div className="flex w-10 shrink-0 flex-col items-center gap-1 pt-0.5">
+            <div className="h-2 w-7 rounded-sm bg-muted-foreground/10" />
+            <div className="h-5 w-6 rounded-sm bg-muted-foreground/15" />
+            <div className="h-2 w-6 rounded-sm bg-muted-foreground/10" />
+          </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="h-3 w-2/3 rounded-sm bg-muted-foreground/15" />
+            <div className="mt-2.5 h-2 w-full rounded-sm bg-muted-foreground/10" />
+            <div className="mt-1.5 h-2 w-4/5 rounded-sm bg-muted-foreground/10" />
+          </div>
         </div>
       ))}
     </div>
@@ -46,35 +93,63 @@ function DiaryListButton({
   active: boolean;
   onSelect: () => void;
 }) {
+  const { weekday, day, month } = diaryDateParts(diary.date);
+  const isToday = daysSince(diary.date) === 0;
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "w-full rounded-md px-3 py-3 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        active
-          ? "bg-primary text-primary-foreground"
-          : "text-foreground hover:bg-accent/60",
+        "flex w-full gap-3 rounded-md px-2 py-3 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/50",
       )}
     >
-      <span className="flex items-center gap-2 text-xs leading-none">
-        <CalendarDays className="size-3.5" />
-        <span>{formatDiaryDate(diary.date, "short")}</span>
-      </span>
-      <span className="mt-2 block truncate font-serif text-sm leading-tight tracking-tight">
-        {diary.title}
-      </span>
-      {diary.excerpt ? (
+      <span className="flex w-10 shrink-0 flex-col items-center font-serif leading-none">
         <span
           className={cn(
-            "mt-1.5 line-clamp-2 text-xs leading-relaxed",
-            active ? "text-primary-foreground/75" : "text-muted-foreground",
+            "text-[0.6875rem] tracking-wide",
+            active ? "text-primary-foreground/70" : "text-muted-foreground",
           )}
         >
-          {diary.excerpt}
+          {weekday}
         </span>
-      ) : null}
+        <span className="mt-0.5 text-2xl tabular-nums">{day}</span>
+        <span
+          className={cn(
+            "mt-0.5 text-[0.6875rem] tracking-wide",
+            active ? "text-primary-foreground/70" : "text-muted-foreground",
+          )}
+        >
+          {month}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="block truncate font-serif text-sm leading-tight tracking-tight">
+            {diary.title}
+          </span>
+          {isToday ? (
+            <span
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                active ? "bg-primary-foreground/70" : "bg-primary",
+              )}
+              aria-hidden
+            />
+          ) : null}
+        </span>
+        {diary.excerpt ? (
+          <span
+            className={cn(
+              "mt-1.5 line-clamp-2 text-xs leading-relaxed",
+              active ? "text-primary-foreground/85" : "text-muted-foreground",
+            )}
+          >
+            {diary.excerpt}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }
@@ -237,20 +312,20 @@ function DiaryReader({
       </div>
     );
   }
+  const recency = diaryRecency(summary.date);
+  const reading = content !== undefined ? readingTime(content) : "";
+  const meta = [recency, reading].filter(Boolean).join(" · ");
   return (
     <article
       key={summary.date}
-      className="mx-auto flex w-full max-w-3xl flex-col px-6 py-8 duration-200 ease-out-quart animate-in fade-in-0 slide-in-from-bottom-[0.375rem] motion-reduce:animate-none md:px-8 md:py-10"
+      className="mx-auto flex w-full max-w-[70ch] flex-col px-6 py-8 duration-200 ease-out-quart animate-in fade-in-0 slide-in-from-bottom-[0.375rem] motion-reduce:animate-none md:px-8 md:py-10"
     >
       <div className="mb-8 border-b border-border pb-6">
         <p className="font-serif text-sm italic text-muted-foreground">{formatDiaryDate(summary.date)}</p>
-        <h1 className="mt-3 max-w-[18ch] font-serif text-3xl leading-tight tracking-tight text-foreground">
+        <h1 className="mt-3 font-serif text-3xl leading-tight tracking-tight text-balance text-foreground">
           {summary.title}
         </h1>
-        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <FileText className="size-3.5" />
-          {summary.sourceId}, {formatSize(summary.sizeBytes)}
-        </p>
+        {meta ? <p className="mt-3 font-serif text-xs italic text-muted-foreground">{meta}</p> : null}
       </div>
       {content !== undefined ? (
         <div className="duration-300 ease-out-quart animate-in fade-in-0 motion-reduce:animate-none">
@@ -344,8 +419,10 @@ export function DiariesPage() {
       ) : null}
       {showInitialSkeleton ? (
         <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 overflow-hidden px-4 py-5 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
-          <LoadingRows />
-          <div className="rounded-md bg-card p-8">
+          <div className="rounded-md border border-border bg-card py-2">
+            <LoadingRows />
+          </div>
+          <div className="rounded-md border border-border bg-card p-8">
             <div className="h-4 w-28 rounded-sm bg-muted-foreground/15" />
             <div className="mt-6 h-8 w-64 rounded-sm bg-muted-foreground/10" />
             <div className="mt-8 space-y-3">
@@ -359,8 +436,8 @@ export function DiariesPage() {
         <EmptyState onRefresh={() => void loadList()} />
       ) : (
         <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-5 overflow-hidden px-4 py-5 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
-          <aside className="min-h-0 rounded-md bg-card py-2 shadow-sm">
-            <ScrollArea className="h-full max-h-56 md:max-h-none">
+          <aside className="min-h-0 rounded-md border border-border bg-card py-2">
+            <ScrollArea className="h-full max-h-72 md:max-h-none">
               <div className="grid gap-1 px-2">
                 {diaries.map((diary) => (
                   <DiaryListButton
@@ -373,7 +450,7 @@ export function DiariesPage() {
               </div>
             </ScrollArea>
           </aside>
-          <main className="min-h-0 overflow-hidden rounded-md bg-card shadow-sm">
+          <main className="min-h-0 overflow-hidden rounded-md border border-border bg-card">
             <ScrollArea className="h-full">
               <DiaryReader
                 summary={selectedSummary}

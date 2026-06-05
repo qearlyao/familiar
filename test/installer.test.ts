@@ -14,13 +14,15 @@ function escapeRegExp(value: string): string {
 }
 
 describe("install scripts", () => {
-	it("keeps the publishable shrinkwrap aligned with the source lock", async () => {
-		const [sourceLock, shrinkwrap] = await Promise.all([
-			readFile(resolve(repoRoot, "package-lock.json"), "utf8"),
+	it("keeps npm-shrinkwrap as the single publishable lockfile", async () => {
+		const [packageJson, shrinkwrap] = await Promise.all([
+			readFile(resolve(repoRoot, "package.json"), "utf8"),
 			readFile(resolve(repoRoot, "npm-shrinkwrap.json"), "utf8"),
 		]);
 
-		assert.equal(shrinkwrap, sourceLock);
+		assert.equal(JSON.parse(shrinkwrap).name, "@qearlyao/familiar");
+		assert.equal(JSON.parse(packageJson).files.includes("npm-shrinkwrap.json"), true);
+		await assert.rejects(() => readFile(resolve(repoRoot, "package-lock.json"), "utf8"), { code: "ENOENT" });
 	});
 
 	it("prints shell installer help", async () => {

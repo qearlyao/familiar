@@ -208,12 +208,152 @@
 }
 
 @layer components {
-  .diary-prose {
-    @apply max-w-[70ch] text-[0.95rem] leading-relaxed text-foreground;
+  .warm-prose {
+    @apply max-w-[70ch] leading-relaxed text-foreground;
   }
 
-  .diary-prose > * + * {
+  .warm-prose > * + * {
     @apply mt-5;
+  }
+
+  .warm-prose h1,
+  .warm-prose h2,
+  .warm-prose h3,
+  .warm-prose h4,
+  .warm-prose h5,
+  .warm-prose h6 {
+    @apply font-serif leading-tight tracking-tight text-foreground first:mt-0;
+    text-wrap: balance;
+  }
+
+  .warm-prose p {
+    @apply whitespace-pre-wrap wrap-anywhere;
+    text-wrap: pretty;
+  }
+
+  .warm-prose ul,
+  .warm-prose ol {
+    @apply grid pl-5;
+  }
+
+  .warm-prose ul {
+    @apply list-disc;
+  }
+
+  .warm-prose ol {
+    @apply list-decimal;
+  }
+
+  .warm-prose strong {
+    @apply font-bold text-foreground;
+  }
+
+  .warm-prose em {
+    @apply italic;
+  }
+
+  .warm-prose blockquote {
+    @apply border-l border-border pl-4 font-serif italic text-muted-foreground;
+  }
+
+  .warm-prose code {
+    @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground;
+  }
+
+  .chat-markdown {
+    @apply min-w-0 wrap-anywhere;
+  }
+
+  .chat-markdown > * + * {
+    @apply mt-3;
+  }
+
+  .chat-markdown h1,
+  .chat-markdown h2,
+  .chat-markdown h3,
+  .chat-markdown h4,
+  .chat-markdown h5,
+  .chat-markdown h6 {
+    @apply mt-5 leading-snug;
+  }
+
+  .chat-markdown h1 {
+    @apply text-xl;
+  }
+
+  .chat-markdown h2 {
+    @apply text-lg;
+  }
+
+  .chat-markdown h3,
+  .chat-markdown h4,
+  .chat-markdown h5,
+  .chat-markdown h6 {
+    @apply text-base;
+  }
+
+  .chat-markdown a {
+    @apply text-primary underline underline-offset-4 transition-colors hover:text-foreground;
+  }
+
+  .chat-markdown ul,
+  .chat-markdown ol {
+    @apply gap-1.5;
+  }
+
+  .chat-markdown li {
+    @apply pl-1;
+  }
+
+  .chat-markdown li > p {
+    @apply inline;
+  }
+
+  .chat-markdown li > ul,
+  .chat-markdown li > ol {
+    @apply mt-1.5;
+  }
+
+  .chat-markdown hr {
+    @apply my-5 border-border/80;
+  }
+
+  .chat-markdown pre {
+    @apply overflow-x-auto rounded-md border border-border/80 bg-muted/70 p-3 text-sm leading-relaxed;
+  }
+
+  .chat-markdown pre code {
+    @apply rounded-none bg-transparent p-0 text-[0.9em];
+  }
+
+  .chat-markdown input[type="checkbox"] {
+    @apply mr-2 align-middle accent-primary;
+  }
+
+  .chat-markdown-table {
+    @apply max-w-full overflow-x-auto;
+  }
+
+  .chat-markdown table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .chat-markdown th,
+  .chat-markdown td {
+    @apply border border-border/80 px-2.5 py-1.5 text-left align-top;
+  }
+
+  .chat-markdown th {
+    @apply bg-muted/70 font-bold;
+  }
+
+  .chat-markdown-streaming::after {
+    @apply ml-0.5 inline-block animate-pulse;
+    content: "▎";
+  }
+
+  .diary-prose {
+    @apply text-[0.95rem];
   }
 
   .diary-prose h2 {
@@ -224,28 +364,8 @@
     @apply mt-7 font-serif text-xl leading-tight tracking-tight text-foreground first:mt-0;
   }
 
-  .diary-prose p {
-    @apply whitespace-pre-wrap wrap-anywhere;
-  }
-
   .diary-prose ul,
   .diary-prose ol {
-    @apply grid gap-2 pl-5;
-  }
-
-  .diary-prose ul {
-    @apply list-disc;
-  }
-
-  .diary-prose ol {
-    @apply list-decimal;
-  }
-
-  .diary-prose blockquote {
-    @apply border-l border-border pl-4 font-serif italic text-muted-foreground;
-  }
-
-  .diary-prose code {
-    @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground;
+    @apply gap-2;
   }
 }

@@ -5,7 +5,7 @@ export function MarkdownView({ content, title }: { content: string; title: strin
   if (blocks.length === 0) {
     return <p className="font-serif text-sm italic text-muted-foreground">this day is quiet.</p>;
   }
-  return <div className="diary-prose">{blocks}</div>;
+  return <div className="warm-prose diary-prose">{blocks}</div>;
 }
 
 function markdownBlocks(content: string, title: string): ReactNode[] {

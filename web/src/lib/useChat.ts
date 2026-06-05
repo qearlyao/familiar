@@ -121,6 +121,7 @@ export function useChat(): ChatHook {
   const lastEventIdRef = useRef<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
+  const activeAssistantMessageIdsRef = useRef<Set<string>>(new Set());
 
   const patchSteps = useCallback((messageId: string, fn: (steps: Step[]) => Step[]) => {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, steps: fn(m.steps) } : m)));
@@ -132,7 +133,10 @@ export function useChat(): ChatHook {
 
       switch (event.type) {
         case "message_started": {
-          if (event.role !== "user") setStreaming(true);
+          if (event.role !== "user") {
+            activeAssistantMessageIdsRef.current.add(event.messageId);
+            setStreaming(true);
+          }
           setMessages((prev) => {
             if (prev.some((m) => m.id === event.messageId)) return prev;
             return [
@@ -150,12 +154,16 @@ export function useChat(): ChatHook {
         }
 
         case "message_replaced": {
+          activeAssistantMessageIdsRef.current.delete(event.oldMessageId);
+          activeAssistantMessageIdsRef.current.add(event.newMessageId);
           setStreaming(true);
           setMessages((prev) => prev.filter((m) => m.id !== event.oldMessageId));
           break;
         }
 
         case "message_deleted": {
+          activeAssistantMessageIdsRef.current.delete(event.messageId);
+          if (activeAssistantMessageIdsRef.current.size === 0) setStreaming(false);
           setMessages((prev) => prev.filter((m) => m.id !== event.messageId));
           break;
         }
@@ -174,6 +182,9 @@ export function useChat(): ChatHook {
 
         case "message_completed": {
           const now = Date.now();
+          if (activeAssistantMessageIdsRef.current.delete(event.messageId)) {
+            setStreaming(activeAssistantMessageIdsRef.current.size > 0);
+          }
           setMessages((prev) => {
             const existing = prev.find((m) => m.id === event.messageId);
             if (!existing) {
@@ -229,11 +240,15 @@ export function useChat(): ChatHook {
         }
 
         case "status": {
-          if (event.kind === "idle") setStreaming(false);
+          if (event.kind === "idle") {
+            activeAssistantMessageIdsRef.current.clear();
+            setStreaming(false);
+          }
           break;
         }
 
         case "error": {
+          activeAssistantMessageIdsRef.current.clear();
           setStreaming(false);
           setMessages((prev) => [
             ...prev,
@@ -306,6 +321,7 @@ export function useChat(): ChatHook {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     lastEventIdRef.current = null;
+    activeAssistantMessageIdsRef.current.clear();
 
     const resetTimer = window.setTimeout(() => {
       if (cancelled) return;

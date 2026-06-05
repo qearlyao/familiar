@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { collapseInlineSegments, parseInlineSegments } from "../web/src/lib/inlineSegments.js";
+import { splitLegacyChatMedia } from "../web/src/lib/chatMarkdownMedia.js";
 
-describe("renderInlineText parser", () => {
+describe("chat markdown media parser", () => {
 	it("parses meme labels that contain parentheses", () => {
 		const text =
 			"meme: i'll burn two holes in your ass (vulgar joke) (https://files.catbox.moe/e3knpt.jpg)";
 
-		assert.deepEqual(collapseInlineSegments(parseInlineSegments(text)), [
+		assert.deepEqual(splitLegacyChatMedia(text), [
 			{
 				type: "image",
 				url: "https://files.catbox.moe/e3knpt.jpg",
@@ -20,7 +20,7 @@ describe("renderInlineText parser", () => {
 	it("keeps non-image URLs as text", () => {
 		const text = "read https://example.com/docs and then meme: okay (https://files.catbox.moe/faj921.png)";
 
-		assert.deepEqual(collapseInlineSegments(parseInlineSegments(text)), [
+		assert.deepEqual(splitLegacyChatMedia(text), [
 			{ type: "text", value: "read https://example.com/docs and then" },
 			{ type: "image", url: "https://files.catbox.moe/faj921.png", alt: "okay" },
 		]);

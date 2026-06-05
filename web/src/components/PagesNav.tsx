@@ -1,34 +1,16 @@
 import { useState } from "react";
-import {
-  BookOpen,
-  FileText,
-  Images,
-  MessageCircle,
-  PanelLeftOpen,
-  Sparkles,
-  type LucideIcon,
-} from "lucide-react";
+import { PanelLeftOpen, type LucideIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type ShellPage = "chat" | "diaries" | "skills" | "files" | "gallery";
-
-interface ShellNavItem {
-  id: ShellPage;
+export interface ShellNavItem<PageId extends string = string> {
+  id: PageId;
   label: string;
   description: string;
   icon: LucideIcon;
   enabled?: boolean;
 }
-
-const NAV_ITEMS: ShellNavItem[] = [
-  { id: "chat", label: "chat", description: "where you two are", icon: MessageCircle, enabled: true },
-  { id: "diaries", label: "diaries", description: "written days", icon: BookOpen, enabled: true },
-  { id: "skills", label: "skills", description: "little tools", icon: Sparkles },
-  { id: "files", label: "files", description: "notes by the door", icon: FileText },
-  { id: "gallery", label: "gallery", description: "pictures left behind", icon: Images },
-];
 
 function ShellButton({
   item,
@@ -75,12 +57,14 @@ function ShellButton({
   );
 }
 
-export function PagesNav({
+export function PagesNav<PageId extends string>({
+  items,
   selectedPage,
   onSelectPage,
 }: {
-  selectedPage: ShellPage;
-  onSelectPage: (page: ShellPage) => void;
+  items: ShellNavItem<PageId>[];
+  selectedPage: PageId;
+  onSelectPage: (page: PageId) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -119,7 +103,7 @@ export function PagesNav({
             <p className="mt-1 font-serif text-xs italic text-muted-foreground">choose a room</p>
           </div>
           <nav className="grid gap-2">
-            {NAV_ITEMS.map((item) => (
+            {items.map((item) => (
               <ShellButton
                 key={item.id}
                 item={item}

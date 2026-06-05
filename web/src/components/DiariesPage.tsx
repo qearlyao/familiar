@@ -300,10 +300,12 @@ function DiaryReader({
   summary,
   content,
   loading,
+  settle,
 }: {
   summary: DiarySummary | undefined;
   content: string | undefined;
   loading: boolean;
+  settle: boolean;
 }) {
   if (!summary) {
     return (
@@ -318,7 +320,11 @@ function DiaryReader({
   return (
     <article
       key={summary.date}
-      className="mx-auto flex w-full max-w-[70ch] flex-col px-6 py-8 duration-200 ease-out-quart animate-in fade-in-0 slide-in-from-bottom-[0.375rem] motion-reduce:animate-none md:px-8 md:py-10"
+      className={cn(
+        "mx-auto flex w-full max-w-[70ch] flex-col px-6 py-8 md:px-8 md:py-10",
+        settle &&
+          "duration-200 ease-out-quart animate-in fade-in-0 slide-in-from-bottom-[0.375rem] motion-reduce:animate-none",
+      )}
     >
       <div className="mb-8 border-b border-border pb-6">
         <p className="font-serif text-sm italic text-muted-foreground">{formatDiaryDate(summary.date)}</p>
@@ -346,6 +352,7 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
   const [loadingEntry, setLoadingEntry] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [mobileReader, setMobileReader] = useState(false);
+  const [userSwitched, setUserSwitched] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -383,10 +390,10 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
   }, [loadList]);
 
   useEffect(() => {
-    if (!selectedDate) return;
+    if (!selectedDate || entry?.date === selectedDate) return;
     const id = window.setTimeout(() => void loadEntry(selectedDate), 0);
     return () => window.clearTimeout(id);
-  }, [loadEntry, selectedDate]);
+  }, [entry?.date, loadEntry, selectedDate]);
 
   const selectedSummary = diaries.find((diary) => diary.date === selectedDate);
   const currentContent = entry && entry.date === selectedDate ? entry.content : undefined;
@@ -452,6 +459,7 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
                     diary={diary}
                     active={diary.date === selectedDate}
                     onSelect={() => {
+                      if (diary.date !== selectedDate) setUserSwitched(true);
                       setSelectedDate(diary.date);
                       setMobileReader(true);
                     }}
@@ -479,6 +487,7 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
                 summary={selectedSummary}
                 content={currentContent}
                 loading={loadingEntry}
+                settle={userSwitched}
               />
             </ScrollArea>
           </main>

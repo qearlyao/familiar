@@ -243,6 +243,37 @@ describe("web history", () => {
 		assert.equal(message.attachments?.[0]?.name, "config.txt");
 	});
 
+	it("keeps copied-workspace attachment paths from breaking history", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			{
+				type: "inbound",
+				...base(1, "2026-05-26T00:00:00.000Z"),
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "Q",
+				text: "old image",
+				isBot: false,
+				mentionedBot: true,
+				attachments: [
+					{
+						id: "attachment-1",
+						name: "mac-image.png",
+						kind: "image",
+						mimeType: "image/png",
+						localPath: "/Users/qearl/.familiar/data/attachments/generated/mac-image.png",
+					},
+				],
+			},
+		];
+
+		const body = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 50 });
+
+		assert.equal(body.messages[0]?.text, "old image");
+		assert.equal(body.messages[0]?.attachments?.[0]?.name, "mac-image.png");
+		assert.equal(body.messages[0]?.attachments?.[0]?.url, undefined);
+	});
+
 	it("preserves interleaved assistant step order from agent events", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records = interleavedAssistantRecords();

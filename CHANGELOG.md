@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0 - 2026-06-05
+
+### Added
+
+- Add bearer-token WebUI login with HttpOnly device-session cookies, persistent device history, logout, device revocation, and sign-out-others controls.
+- Add a WebUI room switcher with Chat and Diaries rooms while keeping the chat session mounted across page changes.
+- Add a WebUI diaries reader for `memories/diaries/YYYY-MM-DD.md`, with dated excerpts, Markdown prose, refresh/empty/loading states, and a mobile master-detail layout.
+- Render WebUI chat replies as Markdown, including lists, code, links, tables, images, and existing `meme: ... (url)` media links.
+
+### Changed
+
+- Document loopback reverse-proxy bearer deployments for the WebUI and trust forwarded IP/proto headers only from loopback proxy connections.
+- Raise inbound attachment limits to 32MB per file and 96MB total, accept QuickTime/MOV videos, and route video understanding through Gemini Files API for large uploads.
+- Keep attachment summaries and media-understanding failure notes attached to attachment metadata instead of mixing them into user-authored WebUI text.
+- Polish WebUI settings and navigation, including clearer settings sections, compact thinking controls, inline page navigation, and a responsive diary reader.
+- Ask heartbeat-written diary entries to include meaningful Markdown titles so the WebUI diaries list shows readable day names.
+
+### Fixed
+
+- Restore Discord delivery for generated attachments by using direct multipart uploads with a longer per-upload timeout.
+- Surface WebUI send failures in the composer and restore the unsent draft when a send attempt fails.
+- Release the WebUI composer after Discord or heartbeat turns finish, even when no separate idle status frame arrives.
+- Use cross-platform spawning for browser helpers so Windows `.cmd` paths and special characters in arguments work reliably.
+
 ## 0.3.0 - 2026-06-02
 
 ### Added

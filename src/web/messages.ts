@@ -26,9 +26,18 @@ export function webAttachments(
 		kind: attachment.kind,
 		mimeType: attachment.mimeType,
 		size: attachment.size,
-		url: attachment.localPath ? publicAttachmentPath(config, attachment.localPath) : attachment.remoteUrl,
+		url: webAttachmentUrl(config, attachment),
 		derivedText: attachmentDerivedText(attachment),
 	}));
+}
+
+function webAttachmentUrl(config: Config, attachment: StoredAttachment): string | undefined {
+	if (!attachment.localPath) return attachment.remoteUrl;
+	try {
+		return publicAttachmentPath(config, attachment.localPath);
+	} catch {
+		return attachment.remoteUrl;
+	}
 }
 
 export function attachmentDerivedText(attachment: StoredAttachment): WebAttachment["derivedText"] | undefined {

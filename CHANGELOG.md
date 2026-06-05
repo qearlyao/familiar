@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 - 2026-06-05
+
+### Added
+
+- Add short `familiar start`, `familiar stop`, and `familiar restart` service commands for installed macOS and Linux user services.
+- Preserve ordered sticker drafts in the WebUI composer so image/sticker snippets stay in place while editing mixed text and media messages.
+
+### Fixed
+
+- Hug right-aligned WebUI user message bubbles to their longest rendered line for cleaner wrapping.
+
 ## 0.4.0 - 2026-06-05
 
 ### Added

@@ -1,13 +1,33 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { MediaPreview } from "@/components/MediaPreview";
 import { remarkImageParagraphs } from "@/lib/chatMarkdownLayout";
 import { remarkLegacyChatMedia } from "@/lib/chatMarkdownMedia";
+import { hugParagraphs } from "@/lib/hugLines";
 import { cn } from "@/lib/utils";
 
 const remarkPlugins = [remarkGfm, remarkLegacyChatMedia, remarkImageParagraphs];
+
+/**
+ * Right-anchored user messages render as `fit-content` paragraphs, which clamp to the
+ * column width and leave ragged whitespace against the right edge when text wraps. Pin
+ * each paragraph to its widest line so the box hugs the text. Only the `end` alignment
+ * shrink-wraps, so the `start` (assistant) path skips this entirely. User messages are
+ * static — no streaming — so we re-measure on font load and viewport resize only.
+ */
+function useHugLines(ref: React.RefObject<HTMLDivElement | null>, enabled: boolean, text: string) {
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!enabled || !node) return;
+    const measure = () => hugParagraphs(node);
+    measure();
+    window.addEventListener("resize", measure);
+    document.fonts?.ready.then(measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [ref, enabled, text]);
+}
 
 function markdownComponents(align: "start" | "end"): Components {
   return {
@@ -60,9 +80,12 @@ export function ChatMarkdown({
   align?: "start" | "end";
 }) {
   const components = useMemo(() => markdownComponents(align), [align]);
+  const ref = useRef<HTMLDivElement>(null);
+  useHugLines(ref, align === "end", text);
 
   return (
     <div
+      ref={ref}
       className={cn(
         "warm-prose chat-markdown",
         align === "end" && "chat-markdown-end",

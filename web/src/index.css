@@ -268,6 +268,14 @@
     @apply mt-3;
   }
 
+  .chat-markdown p {
+    text-wrap: wrap;
+  }
+
+  .chat-markdown-end > p {
+    @apply ml-auto w-fit max-w-full;
+  }
+
   .chat-markdown h1,
   .chat-markdown h2,
   .chat-markdown h3,

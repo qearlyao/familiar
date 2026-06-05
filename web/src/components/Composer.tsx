@@ -1,16 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DraftEditor } from "@/components/DraftEditor";
+import type { DraftBlock } from "@/lib/composerDraft";
+import {
+  emptyDraftBlocks,
+  hasDraftBlocksContent,
+  serializeDraftBlocks,
+} from "@/lib/composerDraft";
 import { cn } from "@/lib/utils";
-import { MemePicker } from "./MemePicker";
 
 type Draft = {
-  value: string;
+  blocks: DraftBlock[];
   attachments: File[];
   revision: number;
 };
 
-const EMPTY_DRAFT: Draft = { value: "", attachments: [], revision: 0 };
+function emptyDraft(revision = 0): Draft {
+  return { blocks: emptyDraftBlocks(), attachments: [], revision };
+}
 
 function sendErrorMessage(err: unknown): string {
   const message = err instanceof Error ? err.message : "send failed";
@@ -19,11 +27,11 @@ function sendErrorMessage(err: unknown): string {
 }
 
 function emptyNextDraft(draft: Draft): Draft {
-  return { value: "", attachments: [], revision: draft.revision + 1 };
+  return emptyDraft(draft.revision + 1);
 }
 
 function isClearedDraft(draft: Draft, revision: number): boolean {
-  return draft.revision === revision && draft.value.length === 0 && draft.attachments.length === 0;
+  return draft.revision === revision && !hasDraftBlocksContent(draft.blocks) && draft.attachments.length === 0;
 }
 
 export function Composer({
@@ -37,26 +45,19 @@ export function Composer({
   streaming: boolean;
   personaName: string;
 }) {
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft>(() => emptyDraft());
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { value, attachments } = draft;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [value]);
+  const { blocks, attachments } = draft;
+  const serializedText = useMemo(() => serializeDraftBlocks(blocks), [blocks]);
 
   const send = async () => {
     if (sending) return;
     const submittedDraft = draft;
-    const text = value.trim();
-    if (!text && attachments.length === 0) return;
+    const text = serializeDraftBlocks(submittedDraft.blocks);
+    if (!text && submittedDraft.attachments.length === 0) return;
     const clearedRevision = submittedDraft.revision + 1;
     setError(undefined);
     setSending(true);
@@ -71,15 +72,13 @@ export function Composer({
     }
   };
 
-  const insertMeme = (meme: { name: string; url: string }) => {
-    const token = `meme: ${meme.name} (${meme.url})`;
-    setDraft((prev) => ({
-      ...prev,
-      value: prev.value.trim() ? `${prev.value.trimEnd()}\n${token}` : token,
-      revision: prev.revision + 1,
-    }));
+  const updateBlocks = (update: (blocks: DraftBlock[]) => DraftBlock[]) => {
     setError(undefined);
-    window.setTimeout(() => ref.current?.focus(), 0);
+    setDraft((prev) => {
+      const nextBlocks = update(prev.blocks);
+      if (nextBlocks === prev.blocks) return prev;
+      return { ...prev, blocks: nextBlocks, revision: prev.revision + 1 };
+    });
   };
 
   const addAttachments = (files: File[]) => {
@@ -100,7 +99,7 @@ export function Composer({
     return files.length > 0 ? files : Array.from(fallback);
   };
 
-  const sendDisabled = sending || (!streaming && !value.trim() && attachments.length === 0);
+  const sendDisabled = sending || (!streaming && !serializedText && attachments.length === 0);
   const showAbort = streaming && !sending;
 
   return (
@@ -172,28 +171,12 @@ export function Composer({
             >
               <Paperclip className="size-4" />
             </Button>
-            <MemePicker onPick={insertMeme} />
-            <textarea
-              ref={ref}
-              value={value}
-              onChange={(e) => {
-                setError(undefined);
-                setDraft((prev) => ({ ...prev, value: e.target.value, revision: prev.revision + 1 }));
-              }}
-              onPaste={(event) => {
-                const files = Array.from(event.clipboardData.files);
-                if (files.length > 0) addAttachments(files);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              placeholder={`write to ${personaName}…`}
-              rows={1}
-              autoFocus
-              className="min-h-8 flex-1 resize-none bg-transparent leading-8 text-foreground placeholder:text-muted-foreground focus:outline-none"
+            <DraftEditor
+              blocks={blocks}
+              personaName={personaName}
+              onUpdateBlocks={updateBlocks}
+              onPasteFiles={addAttachments}
+              onSubmit={() => void send()}
             />
             <Button
               type="button"

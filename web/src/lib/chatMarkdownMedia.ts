@@ -1,10 +1,12 @@
-import type { Image, Link, PhrasingContent, Root, Text } from "mdast";
+import type { Image, Link, Paragraph, PhrasingContent, Root, Text } from "mdast";
 import type { Parent } from "unist";
 import { SKIP, visit } from "unist-util-visit";
 
-const IMAGE_EXT_RE = /\.(?:jpe?g|png|gif|webp)(?:\?[^\s]*)?$/i;
-const LEGACY_MEDIA_RE =
-  /meme:\s*([^\n]*?)\s*\((https?:\/\/[^\s)<>"']+)\)|(https?:\/\/[^\s)<>"']+)/gi;
+import {
+  IMAGE_URL_RE,
+  legacyMediaTokens,
+  splitLegacyMemeLinkPrefix,
+} from "./legacyMemeToken.js";
 
 function textNode(value: string): Text {
   return { type: "text", value };
@@ -12,10 +14,6 @@ function textNode(value: string): Text {
 
 function imageNode(url: string, alt = ""): Image {
   return { type: "image", url, alt };
-}
-
-function isImageUrl(url: string): boolean {
-  return IMAGE_EXT_RE.test(url);
 }
 
 function pushText(nodes: PhrasingContent[], value: string): void {
@@ -27,16 +25,10 @@ export function splitLegacyChatMedia(value: string): PhrasingContent[] | undefin
   const nodes: PhrasingContent[] = [];
   let cursor = 0;
 
-  for (const match of value.matchAll(LEGACY_MEDIA_RE)) {
-    const index = match.index ?? 0;
-    const memeUrl = match[2];
-    const bareUrl = match[3];
-    const url = memeUrl ?? bareUrl;
-    if (!url || (!memeUrl && !isImageUrl(url))) continue;
-
-    if (index > cursor) pushText(nodes, value.slice(cursor, index));
-    nodes.push(imageNode(url, memeUrl ? (match[1] ?? "").trim() : ""));
-    cursor = index + match[0].length;
+  for (const token of legacyMediaTokens(value)) {
+    if (token.index > cursor) pushText(nodes, value.slice(cursor, token.index));
+    nodes.push(imageNode(token.url, token.type === "meme" ? token.name : ""));
+    cursor = token.index + token.whole.length;
   }
 
   if (nodes.length === 0) return undefined;
@@ -51,7 +43,7 @@ function isPlainImageLink(node: Link): boolean {
     node.children.length === 1 &&
     child?.type === "text" &&
     child.value === node.url &&
-    isImageUrl(node.url)
+    IMAGE_URL_RE.test(node.url)
   );
 }
 
@@ -59,8 +51,41 @@ function replaceChild(parent: Parent, index: number, replacement: PhrasingConten
   parent.children.splice(index, 1, ...replacement);
 }
 
+function rewriteLegacyLinkedMedia(parent: Paragraph): void {
+  const { children } = parent;
+  for (let index = 1; index < children.length - 1; index += 1) {
+    const previous = children[index - 1];
+    const node = children[index];
+    const next = children[index + 1];
+
+    if (
+      previous?.type !== "text" ||
+      node?.type !== "link" ||
+      next?.type !== "text" ||
+      !next.value.startsWith(")") ||
+      !isPlainImageLink(node)
+    ) {
+      continue;
+    }
+
+    const prefix = splitLegacyMemeLinkPrefix(previous.value);
+    if (!prefix) continue;
+
+    const replacement: PhrasingContent[] = [];
+    pushText(replacement, prefix.before);
+    replacement.push(imageNode(node.url, prefix.name));
+    pushText(replacement, next.value.slice(1).replace(/^\n+/, ""));
+    children.splice(index - 1, 3, ...replacement);
+    index += Math.max(0, replacement.length - 2);
+  }
+}
+
 export function remarkLegacyChatMedia() {
   return (tree: Root) => {
+    visit(tree, "paragraph", (node: Paragraph) => {
+      rewriteLegacyLinkedMedia(node);
+    });
+
     visit(tree, "link", (node: Link, index, parent) => {
       if (index === undefined || !parent) return SKIP;
       if (isPlainImageLink(node)) {

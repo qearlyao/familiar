@@ -15,7 +15,7 @@ export function renderInlineText(text: string, opts: RenderOptions = {}): ReactN
     return trailingCursor ? <div className="warm-prose chat-markdown">{cursor}</div> : null;
   }
 
-  const content = <ChatMarkdown text={text} streaming={trailingCursor === true} />;
+  const content = <ChatMarkdown text={text} streaming={trailingCursor === true} align={align} />;
   if (align !== "end") {
     return content;
   }

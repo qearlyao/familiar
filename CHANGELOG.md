@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 - 2026-06-06
+
+### Fixed
+
+- Keep WebUI history loading after moving a workspace between machines when older attachments still point at stale local paths.
+- Preserve compact right-aligned WebUI user message width when Markdown rendering adds inline wrappers.
+
 ## 0.4.1 - 2026-06-05
 
 ### Added

@@ -91,7 +91,7 @@ function UserTurn({ message }: { message: Message }) {
       <span className="text-xs uppercase tracking-wider text-muted-foreground">
         {message.who}
       </span>
-      <div className="flex min-w-0 max-w-[85%] flex-col items-end">
+      <div className="flex w-full min-w-0 max-w-[85%] flex-col items-end">
         {text && renderInlineText(text, { align: "end" })}
         <AttachmentList attachments={message.attachments ?? []} align="right" />
       </div>

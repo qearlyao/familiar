@@ -5,23 +5,24 @@ import remarkGfm from "remark-gfm";
 import { MediaPreview } from "@/components/MediaPreview";
 import { remarkImageParagraphs } from "@/lib/chatMarkdownLayout";
 import { remarkLegacyChatMedia } from "@/lib/chatMarkdownMedia";
-import { hugParagraphs } from "@/lib/hugLines";
+import { hugMessage } from "@/lib/hugLines";
 import { cn } from "@/lib/utils";
 
 const remarkPlugins = [remarkGfm, remarkLegacyChatMedia, remarkImageParagraphs];
 
 /**
- * Right-anchored user messages render as `fit-content` paragraphs, which clamp to the
- * column width and leave ragged whitespace against the right edge when text wraps. Pin
- * each paragraph to its widest line so the box hugs the text. Only the `end` alignment
- * shrink-wraps, so the `start` (assistant) path skips this entirely. User messages are
- * static — no streaming — so we re-measure on font load and viewport resize only.
+ * Right-anchored user messages render as a `fit-content` block, which clamps to the
+ * column width and leaves ragged whitespace against the right edge when text wraps. Pin
+ * the whole message to its widest rendered line so the box hugs the text as one unit —
+ * paragraphs and list items share a left edge instead of floating independently. Only
+ * the `end` alignment shrink-wraps, so the `start` (assistant) path skips this. User
+ * messages are static — no streaming — so we re-measure on font load and resize only.
  */
 function useHugLines(ref: React.RefObject<HTMLDivElement | null>, enabled: boolean, text: string) {
   useLayoutEffect(() => {
     const node = ref.current;
     if (!enabled || !node) return;
-    const measure = () => hugParagraphs(node);
+    const measure = () => hugMessage(node);
     measure();
     window.addEventListener("resize", measure);
     document.fonts?.ready.then(measure);

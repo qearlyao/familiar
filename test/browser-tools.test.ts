@@ -106,41 +106,33 @@ describe("browser tools", () => {
 		assert.equal(calls[0]?.env?.OPENCLI_BROWSER_COMMAND_TIMEOUT, "120");
 	});
 
-	it("spawns browser helpers through cmd.exe on Windows", () => {
+	it("uses cross-spawn for browser helpers on Windows", () => {
 		const spec: BrowserRunSpec = {
 			command: "C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd",
 			args: ["reddit", "saved", "--window", "background", "-f", "json"],
 			backend: "opencli",
 		};
 
-		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32", "C:\\Windows\\System32\\cmd.exe");
+		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32");
 
-		assert.equal(invocation.command, "C:\\Windows\\System32\\cmd.exe");
-		assert.deepEqual(invocation.args, [
-			"/d",
-			"/s",
-			"/c",
-			'""C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd" "reddit" "saved" "--window" "background" "-f" "json""',
-		]);
-		assert.equal(invocation.options.windowsVerbatimArguments, true);
+		assert.equal(invocation.spawnKind, "cross-spawn");
+		assert.equal(invocation.command, "C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd");
+		assert.deepEqual(invocation.args, ["reddit", "saved", "--window", "background", "-f", "json"]);
+		assert.equal(invocation.options.windowsVerbatimArguments, undefined);
 	});
 
-	it("wraps Windows shell invocations so spaced .cmd paths keep argv", () => {
+	it("keeps Windows .cmd paths and metacharacter args as argv", () => {
 		const spec: BrowserRunSpec = {
 			command: "C:\\Users\\C\\App Data\\npm\\opencli.cmd",
-			args: ["twitter", "--help", "-f", "json"],
+			args: ["browser", "familiar", "type", 'hello" & echo injected & "x'],
 			backend: "opencli",
 		};
 
-		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32", "cmd.exe");
+		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32");
 
-		assert.deepEqual(invocation.args, [
-			"/d",
-			"/s",
-			"/c",
-			'""C:\\Users\\C\\App Data\\npm\\opencli.cmd" "twitter" "--help" "-f" "json""',
-		]);
-		assert.equal(invocation.options.windowsVerbatimArguments, true);
+		assert.equal(invocation.spawnKind, "cross-spawn");
+		assert.equal(invocation.command, "C:\\Users\\C\\App Data\\npm\\opencli.cmd");
+		assert.deepEqual(invocation.args, ["browser", "familiar", "type", 'hello" & echo injected & "x']);
 	});
 
 	it("keeps direct helper spawning on non-Windows platforms", () => {
@@ -152,6 +144,7 @@ describe("browser tools", () => {
 
 		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "darwin");
 
+		assert.equal(invocation.spawnKind, "node");
 		assert.equal(invocation.command, "opencli");
 		assert.deepEqual(invocation.args, ["browser", "familiar", "state"]);
 		assert.equal(invocation.options.windowsVerbatimArguments, undefined);

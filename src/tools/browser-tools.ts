@@ -1,10 +1,11 @@
-import { type SpawnOptions, spawn } from "node:child_process";
+import { type ChildProcess, spawn as nodeSpawn, type SpawnOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { basename, extname, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import crossSpawn from "cross-spawn";
 import { type Static, Type } from "typebox";
 
 import type { Config } from "../config/index.js";
@@ -179,53 +180,45 @@ type SiteCommandListing = {
 };
 
 type BrowserSpawnStdio = ["pipe" | "ignore", "pipe", "pipe"];
+type BrowserSpawnKind = "node" | "cross-spawn";
 
 type BrowserSpawnInvocation = {
 	command: string;
 	args: string[];
 	options: SpawnOptions & { stdio: BrowserSpawnStdio };
+	spawnKind: BrowserSpawnKind;
 };
 
-function quoteWindowsShellArg(value: string): string {
-	const escaped = value
-		.replace(/%/g, "%%")
-		.replace(/(\\*)"/g, '$1$1\\"')
-		.replace(/(\\+)$/g, "$1$1");
-	return `"${escaped}"`;
+function spawnKindForPlatform(currentPlatform: NodeJS.Platform = platform()): BrowserSpawnKind {
+	return currentPlatform === "win32" ? "cross-spawn" : "node";
 }
 
 function buildSpawnInvocation(
 	spec: BrowserRunSpec,
 	currentPlatform: NodeJS.Platform = platform(),
-	comSpec = process.env.ComSpec ?? "cmd.exe",
 ): BrowserSpawnInvocation {
 	const options = {
 		stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"] as BrowserSpawnStdio,
 		env: spec.env,
 	};
-	if (currentPlatform !== "win32") return { command: spec.command, args: spec.args, options };
-
-	const commandLine = [spec.command, ...spec.args].map(quoteWindowsShellArg).join(" ");
 	return {
-		command: comSpec,
-		// Windows npm shims are .cmd files, so we must cross cmd.exe here.
-		// The caller already validates browser.site/browser.command and individual
-		// args before they reach this shell boundary.
-		// cmd.exe strips one outer quote pair from the /c string. Wrap the whole
-		// already-quoted command so .cmd shims with spaced paths still receive argv.
-		args: ["/d", "/s", "/c", `"${commandLine}"`],
-		options: {
-			...options,
-			windowsVerbatimArguments: true,
-		},
+		command: spec.command,
+		args: spec.args,
+		options,
+		spawnKind: spawnKindForPlatform(currentPlatform),
 	};
+}
+
+function spawnBrowserChild(invocation: BrowserSpawnInvocation): ChildProcess {
+	const spawn = invocation.spawnKind === "cross-spawn" ? crossSpawn : nodeSpawn;
+	return spawn(invocation.command, invocation.args, invocation.options);
 }
 
 function defaultBrowserRunner(): BrowserRunner {
 	return (spec, options) =>
 		new Promise((resolvePromise, reject) => {
 			const invocation = buildSpawnInvocation(spec);
-			const child = spawn(invocation.command, invocation.args, invocation.options);
+			const child = spawnBrowserChild(invocation);
 			const timeout = setTimeout(() => {
 				child.kill("SIGTERM");
 				reject(new Error(`Browser command timed out after ${options.timeoutMs}ms.`));

@@ -17,7 +17,10 @@ import { startWorkspaceHotReload } from "./lifecycle/hot-reload.js";
 import {
 	formatServiceResult,
 	installService,
+	restartService,
 	serviceStatus,
+	startService,
+	stopService,
 	uninstallService,
 	upgradeFamiliar,
 } from "./lifecycle/service.js";
@@ -216,6 +219,9 @@ function usage(): string {
 		"  familiar memory [workspace] <subcommand>",
 		"  familiar install-service [workspace]",
 		"  familiar uninstall-service [workspace]",
+		"  familiar start [workspace]",
+		"  familiar stop [workspace]",
+		"  familiar restart [workspace]",
 		"  familiar status [workspace]",
 		"  familiar upgrade [workspace]",
 		"",
@@ -262,6 +268,18 @@ async function main(): Promise<void> {
 	}
 	if (command === "uninstall-service") {
 		console.log(formatServiceResult(await uninstallService(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "start") {
+		console.log(formatServiceResult(await startService(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "stop") {
+		console.log(formatServiceResult(await stopService(resolveWorkspaceInput(workspace))));
+		return;
+	}
+	if (command === "restart") {
+		console.log(formatServiceResult(await restartService(resolveWorkspaceInput(workspace))));
 		return;
 	}
 	if (command === "status") {

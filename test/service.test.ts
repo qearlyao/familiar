@@ -5,7 +5,16 @@ import { tmpdir } from "node:os";
 import { posix, resolve } from "node:path";
 import { describe, it } from "node:test";
 
-import { __serviceTest, installService, serviceStatus, uninstallService, upgradeFamiliar } from "../src/lifecycle/service.js";
+import {
+	__serviceTest,
+	installService,
+	restartService,
+	serviceStatus,
+	startService,
+	stopService,
+	uninstallService,
+	upgradeFamiliar,
+} from "../src/lifecycle/service.js";
 
 describe("service management", () => {
 	it("renders launchd plist with escaped paths", () => {
@@ -156,6 +165,57 @@ describe("service management", () => {
 		assert.deepEqual(calls, [
 			"systemctl --user disable --now familiar.service",
 			"systemctl --user daemon-reload",
+		]);
+	});
+
+	it("controls the Linux user systemd service", async () => {
+		const calls: string[] = [];
+		const options = {
+			platform: "linux" as const,
+			homeDir: "/home/test",
+			commandExists: async (command: string) => command === "systemctl",
+			runCommand: async (command: string, args: string[]) => {
+				calls.push([command, ...args].join(" "));
+			},
+		};
+
+		const started = await startService("/home/test/familiar", options);
+		const stopped = await stopService("/home/test/familiar", options);
+		const restarted = await restartService("/home/test/familiar", options);
+
+		assert.equal(started.title, "Familiar service started.");
+		assert.equal(stopped.title, "Familiar service stopped.");
+		assert.equal(restarted.title, "Familiar service restarted.");
+		assert.deepEqual(calls, [
+			"systemctl --user start familiar.service",
+			"systemctl --user stop familiar.service",
+			"systemctl --user restart familiar.service",
+		]);
+	});
+
+	it("controls the macOS launchd service", async () => {
+		const calls: string[] = [];
+		const options = {
+			platform: "darwin" as const,
+			homeDir: "/Users/test",
+			userId: 501,
+			runCommand: async (command: string, args: string[]) => {
+				calls.push([command, ...args].join(" "));
+			},
+		};
+		const servicePath = resolve("/Users/test", "Library", "LaunchAgents", "com.qearlyao.familiar.plist");
+
+		await startService("/Users/test/.familiar", options);
+		await stopService("/Users/test/.familiar", options);
+		await restartService("/Users/test/.familiar", options);
+
+		assert.deepEqual(calls, [
+			`launchctl bootstrap gui/501 ${servicePath}`,
+			"launchctl kickstart gui/501/com.qearlyao.familiar",
+			`launchctl bootout gui/501 ${servicePath}`,
+			`launchctl bootout gui/501 ${servicePath}`,
+			`launchctl bootstrap gui/501 ${servicePath}`,
+			"launchctl kickstart -k gui/501/com.qearlyao.familiar",
 		]);
 	});
 

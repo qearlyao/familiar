@@ -189,13 +189,17 @@ workspace:
 
 ```sh
 familiar install-service
+familiar start
 familiar status
+familiar restart
+familiar stop
 familiar uninstall-service
 ```
 
 macOS uses `launchd`; Linux uses user `systemd`. Windows users should run
-`familiar run` in a foreground terminal for now. Service logs are written under
-`<workspace>/logs`.
+`familiar run` in a foreground terminal for now. The short
+`start`/`stop`/`restart` commands control the installed user service. Service
+logs are written under `<workspace>/logs`.
 
 Upgrade the global npm package and append missing workspace defaults with:
 

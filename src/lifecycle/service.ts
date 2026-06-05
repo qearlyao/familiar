@@ -31,6 +31,8 @@ export interface ServiceCommandResult {
 	details: string[];
 }
 
+type ServiceControlAction = "start" | "stop" | "restart";
+
 interface ServiceOptions {
 	platform?: ServicePlatform;
 	homeDir?: string;
@@ -240,6 +242,68 @@ function unsupported(platformName: string): ServiceCommandResult {
 	};
 }
 
+function serviceDetails(spec: ServiceSpec): string[] {
+	return [
+		`workspace: ${spec.workspacePath}`,
+		`service: ${spec.paths.servicePath}`,
+		`stdout: ${spec.paths.stdoutPath}`,
+		`stderr: ${spec.paths.stderrPath}`,
+	];
+}
+
+function serviceControlTitle(action: ServiceControlAction): string {
+	if (action === "start") return "Familiar service started.";
+	if (action === "stop") return "Familiar service stopped.";
+	return "Familiar service restarted.";
+}
+
+async function runLaunchdControl(
+	action: ServiceControlAction,
+	spec: ServiceSpec,
+	options: ServiceOptions,
+): Promise<void> {
+	const domain = guiDomain(options);
+	if (action === "stop") {
+		await run("launchctl", ["bootout", domain, spec.paths.servicePath], options);
+		return;
+	}
+	if (action === "restart") {
+		await runOptional("launchctl", ["bootout", domain, spec.paths.servicePath], options);
+		await run("launchctl", ["bootstrap", domain, spec.paths.servicePath], options);
+		await run("launchctl", ["kickstart", "-k", `${domain}/${SERVICE_LABEL}`], options);
+		return;
+	}
+	await runOptional("launchctl", ["bootstrap", domain, spec.paths.servicePath], options);
+	await run("launchctl", ["kickstart", `${domain}/${SERVICE_LABEL}`], options);
+}
+
+async function runSystemdControl(action: ServiceControlAction, options: ServiceOptions): Promise<void> {
+	if (!(await hasCommand("systemctl", options))) {
+		throw new Error("systemctl is required to control the Linux user service.");
+	}
+	await run("systemctl", ["--user", action, SYSTEMD_SERVICE], options);
+}
+
+async function controlService(
+	action: ServiceControlAction,
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
+	const spec = buildSpec(workspacePath, options);
+	if (spec.platform !== "darwin" && spec.platform !== "linux") return unsupported(spec.platform);
+
+	if (spec.platform === "darwin") {
+		await runLaunchdControl(action, spec, options);
+	} else {
+		await runSystemdControl(action, options);
+	}
+
+	return {
+		title: serviceControlTitle(action),
+		details: serviceDetails(spec),
+	};
+}
+
 export async function installService(
 	workspacePath: string,
 	options: ServiceOptions = {},
@@ -264,12 +328,7 @@ export async function installService(
 		await run("systemctl", ["--user", "enable", "--now", SYSTEMD_SERVICE], options);
 	}
 
-	const details = [
-		`workspace: ${spec.workspacePath}`,
-		`service: ${spec.paths.servicePath}`,
-		`stdout: ${spec.paths.stdoutPath}`,
-		`stderr: ${spec.paths.stderrPath}`,
-	];
+	const details = serviceDetails(spec);
 	const pathWarning = versionManagedPathWarning(spec);
 	if (pathWarning) details.push(pathWarning);
 
@@ -277,6 +336,21 @@ export async function installService(
 		title: "Familiar service installed.",
 		details,
 	};
+}
+
+export async function startService(workspacePath: string, options: ServiceOptions = {}): Promise<ServiceCommandResult> {
+	return controlService("start", workspacePath, options);
+}
+
+export async function stopService(workspacePath: string, options: ServiceOptions = {}): Promise<ServiceCommandResult> {
+	return controlService("stop", workspacePath, options);
+}
+
+export async function restartService(
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
+	return controlService("restart", workspacePath, options);
 }
 
 export async function uninstallService(

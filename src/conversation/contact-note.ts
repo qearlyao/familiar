@@ -32,6 +32,10 @@ export async function refreshContactNote(): Promise<void> {
 	cachedNickname = parseContactNickname(await loadContactNote(), "");
 }
 
+export function applyContactNoteContent(raw: string): void {
+	cachedNickname = parseContactNickname(raw, "");
+}
+
 export function getContactNickname(fallback: string): string {
 	return cachedNickname || fallback;
 }

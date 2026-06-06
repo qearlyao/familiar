@@ -380,4 +380,103 @@
   .diary-prose ol {
     @apply gap-2;
   }
+
+  .file-prose {
+    @apply text-[0.92rem];
+  }
+
+  .file-prose h1 {
+    @apply text-3xl;
+  }
+
+  .file-prose h2 {
+    @apply mt-8 text-2xl;
+  }
+
+  .file-prose h3 {
+    @apply mt-7 text-xl;
+  }
+
+  .file-prose a {
+    @apply text-primary underline underline-offset-4 transition-colors hover:text-foreground;
+  }
+
+  .file-prose pre {
+    @apply overflow-x-auto rounded-md bg-muted/70 p-3 text-sm leading-relaxed;
+  }
+
+  .file-prose pre code {
+    @apply rounded-none bg-transparent p-0 text-[0.9em];
+  }
+
+  .file-prose hr {
+    @apply my-7 border-border/80;
+  }
+
+  /* Keepsakes note list — editorial index with a margin tick (A2).
+     A single absolute ::before is both the hover tick (a clay rule that
+     grows in height) and, when active, the clay dot. Row padding-left
+     shifts to make room. Ported from the design draft so the React row
+     stays an exact visual match. */
+  .note-row {
+    @apply relative block w-full cursor-pointer border-0 bg-transparent p-[0.85rem] text-left;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+    transition:
+      background 0.18s var(--ease-out-quart),
+      padding 0.18s var(--ease-out-quart);
+  }
+  .note-row:last-child {
+    border-bottom: 0;
+  }
+  .note-row:focus-visible {
+    @apply outline-none ring-3 ring-ring/50;
+  }
+
+  /* the margin tick: hidden at rest, grows on hover of an inactive row */
+  .note-row::before {
+    content: "";
+    position: absolute;
+    left: 0.2rem;
+    top: 50%;
+    width: 2px;
+    height: 0;
+    border-radius: 1px;
+    background: var(--primary);
+    transform: translateY(-50%);
+    transition: height 0.22s var(--ease-out-quart);
+  }
+  .note-row:hover:not(.note-row-active) {
+    padding-left: 1.1rem;
+  }
+  .note-row:hover:not(.note-row-active)::before {
+    height: 1.5rem;
+  }
+
+  /* active: the same ::before becomes the clay dot, row indents to clear it */
+  .note-row-active {
+    padding-left: 1.45rem;
+  }
+  .note-row-active::before {
+    content: "●";
+    position: absolute;
+    left: 0.15rem;
+    top: 1.1rem;
+    width: auto;
+    height: auto;
+    font-size: 0.55rem;
+    color: var(--primary);
+    background: none;
+    transform: none;
+  }
+
+  .note-row-name {
+    @apply block truncate font-serif text-[1.04rem] leading-tight tracking-tight text-foreground;
+    transition: color 0.18s var(--ease-out-quart);
+  }
+  .note-row:hover .note-row-name {
+    color: color-mix(in oklch, var(--foreground) 60%, var(--primary));
+  }
+  .note-row-active .note-row-name {
+    @apply text-primary;
+  }
 }

@@ -183,6 +183,23 @@ export interface DiaryEntry extends DiarySummary {
   content: string;
 }
 
+export const WEB_FILE_IDS = ["soul", "user", "memory", "heartbeat", "contact"] as const;
+export type WebFileId = (typeof WEB_FILE_IDS)[number];
+
+export interface WebFileSummary {
+  id: WebFileId;
+  name: string;
+  title: string;
+  description: string;
+  mtimeMs: number | null;
+  sizeBytes: number;
+  exists: boolean;
+}
+
+export interface WebFileEntry extends WebFileSummary {
+  content: string;
+}
+
 export async function fetchAuthMode(): Promise<{ mode: string; personaName: string }> {
   const res = await fetch("/api/web/auth/mode");
   if (!res.ok) throw new Error(`auth/mode: ${res.status}`);
@@ -282,6 +299,26 @@ export async function fetchDiary(date: string): Promise<DiaryEntry> {
   return body.diary;
 }
 
+export async function fetchFiles(): Promise<WebFileSummary[]> {
+  const res = await fetch("/api/web/files");
+  if (!res.ok) throw new Error(`files: ${res.status}`);
+  const body = (await res.json()) as { files: WebFileSummary[] };
+  return body.files;
+}
+
+export async function fetchFile(id: WebFileId): Promise<WebFileEntry> {
+  const params = new URLSearchParams({ id });
+  const res = await fetch(`/api/web/file?${params.toString()}`);
+  if (!res.ok) throw new Error(`file: ${res.status}`);
+  const body = (await res.json()) as { file: WebFileEntry };
+  return body.file;
+}
+
+export async function saveFile(id: WebFileId, content: string): Promise<WebFileEntry> {
+  const body = await jsonRequest<{ file: WebFileEntry }>("/api/web/file", "PUT", { id, content }, "file");
+  return body.file;
+}
+
 export async function sendMessage(
   text: string,
   clientId: string,
@@ -342,7 +379,7 @@ export async function fetchAvailableModels(): Promise<AvailableModels> {
 // falling back to "<label>: <status>". Returns the parsed body (undefined if empty).
 async function jsonRequest<T>(
   url: string,
-  method: "POST" | "DELETE",
+  method: "POST" | "PUT" | "DELETE",
   body: unknown,
   label: string,
 ): Promise<T> {

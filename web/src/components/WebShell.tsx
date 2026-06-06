@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { BookOpen, FileText, Images, MessageCircle, Sparkles } from "lucide-react";
+import { BookOpen, FileHeart, Images, MessageCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
 import { Chat } from "./Chat";
 import { DiariesPage } from "./DiariesPage";
+import { FilesPage } from "./FilesPage";
 import { PagesNav, type ShellNavItem } from "./PagesNav";
 
 type ShellPage = "chat" | "diaries" | "skills" | "files" | "gallery";
@@ -12,7 +13,7 @@ const NAV_ITEMS: ShellNavItem<ShellPage>[] = [
   { id: "chat", label: "chat", description: "where you two are", icon: MessageCircle, enabled: true },
   { id: "diaries", label: "diaries", description: "written days", icon: BookOpen, enabled: true },
   { id: "skills", label: "skills", description: "little tools", icon: Sparkles },
-  { id: "files", label: "files", description: "notes by the door", icon: FileText },
+  { id: "files", label: "keepsakes", description: "the notes that make them them", icon: FileHeart, enabled: true },
   { id: "gallery", label: "gallery", description: "pictures left behind", icon: Images },
 ];
 
@@ -27,10 +28,13 @@ export function WebShell({
 }) {
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
   const [diariesMounted, setDiariesMounted] = useState(false);
+  const [filesMounted, setFilesMounted] = useState(false);
   const diariesActive = selectedPage === "diaries";
+  const filesActive = selectedPage === "files";
 
   const selectPage = (page: ShellPage) => {
     if (page === "diaries") setDiariesMounted(true);
+    if (page === "files") setFilesMounted(true);
     setSelectedPage(page);
   };
 
@@ -44,6 +48,11 @@ export function WebShell({
       {diariesMounted ? (
         <section className={cn("min-w-0 flex-1 flex-col", diariesActive ? "flex" : "hidden")}>
           <DiariesPage nav={nav} />
+        </section>
+      ) : null}
+      {filesMounted ? (
+        <section className={cn("min-w-0 flex-1 flex-col", filesActive ? "flex" : "hidden")}>
+          <FilesPage nav={nav} />
         </section>
       ) : null}
     </div>

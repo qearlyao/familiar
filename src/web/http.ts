@@ -33,13 +33,13 @@ export function sendText(response: ServerResponse, status: number, text: string)
 	response.end(text);
 }
 
-export async function readJsonBody(request: AsyncIterable<Buffer | string>): Promise<unknown> {
+export async function readJsonBody(request: AsyncIterable<Buffer | string>, maxBytes = MAX_BODY_BYTES): Promise<unknown> {
 	const chunks: Buffer[] = [];
 	let total = 0;
 	for await (const chunk of request) {
 		const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 		total += buffer.length;
-		if (total > MAX_BODY_BYTES) throw new HttpError(413, "Request body too large");
+		if (total > maxBytes) throw new HttpError(413, "Request body too large");
 		chunks.push(buffer);
 	}
 	const raw = Buffer.concat(chunks).toString("utf8").trim();

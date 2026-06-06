@@ -7,7 +7,10 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const SERVICE_LABEL = "com.qearlyao.familiar";
+const LOG_ROTATION_LABEL = `${SERVICE_LABEL}.log-rotation`;
 const SYSTEMD_SERVICE = "familiar.service";
+const SYSTEMD_LOGROTATE_SERVICE = "familiar-logrotate.service";
+const SYSTEMD_LOGROTATE_TIMER = "familiar-logrotate.timer";
 
 export type ServicePlatform = NodeJS.Platform;
 
@@ -16,6 +19,12 @@ export interface ServicePaths {
 	logDir: string;
 	stdoutPath: string;
 	stderrPath: string;
+	logrotateConfigPath: string;
+	logrotateStatePath: string;
+	logRotationScriptPath: string;
+	logRotationLaunchdPath: string;
+	logrotateServicePath: string;
+	logrotateTimerPath: string;
 }
 
 export interface ServiceSpec {
@@ -50,14 +59,26 @@ function servicePaths(
 	input: { platform: ServicePlatform; homeDir: string; resolvePath: (...paths: string[]) => string },
 ): ServicePaths {
 	const logDir = input.resolvePath(workspacePath, "logs");
+	const systemdUserDir = input.resolvePath(input.homeDir, ".config", "systemd", "user");
 	return {
 		servicePath:
 			input.platform === "darwin"
 				? input.resolvePath(input.homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`)
-				: input.resolvePath(input.homeDir, ".config", "systemd", "user", SYSTEMD_SERVICE),
+				: input.resolvePath(systemdUserDir, SYSTEMD_SERVICE),
 		logDir,
 		stdoutPath: input.resolvePath(logDir, "familiar.out.log"),
 		stderrPath: input.resolvePath(logDir, "familiar.err.log"),
+		logrotateConfigPath: input.resolvePath(logDir, "familiar.logrotate.conf"),
+		logrotateStatePath: input.resolvePath(logDir, "familiar.logrotate.state"),
+		logRotationScriptPath: input.resolvePath(logDir, "familiar-rotate-logs.sh"),
+		logRotationLaunchdPath: input.resolvePath(
+			input.homeDir,
+			"Library",
+			"LaunchAgents",
+			`${LOG_ROTATION_LABEL}.plist`,
+		),
+		logrotateServicePath: input.resolvePath(systemdUserDir, SYSTEMD_LOGROTATE_SERVICE),
+		logrotateTimerPath: input.resolvePath(systemdUserDir, SYSTEMD_LOGROTATE_TIMER),
 	};
 }
 
@@ -105,6 +126,14 @@ function systemdQuote(value: string): string {
 	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$").replaceAll("`", "\\`")}"`;
 }
 
+function shellQuote(value: string): string {
+	return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function logrotateQuote(value: string): string {
+	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 function launchdPlist(spec: ServiceSpec): string {
 	const args = [spec.nodePath, spec.cliPath, "run", spec.workspacePath]
 		.map((value) => `\t\t<string>${xmlEscape(value)}</string>`)
@@ -143,6 +172,27 @@ ${args}
 `;
 }
 
+function launchdLogRotationPlist(spec: ServiceSpec): string {
+	const args = ["/bin/sh", spec.paths.logRotationScriptPath, spec.paths.stdoutPath, spec.paths.stderrPath]
+		.map((value) => `\t\t<string>${xmlEscape(value)}</string>`)
+		.join("\n");
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>Label</key>
+\t<string>${LOG_ROTATION_LABEL}</string>
+\t<key>ProgramArguments</key>
+\t<array>
+${args}
+\t</array>
+\t<key>StartInterval</key>
+\t<integer>604800</integer>
+</dict>
+</plist>
+`;
+}
+
 function systemdUnit(spec: ServiceSpec): string {
 	const execStart = [spec.nodePath, spec.cliPath, "run", spec.workspacePath].map(systemdQuote).join(" ");
 	return `[Unit]
@@ -169,6 +219,66 @@ WantedBy=default.target
 `;
 }
 
+function logRotationScript(): string {
+	return `set -eu
+
+for log_path in "$@"; do
+\t[ -s "$log_path" ] || continue
+\trm -f "$log_path.8.gz"
+\tindex=7
+\twhile [ "$index" -ge 1 ]; do
+\t\tnext=$((index + 1))
+\t\tif [ -f "$log_path.$index.gz" ]; then
+\t\t\tmv "$log_path.$index.gz" "$log_path.$next.gz"
+\t\tfi
+\t\tindex=$((index - 1))
+\tdone
+\tcp "$log_path" "$log_path.1"
+\t: > "$log_path"
+\tgzip -f "$log_path.1"
+done
+`;
+}
+
+function logrotateConfig(spec: ServiceSpec): string {
+	return `${[spec.paths.stdoutPath, spec.paths.stderrPath].map(logrotateQuote).join(" ")} {
+	weekly
+	rotate 8
+	missingok
+	notifempty
+	copytruncate
+	compress
+	delaycompress
+}
+`;
+}
+
+function logrotateService(spec: ServiceSpec, logrotatePath: string): string {
+	const execStart = [logrotatePath, "-s", spec.paths.logrotateStatePath, spec.paths.logrotateConfigPath]
+		.map(systemdQuote)
+		.join(" ");
+	return `[Unit]
+Description=Rotate Familiar service logs
+
+[Service]
+Type=oneshot
+ExecStart=${execStart}
+`;
+}
+
+function logrotateTimer(): string {
+	return `[Unit]
+Description=Rotate Familiar service logs weekly
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+`;
+}
+
 async function commandExists(command: string): Promise<boolean> {
 	try {
 		await execFileAsync(command, ["--version"]);
@@ -180,6 +290,17 @@ async function commandExists(command: string): Promise<boolean> {
 
 async function hasCommand(command: string, options: ServiceOptions): Promise<boolean> {
 	return options.commandExists ? options.commandExists(command) : commandExists(command);
+}
+
+async function commandPath(command: string, options: ServiceOptions): Promise<string | undefined> {
+	if (!(await hasCommand(command, options))) return undefined;
+	try {
+		const output = await capture("sh", ["-c", `command -v ${shellQuote(command)}`], options);
+		const [path] = output.trim().split(/\r?\n/);
+		return path || undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 async function run(command: string, args: string[], options: ServiceOptions): Promise<void> {
@@ -242,6 +363,11 @@ function unsupported(platformName: string): ServiceCommandResult {
 	};
 }
 
+interface LogRotationInstallResult {
+	detail: string;
+	installed: boolean;
+}
+
 function serviceDetails(spec: ServiceSpec): string[] {
 	return [
 		`workspace: ${spec.workspacePath}`,
@@ -249,6 +375,63 @@ function serviceDetails(spec: ServiceSpec): string[] {
 		`stdout: ${spec.paths.stdoutPath}`,
 		`stderr: ${spec.paths.stderrPath}`,
 	];
+}
+
+async function prepareLogRotation(
+	spec: ServiceSpec,
+	options: ServiceOptions,
+): Promise<LogRotationInstallResult | undefined> {
+	if (spec.platform === "darwin") {
+		await writeFile(spec.paths.logRotationScriptPath, logRotationScript(), "utf8");
+		await writeFile(spec.paths.logRotationLaunchdPath, launchdLogRotationPlist(spec), "utf8");
+		return { detail: `log_rotation: ${spec.paths.logRotationLaunchdPath}`, installed: true };
+	}
+	if (spec.platform !== "linux") return undefined;
+	const logrotatePath = await commandPath("logrotate", options);
+	if (!logrotatePath) {
+		return {
+			detail: "logrotate: unavailable; install logrotate and rerun familiar install-service",
+			installed: false,
+		};
+	}
+	await writeFile(spec.paths.logrotateConfigPath, logrotateConfig(spec), "utf8");
+	await writeFile(spec.paths.logrotateServicePath, logrotateService(spec, logrotatePath), "utf8");
+	await writeFile(spec.paths.logrotateTimerPath, logrotateTimer(), "utf8");
+	return { detail: `logrotate: ${spec.paths.logrotateConfigPath}`, installed: true };
+}
+
+async function enableLogRotation(
+	spec: ServiceSpec,
+	result: LogRotationInstallResult | undefined,
+	options: ServiceOptions,
+): Promise<void> {
+	if (!result?.installed) return;
+	if (spec.platform === "darwin") {
+		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.logRotationLaunchdPath], options);
+		await run("launchctl", ["bootstrap", guiDomain(options), spec.paths.logRotationLaunchdPath], options);
+		return;
+	}
+	if (spec.platform === "linux") {
+		await run("systemctl", ["--user", "enable", "--now", SYSTEMD_LOGROTATE_TIMER], options);
+	}
+}
+
+async function removeLogRotation(spec: ServiceSpec, options: ServiceOptions): Promise<void> {
+	if (spec.platform === "darwin") {
+		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.logRotationLaunchdPath], options);
+	} else if (spec.platform === "linux" && (await hasCommand("systemctl", options))) {
+		await runOptional("systemctl", ["--user", "disable", "--now", SYSTEMD_LOGROTATE_TIMER], options);
+	}
+	for (const path of [
+		spec.paths.logRotationLaunchdPath,
+		spec.paths.logRotationScriptPath,
+		spec.paths.logrotateServicePath,
+		spec.paths.logrotateTimerPath,
+		spec.paths.logrotateConfigPath,
+		spec.paths.logrotateStatePath,
+	]) {
+		if (existsSync(path)) await rm(path);
+	}
 }
 
 function serviceControlTitle(action: ServiceControlAction): string {
@@ -315,20 +498,24 @@ export async function installService(
 	await mkdir(spec.paths.logDir, { recursive: true });
 	const serviceText = spec.platform === "darwin" ? launchdPlist(spec) : systemdUnit(spec);
 	await writeFile(spec.paths.servicePath, serviceText, "utf8");
+	const logRotation = await prepareLogRotation(spec, options);
 
 	if (spec.platform === "darwin") {
 		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.servicePath], options);
 		await run("launchctl", ["bootstrap", guiDomain(options), spec.paths.servicePath], options);
 		await run("launchctl", ["kickstart", "-k", `${guiDomain(options)}/${SERVICE_LABEL}`], options);
+		await enableLogRotation(spec, logRotation, options);
 	} else {
 		if (!(await hasCommand("systemctl", options))) {
 			throw new Error("systemctl is required to install the Linux user service.");
 		}
 		await run("systemctl", ["--user", "daemon-reload"], options);
 		await run("systemctl", ["--user", "enable", "--now", SYSTEMD_SERVICE], options);
+		await enableLogRotation(spec, logRotation, options);
 	}
 
 	const details = serviceDetails(spec);
+	if (logRotation) details.push(logRotation.detail);
 	const pathWarning = versionManagedPathWarning(spec);
 	if (pathWarning) details.push(pathWarning);
 
@@ -362,10 +549,12 @@ export async function uninstallService(
 
 	if (spec.platform === "darwin") {
 		await runOptional("launchctl", ["bootout", guiDomain(options), spec.paths.servicePath], options);
+		await removeLogRotation(spec, options);
 	} else {
 		if (await hasCommand("systemctl", options)) {
 			await runOptional("systemctl", ["--user", "disable", "--now", SYSTEMD_SERVICE], options);
 		}
+		await removeLogRotation(spec, options);
 	}
 	if (existsSync(spec.paths.servicePath)) await rm(spec.paths.servicePath);
 	if (spec.platform === "linux" && (await hasCommand("systemctl", options))) {
@@ -433,8 +622,10 @@ export const __serviceTest = {
 	SYSTEMD_SERVICE,
 	buildSpec,
 	launchdPlist,
+	launchdLogRotationPlist,
 	systemdUnit,
 	systemdQuote,
+	logRotationScript,
 	xmlEscape,
 	versionManagedPathWarning,
 };

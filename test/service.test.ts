@@ -36,6 +36,27 @@ describe("service management", () => {
 		assert.match(plist, /ExitTimeOut/);
 	});
 
+	it("renders launchd log rotation plist and script", () => {
+		const spec = __serviceTest.buildSpec("/tmp/Familiar & Friends", {
+			platform: "darwin",
+			homeDir: "/Users/test",
+			nodePath: "/opt/node",
+			cliPath: "/tmp/familiar/dist/cli.js",
+			resolvePath: posix.resolve,
+		});
+
+		const plist = __serviceTest.launchdLogRotationPlist(spec);
+		const script = __serviceTest.logRotationScript();
+
+		assert.match(plist, /com\.qearlyao\.familiar\.log-rotation/);
+		assert.match(plist, /StartInterval/);
+		assert.match(plist, /604800/);
+		assert.match(plist, /familiar-rotate-logs\.sh/);
+		assert.match(script, /cp "\$log_path" "\$log_path\.1"/);
+		assert.match(script, /gzip -f/);
+		assert.match(script, /log_path\.8\.gz/);
+	});
+
 	it("renders systemd unit with quoted paths", () => {
 		const spec = __serviceTest.buildSpec("/home/test/Familiar Workspace", {
 			platform: "linux",
@@ -83,22 +104,33 @@ describe("service management", () => {
 			},
 		});
 
+		const servicePath = resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist");
+		const logRotationPath = resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.log-rotation.plist");
+		const logRotationScriptPath = resolve(workspacePath, "logs", "familiar-rotate-logs.sh");
 		assert.match(installed.title, /installed/);
-		assert.equal(calls.length, 3);
+		assert.equal(calls.length, 5);
 		assert.match(calls[0] ?? "", /^launchctl bootout gui\/\d+ /);
 		assert.match(calls[1] ?? "", /^launchctl bootstrap gui\/\d+ /);
 		assert.match(calls[2] ?? "", /^launchctl kickstart -k gui\/\d+\/com\.qearlyao\.familiar$/);
-		assert.ok(calls[0]?.endsWith(resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist")));
-		assert.ok(calls[1]?.endsWith(resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist")));
+		assert.match(calls[3] ?? "", /^launchctl bootout gui\/\d+ /);
+		assert.match(calls[4] ?? "", /^launchctl bootstrap gui\/\d+ /);
+		assert.ok(calls[0]?.endsWith(servicePath));
+		assert.ok(calls[1]?.endsWith(servicePath));
+		assert.ok(calls[3]?.endsWith(logRotationPath));
+		assert.ok(calls[4]?.endsWith(logRotationPath));
+		assert.ok(installed.details.some((line) => line === `log_rotation: ${logRotationPath}`));
 		assert.match(
-			await readFile(resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist"), "utf8"),
+			await readFile(servicePath, "utf8"),
 			/familiar/,
 		);
+		assert.match(await readFile(logRotationPath, "utf8"), /StartInterval/);
+		assert.match(await readFile(logRotationScriptPath, "utf8"), /gzip -f/);
 
 		const status = await serviceStatus(workspacePath, { platform: "darwin", homeDir });
 		assert.ok(status.details.some((line) => line === "service_file: present"));
 		assert.ok(status.details.some((line) => line === "supervisor_state: not-loaded"));
 
+		const uninstallCallsStart = calls.length;
 		const uninstalled = await uninstallService(workspacePath, {
 			platform: "darwin",
 			homeDir,
@@ -107,8 +139,14 @@ describe("service management", () => {
 				calls.push([command, ...args].join(" "));
 			},
 		});
+		const uninstallCalls = calls.slice(uninstallCallsStart);
 		assert.match(uninstalled.title, /uninstalled/);
-		assert.equal(existsSync(resolve(homeDir, "Library", "LaunchAgents", "com.qearlyao.familiar.plist")), false);
+		assert.equal(uninstallCalls.length, 2);
+		assert.ok(uninstallCalls[0]?.endsWith(servicePath));
+		assert.ok(uninstallCalls[1]?.endsWith(logRotationPath));
+		assert.equal(existsSync(servicePath), false);
+		assert.equal(existsSync(logRotationPath), false);
+		assert.equal(existsSync(logRotationScriptPath), false);
 	});
 
 	it("installs a Linux user systemd service definition", async (t) => {
@@ -127,19 +165,33 @@ describe("service management", () => {
 			homeDir,
 			nodePath: "/usr/bin/node",
 			cliPath: "/usr/local/bin/familiar",
-			commandExists: async (command) => command === "systemctl",
+			commandExists: async (command) => command === "systemctl" || command === "logrotate",
 			runCommand: async (command, args) => {
 				calls.push([command, ...args].join(" "));
+			},
+			captureCommand: async (command, args) => {
+				assert.equal([command, ...args].join(" "), "sh -c command -v 'logrotate'");
+				return "/usr/sbin/logrotate\n";
 			},
 		});
 
 		const unitPath = resolve(homeDir, ".config", "systemd", "user", "familiar.service");
+		const logrotateConfigPath = resolve(workspacePath, "logs", "familiar.logrotate.conf");
+		const logrotateServicePath = resolve(homeDir, ".config", "systemd", "user", "familiar-logrotate.service");
+		const logrotateTimerPath = resolve(homeDir, ".config", "systemd", "user", "familiar-logrotate.timer");
 		assert.match(installed.title, /installed/);
+		assert.ok(installed.details.some((line) => line === `logrotate: ${logrotateConfigPath}`));
 		assert.deepEqual(calls, [
 			"systemctl --user daemon-reload",
 			"systemctl --user enable --now familiar.service",
+			"systemctl --user enable --now familiar-logrotate.timer",
 		]);
 		assert.match(await readFile(unitPath, "utf8"), /StartLimitBurst=5/);
+		assert.match(await readFile(logrotateConfigPath, "utf8"), /weekly/);
+		assert.match(await readFile(logrotateConfigPath, "utf8"), /copytruncate/);
+		assert.match(await readFile(logrotateConfigPath, "utf8"), /rotate 8/);
+		assert.match(await readFile(logrotateServicePath, "utf8"), /ExecStart=\/usr\/sbin\/logrotate -s /);
+		assert.match(await readFile(logrotateTimerPath, "utf8"), /OnCalendar=weekly/);
 
 		const status = await serviceStatus(workspacePath, {
 			platform: "linux",
@@ -162,10 +214,45 @@ describe("service management", () => {
 		});
 		assert.match(uninstalled.title, /uninstalled/);
 		assert.equal(existsSync(unitPath), false);
+		assert.equal(existsSync(logrotateConfigPath), false);
+		assert.equal(existsSync(logrotateServicePath), false);
+		assert.equal(existsSync(logrotateTimerPath), false);
 		assert.deepEqual(calls, [
 			"systemctl --user disable --now familiar.service",
+			"systemctl --user disable --now familiar-logrotate.timer",
 			"systemctl --user daemon-reload",
 		]);
+	});
+
+	it("keeps Linux service installation usable when logrotate is unavailable", async (t) => {
+		const homeDir = await mkdtemp(resolve(tmpdir(), "familiar-service-home-"));
+		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-service-workspace-"));
+		t.after(async () => {
+			await Promise.all([
+				rm(homeDir, { recursive: true, force: true }),
+				rm(workspacePath, { recursive: true, force: true }),
+			]);
+		});
+		const calls: string[] = [];
+
+		const installed = await installService(workspacePath, {
+			platform: "linux",
+			homeDir,
+			nodePath: "/usr/bin/node",
+			cliPath: "/usr/local/bin/familiar",
+			commandExists: async (command) => command === "systemctl",
+			runCommand: async (command, args) => {
+				calls.push([command, ...args].join(" "));
+			},
+		});
+
+		assert.ok(installed.details.some((line) => line.includes("logrotate: unavailable")));
+		assert.deepEqual(calls, [
+			"systemctl --user daemon-reload",
+			"systemctl --user enable --now familiar.service",
+		]);
+		assert.equal(existsSync(resolve(workspacePath, "logs", "familiar.logrotate.conf")), false);
+		assert.equal(existsSync(resolve(homeDir, ".config", "systemd", "user", "familiar-logrotate.timer")), false);
 	});
 
 	it("controls the Linux user systemd service", async () => {

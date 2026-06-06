@@ -199,7 +199,8 @@ familiar uninstall-service
 macOS uses `launchd`; Linux uses user `systemd`. Windows users should run
 `familiar run` in a foreground terminal for now. The short
 `start`/`stop`/`restart` commands control the installed user service. Service
-logs are written under `<workspace>/logs`.
+logs are written under `<workspace>/logs`; service installs configure weekly log
+rotation on macOS and on Linux when `logrotate` is available.
 
 Upgrade the global npm package and append missing workspace defaults with:
 

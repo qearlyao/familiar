@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.5 - 2026-06-06
+
+### Added
+
+- Add a WebUI keepsakes room for editing `SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, and `CONTACT.md` from the browser, with per-note draft retention, edit/preview modes, and companion-aware save feedback.
+- Add weekly service log rotation for installed Familiar services.
+
+### Changed
+
+- Align the Diaries and Keepsakes room headers around the same warm, compact visual treatment.
+- Share the WebUI Markdown renderer across chat, diaries, and keepsakes so prose, links, code, lists, tables, and media render more consistently.
+
+### Fixed
+
+- Prevent oversized chat media preview triggers from breaking the composer layout.
+- Prevent long WebUI chat content from causing horizontal overflow.
+
 ## 0.4.2 - 2026-06-06
 
 ### Fixed

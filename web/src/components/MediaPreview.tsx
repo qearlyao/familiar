@@ -8,10 +8,12 @@ export function MediaPreview({
   src,
   alt,
   className,
+  imageClassName,
 }: {
   src: string;
   alt: string;
   className?: string;
+  imageClassName?: string;
 }) {
   return (
     <DialogPrimitive.Root>
@@ -27,7 +29,7 @@ export function MediaPreview({
             src={src}
             alt={alt}
             loading="lazy"
-            className="h-auto max-h-72 max-w-full rounded-md"
+            className={cn("h-auto max-h-72 max-w-full rounded-md", imageClassName)}
           />
         </button>
       </DialogPrimitive.Trigger>

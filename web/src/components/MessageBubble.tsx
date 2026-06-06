@@ -8,6 +8,12 @@ import { AudioPlayer } from "./AudioPlayer";
 import { MediaPreview } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 
+type PreviewableImageAttachment = Attachment & { url: string };
+
+type AttachmentRenderItem =
+  | { type: "attachment"; attachment: Attachment }
+  | { type: "image-album"; attachments: PreviewableImageAttachment[] };
+
 function AttachmentContext({ derived }: { derived: NonNullable<Attachment["derivedText"]> }) {
   return (
     <div className="mt-2 border-l border-border/80 pl-3 text-left font-serif text-xs italic leading-relaxed text-muted-foreground">
@@ -18,11 +24,10 @@ function AttachmentContext({ derived }: { derived: NonNullable<Attachment["deriv
 }
 
 function attachmentPreview(attachment: Attachment): { align?: "right"; content: ReactNode } | undefined {
-  if (!attachment.url) return undefined;
-  const isImage = attachment.kind === "image" || attachment.mimeType?.startsWith("image/");
-  if (isImage) {
+  if (isPreviewableImageAttachment(attachment)) {
     return { content: <MediaPreview src={attachment.url} alt={attachment.name} /> };
   }
+  if (!attachment.url) return undefined;
   if (attachment.mimeType?.startsWith("video/")) {
     return {
       content: (
@@ -59,6 +64,64 @@ function attachmentPreview(attachment: Attachment): { align?: "right"; content: 
   };
 }
 
+function isPreviewableImageAttachment(attachment: Attachment): attachment is PreviewableImageAttachment {
+  return Boolean(attachment.url) && (attachment.kind === "image" || attachment.mimeType?.startsWith("image/") === true);
+}
+
+function attachmentRenderItems(attachments: Attachment[]): AttachmentRenderItem[] {
+  const imageAttachments = attachments.filter(isPreviewableImageAttachment);
+  if (imageAttachments.length < 2) {
+    return attachments.map((attachment) => ({ type: "attachment", attachment }));
+  }
+
+  const firstAlbumImageId = imageAttachments[0].id;
+  return attachments.flatMap((attachment): AttachmentRenderItem[] => {
+    if (!isPreviewableImageAttachment(attachment)) {
+      return [{ type: "attachment", attachment }];
+    }
+    if (attachment.id !== firstAlbumImageId) {
+      return [];
+    }
+    return [{ type: "image-album", attachments: imageAttachments }];
+  });
+}
+
+function imageAlbumTileClass(count: number, index: number): string {
+  if (count === 2) return "aspect-[3/4]";
+  if (count % 2 === 1 && index === count - 1) return "col-span-2 aspect-[2/1]";
+  return "aspect-square";
+}
+
+function ImageAttachmentAlbum({ attachments }: { attachments: PreviewableImageAttachment[] }) {
+  return (
+    <div className="w-80 max-w-full rounded-md border border-border/80 bg-card/70 p-1 shadow-xs sm:w-96">
+      <div className="grid grid-cols-2 gap-1">
+        {attachments.map((attachment, index) => (
+          <div
+            key={attachment.id}
+            className={cn(
+              "min-w-0 overflow-hidden rounded-sm bg-muted",
+              imageAlbumTileClass(attachments.length, index),
+            )}
+          >
+            <MediaPreview
+              src={attachment.url}
+              alt={attachment.name}
+              className="block h-full w-full overflow-hidden rounded-sm sm:max-w-none"
+              imageClassName="h-full w-full max-h-none object-cover"
+            />
+          </div>
+        ))}
+      </div>
+      {attachments.map((attachment) =>
+        attachment.derivedText ? (
+          <AttachmentContext key={`${attachment.id}-context`} derived={attachment.derivedText} />
+        ) : null,
+      )}
+    </div>
+  );
+}
+
 function AttachmentItem({ attachment }: { attachment: Attachment }) {
   const preview = attachmentPreview(attachment);
   if (!preview) return null;
@@ -72,11 +135,15 @@ function AttachmentItem({ attachment }: { attachment: Attachment }) {
 
 function AttachmentList({ attachments, align }: { attachments: Attachment[]; align: "left" | "right" }) {
   if (attachments.length === 0) return null;
+  const renderItems = attachmentRenderItems(attachments);
   return (
     <div className={cn("mt-2 flex flex-col gap-2", align === "right" && "items-end")}>
-      {attachments.map((attachment) => (
-        <AttachmentItem key={attachment.id} attachment={attachment} />
-      ))}
+      {renderItems.map((item) => {
+        if (item.type === "image-album") {
+          return <ImageAttachmentAlbum key="image-attachment-album" attachments={item.attachments} />;
+        }
+        return <AttachmentItem key={item.attachment.id} attachment={item.attachment} />;
+      })}
     </div>
   );
 }

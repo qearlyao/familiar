@@ -58,7 +58,7 @@ export function MessageList({
 
   if (historyLoaded && messages.length === 0) {
     return (
-      <div className="mx-auto flex h-full max-w-3xl items-center justify-center px-5">
+      <div className="mx-auto flex h-full w-full max-w-3xl items-center justify-center px-5">
         <p className="font-serif text-base italic leading-relaxed text-muted-foreground/80">
           hi, i'm {personaName}. write whenever.
         </p>
@@ -67,7 +67,7 @@ export function MessageList({
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-12 px-5 py-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-5 py-6">
       {messages.map((m, i) => {
         const prev = messages[i - 1];
         const showGap = prev != null && m.ts - prev.ts >= GAP_MS;

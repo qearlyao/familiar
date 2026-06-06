@@ -37,7 +37,7 @@ export function WebShell({
   const nav = <PagesNav items={NAV_ITEMS} selectedPage={selectedPage} onSelectPage={selectPage} />;
 
   return (
-    <div className="relative flex h-dvh bg-background text-foreground antialiased">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-background text-foreground antialiased">
       <section className={cn("min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>
         <Chat nav={nav} authMode={authMode} authDevice={authDevice} onSignedOut={onSignedOut} />
       </section>

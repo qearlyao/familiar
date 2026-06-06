@@ -19,7 +19,7 @@ export function MediaPreview({
         <button
           type="button"
           className={cn(
-            "inline-block rounded-md text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-3 focus-visible:ring-ring/40",
+            "inline-block max-w-full rounded-md text-left outline-none transition-opacity hover:opacity-90 focus-visible:ring-3 focus-visible:ring-ring/40",
             className,
           )}
         >
@@ -27,7 +27,7 @@ export function MediaPreview({
             src={src}
             alt={alt}
             loading="lazy"
-            className="max-h-72 max-w-[24rem] rounded-md"
+            className="max-h-72 max-w-[min(24rem,100%)] rounded-md"
           />
         </button>
       </DialogPrimitive.Trigger>

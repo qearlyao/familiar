@@ -35,7 +35,7 @@ export function Chat({
   const [configOpen, setConfigOpen] = useState(false);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground antialiased">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background text-foreground antialiased">
       <Header
         nav={nav}
         connection={connection}
@@ -47,7 +47,7 @@ export function Chat({
         onOpenConfig={() => setConfigOpen(true)}
         onNewChatStarted={notifyNewChat}
       />
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <MessageList
           messages={messages}
           personaName={personaName}

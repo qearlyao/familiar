@@ -277,14 +277,14 @@ const fixtures: Message[] = [
 
 export function Playground() {
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground antialiased">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground antialiased">
       <div className="border-b border-border px-5 py-3">
         <span className="font-serif text-lg text-foreground">ghost</span>
         <span className="ml-3 font-serif italic text-xs text-muted-foreground/70">
           playground · synthetic states
         </span>
       </div>
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <MessageList messages={fixtures} personaName="ghost" historyLoaded={true} />
       </main>
     </div>

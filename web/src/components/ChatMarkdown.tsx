@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { MediaPreview } from "@/components/MediaPreview";
 import { remarkImageParagraphs } from "@/lib/chatMarkdownLayout";
 import { remarkLegacyChatMedia } from "@/lib/chatMarkdownMedia";
@@ -113,9 +114,7 @@ export function ChatMarkdown({
         streaming && "chat-markdown-streaming",
       )}
     >
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
-        {text}
-      </ReactMarkdown>
+      <MarkdownRenderer text={text} remarkPlugins={remarkPlugins} components={components} />
     </div>
   );
 }

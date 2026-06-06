@@ -33,7 +33,10 @@ export function sendText(response: ServerResponse, status: number, text: string)
 	response.end(text);
 }
 
-export async function readJsonBody(request: AsyncIterable<Buffer | string>, maxBytes = MAX_BODY_BYTES): Promise<unknown> {
+export async function readJsonBody(
+	request: AsyncIterable<Buffer | string>,
+	maxBytes = MAX_BODY_BYTES,
+): Promise<unknown> {
 	const chunks: Buffer[] = [];
 	let total = 0;
 	for await (const chunk of request) {

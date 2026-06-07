@@ -409,6 +409,38 @@
     @apply my-7 border-border/80;
   }
 
+  .skill-prose {
+    @apply text-[0.92rem];
+  }
+
+  .skill-prose h1 {
+    @apply text-2xl;
+  }
+
+  .skill-prose h2 {
+    @apply mt-7 text-xl;
+  }
+
+  .skill-prose h3 {
+    @apply mt-6 text-lg;
+  }
+
+  .skill-prose a {
+    @apply text-primary underline underline-offset-4 transition-colors hover:text-foreground;
+  }
+
+  .skill-prose pre {
+    @apply overflow-x-auto rounded-md bg-muted/70 p-3 text-sm leading-relaxed;
+  }
+
+  .skill-prose pre code {
+    @apply rounded-none bg-transparent p-0 text-[0.9em];
+  }
+
+  .skill-prose hr {
+    @apply my-7 border-border/80;
+  }
+
   /* Keepsakes note list — editorial index with a margin tick (A2).
      A single absolute ::before is both the hover tick (a clay rule that
      grows in height) and, when active, the clay dot. Row padding-left

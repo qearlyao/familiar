@@ -19,7 +19,8 @@
 				"sharp": "^0.34.5",
 				"smol-toml": "^1.4.2",
 				"sqlite-vec": "^0.1.9",
-				"typebox": "^1.1.38"
+				"typebox": "^1.1.38",
+				"yaml": "2.9.0"
 			},
 			"bin": {
 				"familiar": "dist/cli.js"

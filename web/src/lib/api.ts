@@ -200,6 +200,21 @@ export interface WebFileEntry extends WebFileSummary {
   content: string;
 }
 
+export interface WebSkillSummary {
+  id: string;
+  name: string;
+  description: string;
+  relativePath: string;
+  mtimeMs: number;
+  sizeBytes: number;
+  enabled: boolean;
+  diagnostics: string[];
+}
+
+export interface WebSkillEntry extends WebSkillSummary {
+  content: string;
+}
+
 export async function fetchAuthMode(): Promise<{ mode: string; personaName: string }> {
   const res = await fetch("/api/web/auth/mode");
   if (!res.ok) throw new Error(`auth/mode: ${res.status}`);
@@ -317,6 +332,39 @@ export async function fetchFile(id: WebFileId): Promise<WebFileEntry> {
 export async function saveFile(id: WebFileId, content: string): Promise<WebFileEntry> {
   const body = await jsonRequest<{ file: WebFileEntry }>("/api/web/file", "PUT", { id, content }, "file");
   return body.file;
+}
+
+export async function fetchSkills(): Promise<WebSkillSummary[]> {
+  const res = await fetch("/api/web/skills");
+  if (!res.ok) throw new Error(`skills: ${res.status}`);
+  const body = (await res.json()) as { skills: WebSkillSummary[] };
+  return body.skills;
+}
+
+export async function fetchSkill(id: string): Promise<WebSkillEntry> {
+  const params = new URLSearchParams({ id });
+  const res = await fetch(`/api/web/skill?${params.toString()}`);
+  if (!res.ok) throw new Error(`skill: ${res.status}`);
+  const body = (await res.json()) as { skill: WebSkillEntry };
+  return body.skill;
+}
+
+export async function saveSkill(
+  id: string,
+  draft: { name: string; description: string; enabled: boolean; content: string },
+): Promise<WebSkillEntry> {
+  const body = await jsonRequest<{ skill: WebSkillEntry }>("/api/web/skill", "PUT", { id, ...draft }, "skill");
+  return body.skill;
+}
+
+export async function setSkillEnabled(id: string, enabled: boolean): Promise<WebSkillEntry> {
+  const body = await jsonRequest<{ skill: WebSkillEntry }>(
+    "/api/web/skill/enabled",
+    "PUT",
+    { id, enabled },
+    "skill/enabled",
+  );
+  return body.skill;
 }
 
 export async function sendMessage(

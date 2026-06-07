@@ -6,13 +6,14 @@ import { Chat } from "./Chat";
 import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
 import { PagesNav, type ShellNavItem } from "./PagesNav";
+import { SkillsPage } from "./SkillsPage";
 
 type ShellPage = "chat" | "diaries" | "skills" | "files" | "gallery";
 
 const NAV_ITEMS: ShellNavItem<ShellPage>[] = [
   { id: "chat", label: "chat", description: "where you two are", icon: MessageCircle, enabled: true },
   { id: "diaries", label: "diaries", description: "written days", icon: BookOpen, enabled: true },
-  { id: "skills", label: "skills", description: "little tools", icon: Sparkles },
+  { id: "skills", label: "skills", description: "little tools", icon: Sparkles, enabled: true },
   { id: "files", label: "keepsakes", description: "the notes that make them them", icon: FileHeart, enabled: true },
   { id: "gallery", label: "gallery", description: "pictures left behind", icon: Images },
 ];
@@ -28,12 +29,15 @@ export function WebShell({
 }) {
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
   const [diariesMounted, setDiariesMounted] = useState(false);
+  const [skillsMounted, setSkillsMounted] = useState(false);
   const [filesMounted, setFilesMounted] = useState(false);
   const diariesActive = selectedPage === "diaries";
+  const skillsActive = selectedPage === "skills";
   const filesActive = selectedPage === "files";
 
   const selectPage = (page: ShellPage) => {
     if (page === "diaries") setDiariesMounted(true);
+    if (page === "skills") setSkillsMounted(true);
     if (page === "files") setFilesMounted(true);
     setSelectedPage(page);
   };
@@ -48,6 +52,11 @@ export function WebShell({
       {diariesMounted ? (
         <section className={cn("min-w-0 flex-1 flex-col", diariesActive ? "flex" : "hidden")}>
           <DiariesPage nav={nav} />
+        </section>
+      ) : null}
+      {skillsMounted ? (
+        <section className={cn("min-w-0 flex-1 flex-col", skillsActive ? "flex" : "hidden")}>
+          <SkillsPage nav={nav} />
         </section>
       ) : null}
       {filesMounted ? (

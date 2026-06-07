@@ -19,6 +19,7 @@ import { registerWebFileRoutes } from "./file-routes.js";
 import { HttpError, sendText } from "./http.js";
 import { createWebRouteRegistry } from "./routes.js";
 import { createWebRuntimeActions } from "./runtime-actions.js";
+import { registerWebSkillRoutes } from "./skill-routes.js";
 import { serveStatic } from "./static.js";
 import { attachWebSocketStream } from "./stream.js";
 import type { WebDaemon } from "./types.js";
@@ -88,6 +89,7 @@ export async function startWebDaemon(
 	registerWebConfigRoutes(route, config, agentCore);
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
+	registerWebSkillRoutes(route, config);
 
 	await subscribeKnownRuntimes();
 

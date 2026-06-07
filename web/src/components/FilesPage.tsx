@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { RefreshCw, Save } from "lucide-react";
 import {
-  ChevronLeft,
-  Eye,
-  Pencil,
-  RefreshCw,
-  Save,
-} from "lucide-react";
-import remarkGfm from "remark-gfm";
-import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+  MarkdownEditorShell,
+  MarkdownEditorSkeleton,
+  type MarkdownViewMode,
+} from "@/components/MarkdownEditorShell";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   fetchFile,
   fetchFiles,
@@ -21,8 +17,6 @@ import {
   type WebFileSummary,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-type ViewMode = "edit" | "preview";
 
 interface FileRecord {
   summary: WebFileSummary;
@@ -130,33 +124,11 @@ function FileListButton({
   );
 }
 
-function EditorSkeleton() {
-  return (
-    <div className="space-y-3 px-5 py-5" aria-hidden>
-      <div className="h-3 w-32 rounded-sm bg-muted-foreground/10" />
-      <div className="h-4 w-56 rounded-sm bg-muted-foreground/10" />
-      <div className="mt-6 h-3 w-full rounded-sm bg-muted-foreground/10" />
-      <div className="h-3 w-11/12 rounded-sm bg-muted-foreground/10" />
-      <div className="h-3 w-3/4 rounded-sm bg-muted-foreground/10" />
-    </div>
-  );
-}
-
-function EmptyPreview() {
-  return (
-    <div className="flex min-h-[18rem] items-center justify-center px-6 text-center">
-      <p className="max-w-sm font-serif text-sm italic leading-relaxed text-muted-foreground">
-        this note is quiet for now.
-      </p>
-    </div>
-  );
-}
-
 export function FilesPage({ nav }: { nav?: ReactNode }) {
   const [fileOrder, setFileOrder] = useState<WebFileId[]>([]);
   const [fileRecords, setFileRecords] = useState<FileRecords>({});
   const [selectedId, setSelectedId] = useState<WebFileId>();
-  const [mode, setMode] = useState<ViewMode>("edit");
+  const [mode, setMode] = useState<MarkdownViewMode>("edit");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingFile, setLoadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -297,7 +269,7 @@ export function FilesPage({ nav }: { nav?: ReactNode }) {
             </div>
           </aside>
           <main className="hidden min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card md:block">
-            <EditorSkeleton />
+            <MarkdownEditorSkeleton />
           </main>
         </div>
       ) : (
@@ -333,61 +305,38 @@ export function FilesPage({ nav }: { nav?: ReactNode }) {
               </div>
             </ScrollArea>
           </aside>
-          <main
-            className={cn(
-              "min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card md:flex md:flex-1",
-              mobileEditor ? "flex flex-1" : "hidden md:flex",
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => setMobileEditor(false)}
-              className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-left font-serif text-xs italic text-muted-foreground transition-colors hover:text-foreground md:hidden"
-            >
-              <ChevronLeft className="size-3.5" />
-              all notes
-            </button>
-            <div className="flex flex-col gap-3 px-4 pb-3 pt-2 md:flex-row md:flex-wrap md:items-start md:px-6 md:pb-4 md:pt-5">
-              <div className="min-w-0 flex-1">
-                <h1 className="font-serif text-2xl leading-tight tracking-tight text-balance">
-                  {selectedSummary?.title ?? "note"}
-                </h1>
-                <p className="mt-1 max-w-[62ch] text-xs leading-relaxed text-muted-foreground">
-                  {selectedSummary?.description ?? "loading note"}
+          <MarkdownEditorShell
+            mobileEditor={mobileEditor}
+            backLabel="all notes"
+            onBack={() => setMobileEditor(false)}
+            editorReady={editorReady}
+            mode={mode}
+            onModeChange={setMode}
+            modeSubject="file"
+            settle={settle}
+            toolbar={({ viewToggle }) => (
+              <div className="flex flex-col gap-3 px-4 pb-3 pt-2 md:flex-row md:flex-wrap md:items-start md:px-6 md:pb-4 md:pt-5">
+                <div className="min-w-0 flex-1">
+                  <h1 className="font-serif text-2xl leading-tight tracking-tight text-balance">
+                    {selectedSummary?.title ?? "note"}
+                  </h1>
+                  <p className="mt-1 max-w-[62ch] text-xs leading-relaxed text-muted-foreground">
+                    {selectedSummary?.description ?? "loading note"}
+                  </p>
+                </div>
+                <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-2 md:w-auto md:justify-end">
+                  {viewToggle}
+                  <Button type="button" size="sm" onClick={() => void saveCurrentFile()} disabled={!canSave}>
+                    <Save className="size-3.5" />
+                    {saving ? "saving" : "save note"}
+                  </Button>
+                </div>
+                <p className="basis-full font-serif text-xs italic text-muted-foreground">
+                  {dirty ? "unsaved changes" : selectedSummary ? fileMeta(selectedSummary) : "loading note"}
                 </p>
               </div>
-              <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-2 md:w-auto md:justify-end">
-                <ToggleGroup
-                  type="single"
-                  value={mode}
-                  onValueChange={(value) => {
-                    if (value === "edit" || value === "preview") setMode(value);
-                  }}
-                  size="sm"
-                  variant="outline"
-                  aria-label="view mode"
-                >
-                  <ToggleGroupItem value="edit" aria-label="edit file">
-                    <Pencil className="size-3.5" />
-                    edit
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="preview" aria-label="preview file">
-                    <Eye className="size-3.5" />
-                    preview
-                  </ToggleGroupItem>
-                </ToggleGroup>
-                <Button type="button" size="sm" onClick={() => void saveCurrentFile()} disabled={!canSave}>
-                  <Save className="size-3.5" />
-                  {saving ? "saving" : "save note"}
-                </Button>
-              </div>
-              <p className="basis-full font-serif text-xs italic text-muted-foreground">
-                {dirty ? "unsaved changes" : selectedSummary ? fileMeta(selectedSummary) : "loading note"}
-              </p>
-            </div>
-            {!editorReady ? (
-              <EditorSkeleton />
-            ) : mode === "edit" ? (
+            )}
+            renderEdit={(animationClassName) => (
               <Textarea
                 value={draft}
                 onChange={(event) => {
@@ -398,27 +347,14 @@ export function FilesPage({ nav }: { nav?: ReactNode }) {
                 aria-label={`edit ${selectedSummary?.title ?? "note"}`}
                 className={cn(
                   "mx-auto min-h-0 w-full max-w-[72ch] flex-1 resize-none rounded-none border-0 bg-card px-6 py-8 font-sans text-[0.95rem] leading-relaxed shadow-none focus-visible:ring-0 md:px-8 md:py-10",
-                  settle && "duration-200 ease-out-quart animate-in fade-in-0 motion-reduce:animate-none",
+                  animationClassName,
                 )}
               />
-            ) : (
-              <ScrollArea className="min-h-0 flex-1">
-                <article
-                  className={cn(
-                    "mx-auto w-full max-w-[72ch] px-6 py-8 md:px-8 md:py-10",
-                    settle &&
-                      "duration-200 ease-out-quart animate-in fade-in-0 slide-in-from-bottom-[0.25rem] motion-reduce:animate-none",
-                  )}
-                >
-                  {draft.trim() ? (
-                    <MarkdownRenderer text={draft} remarkPlugins={[remarkGfm]} className="warm-prose file-prose" />
-                  ) : (
-                    <EmptyPreview />
-                  )}
-                </article>
-              </ScrollArea>
             )}
-          </main>
+            previewText={draft}
+            previewProseClassName="file-prose"
+            emptyPreviewText="this note is quiet for now."
+          />
         </div>
       )}
     </div>

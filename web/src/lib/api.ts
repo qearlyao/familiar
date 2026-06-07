@@ -207,8 +207,6 @@ export interface GalleryItem {
   mimeType?: string;
   size?: number;
   url: string;
-  width?: number;
-  height?: number;
   createdAt: number;
   note: string;
 }

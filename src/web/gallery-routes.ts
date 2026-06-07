@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Dirent, Stats } from "node:fs";
-import { readdir, rm, stat } from "node:fs/promises";
-import { basename, extname, join, relative, resolve, sep } from "node:path";
+import { lstat, readdir, rm, stat } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { Config } from "../config/index.js";
 import { generatedAttachmentsDir, publicAttachmentPath } from "../media/generated-media.js";
@@ -37,8 +37,7 @@ export function registerWebGalleryRoutes(route: RegisterWebRoute, config: Config
 	route("PUT", "/api/web/gallery/note", async (request, response) => {
 		const body = await readJsonBody(request);
 		const { id, note } = galleryNoteUpdateFromBody(body);
-		await writeGalleryNote(config, id, note);
-		sendJson(response, 200, { note });
+		sendJson(response, 200, { note: await writeWebGalleryNote(config, id, note) });
 	});
 }
 
@@ -127,17 +126,42 @@ async function readGalleryNote(config: Config, id: string): Promise<string> {
 	}
 }
 
-async function writeGalleryNote(config: Config, id: string, note: string): Promise<void> {
-	const path = galleryNotePath(config, id);
+export async function writeWebGalleryNote(config: Config, id: string, note: string): Promise<string> {
+	const canonicalId = await requireGalleryItemId(config, id);
+	const path = galleryNotePath(config, canonicalId);
 	if (note === "") {
 		try {
 			await rm(path);
 		} catch (error) {
 			if (!isEnoent(error)) throw error;
 		}
-		return;
+		return note;
 	}
 	await atomicWriteJson(path, { note, updatedAt: new Date().toISOString() });
+	return note;
+}
+
+async function requireGalleryItemId(config: Config, id: string): Promise<string> {
+	const root = generatedAttachmentsDir(config);
+	const path = galleryFilePathFromId(root, id);
+	const linkStat = await lstat(path).catch((error) => {
+		if (isEnoent(error)) return undefined;
+		throw error;
+	});
+	if (!linkStat?.isFile() || !classifyGalleryFile(path)) throw new HttpError(404, "gallery item not found");
+	return relative(root, path).split(sep).join("/");
+}
+
+function galleryFilePathFromId(root: string, id: string): string {
+	if (id === "" || id.includes("\0")) throw new HttpError(400, "invalid gallery id");
+	const path = resolve(root, id);
+	const relativePath = relative(root, path);
+	if (relativePath === "" || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+		throw new HttpError(400, "invalid gallery id");
+	}
+	const canonicalId = relativePath.split(sep).join("/");
+	if (canonicalId !== id) throw new HttpError(400, "invalid gallery id");
+	return path;
 }
 
 function galleryNotePath(config: Config, id: string): string {

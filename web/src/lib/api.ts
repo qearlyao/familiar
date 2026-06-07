@@ -200,6 +200,31 @@ export interface WebFileEntry extends WebFileSummary {
   content: string;
 }
 
+export interface GalleryItem {
+  id: string;
+  name: string;
+  kind: "image" | "audio";
+  mimeType?: string;
+  size?: number;
+  url: string;
+  width?: number;
+  height?: number;
+  createdAt: number;
+  note: string;
+}
+
+export async function fetchGallery(): Promise<GalleryItem[]> {
+  const res = await fetch("/api/web/gallery");
+  if (!res.ok) throw new Error(`gallery: ${res.status}`);
+  const body = (await res.json()) as { items: GalleryItem[] };
+  return body.items;
+}
+
+export async function saveGalleryNote(id: string, note: string): Promise<string> {
+  const body = await jsonRequest<{ note: string }>("/api/web/gallery/note", "PUT", { id, note }, "gallery/note");
+  return body.note;
+}
+
 export interface WebSkillSummary {
   id: string;
   name: string;

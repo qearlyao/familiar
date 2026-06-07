@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { BookOpen, FileHeart, Images, MessageCircle, Sparkles } from "lucide-react";
+import { BookOpen, FileHeart, MessageCircle, Palette, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
 import { Chat } from "./Chat";
 import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
+import { GalleryPage } from "./GalleryPage";
 import { PagesNav, type ShellNavItem } from "./PagesNav";
 import { SkillsPage } from "./SkillsPage";
 
@@ -15,7 +16,7 @@ const NAV_ITEMS: ShellNavItem<ShellPage>[] = [
   { id: "diaries", label: "diaries", description: "written days", icon: BookOpen, enabled: true },
   { id: "skills", label: "skills", description: "little tools", icon: Sparkles, enabled: true },
   { id: "files", label: "keepsakes", description: "the notes that make them them", icon: FileHeart, enabled: true },
-  { id: "gallery", label: "gallery", description: "pictures left behind", icon: Images },
+  { id: "gallery", label: "makings", description: "the images and sounds it made", icon: Palette, enabled: true },
 ];
 
 export function WebShell({
@@ -31,14 +32,17 @@ export function WebShell({
   const [diariesMounted, setDiariesMounted] = useState(false);
   const [skillsMounted, setSkillsMounted] = useState(false);
   const [filesMounted, setFilesMounted] = useState(false);
+  const [galleryMounted, setGalleryMounted] = useState(false);
   const diariesActive = selectedPage === "diaries";
   const skillsActive = selectedPage === "skills";
   const filesActive = selectedPage === "files";
+  const galleryActive = selectedPage === "gallery";
 
   const selectPage = (page: ShellPage) => {
     if (page === "diaries") setDiariesMounted(true);
     if (page === "skills") setSkillsMounted(true);
     if (page === "files") setFilesMounted(true);
+    if (page === "gallery") setGalleryMounted(true);
     setSelectedPage(page);
   };
 
@@ -62,6 +66,11 @@ export function WebShell({
       {filesMounted ? (
         <section className={cn("min-w-0 flex-1 flex-col", filesActive ? "flex" : "hidden")}>
           <FilesPage nav={nav} />
+        </section>
+      ) : null}
+      {galleryMounted ? (
+        <section className={cn("min-w-0 flex-1 flex-col", galleryActive ? "flex" : "hidden")}>
+          <GalleryPage nav={nav} />
         </section>
       ) : null}
     </div>

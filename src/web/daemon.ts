@@ -16,6 +16,7 @@ import { registerWebConversationRoutes } from "./conversation-routes.js";
 import { registerWebDiaryRoutes } from "./diary-routes.js";
 import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
+import { registerWebGalleryRoutes } from "./gallery-routes.js";
 import { HttpError, sendText } from "./http.js";
 import { createWebRouteRegistry } from "./routes.js";
 import { createWebRuntimeActions } from "./runtime-actions.js";
@@ -89,6 +90,7 @@ export async function startWebDaemon(
 	registerWebConfigRoutes(route, config, agentCore);
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
+	registerWebGalleryRoutes(route, config);
 	registerWebSkillRoutes(route, config);
 
 	await subscribeKnownRuntimes();

@@ -20,5 +20,5 @@ export function renderInlineText(text: string, opts: RenderOptions = {}): ReactN
     return content;
   }
 
-  return <div className="flex w-full min-w-0 max-w-full flex-col items-end">{content}</div>;
+  return <div className="flex min-w-0 flex-col items-end">{content}</div>;
 }

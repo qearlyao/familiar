@@ -272,12 +272,8 @@
     text-wrap: wrap;
   }
 
-  .chat-markdown-end {
-    @apply w-fit max-w-full;
-  }
-
-  .chat-markdown-end > p + p {
-    margin-top: 1.625em;
+  .chat-markdown-end > .chat-markdown-media-split {
+    @apply ml-auto w-fit max-w-full;
   }
 
   .chat-markdown h1,

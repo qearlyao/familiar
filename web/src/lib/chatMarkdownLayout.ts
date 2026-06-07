@@ -1,11 +1,18 @@
 import type { Paragraph, PhrasingContent, Root, RootContent } from "mdast";
 
+export const CHAT_MARKDOWN_MEDIA_SPLIT_CLASS = "chat-markdown-media-split";
+
 function hasVisibleChildren(children: PhrasingContent[]): boolean {
   return children.some((child) => child.type !== "text" || child.value.trim().length > 0);
 }
 
-function paragraph(children: PhrasingContent[]): Paragraph {
-  return { type: "paragraph", children };
+function paragraph(children: PhrasingContent[], splitByMedia = false): Paragraph {
+  if (!splitByMedia) return { type: "paragraph", children };
+  return {
+    type: "paragraph",
+    children,
+    data: { hProperties: { className: CHAT_MARKDOWN_MEDIA_SPLIT_CLASS } },
+  };
 }
 
 function splitImageParagraph(parent: Paragraph): RootContent[] {
@@ -20,12 +27,12 @@ function splitImageParagraph(parent: Paragraph): RootContent[] {
       continue;
     }
 
-    if (hasVisibleChildren(textChildren)) blocks.push(paragraph(textChildren));
+    if (hasVisibleChildren(textChildren)) blocks.push(paragraph(textChildren, true));
     textChildren = [];
-    blocks.push(paragraph([child]));
+    blocks.push(paragraph([child], true));
   }
 
-  if (hasVisibleChildren(textChildren)) blocks.push(paragraph(textChildren));
+  if (hasVisibleChildren(textChildren)) blocks.push(paragraph(textChildren, true));
   return blocks.length > 0 ? blocks : [parent];
 }
 

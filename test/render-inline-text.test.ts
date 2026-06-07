@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { remarkImageParagraphs } from "../web/src/lib/chatMarkdownLayout.js";
+import {
+	CHAT_MARKDOWN_MEDIA_SPLIT_CLASS,
+	remarkImageParagraphs,
+} from "../web/src/lib/chatMarkdownLayout.js";
 import { remarkLegacyChatMedia, splitLegacyChatMedia } from "../web/src/lib/chatMarkdownMedia.js";
 
 function gfmAutolinkedMemeTree({ layout = false } = {}) {
@@ -68,19 +71,44 @@ describe("chat markdown media parser", () => {
 	});
 
 	it("splits mixed image paragraphs only in the explicit layout pass", () => {
+		const splitParagraphData = {
+			hProperties: { className: CHAT_MARKDOWN_MEDIA_SPLIT_CLASS },
+		};
+
 		assert.deepEqual(gfmAutolinkedMemeTree({ layout: true }).children, [
 			{
 				type: "paragraph",
+				data: splitParagraphData,
 				children: [{ type: "text", value: "ur my hero\n" }],
 			},
 			{
 				type: "paragraph",
+				data: splitParagraphData,
 				children: [{ type: "image", url: "https://files.catbox.moe/faj921.png", alt: "falling in love" }],
 			},
 			{
 				type: "paragraph",
+				data: splitParagraphData,
 				children: [{ type: "text", value: "love u" }],
 			},
+		]);
+	});
+
+	it("does not mark plain markdown paragraphs as media split blocks", () => {
+		const transform = remarkImageParagraphs();
+		const tree: Parameters<typeof transform>[0] = {
+			type: "root",
+			children: [
+				{ type: "paragraph", children: [{ type: "text", value: "first paragraph" }] },
+				{ type: "paragraph", children: [{ type: "text", value: "second paragraph" }] },
+			],
+		};
+
+		transform(tree);
+
+		assert.deepEqual(tree.children, [
+			{ type: "paragraph", children: [{ type: "text", value: "first paragraph" }] },
+			{ type: "paragraph", children: [{ type: "text", value: "second paragraph" }] },
 		]);
 	});
 });

@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import type { GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatShortDate, type TimeGroup } from "./format";
-import { bloomPulseForId, InkBloomField } from "./InkBloom";
-import { useAudioElement } from "./useAudioElement";
+import { InkBloomField } from "./InkBloom";
+import { bloomPulseForId } from "./inkBloomModel";
+import { useAudioMetadata } from "./useAudioElement";
 
 function GroupHeading({ label, count }: { label: string; count: number }) {
   return (
@@ -61,7 +62,7 @@ function ImageTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) 
 }
 
 function AudioTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) {
-  const { audioRef, duration } = useAudioElement();
+  const { audioRef, duration } = useAudioMetadata();
   const durationLabel = formatDuration(duration);
   return (
     <div className="mb-3 break-inside-avoid">

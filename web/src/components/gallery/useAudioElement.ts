@@ -1,5 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+function durationFrom(el: HTMLAudioElement | null): number | undefined {
+  return el && Number.isFinite(el.duration) ? el.duration : undefined;
+}
+
+export function useAudioMetadata(): {
+  audioRef: React.RefCallback<HTMLAudioElement>;
+  duration: number | undefined;
+} {
+  const detachAudioListenersRef = useRef<(() => void) | undefined>(undefined);
+  const [duration, setDuration] = useState<number>();
+
+  const audioRef = useCallback((el: HTMLAudioElement | null) => {
+    detachAudioListenersRef.current?.();
+    detachAudioListenersRef.current = undefined;
+
+    if (!el) {
+      setDuration(undefined);
+      return;
+    }
+
+    const syncDuration = () => setDuration(durationFrom(el));
+    syncDuration();
+    el.addEventListener("loadedmetadata", syncDuration);
+    el.addEventListener("durationchange", syncDuration);
+    el.addEventListener("emptied", syncDuration);
+    detachAudioListenersRef.current = () => {
+      el.removeEventListener("loadedmetadata", syncDuration);
+      el.removeEventListener("durationchange", syncDuration);
+      el.removeEventListener("emptied", syncDuration);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => detachAudioListenersRef.current?.();
+  }, []);
+
+  return { audioRef, duration };
+}
+
 export function useAudioElement(): {
   audioRef: React.RefCallback<HTMLAudioElement>;
   playing: boolean;
@@ -19,7 +58,7 @@ export function useAudioElement(): {
   }, []);
 
   const syncDuration = useCallback((el = audioElementRef.current) => {
-    setDuration(el && Number.isFinite(el.duration) ? el.duration : undefined);
+    setDuration(durationFrom(el));
   }, []);
 
   const syncCurrentTime = useCallback((el = audioElementRef.current) => {

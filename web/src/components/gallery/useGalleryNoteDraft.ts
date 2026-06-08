@@ -12,7 +12,6 @@ export function useGalleryNoteDraft({
   item: GalleryItem | undefined;
   saveNote: (id: string, text: string) => Promise<string>;
 }) {
-  const [draft, setDraft] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
   const [noteError, setNoteError] = useState<string | undefined>();
@@ -20,31 +19,23 @@ export function useGalleryNoteDraft({
   const savingRef = useRef(false);
 
   const openedId = item?.id;
-  const openedInitialNote = item?.note ?? "";
 
   useEffect(() => {
     if (lastOpenedIdRef.current === openedId) return;
     lastOpenedIdRef.current = openedId;
-    setDraft(openedInitialNote);
     setNoteSaved(false);
     setNoteError(undefined);
-  }, [openedId, openedInitialNote]);
+  }, [openedId]);
 
-  const setNoteDraft = useCallback((value: string) => {
-    setDraft(value);
-    setNoteSaved(false);
-    setNoteError(undefined);
-  }, []);
-
-  const saveCurrentNote = useCallback(async () => {
-    if (!item || draft === item.note) return true;
+  const saveCurrentNote = useCallback(async (text: string) => {
+    if (!item || text === item.note) return true;
     if (savingRef.current) return false;
 
     savingRef.current = true;
     setSavingNote(true);
     setNoteError(undefined);
     try {
-      await saveNote(item.id, draft);
+      await saveNote(item.id, text);
       setNoteSaved(true);
       return true;
     } catch (error) {
@@ -54,16 +45,13 @@ export function useGalleryNoteDraft({
       savingRef.current = false;
       setSavingNote(false);
     }
-  }, [draft, item, saveNote]);
+  }, [item, saveNote]);
 
   return {
-    draft,
-    dirty: item ? draft !== item.note : false,
     savingNote,
     noteSaved,
     noteError,
-    setDraft: setNoteDraft,
     saveCurrentNote,
-    flushIfDirty: saveCurrentNote,
+    flushIfDirty: () => !savingRef.current,
   };
 }

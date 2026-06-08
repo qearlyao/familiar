@@ -102,12 +102,10 @@ export function GalleryPage({ nav }: { nav?: ReactNode }) {
             index={openIndex ?? 0}
             total={items.length}
             note={{
-              draft: note.draft,
-              dirty: note.dirty,
+              text: openItem.note,
               savingNote: note.savingNote,
               noteSaved: note.noteSaved,
               noteError: note.noteError,
-              onDraftChange: note.setDraft,
               onSave: note.saveCurrentNote,
             }}
             now={now}

@@ -6,55 +6,60 @@ import { Textarea } from "@/components/ui/textarea";
 import type { GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatBytes, formatDuration, formatWhen } from "./format";
-import { bloomPulseForId, InkBloomField } from "./InkBloom";
+import { InkBloomField } from "./InkBloom";
+import { bloomPulseForId } from "./inkBloomModel";
 import { useAudioElement } from "./useAudioElement";
 
 export interface GalleryNoteControls {
-  draft: string;
-  dirty: boolean;
+  text: string;
   savingNote: boolean;
   noteSaved: boolean;
   noteError?: string;
-  onDraftChange: (value: string) => void;
-  onSave: () => boolean | Promise<boolean>;
+  onSave: (text: string) => boolean | Promise<boolean>;
 }
 
 function noteStatusText({
-  dirty,
   savingNote,
   noteSaved,
   noteError,
-}: Pick<GalleryNoteControls, "dirty" | "savingNote" | "noteSaved" | "noteError">): string {
+  dirty,
+}: Pick<GalleryNoteControls, "savingNote" | "noteSaved" | "noteError"> & { dirty: boolean }): string {
   if (savingNote) return "saving";
-  if (noteError) return "save failed";
   if (dirty) return "unsaved";
+  if (noteError) return "save failed";
   if (noteSaved) return "note kept";
   return "";
 }
 
 function NotePopup({
-  item,
   note,
 }: {
-  item: GalleryItem;
   note: GalleryNoteControls;
 }) {
   const [open, setOpen] = useState(false);
-  const status = noteStatusText(note);
+  const [draft, setDraft] = useState(note.text);
+  const dirty = draft !== note.text;
+  const status = noteStatusText({ ...note, dirty });
   const cancel = () => {
-    note.onDraftChange(item.note);
+    setDraft(note.text);
     setOpen(false);
   };
   const save = async () => {
-    if (!note.dirty) {
+    if (!dirty) {
       setOpen(false);
       return;
     }
-    if (await note.onSave()) setOpen(false);
+    if (await note.onSave(draft)) setOpen(false);
   };
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setDraft(note.text);
+      }}
+    >
       <PopoverPrimitive.Trigger asChild>
         <Button
           type="button"
@@ -62,7 +67,7 @@ function NotePopup({
           size="sm"
           className="h-7 font-serif text-xs italic text-muted-foreground hover:text-foreground"
         >
-          add a note
+          {note.text ? "edit note" : "add a note"}
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
@@ -80,8 +85,8 @@ function NotePopup({
           )}
         >
           <Textarea
-            value={note.draft}
-            onChange={(event) => note.onDraftChange(event.target.value)}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
             placeholder="write a line about this one..."
             spellCheck
             className="min-h-20 resize-none rounded-md bg-background text-sm leading-relaxed text-foreground"
@@ -92,7 +97,7 @@ function NotePopup({
               <Button type="button" variant="ghost" size="sm" onClick={cancel} disabled={note.savingNote}>
                 cancel
               </Button>
-              <Button type="button" size="sm" onClick={() => void save()} disabled={!note.dirty || note.savingNote}>
+              <Button type="button" size="sm" onClick={() => void save()} disabled={!dirty || note.savingNote}>
                 <Save className="size-3.5" />
                 {note.savingNote ? "saving" : "keep note"}
               </Button>
@@ -119,36 +124,38 @@ function AudioProgress({
 }) {
   const knownDuration = duration && Number.isFinite(duration) && duration > 0 ? duration : undefined;
   const elapsed = knownDuration ? Math.min(knownDuration, Math.max(0, currentTime)) : 0;
-  const percent = knownDuration ? `${(elapsed / knownDuration) * 100}%` : "0%";
+  const percent = knownDuration ? (elapsed / knownDuration) * 100 : 0;
 
   return (
     <div className="w-full">
-      <button
-        type="button"
-        onClick={(event) => {
-          if (!knownDuration) {
-            onToggle();
-            return;
-          }
-          const rect = event.currentTarget.getBoundingClientRect();
-          const ratio = (event.clientX - rect.left) / rect.width;
-          onSeek(knownDuration * ratio);
-        }}
+      <input
+        type="range"
+        min={0}
+        max={knownDuration ?? 0}
+        step={0.1}
+        value={elapsed}
+        onChange={(event) => onSeek(Number(event.target.value))}
         aria-label="seek recording"
-        className="group/progress flex h-8 w-full items-center rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-      >
-        <span className="relative block h-px w-full bg-border">
-          <span className="absolute inset-y-0 left-0 bg-primary" style={{ width: percent }} />
-          <span
-            className={cn(
-              "absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary",
-              "transition-[transform,opacity] duration-200 ease-out group-hover/progress:scale-125",
-              playing ? "opacity-100" : "opacity-70",
-            )}
-            style={{ left: percent }}
-          />
-        </span>
-      </button>
+        disabled={!knownDuration}
+        className={cn(
+          "h-8 w-full cursor-pointer appearance-none bg-transparent outline-none disabled:cursor-default disabled:opacity-60",
+          "[&::-webkit-slider-runnable-track]:h-px [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
+          "[&::-webkit-slider-thumb]:size-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
+          "[&::-webkit-slider-thumb]:transition-[transform,opacity] [&::-webkit-slider-thumb]:duration-200 [&::-webkit-slider-thumb]:ease-out",
+          "[&::-webkit-slider-thumb]:-mt-[0.21875rem] hover:[&::-webkit-slider-thumb]:scale-125",
+          "[&::-moz-range-track]:h-px [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
+          "[&::-moz-range-thumb]:size-2 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-primary",
+          "[&::-moz-range-thumb]:transition-[transform,opacity] [&::-moz-range-thumb]:duration-200 [&::-moz-range-thumb]:ease-out",
+          "hover:[&::-moz-range-thumb]:scale-125 focus-visible:ring-3 focus-visible:ring-ring/40",
+          playing ? "[&::-webkit-slider-thumb]:opacity-100 [&::-moz-range-thumb]:opacity-100" : "[&::-webkit-slider-thumb]:opacity-70 [&::-moz-range-thumb]:opacity-70",
+        )}
+        style={{
+          background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${percent}%, var(--border) ${percent}%, var(--border) 100%)`,
+          backgroundSize: "100% 1px",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      />
       <div className="mt-0.5 flex items-center justify-between font-serif text-[0.7rem] italic text-muted-foreground/80 tabular-nums">
         <span>{formatDuration(elapsed) ?? "0:00"}</span>
         <button
@@ -193,13 +200,13 @@ function AudioLightboxContent({
       </div>
       <div className="w-full max-w-2xl pb-4 md:pb-8">
         <AudioProgress duration={duration} currentTime={currentTime} playing={playing} onToggle={toggle} onSeek={seek} />
-        {note.draft ? (
+        {note.text ? (
           <p className="mx-auto mt-4 max-w-xl text-center font-serif text-sm italic leading-relaxed text-muted-foreground">
-            {note.draft}
+            {note.text}
           </p>
         ) : null}
         <div className="mt-2 flex justify-center">
-          <NotePopup item={item} note={note} />
+          <NotePopup key={item.id} note={note} />
         </div>
       </div>
     </div>
@@ -217,11 +224,11 @@ function ImageLightboxContent({
     <div className="flex h-full w-full max-w-5xl flex-col items-center justify-center gap-3">
       <img
         src={item.url}
-        alt={note.draft || item.name}
+        alt={note.text || item.name}
         className="min-h-0 max-h-[calc(100dvh-11rem)] max-w-full rounded-md object-contain shadow-lg"
       />
       <div className="pb-4">
-        <NotePopup item={item} note={note} />
+        <NotePopup key={item.id} note={note} />
       </div>
     </div>
   );

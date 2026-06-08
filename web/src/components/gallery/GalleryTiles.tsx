@@ -1,9 +1,9 @@
-import { Palette, Pencil, RefreshCw } from "lucide-react";
+import { Palette, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GalleryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatShortDate, type TimeGroup } from "./format";
-import { InkBloom } from "./InkBloom";
+import { bloomPulseForId, InkBloomField } from "./InkBloom";
 import { useAudioElement } from "./useAudioElement";
 
 function GroupHeading({ label, count }: { label: string; count: number }) {
@@ -60,37 +60,35 @@ function ImageTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) 
   );
 }
 
-function AudioTile({ item, onOpenNote }: { item: GalleryItem; onOpenNote: () => void }) {
-  const { audioRef, playing, duration, toggle } = useAudioElement();
+function AudioTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) {
+  const { audioRef, duration } = useAudioElement();
   const durationLabel = formatDuration(duration);
   return (
     <div className="mb-3 break-inside-avoid">
       <audio ref={audioRef} src={item.url} preload="metadata" />
-      <div className="gallery-audio-card flex flex-col rounded-3xl px-3 pb-3 pt-3">
-        <div className="grid place-items-center py-1">
-          <InkBloom id={item.id} playing={playing} onToggle={toggle} />
-        </div>
-        <div className="mt-2 flex flex-col gap-1 px-1">
-          <span className="font-serif text-sm italic leading-none text-muted-foreground tabular-nums">
-            {durationLabel ?? "a recording"}
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          "group/tile block w-full rounded-md border border-border bg-card px-2.5 py-2.5 text-left shadow-xs",
+          "transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+          "hover:-translate-y-0.5 hover:border-primary/45 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+        )}
+        aria-label={`open recording from ${formatShortDate(item.createdAt)}`}
+      >
+        <span className="flex items-center gap-2">
+          <InkBloomField id={item.id} playing={false} pulse={bloomPulseForId(item.id)} className="size-8 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-serif text-base italic leading-none text-foreground tabular-nums">
+              {durationLabel ?? "recording"}
+            </span>
+            <span className="mt-1 block truncate font-serif text-[0.7rem] italic text-muted-foreground/80">
+              {formatShortDate(item.createdAt)}
+            </span>
           </span>
-          <button
-            type="button"
-            onClick={onOpenNote}
-            aria-label={item.note ? "open note" : "add a note"}
-            className="rounded-sm text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            {item.note ? (
-              <NoteMark note={item.note} />
-            ) : (
-              <span className="flex items-center gap-1 font-serif text-[0.72rem] italic text-muted-foreground/60 hover:text-foreground">
-                <Pencil className="size-3" />
-                add a note
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+        </span>
+        {item.note ? <NoteMark note={item.note} /> : null}
+      </button>
     </div>
   );
 }
@@ -107,10 +105,10 @@ export function GalleryGrid({
       {groups.map((group) => (
         <section key={group.key} className="mb-9 last:mb-2">
           <GroupHeading label={group.label} count={group.entries.length} />
-          <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
+          <div className="columns-2 gap-3 sm:columns-3 lg:columns-5">
             {group.entries.map(({ item, index }) =>
               item.kind === "audio" ? (
-                <AudioTile key={item.id} item={item} onOpenNote={() => onOpen(index)} />
+                <AudioTile key={item.id} item={item} onOpen={() => onOpen(index)} />
               ) : (
                 <ImageTile key={item.id} item={item} onOpen={() => onOpen(index)} />
               ),

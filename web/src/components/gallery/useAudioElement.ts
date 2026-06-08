@@ -4,12 +4,15 @@ export function useAudioElement(): {
   audioRef: React.RefCallback<HTMLAudioElement>;
   playing: boolean;
   duration: number | undefined;
+  currentTime: number;
   toggle: () => void;
+  seek: (time: number) => void;
 } {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const detachAudioListenersRef = useRef<(() => void) | undefined>(undefined);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState<number>();
+  const [currentTime, setCurrentTime] = useState(0);
 
   const syncPlaybackState = useCallback((el = audioElementRef.current) => {
     setPlaying(Boolean(el && !el.paused && !el.ended));
@@ -17,6 +20,10 @@ export function useAudioElement(): {
 
   const syncDuration = useCallback((el = audioElementRef.current) => {
     setDuration(el && Number.isFinite(el.duration) ? el.duration : undefined);
+  }, []);
+
+  const syncCurrentTime = useCallback((el = audioElementRef.current) => {
+    setCurrentTime(el && Number.isFinite(el.currentTime) ? el.currentTime : 0);
   }, []);
 
   const audioRef = useCallback(
@@ -27,36 +34,61 @@ export function useAudioElement(): {
 
       if (!el) {
         setPlaying(false);
+        setCurrentTime(0);
+        setDuration(undefined);
         return;
       }
 
       const onMeta = () => syncDuration(el);
       const onPlayback = () => syncPlaybackState(el);
+      const onTime = () => syncCurrentTime(el);
       onMeta();
       onPlayback();
+      onTime();
       el.addEventListener("loadedmetadata", onMeta);
       el.addEventListener("durationchange", onMeta);
+      el.addEventListener("timeupdate", onTime);
+      el.addEventListener("seeking", onTime);
+      el.addEventListener("seeked", onTime);
       el.addEventListener("play", onPlayback);
       el.addEventListener("playing", onPlayback);
       el.addEventListener("pause", onPlayback);
       el.addEventListener("ended", onPlayback);
+      el.addEventListener("ended", onTime);
       el.addEventListener("emptied", onPlayback);
+      el.addEventListener("emptied", onTime);
       detachAudioListenersRef.current = () => {
         el.removeEventListener("loadedmetadata", onMeta);
         el.removeEventListener("durationchange", onMeta);
+        el.removeEventListener("timeupdate", onTime);
+        el.removeEventListener("seeking", onTime);
+        el.removeEventListener("seeked", onTime);
         el.removeEventListener("play", onPlayback);
         el.removeEventListener("playing", onPlayback);
         el.removeEventListener("pause", onPlayback);
         el.removeEventListener("ended", onPlayback);
+        el.removeEventListener("ended", onTime);
         el.removeEventListener("emptied", onPlayback);
+        el.removeEventListener("emptied", onTime);
       };
     },
-    [syncDuration, syncPlaybackState],
+    [syncCurrentTime, syncDuration, syncPlaybackState],
   );
 
   useEffect(() => {
     return () => detachAudioListenersRef.current?.();
   }, []);
+
+  useEffect(() => {
+    if (!playing) return;
+    let frame = 0;
+    const tick = () => {
+      syncCurrentTime();
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [playing, syncCurrentTime]);
 
   const toggle = useCallback(() => {
     const el = audioElementRef.current;
@@ -64,15 +96,35 @@ export function useAudioElement(): {
     if (!el.paused && !el.ended) {
       el.pause();
       syncPlaybackState(el);
+      syncCurrentTime(el);
       return;
     }
-    if (el.ended) el.currentTime = 0;
+    if (el.ended) {
+      el.currentTime = 0;
+      syncCurrentTime(el);
+    }
     setPlaying(true);
     void el
       .play()
-      .then(() => syncPlaybackState(el))
-      .catch(() => syncPlaybackState(el));
-  }, [syncPlaybackState]);
+      .then(() => {
+        syncPlaybackState(el);
+        syncCurrentTime(el);
+      })
+      .catch(() => {
+        syncPlaybackState(el);
+        syncCurrentTime(el);
+      });
+  }, [syncCurrentTime, syncPlaybackState]);
 
-  return { audioRef, playing, duration, toggle };
+  const seek = useCallback(
+    (time: number) => {
+      const el = audioElementRef.current;
+      if (!el || !Number.isFinite(el.duration)) return;
+      el.currentTime = Math.min(el.duration, Math.max(0, time));
+      syncCurrentTime(el);
+    },
+    [syncCurrentTime],
+  );
+
+  return { audioRef, playing, duration, currentTime, toggle, seek };
 }

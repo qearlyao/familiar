@@ -4,7 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { AudioNotePopup, Lightbox } from "./gallery/GalleryDialogs";
+import { Lightbox } from "./gallery/GalleryDialogs";
 import { EmptyGallery, GalleryGrid, GallerySkeleton } from "./gallery/GalleryTiles";
 import { groupByTime } from "./gallery/format";
 import { useGalleryItems } from "./gallery/useGalleryItems";
@@ -97,40 +97,22 @@ export function GalleryPage({ nav }: { nav?: ReactNode }) {
         }}
       >
         {openItem ? (
-          openItem.kind === "audio" ? (
-            <AudioNotePopup
-              item={openItem}
-              index={openIndex ?? 0}
-              total={items.length}
-              note={{
-                draft: note.draft,
-                dirty: note.dirty,
-                savingNote: note.savingNote,
-                noteSaved: note.noteSaved,
-                noteError: note.noteError,
-                onDraftChange: note.setDraft,
-                onSave: () => void note.saveCurrentNote(),
-              }}
-              now={now}
-            />
-          ) : (
-            <Lightbox
-              item={openItem}
-              index={openIndex ?? 0}
-              total={items.length}
-              note={{
-                draft: note.draft,
-                dirty: note.dirty,
-                savingNote: note.savingNote,
-                noteSaved: note.noteSaved,
-                noteError: note.noteError,
-                onDraftChange: note.setDraft,
-                onSave: () => void note.saveCurrentNote(),
-              }}
-              now={now}
-              onNavigate={(delta) => void navigate(delta)}
-            />
-          )
+          <Lightbox
+            item={openItem}
+            index={openIndex ?? 0}
+            total={items.length}
+            note={{
+              draft: note.draft,
+              dirty: note.dirty,
+              savingNote: note.savingNote,
+              noteSaved: note.noteSaved,
+              noteError: note.noteError,
+              onDraftChange: note.setDraft,
+              onSave: note.saveCurrentNote,
+            }}
+            now={now}
+            onNavigate={(delta) => void navigate(delta)}
+          />
         ) : null}
       </DialogPrimitive.Root>
     </div>

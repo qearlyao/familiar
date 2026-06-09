@@ -208,6 +208,36 @@
 }
 
 @layer components {
+  .chat-frame {
+    @apply mx-auto w-full max-w-3xl;
+  }
+
+  .workspace-frame {
+    @apply mx-auto w-full max-w-6xl;
+  }
+
+  /* Keep the current intimate column on ordinary laptop viewports, then open
+     it up on wide 1x/low-scale external displays where 48rem reads too narrow. */
+  @media (min-width: 1600px) {
+    .chat-frame {
+      max-width: 64rem;
+    }
+
+    .workspace-frame {
+      max-width: 80rem;
+    }
+  }
+
+  @media (min-width: 2200px) {
+    .chat-frame {
+      max-width: 72rem;
+    }
+
+    .workspace-frame {
+      max-width: 88rem;
+    }
+  }
+
   .warm-prose {
     @apply max-w-[70ch] leading-relaxed text-foreground;
   }

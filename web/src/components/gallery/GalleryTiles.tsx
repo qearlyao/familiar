@@ -102,7 +102,7 @@ export function GalleryGrid({
   onOpen: (index: number) => void;
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
+    <div className="workspace-frame px-4 py-6 md:px-8">
       {groups.map((group) => (
         <section key={group.key} className="mb-9 last:mb-2">
           <GroupHeading label={group.label} count={group.entries.length} />
@@ -124,7 +124,7 @@ export function GalleryGrid({
 export function GallerySkeleton() {
   const spans = [40, 26, 34, 30, 44, 28, 36, 32, 40, 24, 30, 38];
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8" aria-hidden>
+    <div className="workspace-frame px-4 py-6 md:px-8" aria-hidden>
       <div className="mb-4 h-4 w-28 rounded-sm bg-muted-foreground/15" />
       <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
         {spans.map((h, i) => (

@@ -39,7 +39,7 @@ Run these four lenses before writing code so `/simplify` review concerns do not 
    - `src/memory/util.ts` — `positiveIntegerOrDefault`, `runInTransaction`
    - `src/models.ts` — `isThinkingLevel`, `parseModelRef`, `resolveProviderSetting`
    - Inline string manipulation, manual path handling, ad-hoc type guards, custom env checks, hand-rolled fetch where a client already exposes a REST handle: probably already a util or library call for it.
-2. **Quality**: avoid redundant state, parameter sprawl, copy-paste variation, leaky abstractions, stringly typed code where constants or unions exist, nested conditionals 3+ deep, and comments that narrate what well-named code already says.
+2. **Quality**: avoid redundant state, parameter sprawl, copy-paste variation, leaky abstractions, stringly typed code where constants or unions exist, nested conditionals 3+ deep.
 3. **Efficiency**: avoid repeated reads, duplicate API calls, N+1 work, missed concurrency on independent operations, startup or hot-path bloat, recurring no-op store updates, TOCTOU pre-existence checks, unbounded data structures, and overly broad reads.
 4. **Cross-write atomicity**: when one logical operation writes to multiple places, make those writes commit together or roll back together. Persisted state must not claim a thing exists that was not successfully delivered.
 

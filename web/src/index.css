@@ -507,4 +507,159 @@
   .note-row-active .note-row-name {
     @apply text-primary;
   }
+
+  /* Gallery audio bloom — the diffusion token for recordings, replacing the
+     waveform. Still at rest; drifts on hover; livelier while playing. Each tile
+     rotates/scales the field by an inline transform (seeded from the item id)
+     so no two blooms read the same. */
+  .bloom {
+    @apply relative grid place-items-center;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    isolation: isolate;
+  }
+  .bloom:focus-visible {
+    outline: none;
+  }
+  .bloom:focus-visible .bloom-glyph {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 55%, transparent);
+    border-radius: 9999px;
+  }
+  .bloom-glyph {
+    @apply relative z-[2] grid place-items-center;
+    color: color-mix(in oklch, var(--primary) 78%, black);
+    opacity: 0.45;
+    padding: 0.4rem;
+    transition:
+      opacity 0.3s var(--ease-out-quart),
+      transform 0.3s var(--ease-out-quart);
+  }
+  .dark .bloom-glyph {
+    color: color-mix(in oklch, white 78%, var(--primary));
+  }
+  .bloom:hover .bloom-glyph {
+    opacity: 0.95;
+    transform: scale(1.06);
+  }
+  .bloom-field {
+    position: absolute;
+    inset: -58%;
+    z-index: 0;
+    pointer-events: none;
+    filter: blur(11px);
+  }
+  .bloom-blob {
+    position: absolute;
+    border-radius: 9999px;
+    opacity: 0.6;
+    mix-blend-mode: screen;
+    transition: opacity 0.5s var(--ease-out-quart);
+    will-change: transform;
+  }
+  .dark .bloom-blob {
+    mix-blend-mode: lighten;
+  }
+  .bloom-blob-a {
+    inset: 12% 30% 32% 10%;
+    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 76%, white), transparent 68%);
+  }
+  .bloom-blob-b {
+    inset: 28% 10% 14% 32%;
+    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 60%, var(--accent)), transparent 68%);
+  }
+  .bloom-blob-c {
+    inset: 32% 34% 18% 18%;
+    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 54%, white), transparent 70%);
+  }
+  .bloom-blob-d {
+    inset: 10% 16% 38% 36%;
+    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 64%, var(--accent)), transparent 66%);
+  }
+  .bloom:hover .bloom-blob {
+    opacity: 0.78;
+  }
+  .bloom:hover .bloom-blob-a {
+    animation: bloom-drift-a 12s ease-in-out infinite;
+  }
+  .bloom:hover .bloom-blob-b {
+    animation: bloom-drift-b 14s ease-in-out infinite;
+  }
+  .bloom:hover .bloom-blob-c {
+    animation: bloom-drift-c 16s ease-in-out infinite;
+  }
+  .bloom:hover .bloom-blob-d {
+    animation: bloom-drift-d 18s ease-in-out infinite;
+  }
+  .bloom.is-playing .bloom-blob {
+    opacity: 0.9;
+  }
+  .bloom.is-playing .bloom-blob-a {
+    animation: bloom-drift-a 8s ease-in-out infinite;
+  }
+  .bloom.is-playing .bloom-blob-b {
+    animation: bloom-drift-b 9.5s ease-in-out infinite;
+  }
+  .bloom.is-playing .bloom-blob-c {
+    animation: bloom-drift-c 11s ease-in-out infinite;
+  }
+  .bloom.is-playing .bloom-blob-d {
+    animation: bloom-drift-d 12.5s ease-in-out infinite;
+  }
+
+  /* Bloom-shaped audio card: a soft radial wash, no hard rectangle. */
+  .gallery-audio-card {
+    background: radial-gradient(
+      120% 90% at 50% 38%,
+      color-mix(in oklch, var(--primary) 12%, var(--card)) 0%,
+      var(--card) 70%
+    );
+    box-shadow: var(--shadow-xs);
+  }
+}
+
+@keyframes bloom-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(13%, -10%) scale(1.13);
+  }
+}
+@keyframes bloom-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-12%, 9%) scale(1.1);
+  }
+}
+@keyframes bloom-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(9%, 12%) scale(0.9);
+  }
+}
+@keyframes bloom-drift-d {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-10%, -11%) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloom-blob {
+    animation: none !important;
+  }
+  .bloom.is-playing .bloom-blob {
+    opacity: 0.9;
+  }
 }

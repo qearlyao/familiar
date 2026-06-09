@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 - 2026-06-09
+
+### Added
+
+- Add a WebUI Skills room for browsing and editing workspace skills, previewing Markdown, toggling whether each skill is listed for Familiar, and surfacing skill diagnostics.
+- Add a WebUI Makings gallery for generated images and audio, with grouped media tiles, lightbox viewing, audio playback, and per-item notes.
+- Group image attachments in WebUI chat messages so multi-image outputs read as a single visual set.
+
+### Changed
+
+- Share the Markdown editor shell between Keepsakes and Skills for a more consistent edit/preview workflow.
+- Move gallery audio playback into the lightbox so the Makings grid stays compact.
+
+### Fixed
+
+- Keep right-aligned WebUI media messages on a simpler CSS-driven layout that avoids fragile measurement behavior.
+- Keep gallery note edits local until saved and validate note writes against real generated media items.
+
 ## 0.4.5 - 2026-06-06
 
 ### Added

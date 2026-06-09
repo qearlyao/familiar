@@ -34,7 +34,7 @@ max_output_chars = 12000
 read_write = true
 
 [agent]
-model = "anthropic/claude-opus-4-8"
+model = "anthropic/claude-fable-5"
 cache_retention = "short"
 thinking_level = "medium"
 
@@ -61,7 +61,7 @@ poll_seconds = 60
 
 [models]
 allow = [
-	"anthropic/claude-opus-4-8",
+	"anthropic/claude-fable-5",
 	"google/gemini-3.1-pro-preview",
 	"google/gemini-3.5-flash",
 	"openai/gpt-5.5",

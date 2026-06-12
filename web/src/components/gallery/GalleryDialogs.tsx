@@ -128,34 +128,29 @@ function AudioProgress({
 
   return (
     <div className="w-full">
-      <input
-        type="range"
-        min={0}
-        max={knownDuration ?? 0}
-        step={0.1}
-        value={elapsed}
-        onChange={(event) => onSeek(Number(event.target.value))}
-        aria-label="seek recording"
-        disabled={!knownDuration}
-        className={cn(
-          "h-8 w-full cursor-pointer appearance-none bg-transparent outline-none disabled:cursor-default disabled:opacity-60",
-          "[&::-webkit-slider-runnable-track]:h-px [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
-          "[&::-webkit-slider-thumb]:size-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
-          "[&::-webkit-slider-thumb]:transition-[transform,opacity] [&::-webkit-slider-thumb]:duration-200 [&::-webkit-slider-thumb]:ease-out",
-          "[&::-webkit-slider-thumb]:-mt-[0.21875rem] hover:[&::-webkit-slider-thumb]:scale-125",
-          "[&::-moz-range-track]:h-px [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
-          "[&::-moz-range-thumb]:size-2 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-primary",
-          "[&::-moz-range-thumb]:transition-[transform,opacity] [&::-moz-range-thumb]:duration-200 [&::-moz-range-thumb]:ease-out",
-          "hover:[&::-moz-range-thumb]:scale-125 focus-visible:ring-3 focus-visible:ring-ring/40",
-          playing ? "[&::-webkit-slider-thumb]:opacity-100 [&::-moz-range-thumb]:opacity-100" : "[&::-webkit-slider-thumb]:opacity-70 [&::-moz-range-thumb]:opacity-70",
-        )}
-        style={{
-          background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${percent}%, var(--border) ${percent}%, var(--border) 100%)`,
-          backgroundSize: "100% 1px",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
-      />
+      <div className="relative h-8 w-full rounded-sm focus-within:ring-3 focus-within:ring-ring/40">
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/80">
+          <div className="h-full bg-primary" style={{ width: `${percent}%` }} />
+          <span
+            className={cn(
+              "absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary transition-[transform,opacity] duration-200 ease-out",
+              playing ? "opacity-100" : "opacity-70",
+            )}
+            style={{ left: `${percent}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={knownDuration ?? 0}
+          step={0.1}
+          value={elapsed}
+          onChange={(event) => onSeek(Number(event.target.value))}
+          aria-label="seek recording"
+          disabled={!knownDuration}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 outline-none disabled:cursor-default"
+        />
+      </div>
       <div className="mt-0.5 flex items-center justify-between font-serif text-[0.7rem] italic text-muted-foreground/80 tabular-nums">
         <span>{formatDuration(elapsed) ?? "0:00"}</span>
         <button

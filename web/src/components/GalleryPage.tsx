@@ -53,7 +53,7 @@ export function GalleryPage({ nav }: { nav?: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
-        <div className="workspace-frame flex items-center gap-3">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
           {nav}
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h1 className="font-serif text-2xl leading-none tracking-tight">makings</h1>

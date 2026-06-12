@@ -104,7 +104,7 @@ export function Composer({
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
-      <div className="chat-frame px-5 py-4">
+      <div className="mx-auto max-w-3xl px-5 py-4">
         <input
           ref={fileRef}
           type="file"

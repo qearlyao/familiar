@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 - 2026-06-13
+
+### Changed
+
+- Update the bundled example config to use `anthropic/claude-fable-5` as the default Claude model reference.
+- Bump the pi dependency set to `0.79.1`, bringing newer provider metadata, Claude Fable 5 support, and upstream SDK/runtime fixes.
+
+### Fixed
+
+- Recover stale WebUI realtime streams after long idle periods or proxy/browser connection timeouts.
+- Give WebUI chat and workspace pages more room on wide low-DPI displays without changing the existing Retina laptop layout.
+- Restore the custom gallery audio progress bar while keeping accessible range input behavior.
+
 ## 0.5.0 - 2026-06-09
 
 ### Added

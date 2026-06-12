@@ -66,7 +66,7 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center gap-3">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
           {nav}
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h1 className="font-serif text-2xl leading-none tracking-tight">diaries</h1>
@@ -96,7 +96,7 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
       ) : diaries.length === 0 ? (
         <EmptyState onRefresh={() => void loadList()} />
       ) : (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
           <aside
             className={cn(
               "min-h-0 flex-col rounded-md border border-border bg-card py-2 md:flex md:w-72 md:flex-none",

@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant low-dpr-wide (@media (min-width: 1440px) and (max-resolution: 1.5dppx));
 
 @theme inline {
     --font-heading: var(--font-sans);

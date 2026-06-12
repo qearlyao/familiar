@@ -104,7 +104,7 @@ export function Composer({
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-3xl px-5 py-4">
+      <div className="mx-auto max-w-3xl px-5 py-4 low-dpr-wide:max-w-[clamp(48rem,52vw,72rem)]">
         <input
           ref={fileRef}
           type="file"

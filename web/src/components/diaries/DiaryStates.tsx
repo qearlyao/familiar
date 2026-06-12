@@ -24,7 +24,7 @@ export function LoadingRows() {
 
 export function InitialDiarySkeleton() {
   return (
-    <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 overflow-hidden px-4 py-5 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
+    <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 overflow-hidden px-4 py-5 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
       <div className="rounded-md border border-border bg-card py-2">
         <LoadingRows />
       </div>

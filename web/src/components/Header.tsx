@@ -44,7 +44,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background px-3 py-3 md:px-5">
-      <div className="mx-auto flex max-w-3xl items-center gap-3">
+      <div className="mx-auto flex max-w-3xl items-center gap-3 low-dpr-wide:max-w-[clamp(48rem,52vw,72rem)]">
         {nav}
         <span
           aria-label={STATUS_LABEL[connection]}

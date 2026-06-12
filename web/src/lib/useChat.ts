@@ -9,10 +9,15 @@ import {
   type ConnectionState,
   type SessionInfo,
   type StreamEvent,
+  type StreamFrame,
 } from "./api";
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
+const HEARTBEAT_INTERVAL_MS = 25_000;
+const HEARTBEAT_TIMEOUT_MS = 45_000;
+const STALE_SOCKET_MS = 60_000;
+const SEND_RESYNC_DELAY_MS = 1500;
 
 function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -119,9 +124,15 @@ export function useChat(): ChatHook {
   const [streaming, setStreaming] = useState(false);
 
   const lastEventIdRef = useRef<string | null>(null);
+  const lastEventAtRef = useRef<number>(Date.now());
+  const messagesRef = useRef<Message[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
   const activeAssistantMessageIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const patchSteps = useCallback((messageId: string, fn: (steps: Step[]) => Step[]) => {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, steps: fn(m.steps) } : m)));
@@ -129,6 +140,7 @@ export function useChat(): ChatHook {
 
   const handleEvent = useCallback(
     (event: StreamEvent) => {
+      lastEventAtRef.current = Date.now();
       if ("eventId" in event) lastEventIdRef.current = event.eventId;
 
       switch (event.type) {
@@ -271,8 +283,15 @@ export function useChat(): ChatHook {
         }
 
         case "replay_window_lost": {
+          lastEventIdRef.current = null;
+          activeAssistantMessageIdsRef.current.clear();
+          setStreaming(false);
           fetchHistory(activeSessionKey)
-            .then((res) => setMessages(res.messages))
+            .then((res) => {
+              setMessages(res.messages);
+              setHistoryLoaded(true);
+              lastEventAtRef.current = Date.now();
+            })
             .catch(() => undefined);
           break;
         }
@@ -319,9 +338,12 @@ export function useChat(): ChatHook {
     let ws: WebSocket | null = null;
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
 
     lastEventIdRef.current = null;
     activeAssistantMessageIdsRef.current.clear();
+    lastEventAtRef.current = Date.now();
 
     const resetTimer = window.setTimeout(() => {
       if (cancelled) return;
@@ -335,11 +357,66 @@ export function useChat(): ChatHook {
         if (!cancelled) {
           setMessages(res.messages);
           setHistoryLoaded(true);
+          lastEventAtRef.current = Date.now();
         }
       })
       .catch(() => {
         if (!cancelled) setHistoryLoaded(true);
       });
+
+    const refreshHistory = async (): Promise<void> => {
+      const res = await fetchHistory(activeSessionKey);
+      if (cancelled) return;
+      setMessages(res.messages);
+      setHistoryLoaded(true);
+      lastEventAtRef.current = Date.now();
+    };
+
+    const refreshHistoryQuietly = (): void => {
+      void refreshHistory().catch(() => undefined);
+    };
+
+    const recoverTransport = (): void => {
+      if (cancelled) return;
+      if (!lastEventIdRef.current) refreshHistoryQuietly();
+      const socket = wsRef.current;
+      if (socket && socket.readyState !== WebSocket.CLOSED) {
+        socket.close(4000, "stale");
+        return;
+      }
+    };
+
+    const recoverIfStale = (): void => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastEventAtRef.current < STALE_SOCKET_MS) return;
+      recoverTransport();
+    };
+
+    const stopHeartbeat = (): void => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    };
+
+    const sendHeartbeat = (): void => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      const socket = wsRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastEventAtRef.current > HEARTBEAT_TIMEOUT_MS) {
+        recoverTransport();
+        return;
+      }
+      try {
+        socket.send(JSON.stringify({ type: "ping" }));
+      } catch {
+        recoverTransport();
+      }
+    };
+
+    const startHeartbeat = (): void => {
+      stopHeartbeat();
+      heartbeatTimer = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+    };
 
     const connect = () => {
       if (cancelled) return;
@@ -352,13 +429,17 @@ export function useChat(): ChatHook {
         if (cancelled) return;
         reconnectAttempts = 0;
         setConnection("open");
+        lastEventAtRef.current = Date.now();
         socket.send(JSON.stringify({ type: "hello", lastEventId: lastEventIdRef.current }));
+        startHeartbeat();
       });
 
       socket.addEventListener("message", (e) => {
         if (cancelled) return;
+        lastEventAtRef.current = Date.now();
         try {
-          const data = JSON.parse(e.data) as StreamEvent;
+          const data = JSON.parse(e.data) as StreamFrame;
+          if (data.type === "pong") return;
           handleEventRef.current(data);
         } catch {
           /* ignore malformed frame */
@@ -367,6 +448,7 @@ export function useChat(): ChatHook {
 
       socket.addEventListener("close", () => {
         if (cancelled) return;
+        stopHeartbeat();
         if (wsRef.current === socket) wsRef.current = null;
         setConnection("closed");
         const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempts);
@@ -377,21 +459,50 @@ export function useChat(): ChatHook {
       socket.addEventListener("error", () => {
         if (cancelled) return;
         setConnection("error");
+        if (wsRef.current === socket && socket.readyState !== WebSocket.CLOSED) {
+          socket.close(4000, "error");
+        }
       });
     };
 
     connect();
 
+    const onVisibilityChange = (): void => {
+      recoverIfStale();
+    };
+    const onFocus = (): void => {
+      recoverIfStale();
+    };
+    const onPageShow = (): void => {
+      recoverIfStale();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+
     sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
-      await sendMessageApi(trimmed, uid(), activeSessionKey, attachments);
+      const messageId = uid();
+      const result = await sendMessageApi(trimmed, messageId, activeSessionKey, attachments);
+      if (resyncTimer) clearTimeout(resyncTimer);
+      resyncTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        if (messagesRef.current.some((message) => message.id === result.id)) return;
+        refreshHistoryQuietly();
+        recoverTransport();
+      }, SEND_RESYNC_DELAY_MS);
     };
 
     return () => {
       cancelled = true;
       clearTimeout(resetTimer);
+      if (resyncTimer) clearTimeout(resyncTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopHeartbeat();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
       if (wsRef.current === ws) wsRef.current = null;
       ws?.close();
     };

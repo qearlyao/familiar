@@ -4,7 +4,7 @@ import type { Socket } from "node:net";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isRecord } from "../util/guards.js";
 import type { WebEventHub } from "./event-hub.js";
-import { acceptWebSocket, decodeFrames, type WebSocketClient } from "./events.js";
+import { acceptWebSocket, decodeFrames, encodeFrame, type WebSocketClient } from "./events.js";
 
 type StreamAction = (runtime: ConversationRuntime) => Promise<void>;
 
@@ -32,6 +32,10 @@ export function attachWebSocketStream(
 				client.channelKey,
 				typeof message.lastEventId === "string" ? message.lastEventId : null,
 			);
+			return;
+		}
+		if (message.type === "ping") {
+			client.socket.write(encodeFrame(JSON.stringify({ type: "pong", ts: Date.now() })));
 			return;
 		}
 		const action = runtimeActions[message.type];

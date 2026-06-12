@@ -162,6 +162,8 @@ export type StreamEvent =
     }
   | { type: "replay_window_lost"; eventId: string; ts: number; channelKey?: string };
 
+export type StreamFrame = StreamEvent | { type: "pong"; ts: number };
+
 export type ConnectionState = "connecting" | "open" | "closed" | "error";
 
 export interface HistoryResponse {

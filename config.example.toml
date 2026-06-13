@@ -23,10 +23,30 @@ bind_address = "127.0.0.1"
 # browser-harness when you want Familiar to attach to your already-running Chrome.
 enabled = false
 backend = "browser-harness" # opencli | browser-harness
+harness_mode = "attach" # attach | cdp | cloud
 opencli_command = "opencli"
 harness_command = "browser-harness"
 session = "familiar"
 # profile = "work"
+# VPS/local headless example:
+# harness_mode = "cdp"
+# harness_cdp_url = "http://127.0.0.1:9222"
+# harness_launch_command = "/usr/bin/google-chrome-stable"
+# harness_launch_args = [
+# 	"--headless=new",
+# 	"--remote-debugging-address=127.0.0.1",
+# 	"--remote-debugging-port=9222",
+# 	"--user-data-dir=/home/familiar/.familiar/browser-harness-profile",
+# 	"--no-first-run",
+# 	"--no-default-browser-check",
+# 	"--disable-dev-shm-usage",
+# 	"about:blank",
+# ]
+# Browser Use cloud example:
+# harness_mode = "cloud"
+# harness_cloud_api_key_env = "BROWSER_USE_API_KEY"
+# harness_cloud_profile_id = "YOUR_BROWSER_USE_PROFILE_ID"
+# harness_cloud_timeout_minutes = 120
 window = "foreground" # foreground | background
 timeout_ms = 60000
 max_output_chars = 12000

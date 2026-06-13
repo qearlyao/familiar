@@ -1,5 +1,6 @@
 import type {
 	BrowserBackend,
+	BrowserHarnessMode,
 	CacheRetention,
 	CronDeliveryMode,
 	CronFrequency,
@@ -49,4 +50,5 @@ export const MEMORY_EMBEDDING_FORMATS = [
 	"voyage",
 ] as const satisfies readonly MemoryEmbeddingFormat[];
 export const BROWSER_BACKENDS = ["opencli", "browser-harness"] as const satisfies readonly BrowserBackend[];
+export const BROWSER_HARNESS_MODES = ["attach", "cdp", "cloud"] as const satisfies readonly BrowserHarnessMode[];
 export const BROWSER_WINDOW_MODES = ["foreground", "background"] as const;

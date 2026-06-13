@@ -236,6 +236,19 @@ Windows PowerShell:
 - OpenCLI: [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)
 - browser-harness: [browser-use/browser-harness](https://github.com/browser-use/browser-harness)
 
+`browser-harness` can run in three Familiar modes:
+
+- `harness_mode = "attach"` keeps the default local-desktop behavior and lets
+  browser-harness discover your already-running Chrome/Chromium.
+- `harness_mode = "cdp"` points browser-harness at an explicit CDP endpoint.
+  For VPS/headless use, set `harness_cdp_url` plus an optional
+  `harness_launch_command`/`harness_launch_args`; Familiar starts that command
+  when the CDP endpoint is not reachable, then attaches through `BU_CDP_URL`.
+- `harness_mode = "cloud"` provisions a Browser Use cloud browser before the
+  tool call and passes its CDP WebSocket to browser-harness. Set
+  `BROWSER_USE_API_KEY` and optionally `harness_cloud_profile_id` or
+  `harness_cloud_profile_name` to start with a logged-in cloud profile.
+
 Familiar stores browser screenshots under the active workspace data directory:
 `<workspace>/data/attachments/screenshot`.
 

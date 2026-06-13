@@ -10,7 +10,7 @@ import {
 	type BrowserRunSpec,
 } from "../src/tools/browser-tools.js";
 import { browserScreenshotsDir, createGeneratedMediaSink } from "../src/media/generated-media.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, withEnv, withoutEnv } from "./helpers.js";
 
 function textFrom(result: Awaited<ReturnType<ReturnType<typeof createBrowserTools>[number]["execute"]>>): string {
 	const part = result.content[0];
@@ -357,6 +357,479 @@ describe("browser tools", () => {
 		assert.doesNotMatch(textFrom(result), /browser-harness ok/);
 		assert.doesNotMatch(textFrom(result), /Command:/);
 		assert.match(textFrom(result), /"targetId":"tab-1"/);
+	});
+
+	it("passes configured browser-harness CDP websocket to the helper env", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cdp",
+					cdpWs: "ws://127.0.0.1:9222/devtools/browser/local",
+					launchArgs: [],
+				},
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await tool.execute("call-1", { mode: "page", action: "state" });
+
+		assert.equal(calls[0]?.env?.BU_NAME, "familiar");
+		assert.equal(calls[0]?.env?.BU_CDP_WS, "ws://127.0.0.1:9222/devtools/browser/local");
+		assert.equal(calls[0]?.env?.BU_CDP_URL, undefined);
+	});
+
+	it("normalizes trailing slashes from configured CDP URLs", async (t) => {
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+		});
+		const probedUrls: string[] = [];
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			probedUrls.push(url);
+			if (url === "http://127.0.0.1:9222/json/version") {
+				return new Response(JSON.stringify({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/local" }));
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cdp",
+					cdpUrl: "http://127.0.0.1:9222///",
+					launchArgs: [],
+				},
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await tool.execute("call-1", { mode: "page", action: "state" });
+
+		assert.deepEqual(probedUrls, ["http://127.0.0.1:9222/json/version"]);
+		assert.equal(calls[0]?.env?.BU_CDP_URL, "http://127.0.0.1:9222///");
+	});
+
+	it("provisions configured Browser Use cloud profiles for browser-harness", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		const requested: Array<{ url: string; body?: unknown }> = [];
+		globalThis.fetch = async (input, init) => {
+			const url = String(input);
+			requested.push({
+				url,
+				body: init?.body ? JSON.parse(String(init.body)) : undefined,
+			});
+			if (url === "https://api.browser-use.com/api/v3/browsers") {
+				return new Response(
+					JSON.stringify({
+						id: "browser-1",
+						cdpUrl: "https://cloud.browser-use.example/cdp/browser-1",
+						liveUrl: "https://live.browser-use.example/browser-1",
+					}),
+					{ status: 201 },
+				);
+			}
+			if (url === "https://cloud.browser-use.example/cdp/browser-1/json/version") {
+				return new Response(JSON.stringify({ webSocketDebuggerUrl: "wss://cloud.browser-use.example/ws/browser-1" }));
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cloud",
+					apiKeyEnv: "BROWSER_USE_API_KEY",
+					profileId: "profile-1",
+					timeoutMinutes: 120,
+					proxyCountryCode: "de",
+				},
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await withEnv("BROWSER_USE_API_KEY", "browser-use-key", () =>
+			tool.execute("call-1", { mode: "page", action: "state" }),
+		);
+
+		assert.deepEqual(requested[0], {
+			url: "https://api.browser-use.com/api/v3/browsers",
+			body: { profileId: "profile-1", timeout: 120, proxyCountryCode: "de" },
+		});
+		assert.equal(calls[0]?.env?.BU_CDP_WS, "wss://cloud.browser-use.example/ws/browser-1");
+		assert.equal(calls[0]?.env?.BU_BROWSER_ID, "browser-1");
+		assert.equal(calls[0]?.env?.BROWSER_USE_API_KEY, "browser-use-key");
+	});
+
+	it("reuses Browser Use cloud browsers until their timeoutAt expires", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		let createdCount = 0;
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			if (url === "https://api.browser-use.com/api/v3/browsers") {
+				createdCount += 1;
+				return new Response(
+					JSON.stringify({
+						id: `browser-${createdCount}`,
+						cdpUrl: `https://cloud.browser-use.example/cdp/browser-${createdCount}`,
+						timeoutAt: new Date(Date.now() + 60_000).toISOString(),
+					}),
+					{ status: 201 },
+				);
+			}
+			const match = url.match(/https:\/\/cloud\.browser-use\.example\/cdp\/browser-(\d+)\/json\/version/);
+			if (match) {
+				return new Response(
+					JSON.stringify({ webSocketDebuggerUrl: `wss://cloud.browser-use.example/ws/browser-${match[1]}` }),
+				);
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: { mode: "cloud", apiKeyEnv: "BROWSER_USE_API_KEY", profileId: "profile-1" },
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await withEnv("BROWSER_USE_API_KEY", "browser-use-key", async () => {
+			await tool.execute("call-1", { mode: "page", action: "state" });
+			await tool.execute("call-2", { mode: "page", action: "state" });
+		});
+
+		assert.equal(createdCount, 1);
+		assert.equal(calls[0]?.env?.BU_BROWSER_ID, "browser-1");
+		assert.equal(calls[1]?.env?.BU_BROWSER_ID, "browser-1");
+	});
+
+	it("recreates expired Browser Use cloud browsers", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		let createdCount = 0;
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			if (url === "https://api.browser-use.com/api/v3/browsers") {
+				createdCount += 1;
+				return new Response(
+					JSON.stringify({
+						id: `browser-${createdCount}`,
+						cdpUrl: `https://cloud.browser-use.example/cdp/browser-${createdCount}`,
+						timeoutAt: new Date(Date.now() - 1_000).toISOString(),
+					}),
+					{ status: 201 },
+				);
+			}
+			const match = url.match(/https:\/\/cloud\.browser-use\.example\/cdp\/browser-(\d+)\/json\/version/);
+			if (match) {
+				return new Response(
+					JSON.stringify({ webSocketDebuggerUrl: `wss://cloud.browser-use.example/ws/browser-${match[1]}` }),
+				);
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: { mode: "cloud", apiKeyEnv: "BROWSER_USE_API_KEY", profileId: "profile-1" },
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await withEnv("BROWSER_USE_API_KEY", "browser-use-key", async () => {
+			await tool.execute("call-1", { mode: "page", action: "state" });
+			await tool.execute("call-2", { mode: "page", action: "state" });
+		});
+
+		assert.equal(createdCount, 2);
+		assert.equal(calls[0]?.env?.BU_BROWSER_ID, "browser-1");
+		assert.equal(calls[1]?.env?.BU_BROWSER_ID, "browser-2");
+	});
+
+	it("fails cloud mode before provisioning when the Browser Use API key is missing", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		let fetchCount = 0;
+		globalThis.fetch = async () => {
+			fetchCount += 1;
+			return new Response("unexpected", { status: 500 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: { mode: "cloud", apiKeyEnv: "BROWSER_USE_API_KEY", profileId: "profile-1" },
+			},
+		});
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
+			throw new Error("runner should not be called");
+		});
+
+		await withoutEnv("BROWSER_USE_API_KEY", () =>
+			assert.rejects(() => tool.execute("call-1", { mode: "page", action: "state" }), /Missing Browser Use API key/),
+		);
+
+		assert.equal(fetchCount, 0);
+	});
+
+	it("rejects duplicate Browser Use cloud profile names", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			if (url === "https://api.browser-use.com/api/v3/profiles?pageSize=100&pageNumber=1") {
+				return new Response(JSON.stringify({ items: [{ id: "profile-1" }, { id: "profile-2" }], totalItems: 2 }));
+			}
+			if (url === "https://api.browser-use.com/api/v3/profiles/profile-1") {
+				return new Response(JSON.stringify({ id: "profile-1", name: "work" }));
+			}
+			if (url === "https://api.browser-use.com/api/v3/profiles/profile-2") {
+				return new Response(JSON.stringify({ id: "profile-2", name: "work" }));
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: { mode: "cloud", apiKeyEnv: "BROWSER_USE_API_KEY", profileName: "work" },
+			},
+		});
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
+			throw new Error("runner should not be called");
+		});
+
+		await withEnv("BROWSER_USE_API_KEY", "browser-use-key", () =>
+			assert.rejects(
+				() => tool.execute("call-1", { mode: "page", action: "state" }),
+				/Multiple Browser Use cloud profiles named "work"/,
+			),
+		);
+	});
+
+	it("launches a configured CDP browser process before passing BU_CDP_URL", async (t) => {
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+		});
+		let versionChecks = 0;
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			if (url === "http://127.0.0.1:9222/json/version") {
+				versionChecks += 1;
+				if (versionChecks === 1) return new Response("not ready", { status: 503 });
+				return new Response(JSON.stringify({ webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/local" }));
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cdp",
+					cdpUrl: "http://127.0.0.1:9222",
+					launchCommand: process.execPath,
+					launchArgs: ["-e", ""],
+				},
+			},
+		});
+		const calls: BrowserRunSpec[] = [];
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async (spec) => {
+			calls.push(spec);
+			return {
+				ok: true,
+				backend: "browser-harness",
+				command: [spec.command, ...spec.args],
+				exitCode: 0,
+				stdout: "{}",
+				stderr: "",
+				json: {},
+				truncated: false,
+			};
+		});
+
+		await tool.execute("call-1", { mode: "page", action: "state" });
+
+		assert.equal(versionChecks, 2);
+		assert.equal(calls[0]?.env?.BU_CDP_URL, "http://127.0.0.1:9222");
+		assert.equal(calls[0]?.env?.BU_CDP_WS, undefined);
+	});
+
+	it("reports CDP launch failures before running browser-harness", async (t) => {
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+		});
+		let versionChecks = 0;
+		globalThis.fetch = async (input) => {
+			const url = String(input);
+			if (url === "http://127.0.0.1:9222/json/version") {
+				versionChecks += 1;
+				return new Response("not ready", { status: 503 });
+			}
+			return new Response("not found", { status: 404 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cdp",
+					cdpUrl: "http://127.0.0.1:9222",
+					launchCommand: "/definitely-not-a-familiar-browser",
+					launchArgs: [],
+				},
+			},
+		});
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
+			throw new Error("runner should not be called");
+		});
+
+		await assert.rejects(
+			() => tool.execute("call-1", { mode: "page", action: "state" }),
+			/Failed to launch browser command "\/definitely-not-a-familiar-browser"/,
+		);
+		assert.equal(versionChecks, 1);
+	});
+
+	it("does not provision browser-harness cloud before rejected read_write actions", async (t) => {
+		__browserToolsTest.clearCloudBrowsers();
+		const previousFetch = globalThis.fetch;
+		t.after(() => {
+			globalThis.fetch = previousFetch;
+			__browserToolsTest.clearCloudBrowsers();
+		});
+		let fetchCount = 0;
+		globalThis.fetch = async () => {
+			fetchCount += 1;
+			return new Response("unexpected", { status: 500 });
+		};
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			browser: {
+				enabled: true,
+				backend: "browser-harness",
+				harnessTarget: {
+					mode: "cloud",
+					apiKeyEnv: "BROWSER_USE_API_KEY",
+					profileId: "profile-1",
+				},
+			},
+		});
+		const [tool] = createBrowserTools(config, createGeneratedMediaSink(), async () => {
+			throw new Error("runner should not be called");
+		});
+
+		await withEnv("BROWSER_USE_API_KEY", "browser-use-key", () =>
+			assert.rejects(() => tool.execute("call-1", { mode: "page", action: "open", url: "https://example.com" }), {
+				message: /browser\.read_write/,
+			}),
+		);
+
+		assert.equal(fetchCount, 0);
 	});
 
 	it("routes site mode through OpenCLI even when page mode uses browser-harness", async (t) => {

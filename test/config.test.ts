@@ -61,6 +61,7 @@ describe("loadConfig tts", () => {
 		assert.deepEqual(config.browser, {
 			enabled: false,
 			backend: "opencli",
+			harnessTarget: { mode: "attach" },
 			opencliCommand: "opencli",
 			harnessCommand: "browser-harness",
 			session: "familiar",
@@ -193,17 +194,112 @@ stability = 1.1
 	[browser]
 	enabled = true
 	backend = "browser-harness"
+	harness_mode = "cloud"
 	harness_command = "browser-harness-dev"
 	session = "personal"
+	harness_cloud_api_key_env = "ALT_BROWSER_USE_API_KEY"
+	harness_cloud_profile_id = "profile-123"
+	harness_cloud_timeout_minutes = 120
+	harness_cloud_proxy_country_code = "de"
 	`),
 		);
 
 		const config = await loadConfig(workspacePath);
 
 		assert.equal(config.browser.backend, "browser-harness");
+		assert.deepEqual(config.browser.harnessTarget, {
+			mode: "cloud",
+			apiKeyEnv: "ALT_BROWSER_USE_API_KEY",
+			profileId: "profile-123",
+			profileName: undefined,
+			timeoutMinutes: 120,
+			proxyCountryCode: "de",
+		});
 		assert.equal(config.browser.opencliCommand, "opencli");
 		assert.equal(config.browser.harnessCommand, "browser-harness-dev");
 		assert.equal(config.browser.session, "personal");
+	});
+
+	it("loads browser-harness cdp launch settings", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+	[browser]
+	enabled = true
+	backend = "browser-harness"
+	harness_mode = "cdp"
+	harness_cdp_url = "http://127.0.0.1:9222"
+	harness_launch_command = "/usr/bin/chromium"
+	harness_launch_args = [
+		"--headless=new",
+		"--remote-debugging-port=9222",
+	]
+	`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.browser.harnessTarget, {
+			mode: "cdp",
+			cdpUrl: "http://127.0.0.1:9222",
+			cdpWs: undefined,
+			launchCommand: "/usr/bin/chromium",
+			launchArgs: ["--headless=new", "--remote-debugging-port=9222"],
+		});
+	});
+
+	it("rejects invalid browser-harness target combinations", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const cases = [
+			{
+				toml: `
+	[browser]
+	harness_mode = "cdp"
+	harness_cdp_url = "http://127.0.0.1:9222"
+	harness_cdp_ws = "ws://127.0.0.1:9222/devtools/browser/local"
+	`,
+				pattern: /harness_cdp_url or browser\.harness_cdp_ws/,
+			},
+			{
+				toml: `
+	[browser]
+	harness_mode = "cdp"
+	`,
+				pattern: /requires browser\.harness_cdp_url or browser\.harness_cdp_ws/,
+			},
+			{
+				toml: `
+	[browser]
+	harness_mode = "cloud"
+	harness_cloud_profile_id = "profile-1"
+	harness_cloud_profile_name = "work"
+	`,
+				pattern: /harness_cloud_profile_id or browser\.harness_cloud_profile_name/,
+			},
+			{
+				toml: `
+	[browser]
+	harness_mode = "attach"
+	harness_cdp_url = "http://127.0.0.1:9222"
+	`,
+				pattern: /harness_cdp_url.*harness_mode = "cdp"/,
+			},
+			{
+				toml: `
+	[browser]
+	harness_mode = "cdp"
+	harness_cdp_ws = "ws://127.0.0.1:9222/devtools/browser/local"
+	harness_launch_command = "/usr/bin/chromium"
+	`,
+				pattern: /harness_launch_command requires browser\.harness_cdp_url/,
+			},
+		];
+
+		for (const item of cases) {
+			const workspacePath = await createWorkspace(t, minimalConfigToml(item.toml));
+			await assert.rejects(() => loadConfig(workspacePath), item.pattern);
+		}
 	});
 
 	it("rejects invalid browser settings", async (t) => {
@@ -371,6 +467,7 @@ api = "native-gemini"
 		assert.deepEqual(config.browser, {
 			enabled: false,
 			backend: "browser-harness",
+			harnessTarget: { mode: "attach" },
 			opencliCommand: "opencli",
 			harnessCommand: "browser-harness",
 			session: "familiar",

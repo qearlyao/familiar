@@ -12,6 +12,25 @@ export type ImageGenApi = "openrouter-images";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
+export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
+
+export type BrowserHarnessTargetConfig =
+	| { mode: "attach" }
+	| {
+			mode: "cdp";
+			cdpUrl?: string;
+			cdpWs?: string;
+			launchCommand?: string;
+			launchArgs: string[];
+	  }
+	| {
+			mode: "cloud";
+			apiKeyEnv: string;
+			profileId?: string;
+			profileName?: string;
+			timeoutMinutes?: number;
+			proxyCountryCode?: string;
+	  };
 
 export interface TtsVoiceSettings {
 	stability: number;
@@ -45,6 +64,7 @@ export interface Config {
 	browser: {
 		enabled: boolean;
 		backend: BrowserBackend;
+		harnessTarget: BrowserHarnessTargetConfig;
 		opencliCommand: string;
 		harnessCommand: string;
 		session: string;

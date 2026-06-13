@@ -1,13 +1,20 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DraftEditor } from "@/components/DraftEditor";
+import { SlashCommandMenu, slashCommandText } from "@/components/SlashCommandMenu";
 import type { DraftBlock } from "@/lib/composerDraft";
 import {
   emptyDraftBlocks,
   hasDraftBlocksContent,
   serializeDraftBlocks,
 } from "@/lib/composerDraft";
+import {
+  controlCommandCompletionQuery,
+  matchingControlCommands,
+  parseControlCommandText,
+  type ControlCommandDefinition,
+} from "@/lib/slashCommands";
 import { cn } from "@/lib/utils";
 
 type Draft = {
@@ -34,6 +41,10 @@ function isClearedDraft(draft: Draft, revision: number): boolean {
   return draft.revision === revision && !hasDraftBlocksContent(draft.blocks) && draft.attachments.length === 0;
 }
 
+function singleTextBlock(blocks: DraftBlock[]): string | undefined {
+  return blocks.length === 1 && blocks[0]?.type === "text" ? blocks[0].value : undefined;
+}
+
 export function Composer({
   onSend,
   onAbort,
@@ -49,9 +60,30 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [dismissedCommandText, setDismissedCommandText] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const { blocks, attachments } = draft;
   const serializedText = useMemo(() => serializeDraftBlocks(blocks), [blocks]);
+  const commandDraftText = singleTextBlock(blocks);
+  const commandSuggestions = useMemo(
+    () => (attachments.length === 0 && commandDraftText !== undefined ? matchingControlCommands(commandDraftText) : []),
+    [attachments.length, commandDraftText],
+  );
+  const commandMenuOpen =
+    commandSuggestions.length > 0 &&
+    commandDraftText !== undefined &&
+    dismissedCommandText !== commandDraftText &&
+    controlCommandCompletionQuery(commandDraftText) !== undefined;
+  const exactCommandDraft = !!commandDraftText && !!parseControlCommandText(commandDraftText);
+
+  useEffect(() => {
+    setSelectedCommandIndex(0);
+  }, [commandDraftText]);
+
+  useEffect(() => {
+    setSelectedCommandIndex((current) => Math.min(current, Math.max(0, commandSuggestions.length - 1)));
+  }, [commandSuggestions.length]);
 
   const send = async () => {
     if (sending) return;
@@ -79,6 +111,48 @@ export function Composer({
       if (nextBlocks === prev.blocks) return prev;
       return { ...prev, blocks: nextBlocks, revision: prev.revision + 1 };
     });
+  };
+
+  const applyCommandSuggestion = (command: ControlCommandDefinition) => {
+    const nextText = slashCommandText(command);
+    setDismissedCommandText(undefined);
+    setDraft((prev) => ({
+      ...prev,
+      blocks: [{ type: "text", value: nextText }],
+      revision: prev.revision + 1,
+    }));
+  };
+
+  const handleCommandKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!commandMenuOpen) return false;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelectedCommandIndex((current) => (current + 1) % commandSuggestions.length);
+      return true;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelectedCommandIndex((current) => (current - 1 + commandSuggestions.length) % commandSuggestions.length);
+      return true;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const command = commandSuggestions[selectedCommandIndex] ?? commandSuggestions[0];
+      if (command) applyCommandSuggestion(command);
+      return true;
+    }
+    if (event.key === "Enter" && !event.shiftKey && !exactCommandDraft) {
+      event.preventDefault();
+      const command = commandSuggestions[selectedCommandIndex] ?? commandSuggestions[0];
+      if (command) applyCommandSuggestion(command);
+      return true;
+    }
+    if (event.key === "Escape" && commandDraftText !== undefined) {
+      event.preventDefault();
+      setDismissedCommandText(commandDraftText);
+      return true;
+    }
+    return false;
   };
 
   const addAttachments = (files: File[]) => {
@@ -160,6 +234,13 @@ export function Composer({
               ))}
             </div>
           )}
+          {commandMenuOpen ? (
+            <SlashCommandMenu
+              commands={commandSuggestions}
+              selectedIndex={selectedCommandIndex}
+              onSelect={applyCommandSuggestion}
+            />
+          ) : null}
           <div className="flex items-end gap-2">
             <Button
               type="button"
@@ -177,6 +258,7 @@ export function Composer({
               onUpdateBlocks={updateBlocks}
               onPasteFiles={addAttachments}
               onSubmit={() => void send()}
+              onCommandKeyDown={handleCommandKeyDown}
             />
             <Button
               type="button"

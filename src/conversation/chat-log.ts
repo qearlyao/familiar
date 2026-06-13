@@ -3,19 +3,11 @@ import { dirname, resolve } from "node:path";
 
 import type { Config } from "../config/index.js";
 import { isEnoent, readFileOrNull } from "../util/fs.js";
+import type { ControlCommand } from "./control-commands.js";
 
 export type ChatService = "discord" | "web";
 export type ChatScope = "dm" | "channel" | "thread" | "web";
-export type ControlCommand =
-	| "stop"
-	| "status"
-	| "new"
-	| "reload"
-	| "restart"
-	| "compact"
-	| "model"
-	| "thinking"
-	| "channel-trigger";
+export type { ControlCommand } from "./control-commands.js";
 export type JobTrigger = "dm" | "mention" | "message";
 
 export interface ChatChannelRef {

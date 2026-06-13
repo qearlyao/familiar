@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { X } from "lucide-react";
 
 import type { DraftBlock, DraftSelection } from "@/lib/composerDraft";
@@ -37,12 +37,14 @@ export function DraftEditor({
   onUpdateBlocks,
   onPasteFiles,
   onSubmit,
+  onCommandKeyDown,
 }: {
   blocks: DraftBlock[];
   personaName: string;
   onUpdateBlocks: DraftBlocksUpdater;
   onPasteFiles: (files: File[]) => void;
   onSubmit: () => void;
+  onCommandKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }) {
   const textRefs = useRef(new Map<number, HTMLTextAreaElement>());
   const activeTextIndexRef = useRef(0);
@@ -140,6 +142,7 @@ export function DraftEditor({
                 if (files.length > 0) onPasteFiles(files);
               }}
               onKeyDown={(e) => {
+                if (onCommandKeyDown?.(e)) return;
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   onSubmit();

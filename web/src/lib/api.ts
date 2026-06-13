@@ -1,4 +1,5 @@
 import type { Attachment, Message, Step, ToolEvent, Usage } from "../types";
+import type { ControlCommand } from "@/lib/slashCommands";
 
 interface WireMessage {
   id: string;
@@ -409,6 +410,30 @@ export async function sendMessage(
     throw new Error(errBody.error ?? `send: ${res.status}`);
   }
   return (await res.json()) as { id: string; ts: number; channelKey: string };
+}
+
+export async function sendControlCommand(
+  command: ControlCommand,
+  args: string,
+  channelKey?: string,
+): Promise<{ message: string; channelKey: string }> {
+  const res = await fetch("/api/web/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, args, channelKey }),
+  });
+  const body = await res.json().catch(() => undefined);
+  const record = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
+  const message = typeof record?.message === "string" ? record.message : undefined;
+  const channel = typeof record?.channelKey === "string" ? record.channelKey : undefined;
+  const error = typeof record?.error === "string" ? record.error : message;
+  if (!res.ok || record?.ok === false) {
+    throw new Error(error ?? `control: ${res.status}`);
+  }
+  if (record?.ok !== true || message === undefined || channel === undefined) {
+    throw new Error("control: invalid response");
+  }
+  return { message, channelKey: channel };
 }
 
 export function streamUrl(channelKey?: string): string {

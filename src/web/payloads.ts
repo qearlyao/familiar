@@ -4,6 +4,7 @@ import type { DiscordWebSession } from "../runtime/agent-core.js";
 import { isRecord } from "../util/guards.js";
 
 export function commandArgs(command: string, args: unknown): string {
+	if (typeof args === "string") return args.trim();
 	if (!isRecord(args)) return "";
 	if (command === "model") return typeof args.model === "string" ? args.model : "";
 	if (command === "thinking") return typeof args.level === "string" ? args.level : "";

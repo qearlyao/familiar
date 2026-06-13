@@ -14,13 +14,22 @@ export {
 	type ChatLogRecord,
 	type ChatScope,
 	type ChatService,
-	type ControlCommand,
 	chatChannelKey,
 	chatLogPath,
 	createChatLog,
 	type JobTrigger,
 	type StoredAttachment,
 } from "./conversation/chat-log.js";
+export {
+	CONTROL_COMMANDS,
+	type ControlCommand,
+	type ControlCommandDefinition,
+	controlCommandCompletionQuery,
+	isControlCommand,
+	matchingControlCommands,
+	type ParsedControlCommandText,
+	parseControlCommandText,
+} from "./conversation/control-commands.js";
 export { type DiscordDaemon, startDiscordDaemon } from "./discord/daemon.js";
 export type { RestartHandler } from "./lifecycle/control.js";
 export { type HotReloadWatcher, startWorkspaceHotReload } from "./lifecycle/hot-reload.js";

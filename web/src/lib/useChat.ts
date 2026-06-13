@@ -4,6 +4,7 @@ import {
   fetchAuthMode,
   fetchHistory,
   fetchSessions,
+  sendControlCommand as sendControlCommandApi,
   sendMessage as sendMessageApi,
   streamUrl,
   type ConnectionState,
@@ -11,6 +12,7 @@ import {
   type StreamEvent,
   type StreamFrame,
 } from "./api";
+import { parseControlCommandText } from "./slashCommands";
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
@@ -129,6 +131,19 @@ export function useChat(): ChatHook {
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
   const activeAssistantMessageIdsRef = useRef<Set<string>>(new Set());
+
+  const appendSystemMessage = useCallback((text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        role: "system",
+        who: "",
+        steps: [{ kind: "text", id: uid(), text, complete: true }],
+        ts: Date.now(),
+      },
+    ]);
+  }, []);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -483,6 +498,12 @@ export function useChat(): ChatHook {
     sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
+      const control = attachments.length === 0 ? parseControlCommandText(trimmed) : undefined;
+      if (control) {
+        const result = await sendControlCommandApi(control.command, control.args, activeSessionKey);
+        appendSystemMessage(result.message);
+        return;
+      }
       const messageId = uid();
       const result = await sendMessageApi(trimmed, messageId, activeSessionKey, attachments);
       if (resyncTimer) clearTimeout(resyncTimer);
@@ -506,7 +527,7 @@ export function useChat(): ChatHook {
       if (wsRef.current === ws) wsRef.current = null;
       ws?.close();
     };
-  }, [activeSessionKey]);
+  }, [activeSessionKey, appendSystemMessage]);
 
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
@@ -531,19 +552,8 @@ export function useChat(): ChatHook {
   }, [sendControlFrame]);
 
   const notifyNewChat = useCallback(() => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: uid(),
-        role: "system",
-        who: "",
-        steps: [
-          { kind: "text", id: uid(), text: "started fresh", complete: true },
-        ],
-        ts: Date.now(),
-      },
-    ]);
-  }, []);
+    appendSystemMessage("started fresh");
+  }, [appendSystemMessage]);
 
   return {
     messages,

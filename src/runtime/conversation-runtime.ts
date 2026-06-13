@@ -5,7 +5,6 @@ import {
 	type ChatChannelRef,
 	type ChatLog,
 	type ChatLogRecord,
-	type ControlCommand,
 	hiddenWebMessageIds,
 	type InboundChatRecord,
 	type JobTrigger,
@@ -13,6 +12,7 @@ import {
 	type StoredAgentEvent,
 	type StoredAttachment,
 } from "../conversation/chat-log.js";
+import { type ControlCommand, parseControlCommandText } from "../conversation/control-commands.js";
 import { promptAttachmentNotes } from "../media/inbound-attachments.js";
 import { formatLocalTimestamp } from "../util/time.js";
 
@@ -303,23 +303,10 @@ export class ConversationRuntime {
 		let text = input.text;
 		if (this.botUserId) text = text.replace(new RegExp(`<@!?${escapeRegExp(this.botUserId)}>`, "g"), " ");
 		const normalized = text.replace(/\s+/g, " ").trim();
-		const commandText = normalized.toLowerCase();
-		const slashCommand = commandText.startsWith("/");
+		const slashCommand = normalized.startsWith("/");
 		const explicitBotCommand = input.mentionedBot === true;
 		if (!slashCommand && !explicitBotCommand) return undefined;
-		const [rawCommand = "", ...argParts] = normalized.split(" ");
-		const command = rawCommand.replace(/^\//, "").toLowerCase();
-		if (
-			!["stop", "status", "new", "reload", "restart", "compact", "model", "thinking", "channel-trigger"].includes(
-				command,
-			)
-		) {
-			return undefined;
-		}
-		return {
-			command: command as ControlCommand,
-			args: argParts.join(" ").trim(),
-		};
+		return parseControlCommandText(normalized, { allowBare: explicitBotCommand });
 	}
 
 	async noteControlCommand(input: InboundMessageInput, control: ParsedControlCommand): Promise<void> {

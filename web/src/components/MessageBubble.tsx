@@ -28,20 +28,6 @@ function attachmentPreview(attachment: Attachment): { align?: "right"; content: 
     return { content: <MediaPreview src={attachment.url} alt={attachment.name} /> };
   }
   if (!attachment.url) return undefined;
-  if (attachment.mimeType?.startsWith("video/")) {
-    return {
-      content: (
-        <div className="w-full max-w-[24rem]">
-          <video
-            src={attachment.url}
-            controls
-            preload="metadata"
-            className="aspect-video w-full rounded-md bg-muted object-contain"
-          />
-        </div>
-      ),
-    };
-  }
   if (attachment.mimeType?.startsWith("audio/")) {
     return {
       content: (
@@ -122,11 +108,26 @@ function ImageAttachmentAlbum({ attachments }: { attachments: PreviewableImageAt
   );
 }
 
-function AttachmentItem({ attachment }: { attachment: Attachment }) {
+function AttachmentItem({ attachment, align }: { attachment: Attachment; align: "left" | "right" }) {
+  if (attachment.url && attachment.mimeType?.startsWith("video/")) {
+    return (
+      <div className={cn("max-w-full", align === "right" && "ml-auto")}>
+        <div className="w-80 max-w-full sm:w-96">
+          <video
+            src={attachment.url}
+            controls
+            preload="metadata"
+            className="aspect-video w-full rounded-md bg-muted object-contain"
+          />
+          {attachment.derivedText ? <AttachmentContext derived={attachment.derivedText} /> : null}
+        </div>
+      </div>
+    );
+  }
   const preview = attachmentPreview(attachment);
   if (!preview) return null;
   return (
-    <div className={cn("max-w-full", preview.align === "right" && "text-right")}>
+    <div className={cn("max-w-full", (align === "right" || preview.align === "right") && "ml-auto text-right")}>
       {preview.content}
       {attachment.derivedText ? <AttachmentContext derived={attachment.derivedText} /> : null}
     </div>
@@ -142,7 +143,7 @@ function AttachmentList({ attachments, align }: { attachments: Attachment[]; ali
         if (item.type === "image-album") {
           return <ImageAttachmentAlbum key="image-attachment-album" attachments={item.attachments} />;
         }
-        return <AttachmentItem key={item.attachment.id} attachment={item.attachment} />;
+        return <AttachmentItem key={item.attachment.id} attachment={item.attachment} align={align} />;
       })}
     </div>
   );

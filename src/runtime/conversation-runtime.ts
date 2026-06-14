@@ -186,6 +186,9 @@ export class ConversationRuntime {
 			this.queuedTriggerByJobId.set(record.jobId, record.triggerRecordId);
 			this.lastQueuedTriggerRecordId = Math.max(this.lastQueuedTriggerRecordId, record.triggerRecordId);
 		}
+		if (record.type === "assistant_retry") {
+			this.queuedTriggerByJobId.set(record.jobId, record.triggerRecordId);
+		}
 		if (record.type === "job_completed") {
 			this.lastCompletedTriggerRecordId = Math.max(this.lastCompletedTriggerRecordId, record.triggerRecordId);
 		}

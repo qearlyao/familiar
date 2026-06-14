@@ -132,6 +132,62 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("keeps retry targets available after a failed manual retry", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound({
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "qearlyao",
+				text: "hello",
+				remoteTimestamp: "2026-05-09T03:34:16.881Z",
+			});
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			await runtime.noteOutbound({
+				text: "Model error: 400 Bad Request",
+				messageIds: ["assistant-error"],
+				webMessageId: "assistant-error",
+				jobId: dispatch.job.jobId,
+			});
+
+			assert.deepEqual(runtime.latestAssistantRetryTarget(), {
+				messageId: "assistant-error",
+				triggerRecordId: dispatch.job.triggerRecordId,
+				attachments: [],
+			});
+
+			await runtime.noteAssistantRetry({
+				oldMessageId: "assistant-error",
+				newMessageId: "assistant-error-retry",
+				jobId: "retry-job",
+				triggerRecordId: dispatch.job.triggerRecordId,
+			});
+			await runtime.noteOutbound({
+				text: "Model error: 400 Bad Request",
+				messageIds: ["assistant-error-retry"],
+				webMessageId: "assistant-error-retry",
+				jobId: "retry-job",
+			});
+
+			assert.deepEqual(runtime.latestAssistantRetryTarget(), {
+				messageId: "assistant-error-retry",
+				triggerRecordId: dispatch.job.triggerRecordId,
+				attachments: [],
+			});
+		} finally {
+			await runtime.disconnect();
+		}
+	});
+
 	it("tracks last heartbeat-reset interaction from owner inbound records only", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

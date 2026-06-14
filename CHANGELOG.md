@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.3 - 2026-06-14
+
+### Added
+
+- Stream Gemini video uploads through the Files API instead of reading whole video files into memory.
+- Add a video-only Gemini base URL override for deployments where the shared Google model endpoint cannot handle Files API uploads.
+
+### Fixed
+
+- Align WebUI video attachment summaries with the rest of the message content.
+
 ## 0.5.2 - 2026-06-14
 
 ### Added

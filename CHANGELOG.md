@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.2 - 2026-06-14
+
+### Added
+
+- Add browser-harness target configuration for local browsers, configured CDP endpoints, and Browser Use cloud provisioning.
+- Add WebUI composer slash-command completion and route recognized attachmentless slash commands through the control endpoint.
+
+### Changed
+
+- Bump the pi dependency set to `0.79.3`, bringing upstream provider metadata fixes including safer OpenAI/Codex context-window limits.
+
+### Fixed
+
+- Keep manual retry targets chained to their original conversation branch.
+
 ## 0.5.1 - 2026-06-13
 
 ### Changed

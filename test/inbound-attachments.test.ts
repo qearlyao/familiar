@@ -44,53 +44,65 @@ function requestUrl(input: RequestInfo | URL): string {
 	return input.url;
 }
 
-function installGeminiVideoFetchMock(options: {
-	requestedUrls: string[];
-	generateText?: string;
-	startThrows?: Error;
-	uploadFile?: GeminiMockFile;
-	pollFiles?: GeminiMockFile[];
-	pollThrows?: Error;
-	deleteStatus?: number;
-	deleteThrows?: boolean;
-}): typeof fetch {
-	const uploadFile = options.uploadFile ?? geminiVideoFile("PROCESSING");
-	const pollFiles = [...(options.pollFiles ?? [geminiVideoFile("ACTIVE")])];
+type GeminiFetchRequest = {
+	input: RequestInfo | URL;
+	init: RequestInit | undefined;
+	method: string;
+	url: string;
+};
+
+type GeminiFetchRoutes = Partial<{
+	startUpload: (request: GeminiFetchRequest) => Response | Promise<Response>;
+	uploadBytes: (request: GeminiFetchRequest) => Response | Promise<Response>;
+	pollFile: (request: GeminiFetchRequest) => Response | Promise<Response>;
+	generate: (request: GeminiFetchRequest) => Response | Promise<Response>;
+	deleteFile: (request: GeminiFetchRequest) => Response | Promise<Response>;
+}>;
+
+function geminiGenerateResponse(text = "A short clip with visible motion."): Response {
+	return jsonResponse({
+		candidates: [
+			{
+				content: { parts: [{ text }] },
+				finishReason: "STOP",
+				index: 0,
+			},
+		],
+	});
+}
+
+function geminiUploadStartResponse(): Response {
+	return new Response("{}", {
+		status: 200,
+		headers: { "x-goog-upload-url": "https://upload.example.test/upload-session" },
+	});
+}
+
+function geminiUploadBytesResponse(file = geminiVideoFile("PROCESSING"), uploadStatus = "final"): Response {
+	return jsonResponse({ file }, { status: 200, headers: { "x-goog-upload-status": uploadStatus } });
+}
+
+function installGeminiVideoFetchMock(requestedUrls: string[], routes: GeminiFetchRoutes = {}): typeof fetch {
+	const pollFiles = [geminiVideoFile("ACTIVE")];
 	return (async (input, init) => {
 		const url = requestUrl(input);
 		const method = init?.method ?? "GET";
-		options.requestedUrls.push(url);
+		const request = { input, init, method, url };
+		requestedUrls.push(url);
 		if (method === "POST" && url.endsWith("/upload/v1beta/files")) {
-			if (options.startThrows) throw options.startThrows;
-			return new Response("{}", {
-				status: 200,
-				headers: { "x-goog-upload-url": "https://upload.example.test/upload-session" },
-			});
+			return await (routes.startUpload?.(request) ?? geminiUploadStartResponse());
 		}
-		if (method === "POST" && url === "https://example.test/upload-session") {
-			return jsonResponse(
-				{ file: uploadFile },
-				{ status: 200, headers: { "x-goog-upload-status": "final" } },
-			);
+		if (method === "POST" && url === "https://upload.example.test/upload-session") {
+			return await (routes.uploadBytes?.(request) ?? geminiUploadBytesResponse());
 		}
 		if (method === "GET" && /\/v1beta\/files\/gemini-video-1$/.test(url)) {
-			if (options.pollThrows) throw options.pollThrows;
-			return jsonResponse(pollFiles.shift() ?? geminiVideoFile("ACTIVE"));
+			return await (routes.pollFile?.(request) ?? jsonResponse(pollFiles.shift() ?? geminiVideoFile("ACTIVE")));
 		}
 		if (method === "POST" && /\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url)) {
-			return jsonResponse({
-				candidates: [
-					{
-						content: { parts: [{ text: options.generateText ?? "A short clip with visible motion." }] },
-						finishReason: "STOP",
-						index: 0,
-					},
-				],
-			});
+			return await (routes.generate?.(request) ?? geminiGenerateResponse());
 		}
 		if (method === "DELETE" && /\/v1beta\/files\/gemini-video-1$/.test(url)) {
-			if (options.deleteThrows) throw new Error("delete failed");
-			return jsonResponse({}, { status: options.deleteStatus ?? 200 });
+			return await (routes.deleteFile?.(request) ?? jsonResponse({}));
 		}
 		throw new Error(`unexpected Gemini request: ${method} ${url}`);
 	}) as typeof fetch;
@@ -333,7 +345,7 @@ describe("inbound attachments", () => {
 		const previousGemini = process.env.GEMINI_API_KEY;
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = installGeminiVideoFetchMock({ requestedUrls });
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls);
 		try {
 			const attachments = await materializeInboundAttachments(config, [
 				{
@@ -347,7 +359,7 @@ describe("inbound attachments", () => {
 			assert.equal(attachments[0]?.derived?.text?.label, "summary");
 			assert.equal(attachments[0]?.derived?.text?.text, "A short clip with visible motion.");
 			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/upload\/v1beta\/files/.test(url)), true);
-			assert.equal(requestedUrls.includes("https://example.test/upload-session"), true);
+			assert.equal(requestedUrls.includes("https://upload.example.test/upload-session"), true);
 			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/v1beta\/files\/gemini-video-1/.test(url)), true);
 			assert.equal(
 				requestedUrls.some((url) =>
@@ -373,9 +385,10 @@ describe("inbound attachments", () => {
 		const previousGemini = process.env.GEMINI_API_KEY;
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = installGeminiVideoFetchMock({
-			requestedUrls,
-			startThrows: new DOMException("The operation timed out.", "TimeoutError"),
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			startUpload: () => {
+				throw new DOMException("The operation timed out.", "TimeoutError");
+			},
 		});
 		try {
 			const attachments = await materializeInboundAttachments(config, [
@@ -397,6 +410,104 @@ describe("inbound attachments", () => {
 		}
 	});
 
+	it("falls back to inline video content when Gemini Files API upload URL is missing", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const previousWarn = console.warn;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		console.warn = () => undefined;
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			startUpload: () => jsonResponse({}),
+			generate: () => geminiGenerateResponse("Inline fallback summary."),
+		});
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "summary");
+			assert.equal(attachments[0]?.derived?.text?.text, "Inline fallback summary.");
+			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/upload\/v1beta\/files/.test(url)), true);
+			assert.equal(requestedUrls.includes("https://upload.example.test/upload-session"), false);
+			assert.equal(
+				requestedUrls.some((url) =>
+					/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url),
+				),
+				true,
+			);
+		} finally {
+			console.warn = previousWarn;
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
+	it("uploads Gemini Files API bytes directly instead of using the SDK uploader", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://example.test/v1beta" },
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
+		let uploadBody: RequestInit["body"] | undefined;
+		let uploadHeaders: Headers | undefined;
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			uploadBytes: ({ init }) => {
+				uploadBody = init?.body;
+				uploadHeaders = new Headers(init?.headers);
+				return geminiUploadBytesResponse(geminiVideoFile("ACTIVE"), "final");
+			},
+			generate: () => geminiGenerateResponse("Files API upload summary."),
+		});
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "summary");
+			assert.equal(attachments[0]?.derived?.text?.text, "Files API upload summary.");
+			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/upload\/v1beta\/files/.test(url)), true);
+			assert.equal(requestedUrls.includes("https://upload.example.test/upload-session"), true);
+			assert.equal(Buffer.isBuffer(uploadBody), false);
+			assert.ok(uploadBody);
+			assert.ok(uploadHeaders);
+			assert.equal(uploadHeaders.get("Content-Length"), String(mp4Bytes().byteLength));
+			assert.equal(uploadHeaders.get("X-Goog-Upload-Command"), "upload, finalize");
+			assert.equal(
+				requestedUrls.some((url) =>
+					/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url),
+				),
+				true,
+			);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
 	it("preserves a prompt-visible note when Gemini video processing times out", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, {
@@ -408,10 +519,11 @@ describe("inbound attachments", () => {
 		const previousGemini = process.env.GEMINI_API_KEY;
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = installGeminiVideoFetchMock({
-			requestedUrls,
-			uploadFile: geminiVideoFile("PROCESSING"),
-			pollThrows: new Error("request timed out"),
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			uploadBytes: () => geminiUploadBytesResponse(geminiVideoFile("PROCESSING"), "final"),
+			pollFile: () => {
+				throw new Error("request timed out");
+			},
 		});
 		try {
 			const attachments = await materializeInboundAttachments(config, [
@@ -445,10 +557,9 @@ describe("inbound attachments", () => {
 		const previousGemini = process.env.GEMINI_API_KEY;
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
-		globalThis.fetch = installGeminiVideoFetchMock({
-			requestedUrls,
-			uploadFile: geminiVideoFile("PROCESSING"),
-			pollFiles: [geminiVideoFile("FAILED", { message: "video processing failed" })],
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			uploadBytes: () => geminiUploadBytesResponse(geminiVideoFile("PROCESSING"), "final"),
+			pollFile: () => jsonResponse(geminiVideoFile("FAILED", { message: "video processing failed" })),
 		});
 		try {
 			const attachments = await materializeInboundAttachments(config, [
@@ -484,10 +595,9 @@ describe("inbound attachments", () => {
 		const requestedUrls: string[] = [];
 		process.env.GEMINI_API_KEY = "gemini-test";
 		console.warn = () => undefined;
-		globalThis.fetch = installGeminiVideoFetchMock({
-			requestedUrls,
-			generateText: "A summary survives cleanup failure.",
-			deleteStatus: 500,
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls, {
+			generate: () => geminiGenerateResponse("A summary survives cleanup failure."),
+			deleteFile: () => jsonResponse({}, { status: 500 }),
 		});
 		try {
 			const attachments = await materializeInboundAttachments(config, [

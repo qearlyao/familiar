@@ -1,13 +1,16 @@
 import { readFile } from "node:fs/promises";
 
-import { createPartFromUri, createUserContent, FileState, GoogleGenAI } from "@google/genai";
+import { createPartFromBase64, createPartFromUri, createUserContent, FileState, GoogleGenAI } from "@google/genai";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
-import { parseModelRef, resolveModel } from "../models/index.js";
+import {
+	GeminiFilesUploadUnsupportedError,
+	type GeminiUploadFile,
+	geminiHttpOptions,
+	uploadGeminiFile,
+} from "./gemini-files.js";
 
 type DerivedText = NonNullable<StoredAttachment["derived"]>["text"];
-type GeminiFile = Awaited<ReturnType<GoogleGenAI["files"]["upload"]>>;
-const GEMINI_API_VERSION_PATTERN = /\/(v1(?:beta|alpha)?|v\d+beta\d*)\/?$/;
 const AUDIO_UNDERSTANDING_TIMEOUT_MS = 30_000;
 const VIDEO_UNDERSTANDING_TIMEOUT_MS = 5 * 60_000;
 const GEMINI_FILE_POLL_INTERVAL_MS = 2_000;
@@ -21,20 +24,6 @@ function labelForAttachment(kind: StoredAttachment["kind"]): string {
 	if (kind === "audio") return "transcription";
 	if (kind === "video") return "summary";
 	return "text";
-}
-
-function geminiHttpOptions(config: Config): { baseUrl?: string; apiVersion?: string; timeout: number } {
-	const ref = parseModelRef(`google/${config.mediaUnderstanding.video.model}`);
-	const model = ref ? resolveModel(ref, config) : undefined;
-	const baseUrl = model?.baseUrl;
-	if (!baseUrl) return { timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS };
-	const match = baseUrl.match(GEMINI_API_VERSION_PATTERN);
-	if (!match) return { baseUrl, timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS };
-	return {
-		baseUrl: baseUrl.slice(0, match.index),
-		apiVersion: match[1],
-		timeout: VIDEO_UNDERSTANDING_TIMEOUT_MS,
-	};
 }
 
 function timedOut(error: unknown): boolean {
@@ -85,9 +74,9 @@ function fallbackDerivedText(attachment: StoredAttachment, error: unknown): Deri
 
 async function waitForGeminiFileActive(
 	ai: GoogleGenAI,
-	uploaded: GeminiFile,
+	uploaded: GeminiUploadFile,
 	deadline: VideoUnderstandingDeadline,
-): Promise<GeminiFile> {
+): Promise<GeminiUploadFile> {
 	let file = uploaded;
 	let polled = false;
 	for (;;) {
@@ -111,6 +100,32 @@ async function deleteGeminiFile(ai: GoogleGenAI, name: string): Promise<void> {
 	} catch (error) {
 		console.warn("Gemini file cleanup failed", error);
 	}
+}
+
+async function generateVideoSummary(
+	config: Config,
+	ai: GoogleGenAI,
+	videoPart: ReturnType<typeof createPartFromBase64> | ReturnType<typeof createPartFromUri>,
+	deadline: VideoUnderstandingDeadline,
+): Promise<DerivedText | undefined> {
+	const response = await ai.models.generateContent({
+		model: config.mediaUnderstanding.video.model,
+		contents: createUserContent([
+			{
+				text: "Provide a concise description of this video, including any spoken content if present, and summarize the key visible events.",
+			},
+			videoPart,
+		]),
+		config: { abortSignal: deadline.signal() },
+	});
+	const text = response.text?.trim();
+	if (!text) return undefined;
+	return {
+		provider: "google",
+		model: config.mediaUnderstanding.video.model,
+		text: normalizeDerivedText(text),
+		label: "summary",
+	};
 }
 
 async function transcribeAudioAttachment(
@@ -151,45 +166,49 @@ async function summarizeVideoAttachment(
 	attachment: StoredAttachment,
 ): Promise<DerivedText | undefined> {
 	if (!attachment.localPath || !attachment.mimeType?.startsWith("video/")) return undefined;
+	const videoAttachment = {
+		...attachment,
+		localPath: attachment.localPath,
+		mimeType: attachment.mimeType,
+	};
 	const apiKey = process.env[config.mediaUnderstanding.video.apiKeyEnv];
 	if (!apiKey) {
 		console.warn(`media understanding skipped: ${config.mediaUnderstanding.video.apiKeyEnv} is not set`);
 		return undefined;
 	}
-	const ai = new GoogleGenAI({ apiKey, httpOptions: geminiHttpOptions(config) });
+	const ai = new GoogleGenAI({ apiKey, httpOptions: geminiHttpOptions(config, VIDEO_UNDERSTANDING_TIMEOUT_MS) });
 	const deadline = new VideoUnderstandingDeadline();
 	let uploadedName: string | undefined;
 	try {
-		const uploaded = await ai.files.upload({
-			file: attachment.localPath,
-			config: {
-				mimeType: attachment.mimeType,
-				displayName: attachment.name,
-				abortSignal: deadline.signal(),
-			},
+		const uploaded = await uploadGeminiFile({
+			config,
+			apiKey,
+			localPath: videoAttachment.localPath,
+			mimeType: videoAttachment.mimeType,
+			displayName: videoAttachment.name,
+			timeoutMs: VIDEO_UNDERSTANDING_TIMEOUT_MS,
+			signal: deadline.signal(),
 		});
 		uploadedName = uploaded.name;
 		const file = await waitForGeminiFileActive(ai, uploaded, deadline);
 		const fileUri = file.uri ?? uploaded.uri;
 		if (!fileUri) throw new Error("Gemini file upload did not return a file URI");
-		const response = await ai.models.generateContent({
-			model: config.mediaUnderstanding.video.model,
-			contents: createUserContent([
-				{
-					text: "Provide a concise description of this video, including any spoken content if present, and summarize the key visible events.",
-				},
-				createPartFromUri(fileUri, file.mimeType ?? uploaded.mimeType ?? attachment.mimeType),
-			]),
-			config: { abortSignal: deadline.signal() },
-		});
-		const text = response.text?.trim();
-		if (!text) return undefined;
-		return {
-			provider: "google",
-			model: config.mediaUnderstanding.video.model,
-			text: normalizeDerivedText(text),
-			label: labelForAttachment(attachment.kind),
-		};
+		return await generateVideoSummary(
+			config,
+			ai,
+			createPartFromUri(fileUri, file.mimeType ?? uploaded.mimeType ?? attachment.mimeType),
+			deadline,
+		);
+	} catch (error) {
+		if (uploadedName || !(error instanceof GeminiFilesUploadUnsupportedError)) throw error;
+		console.warn("Gemini Files API upload failed; falling back to inline video content", error);
+		const video = await readFile(attachment.localPath);
+		return await generateVideoSummary(
+			config,
+			ai,
+			createPartFromBase64(video.toString("base64"), attachment.mimeType),
+			deadline,
+		);
 	} finally {
 		if (uploadedName) await deleteGeminiFile(ai, uploadedName);
 	}

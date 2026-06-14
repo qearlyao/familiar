@@ -505,6 +505,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					MEDIA_UNDERSTANDING_PROVIDERS,
 				),
 				model: readOptionalString(mediaUnderstandingVideo.model, "gemini-3-flash-preview"),
+				baseUrl: readOptionalConfigString(mediaUnderstandingVideo.base_url, "media.understanding.video.base_url"),
 				apiKeyEnv: readOptionalString(mediaUnderstandingVideo.api_key_env, "GEMINI_API_KEY"),
 			},
 		},

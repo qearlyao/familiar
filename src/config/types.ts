@@ -136,6 +136,7 @@ export interface Config {
 		video: {
 			provider: MediaUnderstandingProvider;
 			model: string;
+			baseUrl?: string;
 			apiKeyEnv: string;
 		};
 	};

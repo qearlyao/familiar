@@ -151,6 +151,9 @@ api_key_env = "GROQ_API_KEY"
 [media.understanding.video]
 provider = "google"
 model = "gemini-3-flash-preview"
+# Optional video-only Gemini endpoint. Use this when [models.base_urls].google points at
+# a gateway that does not support Gemini Files API uploads.
+# base_url = "https://generativelanguage.googleapis.com/v1beta"
 api_key_env = "GEMINI_API_KEY"
 
 [persona]

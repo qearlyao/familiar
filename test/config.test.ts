@@ -398,7 +398,29 @@ api = "native-gemini"
 		assert.deepEqual(config.mediaUnderstanding.video, {
 			provider: "google",
 			model: "gemini-3-flash-preview",
+			baseUrl: undefined,
 			apiKeyEnv: "GEMINI_API_KEY",
+		});
+	});
+
+	it("loads media understanding video base URL override", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[media.understanding.video]
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "ALT_GEMINI_KEY"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.mediaUnderstanding.video, {
+			provider: "google",
+			model: "gemini-3-flash-preview",
+			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+			apiKeyEnv: "ALT_GEMINI_KEY",
 		});
 	});
 

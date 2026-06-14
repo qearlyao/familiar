@@ -24,7 +24,7 @@ export class GeminiFilesUploadUnsupportedError extends Error {
 export function geminiHttpOptions(config: Config, timeout: number): GeminiHttpOptions {
 	const ref = parseModelRef(`google/${config.mediaUnderstanding.video.model}`);
 	const model = ref ? resolveModel(ref, config) : undefined;
-	const baseUrl = model?.baseUrl;
+	const baseUrl = config.mediaUnderstanding.video.baseUrl ?? model?.baseUrl;
 	if (!baseUrl) return { timeout };
 	const match = baseUrl.match(GEMINI_API_VERSION_PATTERN);
 	if (!match) return { baseUrl, timeout };

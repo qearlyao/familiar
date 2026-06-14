@@ -374,6 +374,53 @@ describe("inbound attachments", () => {
 		}
 	});
 
+	it("prefers the video-only Gemini base URL over shared Google model routing", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			models: {
+				baseUrls: { google: "https://linkapi.example.test/v1beta" },
+			},
+			mediaUnderstanding: {
+				video: {
+					provider: "google",
+					model: "gemini-3-flash-preview",
+					baseUrl: "https://example.test/v1beta",
+					apiKeyEnv: "GEMINI_API_KEY",
+				},
+			},
+		});
+		const previousFetch = globalThis.fetch;
+		const previousGemini = process.env.GEMINI_API_KEY;
+		const requestedUrls: string[] = [];
+		process.env.GEMINI_API_KEY = "gemini-test";
+		globalThis.fetch = installGeminiVideoFetchMock(requestedUrls);
+		try {
+			const attachments = await materializeInboundAttachments(config, [
+				{
+					name: "clip.mp4",
+					mimeType: "video/mp4",
+					buffer: mp4Bytes(),
+					source: "web",
+				},
+			]);
+
+			assert.equal(attachments[0]?.derived?.text?.label, "summary");
+			assert.equal(attachments[0]?.derived?.text?.text, "A short clip with visible motion.");
+			assert.equal(requestedUrls.some((url) => url.startsWith("https://linkapi.example.test/")), false);
+			assert.equal(requestedUrls.some((url) => /^https:\/\/example\.test\/upload\/v1beta\/files/.test(url)), true);
+			assert.equal(
+				requestedUrls.some((url) =>
+					/^https:\/\/example\.test\/v1beta\/models\/gemini-3-flash-preview:generateContent/.test(url),
+				),
+				true,
+			);
+		} finally {
+			globalThis.fetch = previousFetch;
+			if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousGemini;
+		}
+	});
+
 	it("preserves a prompt-visible note when Gemini video upload times out before creating a file", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, {

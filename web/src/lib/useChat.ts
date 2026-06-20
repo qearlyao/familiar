@@ -4,10 +4,12 @@ import {
   fetchAuthMode,
   fetchHistory,
   fetchSessions,
+  sendLatestAssistantAction as sendLatestAssistantActionApi,
   sendControlCommand as sendControlCommandApi,
   sendMessage as sendMessageApi,
   streamUrl,
   type ConnectionState,
+  type LatestAssistantAction,
   type SessionInfo,
   type StreamEvent,
   type StreamFrame,
@@ -108,6 +110,7 @@ export interface ChatHook {
   activeSessionKey: string | undefined;
   historyLoaded: boolean;
   streaming: boolean;
+  pendingLatestAssistantAction: LatestAssistantAction | undefined;
   selectSession: (key: string) => void;
   send: (text: string, attachments?: File[]) => Promise<void>;
   abort: () => void;
@@ -124,13 +127,22 @@ export function useChat(): ChatHook {
   const [activeSessionKey, setActiveSessionKey] = useState<string | undefined>(undefined);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [pendingLatestAssistantAction, setPendingLatestAssistantAction] = useState<
+    LatestAssistantAction | undefined
+  >(undefined);
 
   const lastEventIdRef = useRef<string | null>(null);
   const lastEventAtRef = useRef<number>(Date.now());
   const messagesRef = useRef<Message[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
+  const dispatchLatestAssistantActionRef = useRef<(action: LatestAssistantAction) => Promise<void>>(
+    async () => undefined,
+  );
   const activeAssistantMessageIdsRef = useRef<Set<string>>(new Set());
+  const pendingLatestAssistantActionRef = useRef<LatestAssistantAction | undefined>(undefined);
+  const pendingLatestAssistantMessageIdRef = useRef<string | undefined>(undefined);
+  const latestAssistantActionResyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const appendSystemMessage = useCallback((text: string) => {
     setMessages((prev) => [
@@ -149,6 +161,96 @@ export function useChat(): ChatHook {
     messagesRef.current = messages;
   }, [messages]);
 
+  const stopLatestAssistantActionResync = useCallback(() => {
+    const timer = latestAssistantActionResyncTimerRef.current;
+    if (timer) {
+      clearTimeout(timer);
+      latestAssistantActionResyncTimerRef.current = null;
+    }
+  }, []);
+
+  const clearPendingLatestAssistantAction = useCallback(() => {
+    stopLatestAssistantActionResync();
+    pendingLatestAssistantActionRef.current = undefined;
+    pendingLatestAssistantMessageIdRef.current = undefined;
+    setPendingLatestAssistantAction(undefined);
+  }, [stopLatestAssistantActionResync]);
+
+  const beginPendingLatestAssistantAction = useCallback(
+    (action: LatestAssistantAction, messageId: string) => {
+      stopLatestAssistantActionResync();
+      pendingLatestAssistantActionRef.current = action;
+      pendingLatestAssistantMessageIdRef.current = messageId;
+      setPendingLatestAssistantAction(action);
+    },
+    [stopLatestAssistantActionResync],
+  );
+
+  const latestAssistantMessageId = useCallback((): string | undefined => {
+    for (let i = messagesRef.current.length - 1; i >= 0; i -= 1) {
+      const message = messagesRef.current[i];
+      if (message.role === "assistant") return message.id;
+    }
+    return undefined;
+  }, []);
+
+  const reconcilePendingLatestAssistantAction = useCallback(
+    (nextMessages: Message[]) => {
+      const targetMessageId = pendingLatestAssistantMessageIdRef.current;
+      if (!pendingLatestAssistantActionRef.current || !targetMessageId) return;
+      for (let i = nextMessages.length - 1; i >= 0; i -= 1) {
+        const message = nextMessages[i];
+        if (message.role !== "assistant") continue;
+        if (message.id === targetMessageId) return;
+        clearPendingLatestAssistantAction();
+        return;
+      }
+      clearPendingLatestAssistantAction();
+    },
+    [clearPendingLatestAssistantAction],
+  );
+
+  const resolvePendingLatestAssistantAction = useCallback(
+    (event: StreamEvent) => {
+      const pendingAction = pendingLatestAssistantActionRef.current;
+      if (!pendingAction) return;
+      const targetMessageId = pendingLatestAssistantMessageIdRef.current;
+      switch (event.type) {
+        case "message_started":
+          if (pendingAction === "retry" && event.role !== "user") {
+            clearPendingLatestAssistantAction();
+          }
+          break;
+        case "message_replaced":
+          if (pendingAction === "retry" && (!targetMessageId || event.oldMessageId === targetMessageId)) {
+            clearPendingLatestAssistantAction();
+          }
+          break;
+        case "message_deleted":
+          if (!targetMessageId || event.messageId === targetMessageId) {
+            clearPendingLatestAssistantAction();
+          }
+          break;
+        case "message_completed":
+        case "model_error":
+          if (pendingAction === "retry") {
+            clearPendingLatestAssistantAction();
+          }
+          break;
+        case "status":
+          if (event.kind === "idle") {
+            clearPendingLatestAssistantAction();
+          }
+          break;
+        case "error":
+        case "replay_window_lost":
+          clearPendingLatestAssistantAction();
+          break;
+      }
+    },
+    [clearPendingLatestAssistantAction],
+  );
+
   const patchSteps = useCallback((messageId: string, fn: (steps: Step[]) => Step[]) => {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, steps: fn(m.steps) } : m)));
   }, []);
@@ -157,6 +259,7 @@ export function useChat(): ChatHook {
     (event: StreamEvent) => {
       lastEventAtRef.current = Date.now();
       if ("eventId" in event) lastEventIdRef.current = event.eventId;
+      resolvePendingLatestAssistantAction(event);
 
       switch (event.type) {
         case "message_started": {
@@ -303,6 +406,7 @@ export function useChat(): ChatHook {
           setStreaming(false);
           fetchHistory(activeSessionKey)
             .then((res) => {
+              reconcilePendingLatestAssistantAction(res.messages);
               setMessages(res.messages);
               setHistoryLoaded(true);
               lastEventAtRef.current = Date.now();
@@ -312,7 +416,7 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [activeSessionKey, personaName, patchSteps],
+    [activeSessionKey, personaName, patchSteps, reconcilePendingLatestAssistantAction, resolvePendingLatestAssistantAction],
   );
 
   const handleEventRef = useRef(handleEvent);
@@ -359,6 +463,7 @@ export function useChat(): ChatHook {
     lastEventIdRef.current = null;
     activeAssistantMessageIdsRef.current.clear();
     lastEventAtRef.current = Date.now();
+    clearPendingLatestAssistantAction();
 
     const resetTimer = window.setTimeout(() => {
       if (cancelled) return;
@@ -370,6 +475,7 @@ export function useChat(): ChatHook {
     fetchHistory(activeSessionKey)
       .then((res) => {
         if (!cancelled) {
+          reconcilePendingLatestAssistantAction(res.messages);
           setMessages(res.messages);
           setHistoryLoaded(true);
           lastEventAtRef.current = Date.now();
@@ -382,6 +488,7 @@ export function useChat(): ChatHook {
     const refreshHistory = async (): Promise<void> => {
       const res = await fetchHistory(activeSessionKey);
       if (cancelled) return;
+      reconcilePendingLatestAssistantAction(res.messages);
       setMessages(res.messages);
       setHistoryLoaded(true);
       lastEventAtRef.current = Date.now();
@@ -411,6 +518,16 @@ export function useChat(): ChatHook {
     const stopHeartbeat = (): void => {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+    };
+
+    const scheduleLatestAssistantActionRecovery = (): void => {
+      stopLatestAssistantActionResync();
+      latestAssistantActionResyncTimerRef.current = window.setTimeout(() => {
+        latestAssistantActionResyncTimerRef.current = null;
+        if (cancelled || !pendingLatestAssistantActionRef.current) return;
+        refreshHistoryQuietly();
+        recoverTransport();
+      }, SEND_RESYNC_DELAY_MS);
     };
 
     const sendHeartbeat = (): void => {
@@ -515,10 +632,18 @@ export function useChat(): ChatHook {
       }, SEND_RESYNC_DELAY_MS);
     };
 
+    dispatchLatestAssistantActionRef.current = async (action: LatestAssistantAction) => {
+      if (!sendControlFrame(action)) {
+        await sendLatestAssistantActionApi(action, activeSessionKey);
+      }
+      scheduleLatestAssistantActionRecovery();
+    };
+
     return () => {
       cancelled = true;
       clearTimeout(resetTimer);
       if (resyncTimer) clearTimeout(resyncTimer);
+      stopLatestAssistantActionResync();
       if (reconnectTimer) clearTimeout(reconnectTimer);
       stopHeartbeat();
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -527,7 +652,13 @@ export function useChat(): ChatHook {
       if (wsRef.current === ws) wsRef.current = null;
       ws?.close();
     };
-  }, [activeSessionKey, appendSystemMessage]);
+  }, [
+    activeSessionKey,
+    appendSystemMessage,
+    clearPendingLatestAssistantAction,
+    reconcilePendingLatestAssistantAction,
+    stopLatestAssistantActionResync,
+  ]);
 
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
@@ -544,12 +675,44 @@ export function useChat(): ChatHook {
   }, [sendControlFrame]);
 
   const retry = useCallback(() => {
-    sendControlFrame("retry");
-  }, [sendControlFrame]);
+    if (pendingLatestAssistantActionRef.current || streaming) return;
+    const messageId = latestAssistantMessageId();
+    if (!messageId) {
+      appendSystemMessage("nothing to retry");
+      return;
+    }
+    beginPendingLatestAssistantAction("retry", messageId);
+    void dispatchLatestAssistantActionRef.current("retry").catch((error) => {
+      clearPendingLatestAssistantAction();
+      appendSystemMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [
+    appendSystemMessage,
+    beginPendingLatestAssistantAction,
+    clearPendingLatestAssistantAction,
+    latestAssistantMessageId,
+    streaming,
+  ]);
 
   const deleteLatest = useCallback(() => {
-    sendControlFrame("delete");
-  }, [sendControlFrame]);
+    if (pendingLatestAssistantActionRef.current || streaming) return;
+    const messageId = latestAssistantMessageId();
+    if (!messageId) {
+      appendSystemMessage("nothing to delete");
+      return;
+    }
+    beginPendingLatestAssistantAction("delete", messageId);
+    void dispatchLatestAssistantActionRef.current("delete").catch((error) => {
+      clearPendingLatestAssistantAction();
+      appendSystemMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [
+    appendSystemMessage,
+    beginPendingLatestAssistantAction,
+    clearPendingLatestAssistantAction,
+    latestAssistantMessageId,
+    streaming,
+  ]);
 
   const notifyNewChat = useCallback(() => {
     appendSystemMessage("started fresh");
@@ -563,6 +726,7 @@ export function useChat(): ChatHook {
     activeSessionKey,
     historyLoaded,
     streaming,
+    pendingLatestAssistantAction,
     selectSession,
     send,
     abort,

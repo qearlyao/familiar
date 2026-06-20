@@ -514,6 +514,16 @@ export async function startNewChat(channelKey: string): Promise<void> {
   await jsonRequest<void>("/api/web/agent/new", "POST", { channelKey }, "agent/new");
 }
 
+export type LatestAssistantAction = "retry" | "delete";
+
+export async function sendLatestAssistantAction(
+  action: LatestAssistantAction,
+  channelKey?: string,
+): Promise<void> {
+  const path = action === "retry" ? "/api/web/retry" : "/api/web/delete";
+  await jsonRequest<void>(path, "POST", { channelKey }, action);
+}
+
 export interface Meme {
   name: string;
   url: string;

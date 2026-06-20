@@ -656,6 +656,18 @@
   }
 }
 
+@keyframes retry-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bloom-blob {
     animation: none !important;

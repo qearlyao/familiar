@@ -25,6 +25,7 @@ export function Chat({
     activeSessionKey,
     historyLoaded,
     streaming,
+    pendingLatestAssistantAction,
     selectSession,
     send,
     abort,
@@ -53,6 +54,7 @@ export function Chat({
           personaName={personaName}
           historyLoaded={historyLoaded}
           streaming={streaming}
+          pendingLatestAssistantAction={pendingLatestAssistantAction}
           onRetry={retry}
           onDelete={deleteLatest}
         />

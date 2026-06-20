@@ -37,6 +37,7 @@ export function MessageList({
   personaName,
   historyLoaded,
   streaming = false,
+  pendingLatestAssistantAction,
   onRetry,
   onDelete,
 }: {
@@ -44,6 +45,7 @@ export function MessageList({
   personaName: string;
   historyLoaded: boolean;
   streaming?: boolean;
+  pendingLatestAssistantAction?: "retry" | "delete";
   onRetry?: () => void;
   onDelete?: () => void;
 }) {
@@ -84,6 +86,9 @@ export function MessageList({
               message={m}
               onRetry={i === latestAssistantIndex ? onRetry : undefined}
               onDelete={i === latestAssistantIndex ? onDelete : undefined}
+              pendingLatestAssistantAction={
+                i === latestAssistantIndex ? pendingLatestAssistantAction : undefined
+              }
             />
           </div>
         );

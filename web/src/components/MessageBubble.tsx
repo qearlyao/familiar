@@ -182,11 +182,13 @@ function ActionButton({
   label,
   onClick,
   hoverClass,
+  disabled = false,
 }: {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   hoverClass: string;
+  disabled?: boolean;
 }) {
   return (
     <Button
@@ -194,10 +196,11 @@ function ActionButton({
       variant="ghost"
       size="sm"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
       className={cn(
-        "h-7 px-2 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100",
+        "h-7 px-2 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-35",
         hoverClass,
       )}
     >
@@ -206,16 +209,37 @@ function ActionButton({
   );
 }
 
+function RetryDots() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs italic text-muted-foreground/75">
+      <span>retrying</span>
+      <span className="inline-flex items-center gap-1 motion-reduce:gap-0.5" aria-hidden="true">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="size-1 rounded-full bg-current opacity-35 animate-[retry-dot_900ms_cubic-bezier(0.25,1,0.5,1)_infinite] motion-reduce:animate-none"
+            style={{ animationDelay: `${index * 140}ms` }}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export const MessageBubble = memo(function MessageBubble({
   message,
   onRetry,
   onDelete,
+  pendingLatestAssistantAction,
 }: {
   message: Message;
   onRetry?: () => void;
   onDelete?: () => void;
+  pendingLatestAssistantAction?: "retry" | "delete";
 }) {
   const [actionsRevealed, setActionsRevealed] = useState(false);
+  const retrying = pendingLatestAssistantAction === "retry";
+  const latestAssistantActionPending = pendingLatestAssistantAction != null;
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
   return (
@@ -232,14 +256,17 @@ export const MessageBubble = memo(function MessageBubble({
           className={cn(
             "pointer-events-none mt-2 flex opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
             actionsRevealed && "pointer-events-auto opacity-100",
+            latestAssistantActionPending && "pointer-events-auto opacity-100",
           )}
         >
+          {retrying && <RetryDots />}
           {onRetry && (
             <ActionButton
               icon={RotateCcw}
-              label="retry latest reply"
+              label={retrying ? "retry in progress" : "retry latest reply"}
               onClick={onRetry}
               hoverClass="hover:text-foreground"
+              disabled={latestAssistantActionPending}
             />
           )}
           {onDelete && (
@@ -248,6 +275,7 @@ export const MessageBubble = memo(function MessageBubble({
               label="delete latest reply"
               onClick={onDelete}
               hoverClass="hover:text-destructive"
+              disabled={latestAssistantActionPending}
             />
           )}
         </div>

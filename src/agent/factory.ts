@@ -31,6 +31,7 @@ import {
 	resolveModelName,
 	userTextMessage,
 } from "./session-helpers.js";
+import { normalizeToolNameStream } from "./tool-name-compat.js";
 import { createFamiliarTools, setReferenceAttachments } from "./tools.js";
 import { loadStoredMessages, writePayloadLog, writeTranscriptLog } from "./transcript-log.js";
 import type {
@@ -144,8 +145,8 @@ export async function createFamiliarAgent(
 				thinkingLevel,
 			},
 			sessionId,
-			streamFn: (streamModel, context, options) =>
-				streamSimple(streamModel, context, {
+			streamFn: (streamModel, context, options) => {
+				const stream = streamSimple(streamModel, context, {
 					...options,
 					apiKey: getRequestApiKey(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
@@ -174,7 +175,9 @@ export async function createFamiliarAgent(
 							headers: response.headers,
 						});
 					},
-				}),
+				});
+				return normalizeToolNameStream(stream, context.tools ?? []);
+			},
 			transformContext: memoryService
 				? (contextMessages, signal) => {
 						const activeOptions = activePromptOptions.get(sessionKey);

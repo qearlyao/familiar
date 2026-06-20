@@ -22,13 +22,6 @@ Start from this baseline:
 > Be ambitious, if there is a clear path to improving the implementation that involves restructuring some of the codebase, go for it.
 > Be extremely thorough and rigorous. Measure twice, cut once.
 
-## Code Quality Bar
-
-- Before coding, look for the simplest behavior-preserving structure. Prefer changes that delete incidental branches, helper layers, modes, or wrappers over changes that merely rearrange them.
-- Keep feature logic in the canonical owner. Do not scatter one-off flags, special cases, or feature checks through unrelated shared paths.
-- Make invariants explicit. Treat new ad-hoc conditionals, pass-through abstractions, cast-heavy boundaries, `any`/`unknown`, unnecessary optionality, and silent fallbacks as design smells.
-- Keep files cohesive. Do not push a file from under 1000 lines to over 1000 lines without a strong structural reason; extract focused modules or helpers first.
-
 Run these four lenses before writing code so `/simplify` review concerns do not become rework:
 
 1. **Reuse**: rg for an existing helper before adding one. Shared utilities already cover common needs:

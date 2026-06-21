@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.4 - 2026-06-21
+
+### Added
+
+- Add custom model provider configuration, with per-model provider overrides plus endpoint and API key wiring for non-default providers.
+
+### Changed
+
+- Bump the pi dependency set to `0.79.9`, picking up the current upstream provider metadata and runtime updates.
+
+### Fixed
+
+- Keep the latest assistant retry and delete actions disabled while a send or recovery is in flight, with fallback recovery so stale streams do not leave the UI stuck.
+- Prevent diary list text clipping in the WebUI.
+
 ## 0.5.3 - 2026-06-14
 
 ### Added

@@ -103,8 +103,8 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
               mobileReader ? "hidden md:flex" : "flex flex-1",
             )}
           >
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="grid gap-1 px-2">
+            <ScrollArea className="min-w-0 min-h-0 flex-1">
+              <div className="grid min-w-0 gap-1 px-2">
                 {diaries.map((diary) => (
                   <DiaryListButton
                     key={diary.date}

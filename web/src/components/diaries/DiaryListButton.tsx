@@ -19,7 +19,7 @@ export function DiaryListButton({
       onClick={onSelect}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-full gap-3 rounded-md px-2 py-3 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "flex min-w-0 w-full gap-3 overflow-hidden rounded-md px-2 py-3 text-left transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent/50",
       )}
     >
@@ -43,8 +43,8 @@ export function DiaryListButton({
         </span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="block truncate font-serif text-sm leading-tight tracking-tight">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="block min-w-0 flex-1 truncate font-serif text-sm leading-tight tracking-tight">
             {diary.title}
           </span>
           {isToday ? (
@@ -60,7 +60,7 @@ export function DiaryListButton({
         {diary.excerpt ? (
           <span
             className={cn(
-              "mt-1.5 line-clamp-2 text-xs leading-relaxed",
+              "mt-1.5 block max-w-full break-words text-xs leading-relaxed line-clamp-2",
               active ? "text-primary-foreground/85" : "text-muted-foreground",
             )}
           >

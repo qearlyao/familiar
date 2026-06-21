@@ -4,16 +4,11 @@ import {
 	getEnvApiKey,
 	getModels,
 	getProviders,
-	type Model,
 	type KnownProvider,
+	type Model,
 	type ModelThinkingLevel,
 } from "@earendil-works/pi-ai";
-import type {
-	Config,
-	ConfiguredModelInput,
-	ConfiguredProviderDefinition,
-	ThinkingLevel,
-} from "../config/index.js";
+import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
 
 export interface ModelRef {
@@ -87,15 +82,6 @@ function findBuiltInModel(ref: ModelRef): Model<any> | undefined {
 	if (!isBuiltInProvider(ref.provider)) return undefined;
 	const models = getModels(ref.provider) as Model<any>[];
 	return models.find((model) => model.id === ref.id);
-}
-
-function getBuiltInProviderDefaults(provider: string): { api: string; baseUrl: string } | undefined {
-	if (isBuiltInProvider(provider)) {
-		const models = getModels(provider) as Model<any>[];
-		const first = models[0];
-		if (first) return { api: first.api, baseUrl: first.baseUrl };
-	}
-	return PROVIDER_DEFAULTS[provider];
 }
 
 function createBaseModel(ref: ModelRef, api: string, baseUrl: string): Model<any> {
@@ -185,7 +171,10 @@ export function createConfiguredModel(config: Config): Model<any> {
 			id: config.agent.modelId,
 			key: `${config.agent.provider}/${config.agent.modelId}`,
 		};
-		return applyConfiguredBaseUrl(config, synthesizeConfiguredModel(legacyRef, config.agent.api, config.agent.baseUrl));
+		return applyConfiguredBaseUrl(
+			config,
+			synthesizeConfiguredModel(legacyRef, config.agent.api, config.agent.baseUrl),
+		);
 	}
 	return resolveModel(ref, config);
 }

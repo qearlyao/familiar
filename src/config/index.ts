@@ -220,9 +220,7 @@ function readConfiguredModelDefinition(value: Record<string, unknown>, path: str
 	return {
 		id: readString(value.id, `${path}.id`),
 		...(name !== undefined ? { name } : {}),
-		...(value.reasoning !== undefined
-			? { reasoning: readBoolean(value.reasoning, false, `${path}.reasoning`) }
-			: {}),
+		...(value.reasoning !== undefined ? { reasoning: readBoolean(value.reasoning, false, `${path}.reasoning`) } : {}),
 		...(input !== undefined ? { input } : {}),
 		...(contextWindow !== undefined ? { contextWindow } : {}),
 		...(maxTokens !== undefined ? { maxTokens } : {}),

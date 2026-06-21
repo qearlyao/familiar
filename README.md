@@ -129,10 +129,35 @@ model = "anthropic/claude-opus-4-7"
 Provider-specific base URLs and API-key env var names live under
 `[models.base_urls]` and `[models.api_key_envs]`.
 
+Custom providers can be declared under `models.providers.<name>`. Use a bare
+provider name there, not a `provider/model` string. This is only for provider
+names that are not already built into pi-ai/Familiar. Built-in providers still
+use the existing flat maps. Keep endpoint and auth wiring there, then set the
+custom provider API and default model traits in the provider block:
+
+```toml
+[agent]
+model = "proxy/claude-sonnet-4"
+
+[models.base_urls]
+proxy = "https://proxy.example.com"
+
+[models.api_key_envs]
+proxy = "PROXY_API_KEY"
+
+[models.providers.proxy]
+api = "anthropic-messages"
+reasoning = true
+input = ["text", "image"]
+context_window = 200000
+max_tokens = 8192
+```
+
+`[[models.providers.<name>.models]]` is optional. Add it only when a specific
+model needs overrides from the provider defaults.
+
 Legacy manual `agent.api` / `agent.model_id` / `agent.base_url` config is still
-accepted as an escape hatch. Providers outside pi-ai's built-ins and Familiar's
-`anthropic`, `google`, `google-vertex`, and `openai` fallbacks need that legacy
-escape hatch; a base URL alone does not define a new provider.
+accepted as an escape hatch for older configs and one-off custom endpoints.
 
 ## Run
 

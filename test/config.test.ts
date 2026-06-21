@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { loadConfig } from "../src/config/index.js";
+import { createConfiguredModel } from "../src/models/index.js";
 import { createWorkspace, minimalConfigToml } from "./helpers.js";
 
 describe("loadConfig tts", () => {
@@ -503,6 +504,7 @@ api_key_env = "ALT_GEMINI_KEY"
 		assert.equal(config.heartbeat.enabled, true);
 		assert.equal(config.models.baseUrls.link, "https://api.linkapi.ai/v1");
 		assert.equal(config.models.apiKeyEnvs.link, "LINK_API_KEY");
+		assert.deepEqual(config.models.providers, {});
 		assert.deepEqual(config.imageGen, {
 			enabled: true,
 			model: "link/gpt-image-2-c",
@@ -765,6 +767,130 @@ model = "gemini-embedding-2"
 
 		assert.equal(config.memory.embedding.baseUrl, "https://gateway.example.test/google-embedding");
 		assert.equal(config.memory.embedding.apiKeyEnv, "GOOGLE_EMBEDDING_KEY");
+	});
+
+	it("supports custom providers with provider-level defaults and no explicit model list", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			`
+[discord]
+owner_id = "owner"
+
+[agent]
+model = "proxy/claude-sonnet-4"
+
+[models.base_urls]
+proxy = "https://proxy.example.com"
+
+[models.api_key_envs]
+proxy = "PROXY_API_KEY"
+
+[models.providers.proxy]
+api = "anthropic-messages"
+reasoning = true
+input = ["text", "image"]
+context_window = 200000
+max_tokens = 8192
+`,
+		);
+
+		const config = await loadConfig(workspacePath);
+		const model = createConfiguredModel(config);
+
+		assert.deepEqual(config.models.providers.proxy, {
+			api: "anthropic-messages",
+			reasoning: true,
+			input: ["text", "image"],
+			contextWindow: 200000,
+			maxTokens: 8192,
+			models: [],
+		});
+		assert.equal(model.provider, "proxy");
+		assert.equal(model.id, "claude-sonnet-4");
+		assert.equal(model.api, "anthropic-messages");
+		assert.equal(model.baseUrl, "https://proxy.example.com");
+		assert.equal(model.reasoning, true);
+		assert.deepEqual(model.input, ["text", "image"]);
+		assert.equal(model.contextWindow, 200000);
+		assert.equal(model.maxTokens, 8192);
+	});
+
+	it("rejects models.providers entries for built-in providers", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[models.providers.anthropic]
+api = "anthropic-messages"
+`),
+		);
+
+		await assert.rejects(
+			() => loadConfig(workspacePath),
+			/models\.providers\.anthropic is only for custom providers/,
+		);
+	});
+
+	it('rejects models.providers entries whose provider name contains "/"', async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[models.providers."custom/proxy"]
+api = "anthropic-messages"
+`),
+		);
+
+		await assert.rejects(
+			() => loadConfig(workspacePath),
+			/provider name must not contain "\/"; use a bare provider name/,
+		);
+	});
+
+	it("applies optional per-model overrides under models.providers.<provider>.models", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			`
+[discord]
+owner_id = "owner"
+
+[agent]
+model = "proxy/claude-opus-4"
+
+[models.base_urls]
+proxy = "https://proxy.example.com"
+
+[models.api_key_envs]
+proxy = "PROXY_API_KEY"
+
+[models.providers.proxy]
+api = "anthropic-messages"
+reasoning = true
+input = ["text", "image"]
+context_window = 200000
+max_tokens = 8192
+
+[[models.providers.proxy.models]]
+id = "claude-opus-4"
+name = "Claude Opus 4 via Proxy"
+max_tokens = 4096
+`,
+		);
+
+		const config = await loadConfig(workspacePath);
+		const model = createConfiguredModel(config);
+
+		assert.equal(model.provider, "proxy");
+		assert.equal(model.id, "claude-opus-4");
+		assert.equal(model.api, "anthropic-messages");
+		assert.equal(model.baseUrl, "https://proxy.example.com");
+		assert.equal(model.name, "Claude Opus 4 via Proxy");
+		assert.equal(model.reasoning, true);
+		assert.deepEqual(model.input, ["text", "image"]);
+		assert.equal(model.contextWindow, 200000);
+		assert.equal(model.maxTokens, 4096);
 	});
 
 	it("inherits memory lcm summarization provider settings from configured models", async (t) => {

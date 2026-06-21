@@ -5,10 +5,15 @@ import {
 	getModels,
 	getProviders,
 	type Model,
+	type KnownProvider,
 	type ModelThinkingLevel,
-	type Provider,
 } from "@earendil-works/pi-ai";
-import type { Config, ThinkingLevel } from "../config/index.js";
+import type {
+	Config,
+	ConfiguredModelInput,
+	ConfiguredProviderDefinition,
+	ThinkingLevel,
+} from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
 
 export interface ModelRef {
@@ -40,6 +45,26 @@ export const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }>
 	},
 };
 
+const DEFAULT_REASONING = true;
+const DEFAULT_INPUT: Array<"text" | "image"> = ["text", "image"];
+const DEFAULT_CONTEXT_WINDOW = 200000;
+const DEFAULT_MAX_TOKENS = 8192;
+const ZERO_COST = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+} as const;
+const BUILT_IN_PROVIDERS = new Set<string>(getProviders());
+
+interface ModelShapeOverrides {
+	name?: string;
+	reasoning?: boolean;
+	input?: ConfiguredModelInput[];
+	contextWindow?: number;
+	maxTokens?: number;
+}
+
 export function parseModelRef(value: string): ModelRef | undefined {
 	const trimmed = value.trim();
 	const separator = trimmed.indexOf("/");
@@ -50,10 +75,55 @@ export function parseModelRef(value: string): ModelRef | undefined {
 	return { provider, id, key: `${provider}/${id}` };
 }
 
+export function isBuiltInProvider(provider: string): provider is KnownProvider {
+	return BUILT_IN_PROVIDERS.has(provider);
+}
+
+export function isBuiltInOrDefaultProvider(provider: string): boolean {
+	return isBuiltInProvider(provider) || Object.hasOwn(PROVIDER_DEFAULTS, provider);
+}
+
 function findBuiltInModel(ref: ModelRef): Model<any> | undefined {
-	if (!getProviders().includes(ref.provider as any)) return undefined;
-	const models = getModels(ref.provider as any) as Model<any>[];
+	if (!isBuiltInProvider(ref.provider)) return undefined;
+	const models = getModels(ref.provider) as Model<any>[];
 	return models.find((model) => model.id === ref.id);
+}
+
+function getBuiltInProviderDefaults(provider: string): { api: string; baseUrl: string } | undefined {
+	if (isBuiltInProvider(provider)) {
+		const models = getModels(provider) as Model<any>[];
+		const first = models[0];
+		if (first) return { api: first.api, baseUrl: first.baseUrl };
+	}
+	return PROVIDER_DEFAULTS[provider];
+}
+
+function createBaseModel(ref: ModelRef, api: string, baseUrl: string): Model<any> {
+	return {
+		id: ref.id,
+		name: ref.id,
+		api,
+		provider: ref.provider,
+		baseUrl,
+		reasoning: DEFAULT_REASONING,
+		input: DEFAULT_INPUT,
+		cost: ZERO_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: DEFAULT_MAX_TOKENS,
+	};
+}
+
+function synthesizeConfiguredModel(
+	ref: ModelRef,
+	api: string,
+	baseUrl: string,
+	...overrides: Array<ModelShapeOverrides | undefined>
+): Model<any> {
+	let model = createBaseModel(ref, api, baseUrl);
+	for (const override of overrides) {
+		if (override) model = applyModelShapeOverrides(model, override);
+	}
+	return model;
 }
 
 function createFallbackModel(ref: ModelRef): Model<any> {
@@ -61,56 +131,61 @@ function createFallbackModel(ref: ModelRef): Model<any> {
 	if (!defaults) {
 		throw new Error(`Unsupported model provider: ${ref.provider}`);
 	}
-	return {
-		id: ref.id,
-		name: ref.id,
-		api: defaults.api,
-		provider: ref.provider as Provider,
-		baseUrl: defaults.baseUrl,
-		reasoning: true,
-		input: ["text", "image"],
-		cost: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-		},
-		contextWindow: 200000,
-		maxTokens: 8192,
-	};
+	return synthesizeConfiguredModel(ref, defaults.api, defaults.baseUrl);
 }
 
 function applyConfiguredBaseUrl(config: Config, model: Model<any>): Model<any> {
-	const baseUrl = config.models.baseUrls[`${model.provider}/${model.id}`] ?? config.models.baseUrls[model.provider];
+	const baseUrl = resolveProviderSetting(config.models.baseUrls, model.provider, model.id);
 	return baseUrl ? { ...model, baseUrl } : model;
 }
 
+function applyModelShapeOverrides(model: Model<any>, override: ModelShapeOverrides): Model<any> {
+	return {
+		...model,
+		...(override.name !== undefined ? { name: override.name } : {}),
+		...(override.reasoning !== undefined ? { reasoning: override.reasoning } : {}),
+		...(override.input !== undefined ? { input: override.input } : {}),
+		...(override.contextWindow !== undefined ? { contextWindow: override.contextWindow } : {}),
+		...(override.maxTokens !== undefined ? { maxTokens: override.maxTokens } : {}),
+	};
+}
+
+function resolveConfiguredProviderModel(
+	config: Config,
+	ref: ModelRef,
+	providerConfig: ConfiguredProviderDefinition,
+): Model<any> {
+	const api = providerConfig.api;
+	if (!api) {
+		throw new Error(`Missing API for configured provider ${ref.provider}. Set models.providers.${ref.provider}.api.`);
+	}
+	const baseUrl = resolveProviderSetting(config.models.baseUrls, ref.provider, ref.id);
+	if (!baseUrl) {
+		throw new Error(`Missing model base URL for ${ref.key}. Set models.base_urls.${ref.provider}.`);
+	}
+	const override = providerConfig.models.find((model) => model.id === ref.id);
+	return synthesizeConfiguredModel(ref, api, baseUrl, providerConfig, override);
+}
+
 export function resolveModel(ref: ModelRef, config?: Config): Model<any> {
-	const model = findBuiltInModel(ref) ?? createFallbackModel(ref);
+	const builtInModel = findBuiltInModel(ref);
+	if (builtInModel) return config ? applyConfiguredBaseUrl(config, builtInModel) : builtInModel;
+	const providerConfig = config?.models.providers[ref.provider];
+	if (config && providerConfig) return resolveConfiguredProviderModel(config, ref, providerConfig);
+	const model = createFallbackModel(ref);
 	return config ? applyConfiguredBaseUrl(config, model) : model;
 }
 
 export function createConfiguredModel(config: Config): Model<any> {
 	const ref = parseModelRef(config.agent.model);
 	if (!ref) throw new Error(`Invalid agent.model: ${config.agent.model}`);
-	if (config.agent.api && config.agent.modelId && config.agent.baseUrl) {
-		return applyConfiguredBaseUrl(config, {
+	if (config.agent.api && config.agent.modelId && config.agent.baseUrl && config.agent.provider) {
+		const legacyRef: ModelRef = {
+			provider: config.agent.provider,
 			id: config.agent.modelId,
-			name: config.agent.modelId,
-			api: config.agent.api,
-			provider: config.agent.provider as Provider,
-			baseUrl: config.agent.baseUrl,
-			reasoning: true,
-			input: ["text", "image"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: 200000,
-			maxTokens: 8192,
-		});
+			key: `${config.agent.provider}/${config.agent.modelId}`,
+		};
+		return applyConfiguredBaseUrl(config, synthesizeConfiguredModel(legacyRef, config.agent.api, config.agent.baseUrl));
 	}
 	return resolveModel(ref, config);
 }
@@ -125,8 +200,7 @@ export function resolveProviderSetting(
 
 export function resolveModelApiKey(config: Config, model: Model<any>): string | undefined {
 	const configuredEnv =
-		config.models.apiKeyEnvs[`${model.provider}/${model.id}`] ??
-		config.models.apiKeyEnvs[model.provider] ??
+		resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id) ??
 		(model.provider === config.agent.provider ? config.agent.apiKeyEnv : undefined);
 	if (configuredEnv) return process.env[configuredEnv];
 	return getEnvApiKey(model.provider);
@@ -161,10 +235,10 @@ export function assertModelCanAuthenticate(config: Config, model: Model<any>): v
 
 export function describeModelAuth(config: Config, model: Model<any>): string {
 	const configuredEnv =
-		config.models.apiKeyEnvs[`${model.provider}/${model.id}`] ??
-		config.models.apiKeyEnvs[model.provider] ??
+		resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id) ??
 		(model.provider === config.agent.provider ? config.agent.apiKeyEnv : undefined);
 	if (configuredEnv) return configuredEnv;
+	if (config.models.providers[model.provider]) return `models.api_key_envs.${model.provider}`;
 	if (model.provider === "google-vertex") {
 		return "set GOOGLE_CLOUD_API_KEY, or use Vertex ADC with GOOGLE_CLOUD_PROJECT/GCLOUD_PROJECT and GOOGLE_CLOUD_LOCATION";
 	}

@@ -1,4 +1,5 @@
 import { isAbsolute, resolve } from "node:path";
+import { isRecord } from "../util/guards.js";
 
 export function resolveWorkspacePath(workspacePath: string, filePath: string): string {
 	return isAbsolute(filePath) ? filePath : resolve(workspacePath, filePath);
@@ -47,6 +48,20 @@ export function readStringRecord(value: unknown, path: string): Record<string, s
 		if (typeof child !== "string") throw new Error(`Config value must be a string map: ${path}.${key}`);
 	}
 	return Object.fromEntries(entries) as Record<string, string>;
+}
+
+export function readConfigTable(value: unknown, path: string): Record<string, unknown> {
+	if (value === undefined) return {};
+	if (!isRecord(value)) throw new Error(`Config value ${path} must be a table`);
+	return value;
+}
+
+export function readConfigTableArray(value: unknown, path: string): Record<string, unknown>[] {
+	if (value === undefined) return [];
+	if (!Array.isArray(value) || value.some((item) => !isRecord(item))) {
+		throw new Error(`Config value ${path} must be an array of tables`);
+	}
+	return value;
 }
 
 export function readBoolean(value: unknown, fallback: boolean, path: string): boolean {

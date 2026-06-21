@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
-import { resolveProviderSetting } from "../models/index.js";
+import { isBuiltInOrDefaultProvider, resolveProviderSetting } from "../models/index.js";
 import { readEnum } from "../util/guards.js";
 import {
 	BROWSER_BACKENDS,
@@ -27,6 +27,8 @@ import {
 	assertKnownKeys,
 	readBoolean,
 	readConfigString,
+	readConfigTable,
+	readConfigTableArray,
 	readFraction,
 	readInteger,
 	readIntegerInRange,
@@ -42,7 +44,14 @@ import {
 	resolveWorkspacePath,
 } from "./readers.js";
 import { defaultBrowserAllowedSites, readCronJobs, readPromptOverrides } from "./sections.js";
-import type { BrowserHarnessMode, BrowserHarnessTargetConfig, Config } from "./types.js";
+import type {
+	BrowserHarnessMode,
+	BrowserHarnessTargetConfig,
+	Config,
+	ConfiguredModelDefinition,
+	ConfiguredModelInput,
+	ConfiguredProviderDefinition,
+} from "./types.js";
 
 export type {
 	BrowserBackend,
@@ -50,6 +59,9 @@ export type {
 	BrowserHarnessTargetConfig,
 	CacheRetention,
 	Config,
+	ConfiguredModelDefinition,
+	ConfiguredModelInput,
+	ConfiguredProviderDefinition,
 	CronDeliveryMode,
 	CronFrequency,
 	DiscordChannelTrigger,
@@ -188,6 +200,85 @@ function readBrowserHarnessTarget(browser: Record<string, unknown>): BrowserHarn
 	}
 }
 
+function readConfiguredModelInputs(value: unknown, path: string): ConfiguredModelInput[] | undefined {
+	if (value === undefined) return undefined;
+	const input = readStringArray(value, path);
+	for (const entry of input) {
+		if (entry !== "text" && entry !== "image") {
+			throw new Error(`Config value ${path} entries must be "text" or "image"`);
+		}
+	}
+	return input as ConfiguredModelInput[];
+}
+
+function readConfiguredModelDefinition(value: Record<string, unknown>, path: string): ConfiguredModelDefinition {
+	assertKnownKeys(value, path, ["id", "name", "reasoning", "input", "context_window", "max_tokens"]);
+	const name = readOptionalConfigString(value.name, `${path}.name`);
+	const input = readConfiguredModelInputs(value.input, `${path}.input`);
+	const contextWindow = readOptionalInteger(value.context_window, `${path}.context_window`, 1);
+	const maxTokens = readOptionalInteger(value.max_tokens, `${path}.max_tokens`, 1);
+	return {
+		id: readString(value.id, `${path}.id`),
+		...(name !== undefined ? { name } : {}),
+		...(value.reasoning !== undefined
+			? { reasoning: readBoolean(value.reasoning, false, `${path}.reasoning`) }
+			: {}),
+		...(input !== undefined ? { input } : {}),
+		...(contextWindow !== undefined ? { contextWindow } : {}),
+		...(maxTokens !== undefined ? { maxTokens } : {}),
+	};
+}
+
+function assertValidConfiguredProviderName(providerName: string, path: string): void {
+	if (!providerName.trim()) {
+		throw new Error(`Config value ${path} provider name must not be empty`);
+	}
+	if (providerName.includes("/")) {
+		throw new Error(`Config value ${path} provider name must not contain "/"; use a bare provider name`);
+	}
+}
+
+function readConfiguredProviders(value: unknown): Record<string, ConfiguredProviderDefinition> {
+	const providers = readConfigTable(value, "models.providers");
+	const configured: Record<string, ConfiguredProviderDefinition> = {};
+	for (const [providerName, rawProvider] of Object.entries(providers)) {
+		const path = `models.providers.${providerName}`;
+		assertValidConfiguredProviderName(providerName, path);
+		if (isBuiltInOrDefaultProvider(providerName)) {
+			throw new Error(
+				`Config value ${path} is only for custom providers. Use models.base_urls/models.api_key_envs for built-in providers.`,
+			);
+		}
+		const provider = readConfigTable(rawProvider, path);
+		assertKnownKeys(provider, path, ["api", "reasoning", "input", "context_window", "max_tokens", "models"]);
+		const api = readOptionalConfigString(provider.api, `${path}.api`);
+		const input = readConfiguredModelInputs(provider.input, `${path}.input`);
+		const contextWindow = readOptionalInteger(provider.context_window, `${path}.context_window`, 1);
+		const maxTokens = readOptionalInteger(provider.max_tokens, `${path}.max_tokens`, 1);
+		const models = readConfigTableArray(provider.models, `${path}.models`).map((entry, index) =>
+			readConfiguredModelDefinition(entry, `${path}.models[${index}]`),
+		);
+		const seenModelIds = new Set<string>();
+		for (const model of models) {
+			if (seenModelIds.has(model.id)) {
+				throw new Error(`Duplicate configured model id for provider ${providerName}: ${model.id}`);
+			}
+			seenModelIds.add(model.id);
+		}
+		configured[providerName] = {
+			...(api !== undefined ? { api } : {}),
+			...(provider.reasoning !== undefined
+				? { reasoning: readBoolean(provider.reasoning, false, `${path}.reasoning`) }
+				: {}),
+			...(input !== undefined ? { input } : {}),
+			...(contextWindow !== undefined ? { contextWindow } : {}),
+			...(maxTokens !== undefined ? { maxTokens } : {}),
+			models,
+		};
+	}
+	return configured;
+}
+
 export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspacePath = resolve(workspacePathInput);
 	const configPath = resolve(workspacePath, "config.toml");
@@ -272,9 +363,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	}
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
+	assertKnownKeys(models, "models", ["allow", "base_urls", "api_key_envs", "providers"]);
 	const modelAllow = readStringArray(models.allow, "models.allow");
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
+	const configuredProviders = readConfiguredProviders(models.providers);
 	let memoryEmbeddingFormatRaw: unknown = memoryEmbedding.format;
 	if (memoryEmbeddingFormatRaw === undefined && memoryEmbedding.api !== undefined) {
 		warnOnce(
@@ -455,6 +548,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allow: modelAllow,
 			baseUrls: modelBaseUrls,
 			apiKeyEnvs: modelApiKeyEnvs,
+			providers: configuredProviders,
 		},
 		tts: {
 			provider: readEnum(readOptionalString(tts.provider, "elevenlabs"), "tts.provider", TTS_PROVIDERS),

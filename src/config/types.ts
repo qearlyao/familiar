@@ -14,6 +14,26 @@ export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
 export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
 
+export type ConfiguredModelInput = "text" | "image";
+
+export interface ConfiguredModelDefinition {
+	id: string;
+	name?: string;
+	reasoning?: boolean;
+	input?: ConfiguredModelInput[];
+	contextWindow?: number;
+	maxTokens?: number;
+}
+
+export interface ConfiguredProviderDefinition {
+	api?: string;
+	reasoning?: boolean;
+	input?: ConfiguredModelInput[];
+	contextWindow?: number;
+	maxTokens?: number;
+	models: ConfiguredModelDefinition[];
+}
+
 export type BrowserHarnessTargetConfig =
 	| { mode: "attach" }
 	| {
@@ -110,6 +130,7 @@ export interface Config {
 		allow: string[];
 		baseUrls: Record<string, string>;
 		apiKeyEnvs: Record<string, string>;
+		providers: Record<string, ConfiguredProviderDefinition>;
 	};
 	tts: {
 		provider: TtsProvider;

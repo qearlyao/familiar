@@ -21,6 +21,7 @@ import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics 
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
 	assertModelAllowed,
+	buildAnthropicMetadata,
 	deriveSessionId,
 	formatModel,
 	getLastAssistantText,
@@ -149,6 +150,7 @@ export async function createFamiliarAgent(
 				const stream = streamSimple(streamModel, context, {
 					...options,
 					apiKey: getRequestApiKey(config, streamModel),
+					metadata: buildAnthropicMetadata(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
 					maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
 					maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,

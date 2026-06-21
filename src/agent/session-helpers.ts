@@ -35,6 +35,11 @@ export function getRequestApiKey(config: Config, model: Model<any>): string | un
 	return apiKey;
 }
 
+export function buildAnthropicMetadata(config: Config, model: Model<any>): Record<string, unknown> | undefined {
+	if (model.api !== "anthropic-messages") return undefined;
+	return { user_id: config.discord.ownerId };
+}
+
 export function formatModel(model: Model<any>): string {
 	return `${model.provider}/${model.id}`;
 }

@@ -4,6 +4,9 @@ import { describe, it } from "node:test";
 import type { Model } from "@earendil-works/pi-ai";
 
 import { __agentTest } from "../src/agent/factory.js";
+import { buildAnthropicMetadata } from "../src/agent/session-helpers.js";
+import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
+import { loadConfig } from "../src/config/index.js";
 
 const anthropicModel = {
 	id: "claude-test",
@@ -45,5 +48,21 @@ describe("provider payload normalization", () => {
 
 		assert.deepEqual(content?.[0]?.cache_control, { type: "ephemeral" });
 		assert.equal(content?.[1] && "cache_control" in content[1], false);
+	});
+
+	it("adds Anthropic user metadata from the configured owner id", async (t) => {
+		const workspacePath = await createWorkspace(
+			{
+				after(fn) {
+					t.after(fn);
+				},
+			},
+			minimalConfigToml(),
+		);
+		await withDiscordToken(async () => {
+			const config = await loadConfig(workspacePath);
+			assert.deepEqual(buildAnthropicMetadata(config, anthropicModel), { user_id: "owner" });
+			assert.equal(buildAnthropicMetadata(config, { ...anthropicModel, api: "openai-responses" }), undefined);
+		});
 	});
 });

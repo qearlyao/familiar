@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5 - 2026-06-22
+
+### Fixed
+
+- Forward Familiar's stable owner id to Anthropic requests as `metadata.user_id` so provider-specific cache and abuse-tracking hints are preserved.
+
 ## 0.5.4 - 2026-06-21
 
 ### Added

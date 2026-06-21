@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DraftEditor } from "@/components/DraftEditor";
-import { SlashCommandMenu, slashCommandText } from "@/components/SlashCommandMenu";
+import { SlashCommandMenu } from "@/components/SlashCommandMenu";
 import type { DraftBlock } from "@/lib/composerDraft";
 import {
   emptyDraftBlocks,
@@ -45,6 +45,10 @@ function singleTextBlock(blocks: DraftBlock[]): string | undefined {
   return blocks.length === 1 && blocks[0]?.type === "text" ? blocks[0].value : undefined;
 }
 
+function slashCommandText(command: ControlCommandDefinition): string {
+  return `/${command.name}${command.argumentLabel ? " " : ""}`;
+}
+
 export function Composer({
   onSend,
   onAbort,
@@ -60,7 +64,10 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [commandSelection, setCommandSelection] = useState<{ text: string | undefined; index: number }>({
+    text: undefined,
+    index: 0,
+  });
   const [dismissedCommandText, setDismissedCommandText] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const { blocks, attachments } = draft;
@@ -76,14 +83,13 @@ export function Composer({
     dismissedCommandText !== commandDraftText &&
     controlCommandCompletionQuery(commandDraftText) !== undefined;
   const exactCommandDraft = !!commandDraftText && !!parseControlCommandText(commandDraftText);
-
-  useEffect(() => {
-    setSelectedCommandIndex(0);
-  }, [commandDraftText]);
-
-  useEffect(() => {
-    setSelectedCommandIndex((current) => Math.min(current, Math.max(0, commandSuggestions.length - 1)));
-  }, [commandSuggestions.length]);
+  const selectedCommandIndex =
+    commandDraftText === undefined
+      ? 0
+      : Math.min(
+          commandSelection.text === commandDraftText ? commandSelection.index : 0,
+          Math.max(0, commandSuggestions.length - 1),
+        );
 
   const send = async () => {
     if (sending) return;
@@ -116,6 +122,7 @@ export function Composer({
   const applyCommandSuggestion = (command: ControlCommandDefinition) => {
     const nextText = slashCommandText(command);
     setDismissedCommandText(undefined);
+    setCommandSelection({ text: nextText, index: 0 });
     setDraft((prev) => ({
       ...prev,
       blocks: [{ type: "text", value: nextText }],
@@ -124,15 +131,18 @@ export function Composer({
   };
 
   const handleCommandKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!commandMenuOpen) return false;
+    if (!commandMenuOpen || commandDraftText === undefined) return false;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setSelectedCommandIndex((current) => (current + 1) % commandSuggestions.length);
+      setCommandSelection({ text: commandDraftText, index: (selectedCommandIndex + 1) % commandSuggestions.length });
       return true;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setSelectedCommandIndex((current) => (current - 1 + commandSuggestions.length) % commandSuggestions.length);
+      setCommandSelection({
+        text: commandDraftText,
+        index: (selectedCommandIndex - 1 + commandSuggestions.length) % commandSuggestions.length,
+      });
       return true;
     }
     if (event.key === "Tab") {

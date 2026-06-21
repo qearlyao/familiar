@@ -7,10 +7,6 @@ interface SlashCommandMenuProps {
   onSelect: (command: ControlCommandDefinition) => void;
 }
 
-export function slashCommandText(command: ControlCommandDefinition): string {
-  return `/${command.name}${command.argumentLabel ? " " : ""}`;
-}
-
 export function SlashCommandMenu({ commands, selectedIndex, onSelect }: SlashCommandMenuProps) {
   if (commands.length === 0) return null;
   return (

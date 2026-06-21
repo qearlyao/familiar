@@ -132,7 +132,7 @@ export function useChat(): ChatHook {
   >(undefined);
 
   const lastEventIdRef = useRef<string | null>(null);
-  const lastEventAtRef = useRef<number>(Date.now());
+  const lastEventAtRef = useRef<number>(0);
   const messagesRef = useRef<Message[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
@@ -169,12 +169,16 @@ export function useChat(): ChatHook {
     }
   }, []);
 
-  const clearPendingLatestAssistantAction = useCallback(() => {
+  const resetPendingLatestAssistantAction = useCallback(() => {
     stopLatestAssistantActionResync();
     pendingLatestAssistantActionRef.current = undefined;
     pendingLatestAssistantMessageIdRef.current = undefined;
-    setPendingLatestAssistantAction(undefined);
   }, [stopLatestAssistantActionResync]);
+
+  const clearPendingLatestAssistantAction = useCallback(() => {
+    resetPendingLatestAssistantAction();
+    setPendingLatestAssistantAction(undefined);
+  }, [resetPendingLatestAssistantAction]);
 
   const beginPendingLatestAssistantAction = useCallback(
     (action: LatestAssistantAction, messageId: string) => {
@@ -449,6 +453,13 @@ export function useChat(): ChatHook {
     };
   }, []);
 
+  const sendControlFrame = useCallback((type: string): boolean => {
+    const sock = wsRef.current;
+    if (sock?.readyState !== WebSocket.OPEN) return false;
+    sock.send(JSON.stringify({ type }));
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!activeSessionKey) return;
     localStorage.setItem("familiar.activeSession", activeSessionKey);
@@ -463,10 +474,11 @@ export function useChat(): ChatHook {
     lastEventIdRef.current = null;
     activeAssistantMessageIdsRef.current.clear();
     lastEventAtRef.current = Date.now();
-    clearPendingLatestAssistantAction();
+    resetPendingLatestAssistantAction();
 
     const resetTimer = window.setTimeout(() => {
       if (cancelled) return;
+      setPendingLatestAssistantAction(undefined);
       setMessages([]);
       setHistoryLoaded(false);
       setStreaming(false);
@@ -655,20 +667,14 @@ export function useChat(): ChatHook {
   }, [
     activeSessionKey,
     appendSystemMessage,
-    clearPendingLatestAssistantAction,
     reconcilePendingLatestAssistantAction,
+    resetPendingLatestAssistantAction,
+    sendControlFrame,
     stopLatestAssistantActionResync,
   ]);
 
   const send = useCallback((text: string, attachments: File[] = []) => sendRef.current(text, attachments), []);
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);
-
-  const sendControlFrame = useCallback((type: string): boolean => {
-    const sock = wsRef.current;
-    if (sock?.readyState !== WebSocket.OPEN) return false;
-    sock.send(JSON.stringify({ type }));
-    return true;
-  }, []);
 
   const abort = useCallback(() => {
     sendControlFrame("abort");

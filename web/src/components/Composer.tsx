@@ -3,11 +3,9 @@ import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DraftEditor } from "@/components/DraftEditor";
 import { SlashCommandMenu } from "@/components/SlashCommandMenu";
-import {
-  VoiceRecorderButton,
-  VoiceRecordingStatus,
-  useVoiceRecorder,
-} from "@/components/VoiceRecorderButton";
+import { VoiceRecorderControls } from "@/components/VoiceRecorderControls";
+import { VoiceRecordingStatus } from "@/components/VoiceRecordingStatus";
+import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import type { DraftBlock } from "@/lib/composerDraft";
 import {
   composerSendDisabled,
@@ -280,11 +278,12 @@ export function Composer({
             >
               <Paperclip className="size-4" />
             </Button>
-            <VoiceRecorderButton
+            <VoiceRecorderControls
               disabled={sending}
               pending={voiceRecording.pending}
               recording={voiceRecording.recording}
-              onClick={voiceRecording.toggleRecording}
+              onToggle={voiceRecording.toggleRecording}
+              onCancel={voiceRecording.cancelRecording}
             />
             <DraftEditor
               blocks={blocks}

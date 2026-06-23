@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyMessageEditToSteps } from "../../../src/web/message-edit.js";
 import type { Message, Step, ThinkingStep, ToolEvent, ToolStep, TextStep } from "../types";
 import {
   editLatestAssistant as editLatestAssistantApi,
@@ -102,23 +103,6 @@ function upsertToolStep(steps: Step[], tool: ToolEvent, now: number): Step[] {
   const closed = closeContentSteps(steps, now);
   const next: ToolStep = { kind: "tool", id: tool.id, tool };
   return [...closed, next];
-}
-
-function replaceTextStep(steps: Step[], text: string): Step[] {
-  let replaced = false;
-  const next: Step[] = [];
-  for (const step of steps) {
-    if (step.kind === "error") continue;
-    if (step.kind !== "text") {
-      next.push(step);
-      continue;
-    }
-    if (replaced) continue;
-    replaced = true;
-    next.push({ ...step, text, complete: true });
-  }
-  if (!replaced) next.push({ kind: "text", id: uid(), text, complete: true });
-  return next;
 }
 
 export interface ChatHook {
@@ -329,7 +313,14 @@ export function useChat(): ChatHook {
         }
 
         case "message_edited": {
-          patchSteps(event.messageId, (steps) => replaceTextStep(steps, event.text));
+          patchSteps(event.messageId, (steps) =>
+            applyMessageEditToSteps(steps, event.text, () => ({
+              kind: "text",
+              id: uid(),
+              text: event.text,
+              complete: true,
+            })),
+          );
           break;
         }
 

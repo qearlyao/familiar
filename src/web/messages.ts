@@ -9,6 +9,7 @@ import { getContactNickname } from "../conversation/contact-note.js";
 import { toUnixMs } from "../conversation/ids.js";
 import { publicAttachmentPath } from "../media/generated-media.js";
 import { isRecord } from "../util/guards.js";
+import { applyMessageEditToSteps } from "./message-edit.js";
 import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "./types.js";
 
 export function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
@@ -234,21 +235,12 @@ export function ensureFallbackSteps(message: WebMessage): void {
 
 export function applyMessageEditToMessage(message: WebMessage, text: string): void {
 	message.text = text;
-	const steps = message.steps ?? [];
-	let replaced = false;
-	const next: WebStep[] = [];
-	for (const step of steps) {
-		if (step.kind === "error") continue;
-		if (step.kind !== "text") {
-			next.push(step);
-			continue;
-		}
-		if (replaced) continue;
-		replaced = true;
-		next.push({ ...step, text, complete: true });
-	}
-	if (!replaced) next.push({ kind: "text", id: stepId(message.id, "text", next.length), text, complete: true });
-	message.steps = next;
+	message.steps = applyMessageEditToSteps(message.steps ?? [], text, (index) => ({
+		kind: "text",
+		id: stepId(message.id, "text", index),
+		text,
+		complete: true,
+	}));
 }
 
 function mergeMessageAnchor(message: WebMessage, anchor: WebMessage): void {

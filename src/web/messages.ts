@@ -235,14 +235,36 @@ export function ensureFallbackSteps(message: WebMessage): void {
 export function applyMessageEditToMessage(message: WebMessage, text: string): void {
 	message.text = text;
 	const steps = message.steps ?? [];
-	const textStepIndex = steps.findIndex((step) => step.kind === "text");
-	if (textStepIndex < 0) {
-		message.steps = [...steps, { kind: "text", id: stepId(message.id, "text", steps.length), text, complete: true }];
-		return;
+	let replaced = false;
+	const next: WebStep[] = [];
+	for (const step of steps) {
+		if (step.kind === "error") continue;
+		if (step.kind !== "text") {
+			next.push(step);
+			continue;
+		}
+		if (replaced) continue;
+		replaced = true;
+		next.push({ ...step, text, complete: true });
 	}
-	message.steps = steps.map((step, index) =>
-		index === textStepIndex && step.kind === "text" ? { ...step, text, complete: true } : step,
-	);
+	if (!replaced) next.push({ kind: "text", id: stepId(message.id, "text", next.length), text, complete: true });
+	message.steps = next;
+}
+
+function mergeMessageAnchor(message: WebMessage, anchor: WebMessage): void {
+	message.text = anchor.silent ? anchor.text : anchor.text || message.text;
+	message.attachments = anchor.attachments ?? message.attachments;
+	message.thinking = anchor.thinking ?? message.thinking;
+	message.thinkingMs = anchor.thinkingMs ?? message.thinkingMs;
+	message.silent = anchor.silent ?? message.silent;
+	message.ts = anchor.ts;
+}
+
+function recordReferencesMessage(record: ChatLogRecord, messageId: string): boolean {
+	if (record.type === "inbound") return record.messageId === messageId;
+	if (record.type === "outbound") return record.webMessageId === messageId || record.messageIds.includes(messageId);
+	if (record.type === "agent_event") return record.messageId === messageId;
+	return false;
 }
 
 export function webMessagesFromRecords(
@@ -258,16 +280,21 @@ export function webMessagesFromRecords(
 		const message = webMessageFromRecord(config, record, assistantName);
 		if (message && hidden.has(message.id)) continue;
 		if (message) {
-			messages.push(message);
-			messagesById.set(message.id, message);
-			const pending = pendingAgentEvents.get(message.id) ?? [];
-			for (const pendingRecord of pending) {
-				applyStoredAgentEventToMessage(message, pendingRecord, {
-					applyTextDeltas: !message.text && !message.silent,
-					applyThinkingDeltas: !message.thinking,
-				});
+			const existing = messagesById.get(message.id);
+			if (existing) {
+				mergeMessageAnchor(existing, message);
+			} else {
+				messages.push(message);
+				messagesById.set(message.id, message);
+				const pending = pendingAgentEvents.get(message.id) ?? [];
+				for (const pendingRecord of pending) {
+					applyStoredAgentEventToMessage(message, pendingRecord, {
+						applyTextDeltas: !message.text && !message.silent,
+						applyThinkingDeltas: !message.thinking,
+					});
+				}
+				pendingAgentEvents.delete(message.id);
 			}
-			pendingAgentEvents.delete(message.id);
 		}
 		if (record.type === "message_edit") {
 			const existing = messagesById.get(record.messageId);
@@ -304,12 +331,14 @@ export function webHistoryPayload(
 	if (options.before) {
 		let cursorIndex: number | undefined;
 		for (let index = records.length - 1; index >= 0; index -= 1) {
-			const message = webMessageFromRecord(config, records[index], assistantName);
+			const record = records[index];
+			const message = webMessageFromRecord(config, record, assistantName);
 			if (message && hidden.has(message.id)) continue;
-			if (message?.id === options.before) {
+			if (recordReferencesMessage(record, options.before)) {
 				cursorIndex = index;
-				break;
+				continue;
 			}
+			if (cursorIndex !== undefined) break;
 		}
 		end = cursorIndex ?? records.length;
 	}
@@ -319,6 +348,7 @@ export function webHistoryPayload(
 	for (; scanIndex >= 0 && pageEntries.length < options.limit; scanIndex -= 1) {
 		const message = webMessageFromRecord(config, records[scanIndex], assistantName);
 		if (message && hidden.has(message.id)) continue;
+		if (message && pageEntries.some((entry) => entry.message.id === message.id)) continue;
 		if (message) pageEntries.push({ message, recordIndex: scanIndex });
 	}
 
@@ -338,6 +368,11 @@ export function webHistoryPayload(
 	for (const entry of pageEntries) messagesById.set(entry.message.id, entry);
 	for (let index = eventStart; index < end; index += 1) {
 		const record = records[index];
+		const message = webMessageFromRecord(config, record, assistantName);
+		if (message && !hidden.has(message.id)) {
+			const entry = messagesById.get(message.id);
+			if (entry && index !== entry.recordIndex) mergeMessageAnchor(entry.message, message);
+		}
 		if (record.type === "message_edit") {
 			const entry = messagesById.get(record.messageId);
 			if (entry) applyMessageEditToMessage(entry.message, record.text);
@@ -368,6 +403,15 @@ export function webMessageFromRecord(
 	assistantName: string,
 ): WebMessage | undefined {
 	if (!isUserVisibleRuntimeRecord(record)) return undefined;
+	if (record.type === "agent_event" && record.event.type === "message_start" && record.event.role === "assistant") {
+		return {
+			id: record.messageId,
+			role: "assistant",
+			who: assistantName,
+			text: "",
+			ts: toUnixMs(record.ts),
+		};
+	}
 	if (record.type === "inbound") {
 		return {
 			id: record.messageId,

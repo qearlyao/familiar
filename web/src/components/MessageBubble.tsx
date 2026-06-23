@@ -299,6 +299,7 @@ export const MessageBubble = memo(function MessageBubble({
   const savingEdit = pendingLatestAssistantAction === "edit";
   const latestAssistantActionPending = pendingLatestAssistantAction != null;
   const currentText = messageText(message);
+  const canEdit = !!onEdit && !!currentText.trim();
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
   if (editing) {
@@ -320,7 +321,7 @@ export const MessageBubble = memo(function MessageBubble({
     >
       <TurnView message={message} />
       <AttachmentList attachments={message.attachments ?? []} align="left" />
-      {(onRetry || onDelete || onEdit) && (
+      {(onRetry || onDelete || canEdit) && (
         <div
           className={cn(
             "pointer-events-none mt-2 flex opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
@@ -329,7 +330,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         >
           {retrying && <RetryDots />}
-          {onEdit && (
+          {canEdit && (
             <ActionButton
               icon={SquarePen}
               label={savingEdit ? "saving edit" : "edit latest reply"}

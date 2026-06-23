@@ -15,6 +15,7 @@ import {
 import { type ControlCommand, parseControlCommandText } from "../conversation/control-commands.js";
 import { promptAttachmentNotes } from "../media/inbound-attachments.js";
 import { formatLocalTimestamp } from "../util/time.js";
+import { parseAgentReply } from "./silent-marker.js";
 
 export interface InboundMessageInput {
 	messageId: string;
@@ -57,6 +58,13 @@ export interface DispatchableJob {
 	prompt: string;
 	attachments: StoredAttachment[];
 	triggerMessageId?: string;
+}
+
+interface LatestAssistantTurn {
+	record?: OutboundChatRecord;
+	messageId: string;
+	jobId?: string;
+	attachments: StoredAttachment[];
 }
 
 export interface ConversationStatus {
@@ -420,17 +428,22 @@ export class ConversationRuntime {
 		};
 	}
 
-	private latestLiveAssistantOutbound(): { record: OutboundChatRecord; messageId: string } | undefined {
+	private latestLiveAssistantTurn(): LatestAssistantTurn | undefined {
 		const hidden = hiddenWebMessageIds(this.records);
 		for (let index = this.records.length - 1; index >= 0; index--) {
 			const record = this.records[index];
 			if (!record) continue;
 			if (record.type === "runtime" && record.event === "reset") return undefined;
 			if (record.type === "inbound") return undefined;
-			if (record.type !== "outbound" || record.control || !record.jobId) continue;
-			const messageId = record.webMessageId || record.messageIds[0];
-			if (!messageId || hidden.has(messageId)) continue;
-			return { record, messageId };
+			if (record.type === "outbound" && !record.control && record.jobId) {
+				const messageId = record.webMessageId || record.messageIds[0];
+				if (!messageId || hidden.has(messageId)) continue;
+				return { record, messageId, jobId: record.jobId, attachments: record.attachments ?? [] };
+			}
+			if (record.type === "agent_event") {
+				if (hidden.has(record.messageId)) continue;
+				return { messageId: record.messageId, jobId: record.jobId, attachments: [] };
+			}
 		}
 		return undefined;
 	}
@@ -438,24 +451,44 @@ export class ConversationRuntime {
 	latestAssistantRetryTarget():
 		| { messageId: string; triggerRecordId: number; attachments: StoredAttachment[] }
 		| undefined {
-		const found = this.latestLiveAssistantOutbound();
+		const found = this.latestLiveAssistantTurn();
 		if (!found) return undefined;
-		const { record, messageId } = found;
+		const { jobId, messageId } = found;
 		if (this.assistantMessageWasAborted(messageId)) return undefined;
-		const triggerRecordId = record.jobId ? this.queuedTriggerByJobId.get(record.jobId) : undefined;
+		const triggerRecordId = jobId ? this.queuedTriggerByJobId.get(jobId) : undefined;
 		if (triggerRecordId === undefined) return undefined;
-		return { messageId, triggerRecordId, attachments: record.attachments ?? [] };
+		return { messageId, triggerRecordId, attachments: found.attachments };
 	}
 
 	latestAssistantDeleteTarget(): { messageId: string } | undefined {
-		const found = this.latestLiveAssistantOutbound();
+		const found = this.latestLiveAssistantTurn();
 		return found ? { messageId: found.messageId } : undefined;
 	}
 
 	latestAssistantEditTarget(): { messageId: string } | undefined {
-		const found = this.latestLiveAssistantOutbound();
-		if (!found?.record.text.trim()) return undefined;
+		const found = this.latestLiveAssistantTurn();
+		if (!found || !this.assistantMessageHasEditableText(found)) return undefined;
 		return { messageId: found.messageId };
+	}
+
+	private assistantMessageHasEditableText(found: LatestAssistantTurn): boolean {
+		if (found.record?.silent) return false;
+		let sawError = false;
+		let streamedText = "";
+		for (const record of this.records) {
+			if (record.type !== "agent_event" || record.messageId !== found.messageId) continue;
+			const event = record.event;
+			if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+				streamedText += event.assistantMessageEvent.delta;
+			}
+			if (event.type === "message_end" && event.errorMessage) sawError = true;
+		}
+		if (streamedText) {
+			const parsed = parseAgentReply(streamedText);
+			return !parsed.silent && !!parsed.text.trim();
+		}
+		if (sawError) return false;
+		return !!found.record?.text.trim();
 	}
 
 	private assistantMessageWasAborted(messageId: string): boolean {

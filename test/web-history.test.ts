@@ -418,6 +418,43 @@ describe("web history", () => {
 		assert.ok(!message.steps?.some((step) => step.kind === "text"));
 	});
 
+	it("renders streamed assistant text that ends with an error without an outbound anchor", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			{
+				type: "agent_event",
+				...base(1, "2026-05-26T00:00:00.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_start", role: "assistant" },
+			},
+			{
+				type: "agent_event",
+				...base(2, "2026-05-26T00:00:01.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "partial reply" } },
+			},
+			{
+				type: "agent_event",
+				...base(3, "2026-05-26T00:00:02.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_end", role: "assistant", errorMessage: "503 Service Unavailable" },
+			},
+		];
+
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
+		const page = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 1 });
+
+		assert.ok(message);
+		assert.equal(message.id, "msg-1");
+		assert.equal(message.text, "partial reply");
+		assert.deepEqual(message.steps?.map((step) => step.kind), ["text", "error"]);
+		assert.deepEqual(page.messages.map((entry) => entry.id), ["msg-1"]);
+		assert.deepEqual(page.messages[0]?.steps?.map((step) => step.kind), ["text", "error"]);
+	});
+
 	it("keeps legit text from earlier turns plus the marker step from a later silent turn", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [
@@ -662,7 +699,7 @@ describe("web history", () => {
 		]);
 	});
 
-	it("preserves mixed assistant step order when applying an edit", async (t) => {
+	it("collapses assistant text steps when applying an edit", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [
 			...interleavedAssistantRecords(),
@@ -679,19 +716,39 @@ describe("web history", () => {
 		const pageMessage = page.messages[0];
 
 		assert.ok(message);
-		assert.deepEqual(message.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool", "text"]);
+		assert.deepEqual(message.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool"]);
 		assert.deepEqual(
 			message.steps?.map((step) => (step.kind === "tool" ? step.tool.name : step.text)),
-			["think", "first", "cleaned up", "second", "world"],
+			["think", "first", "cleaned up", "second"],
 		);
 		assert.equal(message.text, "cleaned up");
 		assert.equal(pageMessage?.text, "cleaned up");
-		assert.deepEqual(pageMessage?.steps?.map((step) => step.kind), [
-			"thinking",
-			"tool",
-			"text",
-			"tool",
-			"text",
-		]);
+		assert.deepEqual(pageMessage?.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool"]);
+	});
+
+	it("clears model error steps when applying an edit", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			...interleavedAssistantRecords(),
+			{
+				type: "agent_event",
+				...base(11, "2026-05-26T00:00:10.000Z"),
+				jobId: "job-1",
+				messageId: "msg-1",
+				event: { type: "message_end", role: "assistant", errorMessage: "503 Service Unavailable" },
+			},
+			{
+				type: "message_edit",
+				...base(12, "2026-05-26T00:00:11.000Z"),
+				messageId: "msg-1",
+				text: "cleaned up",
+			},
+		];
+
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
+
+		assert.ok(message);
+		assert.deepEqual(message.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool"]);
+		assert.equal(message.steps?.some((step) => step.kind === "error"), false);
 	});
 });

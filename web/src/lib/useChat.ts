@@ -105,11 +105,20 @@ function upsertToolStep(steps: Step[], tool: ToolEvent, now: number): Step[] {
 }
 
 function replaceTextStep(steps: Step[], text: string): Step[] {
-  const textStepIndex = steps.findIndex((step) => step.kind === "text");
-  if (textStepIndex < 0) return [...steps, { kind: "text", id: uid(), text, complete: true }];
-  return steps.map((step, index) =>
-    index === textStepIndex && step.kind === "text" ? { ...step, text, complete: true } : step,
-  );
+  let replaced = false;
+  const next: Step[] = [];
+  for (const step of steps) {
+    if (step.kind === "error") continue;
+    if (step.kind !== "text") {
+      next.push(step);
+      continue;
+    }
+    if (replaced) continue;
+    replaced = true;
+    next.push({ ...step, text, complete: true });
+  }
+  if (!replaced) next.push({ kind: "text", id: uid(), text, complete: true });
+  return next;
 }
 
 export interface ChatHook {

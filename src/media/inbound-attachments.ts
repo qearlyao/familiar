@@ -21,6 +21,7 @@ export { MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 const TEXT_ATTACHMENT_PREVIEW_LINES = 2;
 const TEXT_ATTACHMENT_PREVIEW_CHARS = 1000;
 const MP4_FILE_TYPE_BRANDS = new Set(["avc1", "dash", "iso2", "isom", "M4V ", "mp41", "mp42", "MSNV"]);
+const AUDIO_CONTAINER_MIME_TYPES = new Set(["audio/mp4", "audio/webm"]);
 
 type AttachmentSource = "discord" | "web";
 
@@ -50,6 +51,7 @@ const ATTACHMENT_MIME_POLICY = {
 	"audio/ogg": { kind: "audio", extension: ".ogg" },
 	"audio/wav": { kind: "audio", extension: ".wav" },
 	"audio/webm": { kind: "audio", extension: ".webm" },
+	"audio/mp4": { kind: "audio", extension: ".m4a" },
 	"video/mp4": { kind: "video", extension: ".mp4" },
 	"video/quicktime": { kind: "video", extension: ".mov" },
 	"video/webm": { kind: "video", extension: ".webm" },
@@ -115,7 +117,14 @@ function sniffVideoMimeType(buffer: Buffer): string | undefined {
 	return MP4_FILE_TYPE_BRANDS.has(brand) ? "video/mp4" : undefined;
 }
 
-function sniffMimeType(buffer: Buffer, declared?: string, name?: string): string {
+function declaredAudioContainerMime(input: IncomingAttachment): string | undefined {
+	const mimeType = input.mimeType && mimePolicy(input.mimeType) ? input.mimeType : undefined;
+	if (!mimeType || !AUDIO_CONTAINER_MIME_TYPES.has(mimeType)) return undefined;
+	return input.source === "web" ? mimeType : undefined;
+}
+
+function sniffMimeType(input: IncomingAttachment, buffer: Buffer): string {
+	const declaredMime = input.mimeType && mimePolicy(input.mimeType) ? input.mimeType : undefined;
 	let detected = sniffImageMimeType(buffer);
 	if (!detected && buffer.subarray(0, 4).toString("ascii") === "%PDF") detected = "application/pdf";
 	else if (
@@ -128,10 +137,14 @@ function sniffMimeType(buffer: Buffer, declared?: string, name?: string): string
 		detected = "audio/wav";
 	}
 	detected ??= sniffVideoMimeType(buffer);
-	const declaredMime = declared && mimePolicy(declared) ? declared : undefined;
-	const mime = detected ?? sniffText(buffer) ?? declaredMime ?? mimeFromExtension(name);
+	const mime =
+		(detected === "video/mp4" || detected === "video/webm" ? declaredAudioContainerMime(input) : undefined) ??
+		detected ??
+		sniffText(buffer) ??
+		declaredMime ??
+		mimeFromExtension(input.name);
 	if (!mime || !mimePolicy(mime)) {
-		throw new Error(`Unsupported attachment type: ${declared || detected || "unknown"}`);
+		throw new Error(`Unsupported attachment type: ${input.mimeType || detected || "unknown"}`);
 	}
 	return mime;
 }
@@ -222,7 +235,7 @@ export async function materializeInboundAttachments(
 		if (totalBytes > MAX_INBOUND_TOTAL_BYTES) {
 			throw new Error(`Attachments are too large: max ${MAX_INBOUND_TOTAL_BYTES} bytes total`);
 		}
-		const mimeType = sniffMimeType(buffer, input.mimeType, input.name);
+		const mimeType = sniffMimeType(input, buffer);
 		const id = input.id || randomUUID();
 		const cleanName = canonicalName(input.name, `attachment-${index + 1}`, mimeType);
 		const sha256 = createHash("sha256").update(buffer).digest("hex");

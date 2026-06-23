@@ -222,6 +222,43 @@ describe("inbound attachments", () => {
 		);
 	});
 
+	it("preserves browser voice recordings as audio attachments", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		config.mediaUnderstanding.audio.apiKeyEnv = "FAMILIAR_TEST_GROQ_DISABLED";
+		config.mediaUnderstanding.video.apiKeyEnv = "FAMILIAR_TEST_GEMINI_DISABLED";
+
+		const attachments = await materializeInboundAttachments(config, [
+			{
+				name: "voice-message.webm",
+				mimeType: "audio/webm",
+				buffer: Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(8)]),
+				source: "web",
+			},
+			{
+				name: "voice-message.m4a",
+				mimeType: "audio/mp4",
+				buffer: mp4Bytes(),
+				source: "web",
+			},
+			{
+				name: "capture.webm",
+				mimeType: "application/octet-stream",
+				buffer: Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(8)]),
+				source: "web",
+			},
+		]);
+
+		assert.deepEqual(
+			attachments.map((attachment) => [attachment.name, attachment.kind, attachment.mimeType]),
+			[
+				["voice-message.webm", "audio", "audio/webm"],
+				["voice-message.m4a", "audio", "audio/mp4"],
+				["capture.webm", "video", "video/webm"],
+			],
+		);
+	});
+
 	it("filters non-image attachments out of prompt images", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

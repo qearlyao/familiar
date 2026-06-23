@@ -3,8 +3,14 @@ import { Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DraftEditor } from "@/components/DraftEditor";
 import { SlashCommandMenu } from "@/components/SlashCommandMenu";
+import {
+  VoiceRecorderButton,
+  VoiceRecordingStatus,
+  useVoiceRecorder,
+} from "@/components/VoiceRecorderButton";
 import type { DraftBlock } from "@/lib/composerDraft";
 import {
+  composerSendDisabled,
   emptyDraftBlocks,
   hasDraftBlocksContent,
   serializeDraftBlocks,
@@ -70,6 +76,10 @@ export function Composer({
   });
   const [dismissedCommandText, setDismissedCommandText] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
+  const voiceRecording = useVoiceRecorder({
+    onAttach: (files) => addAttachments(files),
+    onError: setError,
+  });
   const { blocks, attachments } = draft;
   const serializedText = useMemo(() => serializeDraftBlocks(blocks), [blocks]);
   const commandDraftText = singleTextBlock(blocks);
@@ -92,7 +102,7 @@ export function Composer({
         );
 
   const send = async () => {
-    if (sending) return;
+    if (sending || voiceRecording.pending) return;
     const submittedDraft = draft;
     const text = serializeDraftBlocks(submittedDraft.blocks);
     if (!text && submittedDraft.attachments.length === 0) return;
@@ -183,8 +193,15 @@ export function Composer({
     return files.length > 0 ? files : Array.from(fallback);
   };
 
-  const sendDisabled = sending || (!streaming && !serializedText && attachments.length === 0);
   const showAbort = streaming && !sending;
+  const voiceBusy = voiceRecording.pending || voiceRecording.recording;
+  const sendDisabled = composerSendDisabled({
+    showAbort,
+    sending,
+    voiceBusy,
+    hasText: !!serializedText,
+    hasAttachments: attachments.length > 0,
+  });
 
   return (
     <div className="border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
@@ -257,11 +274,18 @@ export function Composer({
               size="sm"
               variant="ghost"
               onClick={() => fileRef.current?.click()}
+              disabled={sending || voiceBusy}
               aria-label="attach"
               className="text-muted-foreground hover:text-foreground"
             >
               <Paperclip className="size-4" />
             </Button>
+            <VoiceRecorderButton
+              disabled={sending}
+              pending={voiceRecording.pending}
+              recording={voiceRecording.recording}
+              onClick={voiceRecording.toggleRecording}
+            />
             <DraftEditor
               blocks={blocks}
               personaName={personaName}
@@ -285,6 +309,7 @@ export function Composer({
               )}
             </Button>
           </div>
+          {voiceRecording.recording ? <VoiceRecordingStatus /> : null}
         </div>
         {error ? <p className="mt-1.5 text-center font-serif text-xs italic text-destructive">{error}</p> : null}
         <p className="mt-1.5 text-center text-[11px] tracking-wide text-muted-foreground">

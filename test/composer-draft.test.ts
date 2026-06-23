@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+	composerSendDisabled,
 	insertMemeDraftBlock,
 	serializeDraftBlocks,
 	type DraftBlock,
@@ -65,6 +66,19 @@ describe("composer draft meme blocks", () => {
 		assert.equal(
 			serializeDraftBlocks([meme(hug.name, hug.url), meme(love.name, love.url)]),
 			"meme: hug (https://files.catbox.moe/hug.png)\nmeme: falling in love (https://files.catbox.moe/love.png)",
+		);
+	});
+
+	it("disables send while voice recording is busy", () => {
+		assert.equal(
+			composerSendDisabled({
+				showAbort: false,
+				sending: false,
+				voiceBusy: true,
+				hasText: true,
+				hasAttachments: false,
+			}),
+			true,
 		);
 	});
 });

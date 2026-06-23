@@ -65,6 +65,22 @@ export function hasDraftBlocksContent(blocks: DraftBlock[]): boolean {
   return serializeDraftBlocks(blocks).length > 0;
 }
 
+export function composerSendDisabled({
+  showAbort,
+  sending,
+  voiceBusy,
+  hasText,
+  hasAttachments,
+}: {
+  showAbort: boolean;
+  sending: boolean;
+  voiceBusy: boolean;
+  hasText: boolean;
+  hasAttachments: boolean;
+}): boolean {
+  return showAbort ? false : sending || voiceBusy || (!hasText && !hasAttachments);
+}
+
 export function insertMemeDraftBlock(
   blocks: DraftBlock[],
   selection: DraftSelection | undefined,

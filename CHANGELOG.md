@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.6 - 2026-06-23
+
+### Added
+
+- Add WebUI voice recording from the composer, including recording controls and browser audio upload handling.
+- Add WebUI editing for the latest assistant reply, with persisted history and replay support.
+
+### Changed
+
+- Bump the pi dependency set to `0.79.10`, bringing upstream AI reasoning preservation and coding-agent fixes.
+
+### Fixed
+
+- Keep retry, edit, and delete actions targeting the full failed assistant turn instead of an error tail.
+- Allow manually added WebUI models to use configured custom providers.
+- Align audio attachment transcripts in WebUI messages.
+
 ## 0.5.5 - 2026-06-22
 
 ### Fixed

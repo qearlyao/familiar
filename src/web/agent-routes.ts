@@ -1,8 +1,7 @@
-import { getProviders } from "@earendil-works/pi-ai";
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
 import { addModel, loadAddedModels, removeModel } from "../models/added-models.js";
-import { type ModelRef, PROVIDER_DEFAULTS, parseModelRef } from "../models/index.js";
+import { type ModelRef, parseModelRef, resolveModel } from "../models/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isRecord } from "../util/guards.js";
 import { errorMessage } from "./errors.js";
@@ -64,11 +63,10 @@ export function registerWebAgentRoutes(options: RegisterWebAgentRoutesOptions): 
 			throw new HttpError(400, "body is required");
 		}
 		const parsed = parseRequestedModel(body.model);
-		if (
-			!Object.hasOwn(PROVIDER_DEFAULTS, parsed.ref.provider) &&
-			!getProviders().includes(parsed.ref.provider as never)
-		) {
-			throw new HttpError(400, `unsupported provider: ${parsed.ref.provider}`);
+		try {
+			resolveModel(parsed.ref, config);
+		} catch (error) {
+			throw new HttpError(400, errorMessage(error));
 		}
 		if (config.models.allow.includes(parsed.model) || loadAddedModels().includes(parsed.model)) {
 			sendJson(response, 200, agentModelsPayload(config));

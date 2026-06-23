@@ -130,6 +130,14 @@ export type StreamEvent =
       messageId: string;
     }
   | {
+      type: "message_edited";
+      eventId: string;
+      ts: number;
+      channelKey?: string;
+      messageId: string;
+      text: string;
+    }
+  | {
       type: "tool_event";
       eventId: string;
       ts: number;
@@ -514,14 +522,19 @@ export async function startNewChat(channelKey: string): Promise<void> {
   await jsonRequest<void>("/api/web/agent/new", "POST", { channelKey }, "agent/new");
 }
 
-export type LatestAssistantAction = "retry" | "delete";
+export type LatestAssistantControlAction = "retry" | "delete";
+export type LatestAssistantAction = LatestAssistantControlAction | "edit";
 
 export async function sendLatestAssistantAction(
-  action: LatestAssistantAction,
+  action: LatestAssistantControlAction,
   channelKey?: string,
 ): Promise<void> {
   const path = action === "retry" ? "/api/web/retry" : "/api/web/delete";
   await jsonRequest<void>(path, "POST", { channelKey }, action);
+}
+
+export async function editLatestAssistant(text: string, channelKey?: string): Promise<void> {
+  await jsonRequest<void>("/api/web/edit", "POST", { channelKey, text }, "edit");
 }
 
 export interface Meme {

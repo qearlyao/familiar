@@ -31,6 +31,7 @@ export function Chat({
     abort,
     retry,
     deleteLatest,
+    editLatest,
     notifyNewChat,
   } = useChat();
   const [configOpen, setConfigOpen] = useState(false);
@@ -57,6 +58,7 @@ export function Chat({
           pendingLatestAssistantAction={pendingLatestAssistantAction}
           onRetry={retry}
           onDelete={deleteLatest}
+          onEdit={editLatest}
         />
       </main>
       <Composer

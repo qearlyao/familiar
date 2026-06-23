@@ -639,4 +639,59 @@ describe("web history", () => {
 		assert.deepEqual(page.messages.map((message) => message.id), ["u1", "msg-a", "u2"]);
 		assert.equal(messages.some((message) => message.text === "second reply"), false);
 	});
+
+	it("applies edited assistant text in full and paginated history", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			...twoTurnRecords(),
+			{
+				type: "message_edit",
+				...base(15, "2026-05-26T00:00:14.000Z"),
+				messageId: "msg-b",
+				text: "cleaned up reply",
+			},
+		];
+
+		const messages = webMessagesFromRecords(config, records, "Ghost");
+		const page = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 2 });
+
+		assert.equal(messages.at(-1)?.text, "cleaned up reply");
+		assert.equal(page.messages.at(-1)?.text, "cleaned up reply");
+		assert.deepEqual(page.messages.at(-1)?.steps?.filter((step) => step.kind === "text").map((step) => step.text), [
+			"cleaned up reply",
+		]);
+	});
+
+	it("preserves mixed assistant step order when applying an edit", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			...interleavedAssistantRecords(),
+			{
+				type: "message_edit",
+				...base(11, "2026-05-26T00:00:10.000Z"),
+				messageId: "msg-1",
+				text: "cleaned up",
+			},
+		];
+
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
+		const page = webHistoryPayload(config, records, "Ghost", "discord-dm-channel-1", { limit: 1 });
+		const pageMessage = page.messages[0];
+
+		assert.ok(message);
+		assert.deepEqual(message.steps?.map((step) => step.kind), ["thinking", "tool", "text", "tool", "text"]);
+		assert.deepEqual(
+			message.steps?.map((step) => (step.kind === "tool" ? step.tool.name : step.text)),
+			["think", "first", "cleaned up", "second", "world"],
+		);
+		assert.equal(message.text, "cleaned up");
+		assert.equal(pageMessage?.text, "cleaned up");
+		assert.deepEqual(pageMessage?.steps?.map((step) => step.kind), [
+			"thinking",
+			"tool",
+			"text",
+			"tool",
+			"text",
+		]);
+	});
 });

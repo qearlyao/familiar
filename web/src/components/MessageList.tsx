@@ -40,14 +40,16 @@ export function MessageList({
   pendingLatestAssistantAction,
   onRetry,
   onDelete,
+  onEdit,
 }: {
   messages: Message[];
   personaName: string;
   historyLoaded: boolean;
   streaming?: boolean;
-  pendingLatestAssistantAction?: "retry" | "delete";
+  pendingLatestAssistantAction?: "retry" | "delete" | "edit";
   onRetry?: () => void;
   onDelete?: () => void;
+  onEdit?: (text: string) => Promise<void>;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const latestAssistantIndex = streaming
@@ -86,6 +88,7 @@ export function MessageList({
               message={m}
               onRetry={i === latestAssistantIndex ? onRetry : undefined}
               onDelete={i === latestAssistantIndex ? onDelete : undefined}
+              onEdit={i === latestAssistantIndex ? onEdit : undefined}
               pendingLatestAssistantAction={
                 i === latestAssistantIndex ? pendingLatestAssistantAction : undefined
               }

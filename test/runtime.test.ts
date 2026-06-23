@@ -188,6 +188,50 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("only exposes editable assistant targets when the latest reply has text", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound({
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "qearlyao",
+				text: "hello",
+				remoteTimestamp: "2026-05-09T03:34:16.881Z",
+			});
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			await runtime.noteOutbound({
+				text: "hi",
+				messageIds: ["assistant-text"],
+				webMessageId: "assistant-text",
+				jobId: dispatch.job.jobId,
+			});
+
+			assert.deepEqual(runtime.latestAssistantEditTarget(), { messageId: "assistant-text" });
+
+			await runtime.noteOutbound({
+				text: "",
+				messageIds: ["assistant-silent"],
+				webMessageId: "assistant-silent",
+				jobId: "silent-job",
+				silent: true,
+			});
+
+			assert.equal(runtime.latestAssistantEditTarget(), undefined);
+			assert.deepEqual(runtime.latestAssistantDeleteTarget(), { messageId: "assistant-silent" });
+		} finally {
+			await runtime.disconnect();
+		}
+	});
+
 	it("tracks last heartbeat-reset interaction from owner inbound records only", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

@@ -49,6 +49,7 @@ export interface WebRuntimeActions {
 	): Promise<WebPromptReply>;
 	retryLatestAssistant(runtime: ConversationRuntime): Promise<void>;
 	deleteLatestAssistant(runtime: ConversationRuntime): Promise<void>;
+	editLatestAssistant(runtime: ConversationRuntime, text: string): Promise<void>;
 	drainJobs(runtime: ConversationRuntime): Promise<void>;
 	applyControlCommand(runtime: ConversationRuntime, control: ParsedControlCommand): Promise<string>;
 }
@@ -225,6 +226,22 @@ export function createWebRuntimeActions(options: WebRuntimeActionsOptions): WebR
 		}
 	};
 
+	const editLatestAssistant = async (runtime: ConversationRuntime, text: string): Promise<void> => {
+		if (runtime.hasActiveJob()) throw new Error("Cannot edit while a turn is running");
+		const trimmed = text.trim();
+		if (!trimmed) throw new Error("Edited message cannot be empty");
+		const target = runtime.latestAssistantEditTarget();
+		if (!target) throw new Error("No assistant message to edit");
+		try {
+			await familiarAgent.editLastAssistant(runtime.channelKey, trimmed);
+			await runtime.noteMessageEdit(target.messageId, trimmed);
+		} catch (error) {
+			const message = errorMessage(error);
+			await appendAndPublishError(runtime, message);
+			throw error;
+		}
+	};
+
 	const drainJobs = async (runtime: ConversationRuntime): Promise<void> => {
 		for (;;) {
 			const dispatch = runtime.beginNextJob();
@@ -299,6 +316,7 @@ export function createWebRuntimeActions(options: WebRuntimeActionsOptions): WebR
 		promptForRuntime,
 		retryLatestAssistant,
 		deleteLatestAssistant,
+		editLatestAssistant,
 		drainJobs,
 		applyControlCommand,
 	};

@@ -452,6 +452,12 @@ export class ConversationRuntime {
 		return found ? { messageId: found.messageId } : undefined;
 	}
 
+	latestAssistantEditTarget(): { messageId: string } | undefined {
+		const found = this.latestLiveAssistantOutbound();
+		if (!found?.record.text.trim()) return undefined;
+		return { messageId: found.messageId };
+	}
+
 	private assistantMessageWasAborted(messageId: string): boolean {
 		return this.records.some(
 			(record) =>
@@ -574,6 +580,15 @@ export class ConversationRuntime {
 			type: "message_delete",
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageId,
+		});
+	}
+
+	async noteMessageEdit(messageId: string, text: string): Promise<void> {
+		await this.appendRecord({
+			type: "message_edit",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			messageId,
+			text: text.trim(),
 		});
 	}
 

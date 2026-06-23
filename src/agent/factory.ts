@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
+import { type AssistantMessage, type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import { setConfigOverridesPath } from "../config/overrides.js";
 import { applyConfigOverridesToConfig } from "../config/registry.js";
@@ -352,6 +352,45 @@ export async function createFamiliarAgent(
 		});
 	};
 
+	const replaceAssistantTextContent = (message: AssistantMessage, text: string): AssistantMessage => {
+		let replaced = false;
+		const content = message.content.map((part) => {
+			if (part.type !== "text") return part;
+			if (replaced) return { ...part, text: "" };
+			replaced = true;
+			return { ...part, text };
+		});
+		if (!replaced) throw new Error("Assistant message has no text to edit");
+		return {
+			...message,
+			content,
+			stopReason: "stop",
+			errorMessage: undefined,
+			timestamp: Math.max(Date.now(), message.timestamp + 1),
+		};
+	};
+
+	const editLastAssistantMessage = (session: FamiliarAgentSession, text: string): void => {
+		const messages = session.agent.state.messages;
+		const message = messages.at(-1);
+		if (!message || message.role !== "assistant") {
+			throw new Error("No assistant message to edit");
+		}
+		const edited = replaceAssistantTextContent(message, text);
+		session.agent.state.messages = [...messages.slice(0, -1), edited];
+		writeTranscriptLog(config, {
+			ts: new Date().toISOString(),
+			sessionId: session.sessionId,
+			type: "supersede",
+			messageTimestamp: message.timestamp,
+		});
+		writeTranscriptLog(config, {
+			ts: new Date().toISOString(),
+			sessionId: session.sessionId,
+			message: edited,
+		});
+	};
+
 	return {
 		async abort(sessionKey: string): Promise<void> {
 			const session = sessions.get(sessionKey);
@@ -379,6 +418,11 @@ export async function createFamiliarAgent(
 			const session = await getSession(sessionKey);
 			await session.promptQueue;
 			popLastAssistant(session, "delete");
+		},
+		async editLastAssistant(sessionKey: string, text: string): Promise<void> {
+			const session = await getSession(sessionKey);
+			await session.promptQueue;
+			editLastAssistantMessage(session, text);
 		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);

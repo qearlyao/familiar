@@ -125,6 +125,14 @@ export type WebStreamEvent =
 			messageId: string;
 	  }
 	| {
+			type: "message_edited";
+			eventId: string;
+			ts: number;
+			channelKey?: string;
+			messageId: string;
+			text: string;
+	  }
+	| {
 			type: "tool_event";
 			eventId: string;
 			ts: number;

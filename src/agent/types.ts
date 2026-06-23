@@ -43,6 +43,7 @@ export interface FamiliarAgent {
 		options?: FamiliarPromptOptions,
 	): Promise<FamiliarAgentReply>;
 	deleteLastAssistant(sessionKey: string): Promise<void>;
+	editLastAssistant(sessionKey: string, text: string): Promise<void>;
 	reset(sessionKey: string): Promise<void>;
 	reload(): Promise<string>;
 	resolveChannelModel(sessionKey: string): { model: Model<any>; source: "config" | "override" };

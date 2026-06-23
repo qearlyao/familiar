@@ -185,6 +185,12 @@ export interface MessageDeleteChatRecord extends ChatRecordBase {
 	messageId: string;
 }
 
+export interface MessageEditChatRecord extends ChatRecordBase {
+	type: "message_edit";
+	messageId: string;
+	text: string;
+}
+
 export type ChatLogRecord =
 	| InboundChatRecord
 	| ControlChatRecord
@@ -197,7 +203,8 @@ export type ChatLogRecord =
 	| RuntimeChatRecord
 	| ErrorChatRecord
 	| AssistantRetryChatRecord
-	| MessageDeleteChatRecord;
+	| MessageDeleteChatRecord
+	| MessageEditChatRecord;
 
 export function hiddenWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
 	return new Set(

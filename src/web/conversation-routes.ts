@@ -116,6 +116,15 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 		void actions.deleteLatestAssistant(runtime).catch((error) => console.error("Web delete failed", error));
 		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
 	});
+	route("POST", "/api/web/edit", async (request, response, url) => {
+		const body = await readJsonBody(request);
+		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));
+		if (!isRecord(body) || typeof body.text !== "string") {
+			throw new HttpError(400, "text is required");
+		}
+		await actions.editLatestAssistant(runtime, body.text);
+		sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+	});
 	route("POST", "/api/web/control", async (request, response, url) => {
 		const body = await readJsonBody(request);
 		const runtime = await getRuntime(getChannelKeyFromRequest(url, body));

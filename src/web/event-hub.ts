@@ -242,6 +242,15 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 				}
 				publish(completion);
 			}
+			if (record.type === "message_edit") {
+				publish({
+					type: "message_edited",
+					channelKey: runtime.channelKey,
+					messageId: record.messageId,
+					text: record.text,
+					ts: toUnixMs(record.ts),
+				});
+			}
 		});
 		const unsubscribeAgentEvents = runtime.subscribeAgentEvents((agentEvent) => {
 			publishStoredAgentEvent(runtime.channelKey, agentEvent.messageId, agentEvent.event, agentEvent.ts);

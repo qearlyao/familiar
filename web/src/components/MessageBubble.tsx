@@ -1,5 +1,5 @@
 import { memo, type ReactNode, useState } from "react";
-import { type LucideIcon, RotateCcw, Trash2 } from "lucide-react";
+import { Check, type LucideIcon, RotateCcw, SquarePen, Trash2, X } from "lucide-react";
 import type { Attachment, Message } from "../types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -166,6 +166,13 @@ function UserTurn({ message }: { message: Message }) {
   );
 }
 
+function messageText(message: Message): string {
+  return message.steps
+    .filter((step) => step.kind === "text")
+    .map((step) => (step.kind === "text" ? step.text : ""))
+    .join("");
+}
+
 function SystemTurn({ message }: { message: Message }) {
   const text = message.steps.find((s) => s.kind === "text");
   if (!text || text.kind !== "text") return null;
@@ -225,22 +232,85 @@ function RetryDots() {
   );
 }
 
+function AssistantEditForm({
+	initialText,
+	onSave,
+	onCancel,
+	saving,
+}: {
+	initialText: string;
+	onSave?: (text: string) => Promise<void>;
+	onCancel: () => void;
+	saving: boolean;
+}) {
+  const [editText, setEditText] = useState(initialText);
+  const save = async (): Promise<void> => {
+    if (!onSave) return;
+    await onSave(editText);
+    onCancel();
+  };
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <textarea
+        value={editText}
+        onChange={(event) => setEditText(event.target.value)}
+        rows={Math.max(3, Math.min(12, editText.split("\n").length))}
+        className="w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-serif text-sm leading-relaxed text-foreground shadow-sm focus:border-ring focus:ring-3 focus:ring-ring/30 focus:outline-none"
+        autoFocus
+      />
+      <div className="flex gap-1">
+        <ActionButton
+          icon={Check}
+          label={saving ? "saving edit" : "save edit"}
+          onClick={() => {
+            void save().catch(() => undefined);
+          }}
+          hoverClass="hover:text-foreground"
+          disabled={saving || !editText.trim()}
+        />
+        <ActionButton
+          icon={X}
+          label="cancel edit"
+          onClick={onCancel}
+          hoverClass="hover:text-foreground"
+          disabled={saving}
+        />
+      </div>
+    </div>
+  );
+}
+
 export const MessageBubble = memo(function MessageBubble({
   message,
   onRetry,
   onDelete,
+  onEdit,
   pendingLatestAssistantAction,
 }: {
   message: Message;
   onRetry?: () => void;
   onDelete?: () => void;
-  pendingLatestAssistantAction?: "retry" | "delete";
+  onEdit?: (text: string) => Promise<void>;
+  pendingLatestAssistantAction?: "retry" | "delete" | "edit";
 }) {
   const [actionsRevealed, setActionsRevealed] = useState(false);
+  const [editing, setEditing] = useState(false);
   const retrying = pendingLatestAssistantAction === "retry";
+  const savingEdit = pendingLatestAssistantAction === "edit";
   const latestAssistantActionPending = pendingLatestAssistantAction != null;
+  const currentText = messageText(message);
   if (message.role === "system") return <SystemTurn message={message} />;
   if (message.role === "user") return <UserTurn message={message} />;
+  if (editing) {
+    return (
+      <AssistantEditForm
+        initialText={currentText}
+        onSave={onEdit}
+        onCancel={() => setEditing(false)}
+        saving={savingEdit}
+      />
+    );
+  }
   return (
     <div
       className="group flex w-full flex-col"
@@ -250,7 +320,7 @@ export const MessageBubble = memo(function MessageBubble({
     >
       <TurnView message={message} />
       <AttachmentList attachments={message.attachments ?? []} align="left" />
-      {(onRetry || onDelete) && (
+      {(onRetry || onDelete || onEdit) && (
         <div
           className={cn(
             "pointer-events-none mt-2 flex opacity-0 transition-opacity duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
@@ -259,6 +329,15 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         >
           {retrying && <RetryDots />}
+          {onEdit && (
+            <ActionButton
+              icon={SquarePen}
+              label={savingEdit ? "saving edit" : "edit latest reply"}
+              onClick={() => setEditing(true)}
+              hoverClass="hover:text-foreground"
+              disabled={latestAssistantActionPending}
+            />
+          )}
           {onRetry && (
             <ActionButton
               icon={RotateCcw}

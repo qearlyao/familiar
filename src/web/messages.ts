@@ -232,6 +232,19 @@ export function ensureFallbackSteps(message: WebMessage): void {
 	if (steps.length) message.steps = steps;
 }
 
+export function applyMessageEditToMessage(message: WebMessage, text: string): void {
+	message.text = text;
+	const steps = message.steps ?? [];
+	const textStepIndex = steps.findIndex((step) => step.kind === "text");
+	if (textStepIndex < 0) {
+		message.steps = [...steps, { kind: "text", id: stepId(message.id, "text", steps.length), text, complete: true }];
+		return;
+	}
+	message.steps = steps.map((step, index) =>
+		index === textStepIndex && step.kind === "text" ? { ...step, text, complete: true } : step,
+	);
+}
+
 export function webMessagesFromRecords(
 	config: Config,
 	records: readonly ChatLogRecord[],
@@ -255,6 +268,10 @@ export function webMessagesFromRecords(
 				});
 			}
 			pendingAgentEvents.delete(message.id);
+		}
+		if (record.type === "message_edit") {
+			const existing = messagesById.get(record.messageId);
+			if (existing) applyMessageEditToMessage(existing, record.text);
 		}
 		if (record.type === "agent_event") {
 			if (hidden.has(record.messageId)) continue;
@@ -321,15 +338,21 @@ export function webHistoryPayload(
 	for (const entry of pageEntries) messagesById.set(entry.message.id, entry);
 	for (let index = eventStart; index < end; index += 1) {
 		const record = records[index];
-		if (record.type !== "agent_event") continue;
-		if (hidden.has(record.messageId)) continue;
-		const entry = messagesById.get(record.messageId);
-		if (!entry) continue;
-		applyStoredAgentEventToMessage(entry.message, record, {
-			applyTextDeltas:
-				index < entry.recordIndex ? !entry.message.text && !entry.message.silent : !entry.message.silent,
-			applyThinkingDeltas: index < entry.recordIndex ? !entry.message.thinking : true,
-		});
+		if (record.type === "message_edit") {
+			const entry = messagesById.get(record.messageId);
+			if (entry) applyMessageEditToMessage(entry.message, record.text);
+			continue;
+		}
+		if (record.type === "agent_event") {
+			if (hidden.has(record.messageId)) continue;
+			const entry = messagesById.get(record.messageId);
+			if (!entry) continue;
+			applyStoredAgentEventToMessage(entry.message, record, {
+				applyTextDeltas:
+					index < entry.recordIndex ? !entry.message.text && !entry.message.silent : !entry.message.silent,
+				applyThinkingDeltas: index < entry.recordIndex ? !entry.message.thinking : true,
+			});
+		}
 	}
 
 	const page = pageEntries.reverse().map((entry) => {

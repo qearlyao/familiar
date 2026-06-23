@@ -65,7 +65,7 @@ export function MemePicker({ onPick }: MemePickerProps) {
       <PopoverPrimitive.Trigger asChild>
         <Button
           type="button"
-          size="sm"
+          size="icon-sm"
           variant="ghost"
           aria-label="memes"
           className="text-muted-foreground hover:text-foreground"

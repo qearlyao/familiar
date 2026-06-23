@@ -268,10 +268,10 @@ export function Composer({
               onSelect={applyCommandSuggestion}
             />
           ) : null}
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-0.5 sm:gap-2">
             <Button
               type="button"
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               onClick={() => fileRef.current?.click()}
               disabled={sending || voiceBusy}

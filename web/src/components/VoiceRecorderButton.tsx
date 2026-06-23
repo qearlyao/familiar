@@ -197,7 +197,7 @@ export function VoiceRecorderButton({
   return (
     <Button
       type="button"
-      size="sm"
+      size="icon-sm"
       variant="ghost"
       onClick={onClick}
       disabled={disabled || pending}

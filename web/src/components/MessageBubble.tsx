@@ -28,15 +28,6 @@ function attachmentPreview(attachment: Attachment): { align?: "right"; content: 
     return { content: <MediaPreview src={attachment.url} alt={attachment.name} /> };
   }
   if (!attachment.url) return undefined;
-  if (attachment.mimeType?.startsWith("audio/")) {
-    return {
-      content: (
-        <div className="max-w-full">
-          <AudioPlayer src={attachment.url} name={attachment.name} />
-        </div>
-      ),
-    };
-  }
   return {
     align: "right",
     content: (
@@ -121,6 +112,14 @@ function AttachmentItem({ attachment, align }: { attachment: Attachment; align: 
           />
           {attachment.derivedText ? <AttachmentContext derived={attachment.derivedText} /> : null}
         </div>
+      </div>
+    );
+  }
+  if (attachment.url && attachment.mimeType?.startsWith("audio/")) {
+    return (
+      <div className={cn("flex w-full max-w-sm flex-col", align === "right" && "ml-auto")}>
+        <AudioPlayer src={attachment.url} name={attachment.name} />
+        {attachment.derivedText ? <AttachmentContext derived={attachment.derivedText} /> : null}
       </div>
     );
   }

@@ -246,18 +246,9 @@ function readConfiguredAnthropicCompat(value: unknown, path: string): AnthropicM
 		compat.supports_cache_control_on_tools,
 		`${path}.supports_cache_control_on_tools`,
 	);
-	const supportsTemperature = readOptionalBoolean(
-		compat.supports_temperature,
-		`${path}.supports_temperature`,
-	);
-	const forceAdaptiveThinking = readOptionalBoolean(
-		compat.force_adaptive_thinking,
-		`${path}.force_adaptive_thinking`,
-	);
-	const allowEmptySignature = readOptionalBoolean(
-		compat.allow_empty_signature,
-		`${path}.allow_empty_signature`,
-	);
+	const supportsTemperature = readOptionalBoolean(compat.supports_temperature, `${path}.supports_temperature`);
+	const forceAdaptiveThinking = readOptionalBoolean(compat.force_adaptive_thinking, `${path}.force_adaptive_thinking`);
+	const allowEmptySignature = readOptionalBoolean(compat.allow_empty_signature, `${path}.allow_empty_signature`);
 	return {
 		...(supportsEagerToolInputStreaming !== undefined ? { supportsEagerToolInputStreaming } : {}),
 		...(supportsLongCacheRetention !== undefined ? { supportsLongCacheRetention } : {}),
@@ -308,7 +299,15 @@ function readConfiguredProviders(value: unknown): Record<string, ConfiguredProvi
 			);
 		}
 		const provider = readConfigTable(rawProvider, path);
-		assertKnownKeys(provider, path, ["api", "reasoning", "input", "context_window", "max_tokens", "compat", "models"]);
+		assertKnownKeys(provider, path, [
+			"api",
+			"reasoning",
+			"input",
+			"context_window",
+			"max_tokens",
+			"compat",
+			"models",
+		]);
 		const api = readOptionalConfigString(provider.api, `${path}.api`);
 		const input = readConfiguredModelInputs(provider.input, `${path}.input`);
 		const contextWindow = readOptionalInteger(provider.context_window, `${path}.context_window`, 1);
@@ -317,7 +316,10 @@ function readConfiguredProviders(value: unknown): Record<string, ConfiguredProvi
 		const models = readConfigTableArray(provider.models, `${path}.models`).map((entry, index) =>
 			readConfiguredModelDefinition(entry, `${path}.models[${index}]`),
 		);
-		if ((compat !== undefined || models.some((model) => model.compat !== undefined)) && api !== "anthropic-messages") {
+		if (
+			(compat !== undefined || models.some((model) => model.compat !== undefined)) &&
+			api !== "anthropic-messages"
+		) {
 			throw new Error(`Config value ${path}.compat is only valid when ${path}.api = "anthropic-messages"`);
 		}
 		const seenModelIds = new Set<string>();

@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { type AssistantMessage, type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai";
+import { type AssistantMessage, type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import { setConfigOverridesPath } from "../config/overrides.js";
 import { applyConfigOverridesToConfig } from "../config/registry.js";

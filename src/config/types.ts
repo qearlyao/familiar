@@ -1,3 +1,5 @@
+import type { Model } from "@earendil-works/pi-ai/compat";
+
 export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type DiscordReplyMode = "plain" | "reply";
@@ -15,6 +17,7 @@ export type BrowserBackend = "opencli" | "browser-harness";
 export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
 
 export type ConfiguredModelInput = "text" | "image";
+export type AnthropicModelCompat = NonNullable<Model<"anthropic-messages">["compat"]>;
 
 export interface ConfiguredModelDefinition {
 	id: string;
@@ -23,6 +26,7 @@ export interface ConfiguredModelDefinition {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
+	compat?: AnthropicModelCompat;
 }
 
 export interface ConfiguredProviderDefinition {
@@ -31,6 +35,7 @@ export interface ConfiguredProviderDefinition {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
+	compat?: AnthropicModelCompat;
 	models: ConfiguredModelDefinition[];
 }
 

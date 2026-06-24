@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 
 import { __agentTest } from "../src/agent/factory.js";
 import { buildAnthropicMetadata } from "../src/agent/session-helpers.js";

@@ -6,8 +6,7 @@ import {
 	completeSimple,
 	type Message,
 	type Model,
-	type Provider,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 
 import type { Config } from "../../config/index.js";
 import { assertModelCanAuthenticate, parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
@@ -330,7 +329,7 @@ export function createSyntheticLcmSummaryMessage(text: string, timestamp = Date.
 		role: "assistant",
 		content: [{ type: "text", text }],
 		api: "lcm-summary" as Api,
-		provider: "familiar" as Provider,
+		provider: "familiar",
 		model: "lcm-summary",
 		usage: {
 			input: 0,

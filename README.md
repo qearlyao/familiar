@@ -151,6 +151,7 @@ reasoning = true
 input = ["text", "image"]
 context_window = 200000
 max_tokens = 8192
+compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false, supports_cache_control_on_tools = false }
 ```
 
 `[[models.providers.<name>.models]]` is optional. Add it only when a specific

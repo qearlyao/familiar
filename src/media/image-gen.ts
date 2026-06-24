@@ -14,7 +14,7 @@ import {
 	type ImagesContext,
 	type ImagesFunction,
 	type ImagesModel,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { type Static, Type } from "typebox";
 import type { Config, ImageGenApi } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";

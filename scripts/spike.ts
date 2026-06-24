@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
-import { type Api, type Model, streamSimple } from "@earendil-works/pi-ai";
+import { type Api, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
 
 function env(name: string, fallback: string): string {

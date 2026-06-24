@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
-import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai";
+import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai/compat";
 
 import type { StoredAttachment } from "../src/conversation/chat-log.js";
 import { attachmentsDir } from "../src/media/generated-media.js";

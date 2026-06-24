@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
 
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { condense } from "./condense.js";

@@ -4,7 +4,7 @@ import {
 	type AssistantMessageEventStream,
 	createAssistantMessageEventStream,
 	type ToolCall,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 
 type ToolNameResolver = (name: string) => string;
 type NamedTool = { name: string };

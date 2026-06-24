@@ -1,5 +1,5 @@
 import type { Agent, AgentEvent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type { ImageContent, Model } from "@earendil-works/pi-ai";
+import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import type { EffectiveSetting } from "../config/settings.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";

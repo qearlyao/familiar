@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import type { Config } from "../config/index.js";
 import { assertModelCanAuthenticate, isAllowedModel, type ModelRef, resolveModelApiKey } from "../models/index.js";
 

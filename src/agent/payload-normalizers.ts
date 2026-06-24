@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { isRecord } from "../util/guards.js";
 
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.

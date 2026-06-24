@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage } from "@earendil-works/pi-ai/compat";
 
 import type { Config } from "../src/config/index.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";

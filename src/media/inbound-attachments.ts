@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 
-import type { ImageContent } from "@earendil-works/pi-ai";
+import type { ImageContent } from "@earendil-works/pi-ai/compat";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "../util/image-mime.js";

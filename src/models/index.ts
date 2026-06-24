@@ -7,7 +7,7 @@ import {
 	type KnownProvider,
 	type Model,
 	type ModelThinkingLevel,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
 
@@ -58,6 +58,7 @@ interface ModelShapeOverrides {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
+	compat?: NonNullable<Model<"anthropic-messages">["compat"]>;
 }
 
 export function parseModelRef(value: string): ModelRef | undefined {
@@ -126,6 +127,15 @@ function applyConfiguredBaseUrl(config: Config, model: Model<any>): Model<any> {
 }
 
 function applyModelShapeOverrides(model: Model<any>, override: ModelShapeOverrides): Model<any> {
+	const compat =
+		override.compat !== undefined
+			? {
+					compat: {
+						...((model as { compat?: NonNullable<Model<"anthropic-messages">["compat"]> }).compat ?? {}),
+						...override.compat,
+					},
+				}
+			: {};
 	return {
 		...model,
 		...(override.name !== undefined ? { name: override.name } : {}),
@@ -133,6 +143,7 @@ function applyModelShapeOverrides(model: Model<any>, override: ModelShapeOverrid
 		...(override.input !== undefined ? { input: override.input } : {}),
 		...(override.contextWindow !== undefined ? { contextWindow: override.contextWindow } : {}),
 		...(override.maxTokens !== undefined ? { maxTokens: override.maxTokens } : {}),
+		...compat,
 	};
 }
 
@@ -150,7 +161,19 @@ function resolveConfiguredProviderModel(
 		throw new Error(`Missing model base URL for ${ref.key}. Set models.base_urls.${ref.provider}.`);
 	}
 	const override = providerConfig.models.find((model) => model.id === ref.id);
-	return synthesizeConfiguredModel(ref, api, baseUrl, providerConfig, override);
+	return synthesizeConfiguredModel(
+		ref,
+		api,
+		baseUrl,
+		{
+			...(providerConfig.reasoning !== undefined ? { reasoning: providerConfig.reasoning } : {}),
+			...(providerConfig.input !== undefined ? { input: providerConfig.input } : {}),
+			...(providerConfig.contextWindow !== undefined ? { contextWindow: providerConfig.contextWindow } : {}),
+			...(providerConfig.maxTokens !== undefined ? { maxTokens: providerConfig.maxTokens } : {}),
+			...(providerConfig.compat !== undefined ? { compat: providerConfig.compat } : {}),
+		},
+		override,
+	);
 }
 
 export function resolveModel(ref: ModelRef, config?: Config): Model<any> {

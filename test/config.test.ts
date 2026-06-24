@@ -792,6 +792,7 @@ reasoning = true
 input = ["text", "image"]
 context_window = 200000
 max_tokens = 8192
+compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false, supports_cache_control_on_tools = false }
 `,
 		);
 
@@ -804,6 +805,11 @@ max_tokens = 8192
 			input: ["text", "image"],
 			contextWindow: 200000,
 			maxTokens: 8192,
+			compat: {
+				sendSessionAffinityHeaders: true,
+				supportsEagerToolInputStreaming: false,
+				supportsCacheControlOnTools: false,
+			},
 			models: [],
 		});
 		assert.equal(model.provider, "proxy");
@@ -814,6 +820,79 @@ max_tokens = 8192
 		assert.deepEqual(model.input, ["text", "image"]);
 		assert.equal(model.contextWindow, 200000);
 		assert.equal(model.maxTokens, 8192);
+		assert.deepEqual(model.compat, {
+			sendSessionAffinityHeaders: true,
+			supportsEagerToolInputStreaming: false,
+			supportsCacheControlOnTools: false,
+		});
+	});
+
+	it("inherits provider compat onto configured model overrides", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			`
+[discord]
+owner_id = "owner"
+
+[agent]
+model = "proxy/claude-opus-4"
+
+[models.base_urls]
+proxy = "https://proxy.example.com"
+
+[models.api_key_envs]
+proxy = "PROXY_API_KEY"
+
+[models.providers.proxy]
+api = "anthropic-messages"
+compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false }
+
+[[models.providers.proxy.models]]
+id = "claude-opus-4"
+name = "Claude Opus 4 via Proxy"
+compat = { supports_cache_control_on_tools = false, allow_empty_signature = true }
+`,
+		);
+
+		const config = await loadConfig(workspacePath);
+		const model = createConfiguredModel(config);
+
+		assert.deepEqual(model.compat, {
+			sendSessionAffinityHeaders: true,
+			supportsEagerToolInputStreaming: false,
+			supportsCacheControlOnTools: false,
+			allowEmptySignature: true,
+		});
+	});
+
+	it("rejects compat for non-Anthropic custom providers", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			`
+[discord]
+owner_id = "owner"
+
+[agent]
+model = "proxy/claude-opus-4"
+
+[models.base_urls]
+proxy = "https://proxy.example.com"
+
+[models.api_key_envs]
+proxy = "PROXY_API_KEY"
+
+[models.providers.proxy]
+api = "openai-completions"
+compat = { send_session_affinity_headers = true }
+`,
+		);
+
+		await assert.rejects(
+			() => loadConfig(workspacePath),
+			/Config value models\.providers\.proxy\.compat is only valid when models\.providers\.proxy\.api = "anthropic-messages"/,
+		);
 	});
 
 	it("rejects models.providers entries for built-in providers", async (t) => {
@@ -871,11 +950,13 @@ reasoning = true
 input = ["text", "image"]
 context_window = 200000
 max_tokens = 8192
+compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false }
 
 [[models.providers.proxy.models]]
 id = "claude-opus-4"
 name = "Claude Opus 4 via Proxy"
 max_tokens = 4096
+compat = { supports_cache_control_on_tools = false, allow_empty_signature = true }
 `,
 		);
 
@@ -891,6 +972,12 @@ max_tokens = 4096
 		assert.deepEqual(model.input, ["text", "image"]);
 		assert.equal(model.contextWindow, 200000);
 		assert.equal(model.maxTokens, 4096);
+		assert.deepEqual(model.compat, {
+			sendSessionAffinityHeaders: true,
+			supportsEagerToolInputStreaming: false,
+			supportsCacheControlOnTools: false,
+			allowEmptySignature: true,
+		});
 	});
 
 	it("inherits memory lcm summarization provider settings from configured models", async (t) => {

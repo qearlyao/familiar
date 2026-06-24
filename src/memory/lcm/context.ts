@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, Provider, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai/compat";
 
 import { buildEvictionScoreContext, scoreEvictable, tokenBag } from "./eviction-score.js";
 import type { LcmAttachmentNote, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
@@ -437,7 +437,7 @@ function fallbackAssistantMessage(text: string, timestamp: number): AssistantMes
 		role: "assistant",
 		content: [{ type: "text", text }],
 		api: "lcm" as Api,
-		provider: "familiar" as Provider,
+		provider: "familiar",
 		model: "lcm-record",
 		usage: {
 			input: 0,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.7 - 2026-06-24
+
+### Added
+
+- Add explicit Anthropic-compatible provider metadata for custom providers that need upstream session-affinity and tool-field compatibility behavior.
+
+### Changed
+
+- Bump the pi dependency set to `0.80.2` and move legacy pi-ai imports to the temporary compatibility entrypoint required by the 0.80 series.
+
 ## 0.5.6 - 2026-06-23
 
 ### Added

@@ -151,11 +151,18 @@ reasoning = true
 input = ["text", "image"]
 context_window = 200000
 max_tokens = 8192
-compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false, supports_cache_control_on_tools = false }
+compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false, supports_cache_control_on_tools = false, force_adaptive_thinking = true }
+
+[[models.providers.proxy.models]]
+id = "claude-fable-5"
+compat = { force_adaptive_thinking = true }
 ```
 
 `[[models.providers.<name>.models]]` is optional. Add it only when a specific
-model needs overrides from the provider defaults.
+model needs overrides from the provider defaults. Put `force_adaptive_thinking`
+there for custom Anthropic-compatible aliases that route to adaptive-thinking
+Claude models, or at provider level only when every model behind the provider
+needs it.
 
 Legacy manual `agent.api` / `agent.model_id` / `agent.base_url` config is still
 accepted as an escape hatch for older configs and one-off custom endpoints.

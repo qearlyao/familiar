@@ -42,9 +42,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "0.80.2",
-		"@earendil-works/pi-ai": "0.80.2",
-		"@earendil-works/pi-coding-agent": "0.80.2",
+		"@earendil-works/pi-agent-core": "0.80.3",
+		"@earendil-works/pi-ai": "0.80.3",
+		"@earendil-works/pi-coding-agent": "0.80.3",
 		"better-sqlite3": "^12.10.0",
 		"cross-spawn": "^7.0.6",
 		"discord.js": "^14.26.3",

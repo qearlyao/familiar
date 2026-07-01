@@ -7,3 +7,9 @@ attachments/
 logs/
 *.log
 .DS_Store
+games/.state/
+games/ai-game-framework/
+games/shangzhuochifan/
+games/ai-fishing-game/
+games/claude-arcade/
+games/leek/

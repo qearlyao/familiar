@@ -78,6 +78,7 @@ export async function startWebDaemon(
 		getRuntime,
 		personaName,
 		actions,
+		familiarAgent,
 	});
 	registerWebAgentRoutes({
 		route,

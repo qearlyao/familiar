@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config, WebAuthMode } from "../config/index.js";
 import { getContactNickname } from "../conversation/contact-note.js";
 import { messageId } from "../conversation/ids.js";
@@ -35,10 +36,11 @@ interface RegisterWebConversationRoutesOptions {
 	getRuntime: RuntimeResolver;
 	personaName: string;
 	actions: WebRuntimeActions;
+	familiarAgent: Pick<FamiliarAgent, "steer">;
 }
 
 export function registerWebConversationRoutes(options: RegisterWebConversationRoutesOptions): void {
-	const { route, config, auth, authMode, agentCore, getRuntime, personaName, actions } = options;
+	const { route, config, auth, authMode, agentCore, getRuntime, personaName, actions, familiarAgent } = options;
 
 	route("GET", "/api/web/sessions", async (_request, response) => {
 		if (!agentCore.hasSessionSource()) {
@@ -100,7 +102,22 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 			checkpoint: { messageId: id },
 			attachments,
 		};
-		await runtime.ingestInbound(input, { mode: "queue" });
+		const shouldTrySteer =
+			config.discord.dmMode === "steer" &&
+			runtime.channel.scope === "dm" &&
+			runtime.hasActiveJob() &&
+			agentCore.activeOwner === runtime.channelKey;
+		const { record } = await runtime.ingestInbound(input, { mode: shouldTrySteer ? "collect" : "queue" });
+		if (shouldTrySteer) {
+			if (runtime.hasActiveJob() && agentCore.activeOwner === runtime.channelKey) {
+				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));
+			} else {
+				await runtime.queueLatestTrigger();
+				void actions.drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
+			}
+			sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
+			return;
+		}
 		void actions.drainJobs(runtime).catch((error) => console.error("Web job drain failed", error));
 		sendJson(response, 200, { id, ts, channelKey: runtime.channelKey });
 	});

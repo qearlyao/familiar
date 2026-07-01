@@ -554,7 +554,7 @@
     position: absolute;
     border-radius: 9999px;
     opacity: 0.6;
-    mix-blend-mode: screen;
+    mix-blend-mode: multiply;
     transition: opacity 0.5s var(--ease-out-quart);
     will-change: transform;
   }

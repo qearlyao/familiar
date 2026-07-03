@@ -2,6 +2,7 @@ import type { Message, Step } from "../types";
 import { chunkSteps } from "@/lib/chunkSteps";
 import { EventStream } from "./EventStream";
 import { ErrorNotice } from "./steps/ErrorNotice";
+import { withoutSilentMarker } from "@/lib/silentMarker";
 import { TextStep } from "./steps/TextStep";
 
 function isStepFinished(step: Step): boolean {
@@ -14,8 +15,9 @@ function isStepFinished(step: Step): boolean {
 export function TurnView({ message }: { message: Message }) {
   const { steps, silent, who } = message;
   const chunks = chunkSteps(steps);
-  const firstTextIdx = chunks.findIndex((c) => c.kind === "text");
-  const hasText = firstTextIdx >= 0;
+  const hasText = chunks.some(
+    (c) => c.kind === "text" && withoutSilentMarker(c.step.text),
+  );
   const showTopLabel = silent === true && !hasText && Boolean(who);
   const messageSettled =
     steps.length > 0 && steps.every(isStepFinished) && (silent === true || hasText);
@@ -48,10 +50,11 @@ export function TurnView({ message }: { message: Message }) {
             step={chunk.step}
             who={who}
             showLabel={showLabel}
+            silent={silent}
           />
         );
       })}
-      {silent && !hasText && (
+      {silent && (
         <p className="font-serif italic text-sm leading-relaxed text-muted-foreground/70">
           they kept quiet.
         </p>

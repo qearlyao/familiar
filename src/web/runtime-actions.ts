@@ -109,10 +109,10 @@ export function createWebRuntimeActions(options: WebRuntimeActionsOptions): WebR
 			await recorder.flush();
 		}
 		const parsed = parseAgentReply(reply.text);
-		const finalText = parsed.silent ? "" : reply.text;
+		const finalText = parsed.text;
 		if (!started) {
 			input.onAssistantStart?.();
-			if (!parsed.silent) {
+			if (!parsed.silent || finalText) {
 				publish({
 					type: "message_started",
 					channelKey: runtime.channelKey,

@@ -1,19 +1,28 @@
 import { renderInlineText } from "@/lib/renderInlineText";
+import {
+  hasSilentMarker,
+  stripStreamingTail,
+  withoutSilentMarker,
+} from "@/lib/silentMarker";
 import type { TextStep as TextStepData } from "../../types";
-
-const SILENT_MARKER = "[[FAMILIAR_SILENT]]";
 
 export function TextStep({
   step,
   who,
   showLabel,
+  silent,
 }: {
   step: TextStepData;
   who: string;
   showLabel: boolean;
+  silent?: boolean;
 }) {
   const active = !step.complete;
-  const isSilent = step.text.startsWith(SILENT_MARKER);
+  const isSilent = silent === true || hasSilentMarker(step.text);
+  const text = isSilent
+    ? withoutSilentMarker(active ? stripStreamingTail(step.text) : step.text)
+    : step.text;
+  if (isSilent && !text && !active) return null;
   return (
     <div className="flex w-full flex-col">
       {showLabel && who && (
@@ -22,11 +31,11 @@ export function TextStep({
         </span>
       )}
       {isSilent ? (
-        <p className="font-serif italic text-sm leading-relaxed text-muted-foreground/70">
-          they kept quiet.
-        </p>
+        <div className="font-serif italic text-sm leading-relaxed text-muted-foreground/70">
+          {renderInlineText(text, { trailingCursor: active })}
+        </div>
       ) : (
-        renderInlineText(step.text, { trailingCursor: active })
+        renderInlineText(text, { trailingCursor: active })
       )}
     </div>
   );

@@ -3,16 +3,14 @@ import type { StoredAgentEvent } from "../conversation/chat-log.js";
 import { getContactNickname } from "../conversation/contact-note.js";
 import { eventId, toUnixMs } from "../conversation/ids.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
-import { consumeSilentDelta, createSilentFilterState, finalizeSilentFilter } from "../runtime/silent-marker.js";
+import { parseAgentReply } from "../runtime/silent-marker.js";
 import { encodeFrame, replayEvents, type WebSocketClient } from "./events.js";
 import { toolFromStoredAgentEvent, webAttachments } from "./messages.js";
 import { EVENT_REPLAY_LIMIT, WEB_USER_NAME, type WebPublishEvent, type WebStreamEvent } from "./types.js";
 
 type InFlightMessage = {
-	silentFilter?: ReturnType<typeof createSilentFilterState>;
-	pendingStartTs?: number;
+	text: string;
 	locallyStreamed: boolean;
-	startedSilent: boolean;
 	lastActiveAt: number;
 };
 
@@ -44,7 +42,7 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 	const getOrCreateInFlight = (messageIdValue: string): InFlightMessage => {
 		let entry = inFlightMessages.get(messageIdValue);
 		if (!entry) {
-			entry = { locallyStreamed: false, startedSilent: false, lastActiveAt: Date.now() };
+			entry = { text: "", locallyStreamed: false, lastActiveAt: Date.now() };
 			inFlightMessages.set(messageIdValue, entry);
 		} else {
 			entry.lastActiveAt = Date.now();
@@ -105,69 +103,30 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 		if (storedEvent.type === "message_start" && storedEvent.role === "assistant") {
 			const entry = getOrCreateInFlight(messageIdValue);
 			entry.locallyStreamed = true;
-			entry.silentFilter = createSilentFilterState();
-			entry.pendingStartTs = ts;
-			entry.startedSilent = false;
-		}
-		const startedSilentMessage = (): boolean => {
-			const entry = inFlightMessages.get(messageIdValue);
-			if (!entry || entry.startedSilent) return false;
-			const startTs = entry.pendingStartTs;
-			entry.pendingStartTs = undefined;
-			entry.startedSilent = true;
+			entry.text = "";
 			publish({
 				type: "message_started",
 				channelKey,
 				messageId: messageIdValue,
 				role: "assistant",
 				who: personaName,
-				ts: startTs,
+				ts,
 			});
-			return true;
-		};
+		}
 		if (storedEvent.type === "message_update") {
 			const assistantEvent = storedEvent.assistantMessageEvent;
 			if (assistantEvent.type === "thinking_delta") {
-				startedSilentMessage();
 				publishDelta(channelKey, messageIdValue, "thinking", assistantEvent.delta, ts);
 			}
 			if (assistantEvent.type === "text_delta") {
-				const filter = inFlightMessages.get(messageIdValue)?.silentFilter;
-				if (!filter) {
-					startedSilentMessage();
-					publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
-				} else {
-					const result = consumeSilentDelta(filter, assistantEvent.delta);
-					if (result.kind === "emit" && result.text) {
-						startedSilentMessage();
-						publishDelta(channelKey, messageIdValue, "text", result.text, ts);
-					}
-				}
+				const entry = inFlightMessages.get(messageIdValue);
+				if (entry) entry.text += assistantEvent.delta;
+				publishDelta(channelKey, messageIdValue, "text", assistantEvent.delta, ts);
 			}
-		}
-		if (storedEvent.type === "tool_execution_start") {
-			startedSilentMessage();
 		}
 		if (storedEvent.type === "message_end" && storedEvent.role === "assistant") {
 			const entry = inFlightMessages.get(messageIdValue);
-			const filter = entry?.silentFilter;
-			let silent = false;
-			if (filter && entry) {
-				const final = finalizeSilentFilter(filter);
-				silent = final.silent;
-				if (!silent) {
-					startedSilentMessage();
-					if (final.flush) {
-						publishDelta(channelKey, messageIdValue, "text", final.flush, ts);
-					}
-				} else {
-					entry.startedSilent = true;
-					entry.pendingStartTs = undefined;
-				}
-				entry.silentFilter = undefined;
-			} else {
-				startedSilentMessage();
-			}
+			const silent = entry ? parseAgentReply(entry.text).silent : false;
 			publish({
 				type: "message_completed",
 				channelKey,
@@ -227,7 +186,7 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 					publish(completion);
 					return;
 				}
-				if (!record.silent) {
+				if (!record.silent || record.text || record.thinking) {
 					publish({
 						type: "message_started",
 						channelKey: runtime.channelKey,

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 - 2026-07-03
+
+### Added
+
+- Add context usage rings to the WebUI session picker so sessions show recent token use against the active model window.
+- Let expanded WebUI thinking and tool event streams collapse directly from the open body.
+
+### Changed
+
+- Bump the pi dependency set to `0.80.3`, bringing refreshed model metadata and upstream runtime fixes.
+- Treat `[[FAMILIAR_SILENT]]` anywhere in an assistant reply as silence, keeping the private reflection out of Discord while rendering it muted in the WebUI.
+
+### Fixed
+
+- Route DM-backed WebUI sends through the same steer path used by Discord DMs when the active turn is still running.
+- Remove the light-mode audio attachment bloom hotspot.
+
 ## 0.5.7 - 2026-06-24
 
 ### Added

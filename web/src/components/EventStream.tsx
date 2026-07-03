@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconForTool, ThinkingIcon } from "@/lib/toolIcon";
 import type { GutterStep } from "@/lib/chunkSteps";
 import type { ThinkingStep, ToolEvent } from "../types";
+
+function isInteractiveElement(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    Boolean(target.closest("button, a, input, textarea, select, [role='button']"))
+  );
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -231,7 +238,7 @@ function CollapsibleBody({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="mt-1.5 font-serif italic text-xs tracking-wide text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          className="mt-1.5 cursor-pointer font-serif italic text-xs tracking-wide text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline"
         >
           {open ? "show less" : "show more"}
         </button>
@@ -297,6 +304,13 @@ export function EventStream({
     setOpen((prev) => !prev);
   };
 
+  const collapseFromBody = (event: MouseEvent<HTMLDivElement>) => {
+    if (isInteractiveElement(event.target)) return;
+    if (window.getSelection()?.toString()) return;
+    userTouched.current = true;
+    setOpen(false);
+  };
+
   if (steps.length === 0) return null;
 
   const first = steps[0];
@@ -310,7 +324,7 @@ export function EventStream({
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 text-left"
+        className="flex w-full cursor-pointer items-center gap-2 text-left"
       >
         <IconCell
           step={first}
@@ -335,7 +349,10 @@ export function EventStream({
       </button>
 
       {open && (
-        <div>
+        <div
+          onClick={collapseFromBody}
+          className="cursor-pointer"
+        >
           {firstHasBody && (
             <StepBodyRow step={first} threadContinues={more > 0 || showDone} />
           )}

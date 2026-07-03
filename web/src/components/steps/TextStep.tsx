@@ -22,7 +22,6 @@ export function TextStep({
   const text = isSilent
     ? withoutSilentMarker(active ? stripStreamingTail(step.text) : step.text)
     : step.text;
-  if (isSilent && !text && !active) return null;
   return (
     <div className="flex w-full flex-col">
       {showLabel && who && (

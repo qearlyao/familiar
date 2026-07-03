@@ -1,4 +1,5 @@
 import type { Step, ThinkingStep, ToolStep } from "../types";
+import { stripStreamingTail, withoutSilentMarker } from "./silentMarker";
 
 export type GutterStep = ThinkingStep | ToolStep;
 
@@ -18,6 +19,9 @@ export function chunkSteps(steps: Step[]): StepChunk[] {
   };
   for (const step of steps) {
     if (step.kind === "text") {
+      // marker-only text renders to nothing; don't let it split a stream group
+      const visible = withoutSilentMarker(step.complete ? step.text : stripStreamingTail(step.text));
+      if (!visible) continue;
       flush();
       out.push({ kind: "text", step });
     } else if (step.kind === "error") {

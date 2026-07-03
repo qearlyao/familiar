@@ -76,6 +76,7 @@ export interface SessionInfo {
   channelName?: string;
   threadId?: string;
   isDefault?: boolean;
+  context?: { tokens: number; limit: number };
 }
 
 export type StreamEvent =

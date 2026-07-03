@@ -1,4 +1,5 @@
 import type { FamiliarAgent } from "../agent/factory.js";
+import type { ChatLogRecord } from "../conversation/chat-log.js";
 import { supportedThinkingLevels } from "../models/index.js";
 import type { DiscordWebSession } from "../runtime/agent-core.js";
 import { isRecord } from "../util/guards.js";
@@ -26,7 +27,20 @@ export function agentSettingsPayload(
 	};
 }
 
-export function sessionDto(session: DiscordWebSession): Record<string, unknown> {
+export function lastContextTokens(records: readonly ChatLogRecord[]): number | undefined {
+	for (let i = records.length - 1; i >= 0; i--) {
+		const record = records[i];
+		if (record.type !== "agent_event" || record.event.type !== "message_end") continue;
+		const usage = record.event.usage;
+		if (usage) return usage.input + usage.cacheRead + usage.cacheWrite + usage.output;
+	}
+	return undefined;
+}
+
+export function sessionDto(
+	session: DiscordWebSession,
+	context?: { tokens: number; limit: number },
+): Record<string, unknown> {
 	return {
 		key: session.key,
 		label: session.label,
@@ -36,5 +50,6 @@ export function sessionDto(session: DiscordWebSession): Record<string, unknown> 
 		channelName: session.channel.channelName,
 		threadId: session.channel.threadId,
 		isDefault: session.isDefault,
+		context,
 	};
 }

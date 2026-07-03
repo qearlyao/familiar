@@ -19,7 +19,7 @@ import {
 	readMultipartBody,
 	type WebUploadAttachment,
 } from "./multipart.js";
-import { commandArgs, sessionDto } from "./payloads.js";
+import { commandArgs, lastContextTokens, sessionDto } from "./payloads.js";
 import { getChannelKeyFromRequest } from "./route-helpers.js";
 import type { RegisterWebRoute } from "./routes.js";
 import type { WebRuntimeActions } from "./runtime-actions.js";
@@ -36,7 +36,7 @@ interface RegisterWebConversationRoutesOptions {
 	getRuntime: RuntimeResolver;
 	personaName: string;
 	actions: WebRuntimeActions;
-	familiarAgent: Pick<FamiliarAgent, "steer">;
+	familiarAgent: Pick<FamiliarAgent, "steer" | "resolveChannelModel">;
 }
 
 export function registerWebConversationRoutes(options: RegisterWebConversationRoutesOptions): void {
@@ -48,7 +48,19 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 			return;
 		}
 		const sessions = await agentCore.getWebSessions();
-		sendJson(response, 200, { sessions: sessions.map(sessionDto) });
+		const payload = await Promise.all(
+			sessions.map(async (session) => {
+				// ponytail: peek only — sessions with no live runtime just omit the context ring
+				const runtime = await agentCore.peekRuntime(session.key);
+				const tokens = runtime ? lastContextTokens(runtime.getRecords()) : undefined;
+				const context =
+					tokens === undefined
+						? undefined
+						: { tokens, limit: familiarAgent.resolveChannelModel(session.key).model.contextWindow ?? 200_000 };
+				return sessionDto(session, context);
+			}),
+		);
+		sendJson(response, 200, { sessions: payload });
 	});
 	route("GET", "/api/web/history", async (_request, response, url) => {
 		const runtime = await getRuntime(getChannelKeyFromRequest(url));

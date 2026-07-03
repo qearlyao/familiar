@@ -102,4 +102,55 @@ describe("web conversation routes", () => {
 		assert.deepEqual(steered, ["steer:use the shorter path"]);
 		assert.equal(drained, false);
 	});
+
+	it("enriches sessions with context tokens from the last message_end usage", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const routes = new Map<string, WebRoute>();
+		const route: RegisterWebRoute = (method, pathname, handler) => routes.set(`${method} ${pathname}`, handler);
+		const records = [
+			{ type: "agent_event", event: { type: "message_end", role: "assistant", usage: { input: 100, output: 20, cacheRead: 800, cacheWrite: 80, cost: 0 } } },
+			{ type: "agent_event", event: { type: "message_end", role: "assistant", usage: { input: 200, output: 50, cacheRead: 1600, cacheWrite: 150, cost: 0 } } },
+			{ type: "checkpoint" },
+		];
+		const agentCore = {
+			hasSessionSource: () => true,
+			getWebSessions: async () => [
+				{ key: "discord:dm:dm-1", label: "Main Chat", channel: { service: "discord", scope: "dm", channelId: "dm-1" }, isDefault: true },
+				{ key: "discord:channel:c-2", label: "side", channel: { service: "discord", scope: "channel", channelId: "c-2" } },
+			],
+			peekRuntime: async (channelKey: string) =>
+				channelKey === "discord:dm:dm-1" ? ({ getRecords: () => records } as unknown as ConversationRuntime) : undefined,
+		} as unknown as AgentCore;
+		const familiarAgent = {
+			resolveChannelModel: () => ({ model: { contextWindow: 100_000 } }),
+		} as unknown as FamiliarAgent;
+
+		registerWebConversationRoutes({
+			route,
+			config,
+			auth: {} as WebAuth,
+			authMode: "tailscale-only",
+			agentCore,
+			getRuntime: async () => {
+				throw new Error("unused");
+			},
+			personaName: "familiar",
+			actions: {} as import("../src/web/runtime-actions.js").WebRuntimeActions,
+			familiarAgent,
+		});
+		const handler = routes.get("GET /api/web/sessions");
+		assert.ok(handler);
+		const response = new FakeResponse();
+
+		await handler(
+			jsonRequest({}),
+			response as unknown as ServerResponse,
+			new URL("http://localhost/api/web/sessions"),
+		);
+
+		assert.equal(response.statusCode, 200);
+		const { sessions } = JSON.parse(response.body) as { sessions: Array<{ key: string; context?: unknown }> };
+		assert.deepEqual(sessions[0].context, { tokens: 2000, limit: 100_000 });
+		assert.equal(sessions[1].context, undefined);
+	});
 });

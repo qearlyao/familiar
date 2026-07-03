@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 - 2026-07-03
+
+### Fixed
+
+- Keep marker-only silent text from splitting adjacent WebUI thinking and tool streams while a reply is still streaming.
+
 ## 0.6.0 - 2026-07-03
 
 ### Added

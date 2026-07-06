@@ -18,8 +18,6 @@ import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
 import { HttpError, sendText } from "./http.js";
-import { createPushService } from "./push.js";
-import { registerWebPushRoutes } from "./push-routes.js";
 import { createWebRouteRegistry } from "./routes.js";
 import { createWebRuntimeActions } from "./runtime-actions.js";
 import { registerWebSkillRoutes } from "./skill-routes.js";
@@ -40,19 +38,7 @@ export async function startWebDaemon(
 	const personaName = parsePersonaName(persona.soul);
 	const webSessions = await loadWebSessionStore(config);
 	const auth = createAuth(config, webSessions);
-	const push = await createPushService(config);
-	// ponytail: push fires whenever no authed web tab is on the channel — if you're
-	// reading it in Discord you may get both; per-surface dedup can come later.
-	const eventHub = createWebEventHub(config, personaName, {
-		onAssistantMessage: (channelKey, text) => {
-			if (eventHub.hasAuthedClient(channelKey)) return;
-			void push.notify({
-				title: personaName,
-				body: text.length > 180 ? `${text.slice(0, 179)}…` : text,
-				tag: channelKey,
-			});
-		},
-	});
+	const eventHub = createWebEventHub(config, personaName);
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
 		if (!agentCore.hasSessionSource()) throw new HttpError(503, "Owner identity is not established yet.");
@@ -103,7 +89,6 @@ export async function startWebDaemon(
 		publish: eventHub.publish,
 	});
 	registerWebConfigRoutes(route, config, agentCore);
-	registerWebPushRoutes(route, push);
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);

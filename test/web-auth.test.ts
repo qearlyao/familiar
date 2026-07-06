@@ -217,6 +217,17 @@ describe("bearer login sessions", () => {
 		assert.equal(await reloaded.authorize(request({ cookie: otherB.cookie ?? "" }), "/api/web/history"), false);
 	});
 
+	it("re-issues the session cookie so its Max-Age slides with activity", async (t) => {
+		const { auth } = await bearerAuth(t);
+		const result = await auth.login(request({}, "POST"), { token: "secret" });
+		const cookie = result.cookie ?? "";
+
+		const refreshed = auth.refreshedSessionCookie(request({ cookie }));
+		assert.match(refreshed ?? "", /familiar_session=/);
+		assert.match(refreshed ?? "", /Max-Age=2592000/);
+		assert.equal(auth.refreshedSessionCookie(request()), undefined);
+	});
+
 	it("rate limits repeated failed login attempts", async (t) => {
 		const { auth } = await bearerAuth(t);
 		const loginRequest = request({}, "POST", "198.51.100.10");

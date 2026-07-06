@@ -172,6 +172,13 @@ export function createAuth(config: Config, sessions: WebSessionStore) {
 	const currentDevice = (request: IncomingMessage): Promise<WebAuthDevice | undefined> =>
 		sessions.authenticateSession(readSessionToken(request), requestAuthContext(request));
 
+	// The store slides expiresAt on activity, but the browser cookie's Max-Age is
+	// fixed at issue time — re-send it so the cookie lifetime slides too.
+	const refreshedSessionCookie = (request: IncomingMessage): string | undefined => {
+		const token = readSessionToken(request);
+		return token ? sessionCookie(token, requestAuthContext(request).secure) : undefined;
+	};
+
 	const login = async (
 		request: IncomingMessage,
 		body: unknown,
@@ -211,6 +218,7 @@ export function createAuth(config: Config, sessions: WebSessionStore) {
 	return {
 		authorize,
 		currentDevice,
+		refreshedSessionCookie,
 		createSession,
 		hasBearer,
 		login,

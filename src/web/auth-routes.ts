@@ -22,7 +22,8 @@ export function registerWebAuthRoutes(
 		if (!device) {
 			throw new HttpError(401, "unauthorized");
 		}
-		sendJson(response, 200, { device });
+		const cookie = auth.refreshedSessionCookie(request);
+		sendJson(response, 200, { device }, cookie ? { "set-cookie": cookie } : {});
 	});
 	route("GET", "/api/web/auth/devices", async (request, response) => {
 		sendJson(response, 200, { devices: auth.listDevices(request) });

@@ -143,7 +143,7 @@ export function DraftEditor({
               }}
               onKeyDown={(e) => {
                 if (onCommandKeyDown?.(e)) return;
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   onSubmit();
                 }

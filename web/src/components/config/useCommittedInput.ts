@@ -61,7 +61,7 @@ export function useCommittedInput<T>(
         void commit();
       },
       onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.currentTarget.blur();
       },
     },
   };

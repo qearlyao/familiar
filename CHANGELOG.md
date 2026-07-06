@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.2 - 2026-07-06
+
+### Added
+
+- Add installable WebUI PWA support with a manifest, service worker, and full-bleed app icons.
+- Add Web Push notifications for completed assistant replies when no authenticated WebUI tab is active on the channel, with per-device controls in settings.
+
+### Fixed
+
+- Keep WebUI session cookies sliding with authenticated activity instead of expiring by the original login time.
+- Ignore Enter key submits while IME composition is active in WebUI inputs.
+
 ## 0.6.1 - 2026-07-03
 
 ### Fixed

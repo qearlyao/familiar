@@ -30,10 +30,16 @@ export interface WebEventHub {
 	subscribeRuntime(runtime: ConversationRuntime): void;
 	replay(client: WebSocketClient, channelKey: string, lastEventId: string | null | undefined): void;
 	registerClient(client: WebSocketClient): () => void;
+	hasAuthedClient(channelKey: string): boolean;
 	stop(): void;
 }
 
-export function createWebEventHub(config: Config, personaName: string): WebEventHub {
+export interface WebEventHubOptions {
+	/** Fires once per completed, non-silent assistant message (streamed or not). */
+	onAssistantMessage?: (channelKey: string, text: string) => void;
+}
+
+export function createWebEventHub(config: Config, personaName: string, options: WebEventHubOptions = {}): WebEventHub {
 	const clients = new Set<WebSocketClient>();
 	const eventsByChannel = new Map<string, WebStreamEvent[]>();
 	const runtimeSubscriptions = new Map<string, () => void>();
@@ -171,6 +177,7 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 				});
 			}
 			if (record.type === "outbound" && !record.control) {
+				if (!record.silent && record.text) options.onAssistantMessage?.(runtime.channelKey, record.text);
 				const outboundId = record.webMessageId || record.messageIds[0] || `out_${record.recordId}`;
 				const completion = {
 					type: "message_completed" as const,
@@ -238,6 +245,12 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 		registerClient(client): () => void {
 			clients.add(client);
 			return () => clients.delete(client);
+		},
+		hasAuthedClient(channelKey): boolean {
+			for (const client of clients) {
+				if (client.channelKey === channelKey && client.authed && !client.socket.destroyed) return true;
+			}
+			return false;
 		},
 		stop(): void {
 			clearInterval(inFlightGcTimer);

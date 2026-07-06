@@ -628,3 +628,17 @@ export async function setConfig(key: ConfigKey, value: unknown): Promise<ConfigP
 export async function clearConfig(key: ConfigKey): Promise<ConfigPayload> {
   return jsonRequest<ConfigPayload>("/api/web/config", "DELETE", { key }, "config");
 }
+
+export async function fetchPushKey(): Promise<string> {
+  const res = await fetch("/api/web/push/key");
+  if (!res.ok) throw new Error(`push key: ${res.status}`);
+  return ((await res.json()) as { key: string }).key;
+}
+
+export async function subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
+  await jsonRequest("/api/web/push/subscribe", "POST", { subscription }, "push");
+}
+
+export async function unsubscribePush(endpoint: string): Promise<void> {
+  await jsonRequest("/api/web/push/subscribe", "DELETE", { endpoint }, "push");
+}

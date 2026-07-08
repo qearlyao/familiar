@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.3 - 2026-07-09
+
+### Added
+
+- Add `time_range` metadata to injected `<from_earlier>` memory summary blocks so the model sees the local-time span each summary covers.
+
+### Changed
+
+- Keep the WebUI installable as a PWA while removing Web Push notifications and their settings.
+- Use platform-specific composer Enter behavior: mobile Enter inserts a newline, while desktop Enter sends and Shift+Enter inserts a newline.
+- Update the WebUI site favicon.
+
 ## 0.6.2 - 2026-07-06
 
 ### Added

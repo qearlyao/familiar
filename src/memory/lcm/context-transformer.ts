@@ -1,8 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
-
-import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { formatLocalTimestamp } from "../../util/time.js";
+import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { condense } from "./condense.js";
 import {
 	createRawContextItems,
@@ -656,12 +655,14 @@ function contiguousRuntimeSummaryCandidateIds(
 }
 
 function formatSummaryTimeRange(summary: StoredLcmSummary): string {
-	const from = typeof summary.metadata?.coverageFromHappenedAt === "string"
-		? formatLocalTimestamp(summary.metadata.coverageFromHappenedAt)
-		: "";
-	const to = typeof summary.metadata?.coverageToHappenedAt === "string"
-		? formatLocalTimestamp(summary.metadata.coverageToHappenedAt)
-		: "";
+	const from =
+		typeof summary.metadata?.coverageFromHappenedAt === "string"
+			? formatLocalTimestamp(summary.metadata.coverageFromHappenedAt)
+			: "";
+	const to =
+		typeof summary.metadata?.coverageToHappenedAt === "string"
+			? formatLocalTimestamp(summary.metadata.coverageToHappenedAt)
+			: "";
 	if (!from && !to) return "";
 	return `${from || "unknown"} – ${to || "unknown"}`;
 }

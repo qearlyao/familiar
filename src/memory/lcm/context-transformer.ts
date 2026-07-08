@@ -2,6 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
 
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
+import { formatLocalTimestamp } from "../../util/time.js";
 import { condense } from "./condense.js";
 import {
 	createRawContextItems,
@@ -654,13 +655,28 @@ function contiguousRuntimeSummaryCandidateIds(
 	return ids;
 }
 
+function formatSummaryTimeRange(summary: StoredLcmSummary): string {
+	const from = typeof summary.metadata?.coverageFromHappenedAt === "string"
+		? formatLocalTimestamp(summary.metadata.coverageFromHappenedAt)
+		: "";
+	const to = typeof summary.metadata?.coverageToHappenedAt === "string"
+		? formatLocalTimestamp(summary.metadata.coverageToHappenedAt)
+		: "";
+	if (!from && !to) return "";
+	return `${from || "unknown"} – ${to || "unknown"}`;
+}
+
 function summaryToContextItem(
 	summary: StoredLcmSummary,
 	fingerprint: string,
 	sessionKey: string,
 	sourceIds: string[],
 ): CompactedLcmItem {
-	const message = createSyntheticLcmSummaryMessage(renderLcmSummaryMessage(summary.text), summary.createdAt * 1000);
+	const timeRange = formatSummaryTimeRange(summary);
+	const message = createSyntheticLcmSummaryMessage(
+		renderLcmSummaryMessage(summary.text, timeRange || undefined),
+		summary.createdAt * 1000,
+	);
 	return {
 		type: "summary",
 		id: fingerprint || `${sessionKey}:summary-${summary.id}`,
@@ -746,8 +762,9 @@ function renderMessageForSummary(message: AgentMessage): string {
 	return [`[${role}${date ? ` ${date}` : ""}]`, text].join("\n");
 }
 
-function renderLcmSummaryMessage(text: string): string {
-	return `${LCM_SUMMARY_OPEN_TAG}\n${text.trim()}\n${LCM_SUMMARY_CLOSE_TAG}`;
+function renderLcmSummaryMessage(text: string, timeRange?: string): string {
+	const openTag = timeRange ? `<from_earlier time_range="${timeRange}">` : LCM_SUMMARY_OPEN_TAG;
+	return `${openTag}\n${text.trim()}\n${LCM_SUMMARY_CLOSE_TAG}`;
 }
 
 function extractTextFromMessage(message: AgentMessage): string {

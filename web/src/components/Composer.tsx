@@ -312,7 +312,9 @@ export function Composer({
         </div>
         {error ? <p className="mt-1.5 text-center font-serif text-xs italic text-destructive">{error}</p> : null}
         <p className="mt-1.5 text-center text-[11px] tracking-wide text-muted-foreground">
-          enter to send · shift+enter for newline
+          {'ontouchstart' in window || navigator.maxTouchPoints > 0
+            ? 'tap send button to send · enter for newline'
+            : 'enter to send · shift+enter for newline'}
         </p>
       </div>
     </div>

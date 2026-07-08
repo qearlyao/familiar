@@ -143,9 +143,18 @@ export function DraftEditor({
               }}
               onKeyDown={(e) => {
                 if (onCommandKeyDown?.(e)) return;
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  onSubmit();
+                const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  if (isMobile) {
+                    // Mobile: Enter always inserts newline, user must tap Send button
+                    return;
+                  } else {
+                    // Desktop: Enter sends (unless Shift held)
+                    if (!e.shiftKey) {
+                      e.preventDefault();
+                      onSubmit();
+                    }
+                  }
                 }
               }}
               placeholder={emptyVisibleDraft ? `write to ${personaName}…` : undefined}

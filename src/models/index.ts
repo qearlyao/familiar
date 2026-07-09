@@ -38,6 +38,10 @@ export const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }>
 		api: "openai-completions",
 		baseUrl: "https://api.groq.com/openai/v1",
 	},
+	xai: {
+		api: "openai-completions",
+		baseUrl: "https://api.x.ai/v1",
+	},
 };
 
 const DEFAULT_REASONING = true;

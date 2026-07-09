@@ -744,7 +744,7 @@ function hashValue(value: unknown): string {
 }
 
 function stableStringify(value: unknown): string {
-	if (value === null || typeof value !== "object") return JSON.stringify(value);
+	if (value === null || typeof value !== "object") return JSON.stringify(value) ?? String(value);
 	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
 	const record = value as Record<string, unknown>;
 	return `{${Object.keys(record)

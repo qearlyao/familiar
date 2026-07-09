@@ -15,26 +15,10 @@ For high-value upstream/local file references, check `PLAN.md` section `## 6. Re
 
 ## Core Prompt
 
-Start from this baseline:
-
-> Think how to structure / implement the changes to meaningfully improve code quality without impacting behavior.
-> Work to improve abstractions, modularity, reduce Spaghetti code, improve succinctness and legibility.
-> Be ambitious, if there is a clear path to improving the implementation that involves restructuring some of the codebase, go for it.
-> Be extremely thorough and rigorous. Measure twice, cut once.
-
-Run these four lenses before writing code so `/simplify` review concerns do not become rework:
-
-1. **Reuse**: rg for an existing helper before adding one. Shared utilities already cover common needs:
-   - `src/util/fs.ts` — `isEnoent`, `readFileOrNull`, `atomicWriteJson`, `createWriteQueue`
-   - `src/util/guards.ts` — `isRecord`, `readEnum`
-   - `src/util/time.ts` — `formatLocalTimestamp`, `formatOffset`
-   - `src/util/image-mime.ts` — `imageMimeTypeFromPath`, `sniffImageMimeType`
-   - `src/memory/util.ts` — `positiveIntegerOrDefault`, `runInTransaction`
-   - `src/models.ts` — `isThinkingLevel`, `parseModelRef`, `resolveProviderSetting`
-   - Inline string manipulation, manual path handling, ad-hoc type guards, custom env checks, hand-rolled fetch where a client already exposes a REST handle: probably already a util or library call for it.
-2. **Quality**: avoid redundant state, parameter sprawl, copy-paste variation, leaky abstractions, stringly typed code where constants or unions exist, nested conditionals 3+ deep.
-3. **Efficiency**: avoid repeated reads, duplicate API calls, N+1 work, missed concurrency on independent operations, startup or hot-path bloat, recurring no-op store updates, TOCTOU pre-existence checks, unbounded data structures, and overly broad reads.
-4. **Cross-write atomicity**: when one logical operation writes to multiple places, make those writes commit together or roll back together. Persisted state must not claim a thing exists that was not successfully delivered.
+1. Fail Fast / Errors Never Pass Silently: Don’t hide logic in the code to swallow up errors and hide problems. If something goes wrong, you should let it out, otherwise you will never find the real problem.
+2. Fix the Cause, Not the Symptom / Don't Paper Over Bugs: When a problem occurs, don't cover it up with various small fixes and targeted patches. The true root cause must be located and completely repaired. Placing paper over bugs will only cause the system to accumulate dangerous hidden diseases that you don't know about.
+3. Make It Observable: Even if the problem is difficult to locate, never be lazy to make superficial repairs. Sufficient logs and observability should be added to the project to ensure that you have enough information to locate the problem next time it reoccurs. When the problem cannot be fixed, just tell me honestly that the information is insufficient and new logs need to be added, and don't pretend to fix it.
+4. Design for Debugging / Traceability: Always pay attention to leaving enough troubleshooting logs on the critical path to ensure that every key node is traceable.
 
 ## Project Rules
 

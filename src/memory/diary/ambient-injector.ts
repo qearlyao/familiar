@@ -8,9 +8,7 @@ const INJECTED_MEMORY_OPEN = "<injected_memory>";
 const INJECTED_MEMORY_CLOSE = "</injected_memory>";
 const INJECTED_MEMORY_BLOCK_RE = /<injected_memory\b[^>]*>[\s\S]*?<\/injected_memory>/gi;
 
-export interface AmbientDiaryInjectorOptions {
-	store: MemoryIndexStore;
-	embeddingProvider: EmbeddingProvider;
+export interface AmbientDiarySettings {
 	enabled?: boolean;
 	topK?: number;
 	minQueryLength?: number;
@@ -19,57 +17,50 @@ export interface AmbientDiaryInjectorOptions {
 	weightValence?: number;
 	weightRecency?: number;
 	weightIntensity?: number;
+}
+
+export interface AmbientDiaryInjectorOptions {
+	store: MemoryIndexStore;
+	embeddingProvider: EmbeddingProvider;
+	// Held by reference and read at inject() time, so in-place config mutations apply live.
+	settings?: AmbientDiarySettings;
 	now?: () => number;
 }
 
 export class AmbientDiaryInjector {
-	private readonly enabled: boolean;
 	private readonly store: MemoryIndexStore;
 	private readonly embeddingProvider: EmbeddingProvider;
-	private readonly topK: number;
-	private readonly minQueryLength: number;
-	private readonly throttleMs: number;
-	private readonly weightSimilarity: number;
-	private readonly weightValence: number;
-	private readonly weightRecency: number;
-	private readonly weightIntensity: number;
+	private readonly settings: AmbientDiarySettings;
 	private readonly now: () => number;
 	private readonly lastInjectedAtBySession = new Map<string, number>();
 
 	constructor(options: AmbientDiaryInjectorOptions) {
-		this.enabled = options.enabled ?? true;
 		this.store = options.store;
 		this.embeddingProvider = options.embeddingProvider;
-		this.topK = positiveIntegerOrDefault(options.topK, 3);
-		this.minQueryLength = nonNegativeIntegerOrDefault(options.minQueryLength, 8);
-		this.throttleMs = nonNegativeIntegerOrDefault(options.throttleSeconds, 30) * 1000;
-		this.weightSimilarity = nonNegativeNumberOrDefault(options.weightSimilarity, 1.0);
-		this.weightValence = nonNegativeNumberOrDefault(options.weightValence, 0.08);
-		this.weightRecency = nonNegativeNumberOrDefault(options.weightRecency, 0.08);
-		this.weightIntensity = nonNegativeNumberOrDefault(options.weightIntensity, 0.1);
+		this.settings = options.settings ?? {};
 		this.now = options.now ?? Date.now;
 	}
 
 	async inject(messages: AgentMessage[], signal?: AbortSignal, sessionKey = "default"): Promise<AgentMessage[]> {
-		if (!this.enabled) return messages;
+		if (!(this.settings.enabled ?? true)) return messages;
 		try {
 			const query = lastUserText(messages);
-			if (!query || query.length < this.minQueryLength) return messages;
+			if (!query || query.length < nonNegativeIntegerOrDefault(this.settings.minQueryLength, 8)) return messages;
 			const now = this.now();
+			const throttleMs = nonNegativeIntegerOrDefault(this.settings.throttleSeconds, 30) * 1000;
 			const lastInjectedAt = this.lastInjectedAtBySession.get(sessionKey);
-			if (lastInjectedAt !== undefined && this.throttleMs > 0 && now - lastInjectedAt < this.throttleMs)
-				return messages;
+			if (lastInjectedAt !== undefined && throttleMs > 0 && now - lastInjectedAt < throttleMs) return messages;
 			debugAmbientQuery(sessionKey, query);
 			const hits = await retrieveAmbientDiary({
 				query,
 				store: this.store,
 				embeddingProvider: this.embeddingProvider,
-				limit: this.topK,
+				limit: positiveIntegerOrDefault(this.settings.topK, 3),
 				weights: {
-					similarity: this.weightSimilarity,
-					valence: this.weightValence,
-					recency: this.weightRecency,
-					intensity: this.weightIntensity,
+					similarity: nonNegativeNumberOrDefault(this.settings.weightSimilarity, 1.0),
+					valence: nonNegativeNumberOrDefault(this.settings.weightValence, 0.08),
+					recency: nonNegativeNumberOrDefault(this.settings.weightRecency, 0.08),
+					intensity: nonNegativeNumberOrDefault(this.settings.weightIntensity, 0.1),
 				},
 				signal,
 			});

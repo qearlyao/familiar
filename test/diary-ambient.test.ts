@@ -99,8 +99,7 @@ describe("ambient diary retrieval", () => {
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			minQueryLength: 8,
-			throttleSeconds: 0,
+			settings: { minQueryLength: 8, throttleSeconds: 0 },
 		});
 		const messages: AgentMessage[] = [{ role: "user", content: " short ", timestamp: 0 }];
 
@@ -116,9 +115,7 @@ describe("ambient diary retrieval", () => {
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			enabled: false,
-			minQueryLength: 1,
-			throttleSeconds: 0,
+			settings: { enabled: false, minQueryLength: 1, throttleSeconds: 0 },
 		});
 		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];
 
@@ -128,14 +125,33 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, []);
 	});
 
+	it("applies live settings mutations on the next injection", async () => {
+		const diary = hit(1, "diary_chunk", "day.md", "quiet memory", 0.1, {});
+		const store = new FakeStore([diary], new Map([["diary_chunk", [diary]]]));
+		const provider = new FakeEmbeddingProviderFull();
+		const settings = { enabled: false, minQueryLength: 1, throttleSeconds: 0 };
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			settings,
+		});
+		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];
+
+		assert.equal(await injector.inject(messages, undefined, "session-a"), messages);
+		settings.enabled = true;
+		const next = await injector.inject(messages, undefined, "session-a");
+
+		assert.notEqual(next, messages);
+		assert.deepEqual(provider.queries, ["quiet memory please"]);
+	});
+
 	it("strips injected memory blocks from the next ambient query", async () => {
 		const store = new FakeStore([], new Map());
 		const provider = new FakeEmbeddingProviderFull();
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			minQueryLength: 1,
-			throttleSeconds: 0,
+			settings: { minQueryLength: 1, throttleSeconds: 0 },
 		});
 		const messages: AgentMessage[] = [
 			{
@@ -157,8 +173,7 @@ describe("ambient diary retrieval", () => {
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			minQueryLength: 1,
-			throttleSeconds: 0,
+			settings: { minQueryLength: 1, throttleSeconds: 0 },
 		});
 		const messages: AgentMessage[] = [{ role: "user", content: "wait what did you see?", timestamp: 0 }];
 
@@ -175,8 +190,7 @@ describe("ambient diary retrieval", () => {
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			minQueryLength: 1,
-			throttleSeconds: 0,
+			settings: { minQueryLength: 1, throttleSeconds: 0 },
 		});
 		const messages: AgentMessage[] = [{ role: "user", content: "what did you see today?", timestamp: 0 }];
 
@@ -194,8 +208,7 @@ describe("ambient diary retrieval", () => {
 		const injector = new AmbientDiaryInjector({
 			store: store as any,
 			embeddingProvider: provider,
-			minQueryLength: 1,
-			throttleSeconds: 30,
+			settings: { minQueryLength: 1, throttleSeconds: 30 },
 			now: () => now,
 		});
 		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];

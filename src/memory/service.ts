@@ -102,14 +102,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 		this.ambientInjector = new AmbientDiaryInjector({
 			store: this.memoryStore,
 			embeddingProvider: this.embeddingProvider,
-			enabled: config.memory.ambient.enabled,
-			topK: config.memory.ambient.topK,
-			minQueryLength: config.memory.ambient.minQueryLength,
-			throttleSeconds: config.memory.ambient.throttleSeconds,
-			weightSimilarity: config.memory.ambient.weightSimilarity,
-			weightValence: config.memory.ambient.weightValence,
-			weightRecency: config.memory.ambient.weightRecency,
-			weightIntensity: config.memory.ambient.weightIntensity,
+			settings: config.memory.ambient,
 		});
 		this.diaryWatchDebounceMs = options.diaryWatchDebounceMs ?? 3000;
 	}

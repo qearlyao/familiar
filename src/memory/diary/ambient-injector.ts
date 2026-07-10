@@ -41,10 +41,15 @@ export class AmbientDiaryInjector {
 		this.now = options.now ?? Date.now;
 	}
 
-	async inject(messages: AgentMessage[], signal?: AbortSignal, sessionKey = "default"): Promise<AgentMessage[]> {
+	async inject(
+		messages: AgentMessage[],
+		signal?: AbortSignal,
+		sessionKey = "default",
+		queryOverride?: string,
+	): Promise<AgentMessage[]> {
 		if (!(this.settings.enabled ?? true)) return messages;
 		try {
-			const query = lastUserText(messages);
+			const query = queryOverride === undefined ? lastUserText(messages) : queryOverride.trim();
 			if (!query || query.length < nonNegativeIntegerOrDefault(this.settings.minQueryLength, 8)) return messages;
 			const now = this.now();
 			const throttleMs = nonNegativeIntegerOrDefault(this.settings.throttleSeconds, 30) * 1000;

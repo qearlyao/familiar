@@ -428,6 +428,17 @@ export class ConversationRuntime {
 		};
 	}
 
+	ambientQueryForActiveJob(jobId: string): string | undefined {
+		if (this.activeJob?.jobId !== jobId) return undefined;
+		return this.triggerInboundSlice(this.activeJob)
+			.flatMap((record) => [
+				record.text,
+				...record.attachments.map((attachment) => attachment.derived?.text?.text ?? ""),
+			])
+			.filter((text) => text.trim())
+			.join("\n");
+	}
+
 	private latestLiveAssistantTurn(): LatestAssistantTurn | undefined {
 		const hidden = hiddenWebMessageIds(this.records);
 		for (let index = this.records.length - 1; index >= 0; index--) {

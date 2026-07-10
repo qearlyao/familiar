@@ -109,6 +109,28 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, []);
 	});
 
+	it("applies min query length to an explicit raw query", async () => {
+		const store = new FakeStore([hit(1, "diary_chunk", "day.md", "quiet memory", 0.5, {})], new Map());
+		const provider = new FakeEmbeddingProviderFull();
+		const injector = new AmbientDiaryInjector({
+			store: store as any,
+			embeddingProvider: provider,
+			settings: { minQueryLength: 10, throttleSeconds: 0 },
+		});
+		const messages: AgentMessage[] = [
+			{
+				role: "user",
+				content: "[qearlyao uid:owner @ 2026-05-09 11:34:16 GMT+8] mornig",
+				timestamp: 0,
+			},
+		];
+
+		const next = await injector.inject(messages, undefined, "session-a", "mornig");
+
+		assert.equal(next, messages);
+		assert.deepEqual(provider.queries, []);
+	});
+
 	it("disabled ambient injection skips retrieval", async () => {
 		const store = new FakeStore([hit(1, "diary_chunk", "day.md", "quiet memory", 0.1, {})], new Map());
 		const provider = new FakeEmbeddingProviderFull();

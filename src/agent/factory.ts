@@ -77,10 +77,18 @@ export async function createFamiliarAgent(
 	// Fail fast during startup if the configured default model cannot authenticate.
 	getRequestApiKey(config, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
-	// activePromptOptions covers the synchronous promptMessage window; skipAmbientMessages
-	// tags message identities so followUpMessage's fire-and-forget path also opts out.
+	// activePromptOptions covers each prompt window; skipAmbientMessages tags message
+	// identities so followUpMessage's fire-and-forget path also opts out.
 	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
 	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
+	const enterPromptOptions = (sessionKey: string, options: FamiliarPromptOptions): (() => void) => {
+		const previousOptions = activePromptOptions.get(sessionKey);
+		activePromptOptions.set(sessionKey, options);
+		return () => {
+			if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
+			else activePromptOptions.delete(sessionKey);
+		};
+	};
 	let reloadInProgress: Promise<void> | undefined;
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
@@ -191,6 +199,7 @@ export async function createFamiliarAgent(
 							sessionId,
 							model: agent.state.model,
 							...(skipAmbient ? { skipAmbient: true } : {}),
+							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
 						});
 					}
 				: undefined,
@@ -529,7 +538,13 @@ export async function createFamiliarAgent(
 		): Promise<FamiliarAgentReply> {
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
 			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
-			return runPromptTurn(sessionKey, options, eventHandler, (session) => session.agent.prompt(input, images));
+			return runPromptTurn(
+				sessionKey,
+				options,
+				eventHandler,
+				(session) => session.agent.prompt(input, images),
+				() => enterPromptOptions(sessionKey, options),
+			);
 		},
 		async promptMessage(
 			sessionKey: string,
@@ -543,13 +558,9 @@ export async function createFamiliarAgent(
 				onEvent,
 				(session) => session.agent.prompt(message),
 				() => {
-					const previousOptions = activePromptOptions.get(sessionKey);
-					activePromptOptions.set(sessionKey, options);
+					const exitPromptOptions = enterPromptOptions(sessionKey, options);
 					if (options.skipAmbient) skipAmbientMessages.add(message);
-					return () => {
-						if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
-						else activePromptOptions.delete(sessionKey);
-					};
+					return exitPromptOptions;
 				},
 			);
 		},

@@ -14,6 +14,7 @@ export interface FamiliarAgentReply {
 
 export interface FamiliarPromptOptions {
 	skipAmbient?: boolean;
+	ambientQuery?: string;
 	referenceAttachments?: StoredAttachment[];
 	onTurnEnd?: () => void | Promise<void>;
 }

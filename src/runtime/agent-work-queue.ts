@@ -33,7 +33,9 @@ export function createAgentWorkQueue(deps: { familiarAgent: FamiliarAgent }) {
 			try {
 				const promptImages = await promptImagesFromAttachments(attachments);
 				const input = [prompt, promptImages.promptSuffix].filter(Boolean).join("\n");
+				const ambientQuery = runtime.ambientQueryForActiveJob(jobId);
 				const reply = await deps.familiarAgent.prompt(runtime.channelKey, input, promptImages.images, onEvent, {
+					...(ambientQuery !== undefined ? { ambientQuery } : {}),
 					referenceAttachments: attachments,
 					onTurnEnd,
 				});

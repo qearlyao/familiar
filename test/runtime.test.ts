@@ -34,6 +34,34 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("keeps prompt metadata out of the ambient query", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound({
+				messageId: "message-1",
+				authorId: "owner",
+				authorName: "qearlyao",
+				text: "mornig",
+				remoteTimestamp: "2026-05-09T03:34:16.881Z",
+			});
+
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			assert.match(dispatch.prompt, /\[qearlyao uid:owner @ .+\] mornig/);
+			assert.equal(runtime.ambientQueryForActiveJob(dispatch.job.jobId), "mornig");
+		} finally {
+			await runtime.disconnect();
+		}
+	});
+
 	it("includes derived attachment text once in prompt records", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);
@@ -73,6 +101,9 @@ describe("ConversationRuntime", () => {
 			const prompt = runtime.buildSteerPromptForRecord(record);
 			assert.equal((prompt.match(/<attachment name="voice-message\.ogg"/g) ?? []).length, 1);
 			assert.equal((prompt.match(/\[transcription: Hello, can you hear me\?\]/g) ?? []).length, 1);
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			assert.equal(runtime.ambientQueryForActiveJob(dispatch.job.jobId), "Hello, can you hear me?");
 		} finally {
 			await runtime.disconnect();
 		}

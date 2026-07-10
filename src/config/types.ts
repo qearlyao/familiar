@@ -19,6 +19,11 @@ export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
 export type ConfiguredModelInput = "text" | "image";
 export type AnthropicModelCompat = NonNullable<Model<"anthropic-messages">["compat"]>;
 
+export interface OpenRouterRoutingConfig {
+	order: string[];
+	allowFallbacks: boolean;
+}
+
 export interface ConfiguredModelDefinition {
 	id: string;
 	name?: string;
@@ -135,6 +140,7 @@ export interface Config {
 		allow: string[];
 		baseUrls: Record<string, string>;
 		apiKeyEnvs: Record<string, string>;
+		openRouterRouting: Record<string, OpenRouterRoutingConfig>;
 		providers: Record<string, ConfiguredProviderDefinition>;
 	};
 	tts: {

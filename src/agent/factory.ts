@@ -16,6 +16,7 @@ import {
 	resolveModel,
 	supportedThinkingLevels,
 } from "../models/index.js";
+import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
@@ -155,7 +156,8 @@ export async function createFamiliarAgent(
 					maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
 					maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,
 					onPayload: (payload, payloadModel) => {
-						const requestPayload = normalizeProviderPayload(payload, payloadModel);
+						const routing = resolveOpenRouterRouting(config, payloadModel);
+						const requestPayload = normalizeProviderPayload(payload, payloadModel, routing);
 						writePayloadLog(config, {
 							ts: new Date().toISOString(),
 							direction: "request",

@@ -1,4 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai/compat";
+import type { OpenRouterRoutingConfig } from "../config/index.js";
+import { addOpenRouterRouting } from "../models/openrouter-routing.js";
 import { isRecord } from "../util/guards.js";
 
 // TODO: remove once pi-ai handles store:false reasoning replay upstream.
@@ -40,6 +42,14 @@ function isInjectedMemoryTextBlock(value: unknown): value is Record<string, unkn
 	return value.text.trim().startsWith("<injected_memory>");
 }
 
-export function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
-	return moveAnthropicCacheControlBeforeInjectedMemory(stripOpenAIStoredReasoningItems(payload, model), model);
+export function normalizeProviderPayload(
+	payload: unknown,
+	model: Model<any>,
+	routing?: OpenRouterRoutingConfig,
+): unknown {
+	return addOpenRouterRouting(
+		moveAnthropicCacheControlBeforeInjectedMemory(stripOpenAIStoredReasoningItems(payload, model), model),
+		model,
+		routing,
+	);
 }

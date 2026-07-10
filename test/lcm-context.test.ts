@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage } from "@earendil-works/pi-ai/compat";
 
 import {
 	createAgentMessageFingerprint,
@@ -12,8 +13,14 @@ import {
 	lcmRecordToAgentMessage,
 	selectLcmCompactionCandidatePromptAware,
 } from "../src/memory/lcm/context.js";
-import { buildCondensedSummaryPrompt, buildLeafSummaryPrompt, capSummaryText } from "../src/memory/lcm/summarizer.js";
+import {
+	buildCondensedSummaryPrompt,
+	buildLeafSummaryPrompt,
+	capSummaryText,
+	DefaultLcmSummarizer,
+} from "../src/memory/lcm/summarizer.js";
 import type { StoredLcmRecord } from "../src/memory/lcm/types.js";
+import { configWithDataDir, createTempDataDir, withEnv } from "./helpers.js";
 import { assistantMessage, lcmRecord as record, zeroUsage } from "./memory-fakes.js";
 
 describe("LCM context helpers", () => {
@@ -48,6 +55,40 @@ describe("LCM context helpers", () => {
 		const capped = capSummaryText("important detail ".repeat(200), 20);
 		assert.ok(capped.length < "important detail ".repeat(200).length);
 		assert.match(capped, /Compressed away: overflow beyond summary cap/);
+	});
+
+	it("applies configured OpenRouter routing to LCM completions", async (t) => {
+		await withEnv("OPENROUTER_API_KEY", "openrouter-test", async () => {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
+				models: {
+					baseUrls: { anthropic: "https://openrouter.ai/api" },
+					apiKeyEnvs: { anthropic: "OPENROUTER_API_KEY" },
+					openRouterRouting: { anthropic: { order: ["anthropic"], allowFallbacks: true } },
+				},
+				memory: { lcm: { enabled: true, model: "anthropic/claude-fable-5" } },
+			});
+			let requestPayload: unknown;
+			const summarizer = new DefaultLcmSummarizer(config, async (model, _context, options) => {
+				requestPayload = await options.onPayload?.({ messages: [] }, model);
+				return {
+					role: "assistant",
+					content: [{ type: "text", text: "short continuity summary" }],
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: zeroUsage(),
+					stopReason: "stop",
+					timestamp: Date.now(),
+				} as AssistantMessage;
+			});
+
+			assert.equal(await summarizer.summarizeLeaf({ text: "old conversation", targetTokens: 40 }), "short continuity summary");
+			assert.deepEqual(requestPayload, {
+				messages: [],
+				provider: { order: ["anthropic"], allow_fallbacks: true },
+			});
+		});
 	});
 
 	it("estimates text and AgentMessage tokens conservatively", () => {

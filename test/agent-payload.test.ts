@@ -50,6 +50,33 @@ describe("provider payload normalization", () => {
 		assert.equal(content?.[1] && "cache_control" in content[1], false);
 	});
 
+	it("adds OpenRouter routing only to its Anthropic Messages endpoint", () => {
+		const routing = { order: ["anthropic"], allowFallbacks: true };
+		const openRouterModel = { ...anthropicModel, baseUrl: "https://openrouter.ai/api/" };
+		const payload = { messages: [] };
+
+		assert.deepEqual(__agentTest.normalizeProviderPayload(payload, openRouterModel, routing), {
+			messages: [],
+			provider: { order: ["anthropic"], allow_fallbacks: true },
+		});
+
+		for (const baseUrl of [
+			"https://api.anthropic.com",
+			"https://proxy.example.test",
+			"https://openrouter.ai.evil.example/api",
+			"http://openrouter.ai/api",
+			"https://openrouter.ai/api/v1",
+		]) {
+			const untouched = { messages: [] };
+			assert.equal(__agentTest.normalizeProviderPayload(untouched, { ...anthropicModel, baseUrl }), untouched);
+			assert.equal("provider" in untouched, false);
+			assert.throws(
+				() => __agentTest.normalizeProviderPayload({ messages: [] }, { ...anthropicModel, baseUrl }, routing),
+				/OpenRouter routing requires https:\/\/openrouter\.ai\/api/,
+			);
+		}
+	});
+
 	it("adds Anthropic user metadata from the configured owner id", async (t) => {
 		const workspacePath = await createWorkspace(
 			{

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
 import { isBuiltInOrDefaultProvider, resolveProviderSetting } from "../models/index.js";
+import { isOpenRouterAnthropicBaseUrl } from "../models/openrouter-routing.js";
 import { readEnum } from "../util/guards.js";
 import {
 	BROWSER_BACKENDS,
@@ -52,6 +53,7 @@ import type {
 	ConfiguredModelDefinition,
 	ConfiguredModelInput,
 	ConfiguredProviderDefinition,
+	OpenRouterRoutingConfig,
 } from "./types.js";
 
 export type {
@@ -72,6 +74,7 @@ export type {
 	ImageGenApi,
 	MediaUnderstandingProvider,
 	MemoryEmbeddingFormat,
+	OpenRouterRoutingConfig,
 	ThinkingLevel,
 	TtsProvider,
 	TtsVoiceSettings,
@@ -344,6 +347,46 @@ function readConfiguredProviders(value: unknown): Record<string, ConfiguredProvi
 	return configured;
 }
 
+function readOpenRouterRouting(
+	value: unknown,
+	baseUrls: Record<string, string>,
+): Record<string, OpenRouterRoutingConfig> {
+	const entries = readConfigTable(value, "models.openrouter_routing");
+	const routing: Record<string, OpenRouterRoutingConfig> = {};
+	for (const [target, rawEntry] of Object.entries(entries)) {
+		const path = `models.openrouter_routing.${target}`;
+		const ref = target === "anthropic" ? undefined : maybeParseProviderModelRef(target);
+		if (target !== "anthropic" && ref?.provider !== "anthropic") {
+			throw new Error(`Config value ${path} must target anthropic or anthropic/<model>`);
+		}
+		const entry = readConfigTable(rawEntry, path);
+		assertKnownKeys(entry, path, ["order", "allow_fallbacks"]);
+		const order = readStringArray(entry.order, `${path}.order`).map((provider) => provider.trim());
+		if (order.length === 0 || order.some((provider) => provider === "")) {
+			throw new Error(`Config value ${path}.order must be a non-empty string array`);
+		}
+		const baseUrl = ref ? resolveProviderSetting(baseUrls, ref.provider, ref.modelId) : baseUrls.anthropic;
+		if (!baseUrl || !isOpenRouterAnthropicBaseUrl(baseUrl)) {
+			throw new Error(`Config value ${path} requires its models.base_urls target to be https://openrouter.ai/api`);
+		}
+		routing[target] = {
+			order,
+			allowFallbacks: readBoolean(entry.allow_fallbacks, true, `${path}.allow_fallbacks`),
+		};
+	}
+	if (routing.anthropic) {
+		for (const [target, baseUrl] of Object.entries(baseUrls)) {
+			const ref = maybeParseProviderModelRef(target);
+			if (ref?.provider === "anthropic" && !isOpenRouterAnthropicBaseUrl(baseUrl)) {
+				throw new Error(
+					`Config value models.openrouter_routing.anthropic applies to ${target}, whose models.base_urls override must be https://openrouter.ai/api`,
+				);
+			}
+		}
+	}
+	return routing;
+}
+
 export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const workspacePath = resolve(workspacePathInput);
 	const configPath = resolve(workspacePath, "config.toml");
@@ -428,10 +471,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	}
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
-	assertKnownKeys(models, "models", ["allow", "base_urls", "api_key_envs", "providers"]);
+	assertKnownKeys(models, "models", ["allow", "base_urls", "api_key_envs", "openrouter_routing", "providers"]);
 	const modelAllow = readStringArray(models.allow, "models.allow");
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
+	const openRouterRouting = readOpenRouterRouting(models.openrouter_routing, modelBaseUrls);
 	const configuredProviders = readConfiguredProviders(models.providers);
 	let memoryEmbeddingFormatRaw: unknown = memoryEmbedding.format;
 	if (memoryEmbeddingFormatRaw === undefined && memoryEmbedding.api !== undefined) {
@@ -613,6 +657,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allow: modelAllow,
 			baseUrls: modelBaseUrls,
 			apiKeyEnvs: modelApiKeyEnvs,
+			openRouterRouting,
 			providers: configuredProviders,
 		},
 		tts: {

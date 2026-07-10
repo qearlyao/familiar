@@ -129,6 +129,29 @@ model = "anthropic/claude-opus-4-7"
 Provider-specific base URLs and API-key env var names live under
 `[models.base_urls]` and `[models.api_key_envs]`.
 
+Built-in Anthropic models can use OpenRouter's native Messages endpoint while
+prioritizing specific OpenRouter providers:
+
+```toml
+[agent]
+model = "anthropic/claude-fable-5"
+
+[models.base_urls]
+anthropic = "https://openrouter.ai/api"
+
+[models.api_key_envs]
+anthropic = "OPENROUTER_API_KEY"
+
+[models.openrouter_routing]
+anthropic = { order = ["anthropic"], allow_fallbacks = true }
+```
+
+Routing is sent only for `anthropic-messages` requests using exactly
+`https://openrouter.ai/api` (an optional trailing slash is accepted). A quoted
+provider/model key such as `"anthropic/claude-fable-5"` overrides the
+provider-wide entry. With `allow_fallbacks = true`, OpenRouter tries the listed
+providers first and then its normal fallback pool.
+
 Custom providers can be declared under `models.providers.<name>`. Use a bare
 provider name there, not a `provider/model` string. This is only for provider
 names that are not already built into pi-ai/Familiar. Built-in providers still

@@ -107,6 +107,13 @@ link = "https://api.linkapi.ai/v1"
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
 link = "LINK_API_KEY"
 
+# Optional OpenRouter provider ordering for built-in Anthropic models whose
+# base URL is exactly https://openrouter.ai/api. A provider/model key overrides
+# the provider-wide entry.
+# [models.openrouter_routing]
+# anthropic = { order = ["anthropic"], allow_fallbacks = true }
+# "anthropic/claude-fable-5" = { order = ["anthropic"], allow_fallbacks = false }
+
 # Optional custom provider metadata for non-built-in providers. Use a bare
 # provider name here, not a provider/model string. Keep endpoint/auth wiring in
 # the flat maps above.

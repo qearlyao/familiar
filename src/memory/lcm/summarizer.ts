@@ -10,6 +10,7 @@ import {
 
 import type { Config } from "../../config/index.js";
 import { assertModelCanAuthenticate, parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
+import { addOpenRouterRouting, resolveOpenRouterRouting } from "../../models/openrouter-routing.js";
 
 export type LcmSummaryMode = "normal" | "aggressive";
 
@@ -41,6 +42,7 @@ export type LcmCompleteFn = (
 		timeoutMs?: number;
 		signal?: AbortSignal;
 		cacheRetention?: "none" | "short" | "long";
+		onPayload?: (payload: unknown, model: Model<Api>) => unknown | undefined | Promise<unknown | undefined>;
 	},
 ) => Promise<AssistantMessage>;
 
@@ -111,6 +113,7 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		const settings = this.config.memory.lcm;
 		if (!settings.enabled) throw new Error("LCM is disabled");
 		const model = this.resolveModel();
+		const routing = resolveOpenRouterRouting(this.config, model);
 		const systemPrompt = (await this.readSystemPromptOverride()) ?? LCM_SUMMARIZER_SYSTEM_PROMPT;
 		const response = await this.complete(
 			model,
@@ -124,6 +127,9 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 				timeoutMs: settings.timeoutMs,
 				signal,
 				cacheRetention: "none",
+				onPayload: routing
+					? (payload, payloadModel) => addOpenRouterRouting(payload, payloadModel, routing)
+					: undefined,
 			},
 		);
 		if (response.stopReason === "error" || response.stopReason === "aborted") {

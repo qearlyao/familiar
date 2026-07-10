@@ -451,7 +451,7 @@ export function streamUrl(channelKey?: string): string {
   return `${proto}//${window.location.host}/api/web/stream${params}`;
 }
 
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type SettingSource = "config" | "override";
 

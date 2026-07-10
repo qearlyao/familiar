@@ -13,13 +13,13 @@ import {
 } from "discord.js";
 
 import type { FamiliarAgent } from "../agent/factory.js";
+import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config } from "../config/index.js";
 import { type EffectiveSetting, formatSetting } from "../config/settings.js";
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import { normalizeOutboundText } from "./send.js";
 
 export const FAMILIAR_COMMAND_NAME = "familiar";
-const THINKING_CHOICES = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
 export const EPHEMERAL_REPLY = MessageFlags.Ephemeral;
 
@@ -84,7 +84,7 @@ export function getFamiliarApplicationCommand(): ApplicationCommandData {
 						description: "Thinking level",
 						type: ApplicationCommandOptionType.String,
 						required: false,
-						choices: THINKING_CHOICES.map((level) => ({ name: level, value: level })),
+						choices: THINKING_LEVELS.map((level) => ({ name: level, value: level })),
 					},
 				],
 			},

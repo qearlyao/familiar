@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { loadConfig } from "../src/config/index.js";
 import { createConfiguredModel } from "../src/models/index.js";
 import { resolveOpenRouterRouting } from "../src/models/openrouter-routing.js";
-import { createWorkspace, minimalConfigToml } from "./helpers.js";
+import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 
 describe("loadConfig tts", () => {
 	const envKeys = ["DISCORD_TOKEN", "ELEVENLABS_VOICE_ID"] as const;
@@ -81,6 +81,14 @@ describe("loadConfig tts", () => {
 			speed: 1,
 			useSpeakerBoost: true,
 		});
+	});
+
+	it("accepts max agent thinking", async (t) => {
+		const workspacePath = await createWorkspace(t, minimalConfigToml('thinking_level = "max"'));
+
+		const config = await withDiscordToken(() => loadConfig(workspacePath));
+
+		assert.equal(config.agent.thinkingLevel, "max");
 	});
 
 	it("interpolates voice id from the environment", async (t) => {

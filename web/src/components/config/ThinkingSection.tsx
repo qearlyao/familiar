@@ -9,7 +9,7 @@ interface ThinkingSectionProps {
   onChange: (level: ThinkingLevel) => void;
 }
 
-const LEVEL_ORDER: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+const LEVEL_ORDER: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 export function ThinkingSection({ current, supported, disabled, onChange }: ThinkingSectionProps) {
   const visible = LEVEL_ORDER.filter((level) => supported.includes(level));

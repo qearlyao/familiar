@@ -4,10 +4,11 @@ import {
 	getEnvApiKey,
 	getModels,
 	getProviders,
+	getSupportedThinkingLevels,
 	type KnownProvider,
 	type Model,
-	type ModelThinkingLevel,
 } from "@earendil-works/pi-ai/compat";
+import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
 
@@ -279,16 +280,9 @@ export function clampConfiguredThinkingLevel(model: Model<any>, level: ThinkingL
 }
 
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return (
-		value === "off" ||
-		value === "minimal" ||
-		value === "low" ||
-		value === "medium" ||
-		value === "high" ||
-		value === "xhigh"
-	);
+	return typeof value === "string" && (THINKING_LEVELS as readonly string[]).includes(value);
 }
 
-export function supportedThinkingLevels(model: Model<any>): ModelThinkingLevel[] {
-	return model.reasoning ? ["off", "minimal", "low", "medium", "high", "xhigh"] : ["off"];
+export function supportedThinkingLevels(model: Model<any>): ThinkingLevel[] {
+	return getSupportedThinkingLevels(model);
 }

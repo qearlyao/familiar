@@ -1,5 +1,6 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
+import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import { setConfigOverridesPath } from "../config/overrides.js";
 import { applyConfigOverridesToConfig } from "../config/registry.js";
@@ -515,7 +516,7 @@ export async function createFamiliarAgent(
 		async setThinkingLevel(sessionKey: string, input: string): Promise<string> {
 			const level = input.trim().toLowerCase();
 			if (!isThinkingLevel(level)) {
-				throw new Error("Usage: /thinking off|minimal|low|medium|high|xhigh");
+				throw new Error(`Usage: /thinking ${THINKING_LEVELS.join("|")}`);
 			}
 			const { model } = resolveChannelModel(sessionKey);
 			const clamped = clampConfiguredThinkingLevel(model, level);

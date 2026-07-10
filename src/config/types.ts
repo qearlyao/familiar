@@ -1,7 +1,7 @@
-import type { Model } from "@earendil-works/pi-ai/compat";
+import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai/compat";
 
 export type CacheRetention = "none" | "short" | "long";
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ThinkingLevel = ModelThinkingLevel;
 export type DiscordReplyMode = "plain" | "reply";
 export type DiscordChunkMode = "simple" | "paragraph" | "newline";
 export type DiscordDispatchMode = "steer" | "queue" | "collect";

@@ -340,7 +340,7 @@ token:
 ```text
 /familiar status
 /familiar model anthropic/claude-opus-4-7
-/familiar thinking xhigh
+/familiar thinking max
 /familiar channel-trigger mention
 ```
 
@@ -352,7 +352,7 @@ The older slash-style text commands still work as a fallback:
 ```text
 /status
 /model anthropic/claude-opus-4-7
-/thinking xhigh
+/thinking max
 /channel-trigger mention
 ```
 

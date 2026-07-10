@@ -24,6 +24,7 @@ export const THINKING_LEVELS = [
 	"medium",
 	"high",
 	"xhigh",
+	"max",
 ] as const satisfies readonly ThinkingLevel[];
 export const DISCORD_REPLY_MODES = ["plain", "reply"] as const satisfies readonly DiscordReplyMode[];
 export const DISCORD_CHUNK_MODES = ["simple", "paragraph", "newline"] as const satisfies readonly DiscordChunkMode[];

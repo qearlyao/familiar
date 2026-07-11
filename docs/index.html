@@ -237,8 +237,17 @@
     }
 
     .toc a {
+      display: block;
+      padding-left: var(--space-sm);
+      border-left: 1px solid transparent;
       color: var(--muted);
       text-decoration: none;
+    }
+
+    .toc a[aria-current="location"] {
+      border-left-color: var(--accent);
+      color: var(--accent);
+      font-weight: 700;
     }
 
     .toc a:hover {
@@ -472,6 +481,7 @@
       <nav class="toc" aria-label="On this page">
         <h2>On this page</h2>
         <ol>
+          <li><a href="#requirements">Before you begin</a></li>
           <li><a href="#discord">Create a Discord bot</a></li>
           <li><a href="#install">Install Familiar</a></li>
           <li><a href="#configure">Add three values</a></li>
@@ -485,7 +495,7 @@
       </nav>
 
       <article>
-        <section class="requirements">
+        <section class="requirements" id="requirements">
           <h2>Before you begin</h2>
           <ul>
             <li>A computer running macOS, Linux, or Windows.</li>
@@ -690,5 +700,31 @@ interval_minutes = 240</code></pre>
   <footer>
     Familiar beginner guide
   </footer>
+  <script>
+    const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
+    const tocSections = tocLinks
+      .map((link) => document.getElementById(link.hash.slice(1)))
+      .filter(Boolean);
+
+    function setActiveSection(id) {
+      for (const link of tocLinks) {
+        if (link.hash === `#${id}`) link.setAttribute("aria-current", "location");
+        else link.removeAttribute("aria-current");
+      }
+    }
+
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        const current = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (current) setActiveSection(current.target.id);
+      },
+      { rootMargin: "-25% 0px -65%" },
+    );
+
+    for (const section of tocSections) sectionObserver.observe(section);
+    setActiveSection(location.hash.slice(1) || tocSections[0]?.id);
+  </script>
 </body>
 </html>

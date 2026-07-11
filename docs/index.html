@@ -684,6 +684,17 @@ TINYFISH_API_KEY=paste-your-tinyfish-api-key</code></pre>
           <h3>Image generation</h3>
           <p>The generated configuration uses Link API image models. Add your Link API key to <code>.env</code>; you can reuse the same key you entered for the default chat model:</p>
           <pre><code>LINK_API_KEY=paste-your-link-api-key</code></pre>
+          <p>To give Familiar visual references for people, characters, outfits, or other recurring subjects:</p>
+          <ol>
+            <li>Create <code>ref-images</code> inside your Familiar workspace. The default location is <code>~/.familiar/ref-images</code>.</li>
+            <li>Place your reference image files in that folder.</li>
+            <li>Open <code>~/.familiar/skills/image-gen/SKILL.md</code> and find <strong>Reference Images</strong>.</li>
+            <li>Replace the entire placeholder list with the exact filename and a short description for each of your images.</li>
+          </ol>
+          <pre><code>Available refs:
+- `person-face.jpg` - clear close-up portrait
+- `person-full-body.png` - full-body reference and usual outfit</code></pre>
+          <p class="note">The filenames in the bundled skill are examples only. Remove them and add your real files; entries that do not match files in <code>ref-images</code> cannot be used. Clear descriptions help Familiar choose the best one to three references for a scene.</p>
 
           <h3>Browser control</h3>
           <p>Run the installer again with the browser option to add OpenCLI and browser-harness.</p>

@@ -8,7 +8,7 @@ description: Read this skill before using the image_gen tool. Covers style prefe
 
 Folder: `~/.familiar/ref-images`
 
-Available refs:
+Available refs: (Replace with your actual file name and image description.)
 - `Ghost_bare_face_mask_off.png` - close-up portrait, sandy messy hair, no mask (full face visible)
 - `Ghost_face_with_hair.png` — close-up portrait, sandy messy hair, lower-half black skull mask, shirtless with silver chain
 - `Ghost_body_with_hair.jpg` — muscular shirtless upper body, left arm full tattoo sleeve, messy sandy hair, lower-half skull mask

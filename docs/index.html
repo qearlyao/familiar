@@ -489,6 +489,7 @@
           <li><a href="#start">Start Familiar</a></li>
           <li><a href="#mobile">Use the WebUI on your phone</a></li>
           <li><a href="#heartbeat">Enable heartbeat</a></li>
+          <li><a href="#advanced">Advanced setup</a></li>
           <li><a href="#upgrade">Upgrade Familiar</a></li>
           <li><a href="#troubleshooting">Troubleshooting</a></li>
         </ol>
@@ -660,6 +661,39 @@ interval_minutes = 240</code></pre>
             <li>Only owner messages reset the idle timer. Familiar's replies and tool work do not.</li>
           </ul>
           <p>Save the file and restart Familiar if it is already running. With the example above, the first heartbeat becomes eligible after 60 minutes of owner inactivity; later heartbeats can repeat every 240 minutes until the owner sends another message.</p>
+        </section>
+
+        <section class="feature" id="advanced">
+          <h2>Optional: add more capabilities</h2>
+          <p>These are not required for your first conversation. Add only the credentials for features you want to use, then restart Familiar.</p>
+
+          <h3>ElevenLabs voice replies</h3>
+          <p>Create an API key in <a href="https://elevenlabs.io/app/developers/api-keys">ElevenLabs API keys</a>, choose a voice, and add its voice ID alongside the key in <code>.env</code>:</p>
+          <pre><code>ELEVENLABS_API_KEY=paste-your-elevenlabs-api-key
+ELEVENLABS_VOICE_ID=paste-your-voice-id</code></pre>
+
+          <h3>Groq voice transcription</h3>
+          <p>Create a key in the <a href="https://console.groq.com/keys">Groq API Keys dashboard</a>, then add it to <code>.env</code>. Familiar uses it to transcribe incoming audio:</p>
+          <pre><code>GROQ_API_KEY=paste-your-groq-api-key</code></pre>
+
+          <h3>Web search and page fetching</h3>
+          <p>Use <a href="https://app.tavily.com/home">Tavily</a> for web search and <a href="https://www.tinyfish.ai/">TinyFish</a> for page fetching. Add either or both keys to <code>.env</code>:</p>
+          <pre><code>TAVILY_API_KEY=paste-your-tavily-api-key
+TINYFISH_API_KEY=paste-your-tinyfish-api-key</code></pre>
+
+          <h3>Image generation</h3>
+          <p>The generated configuration uses Link API image models. Add your Link API key to <code>.env</code>; you can reuse the same key you entered for the default chat model:</p>
+          <pre><code>LINK_API_KEY=paste-your-link-api-key</code></pre>
+
+          <h3>Browser control</h3>
+          <p>Run the installer again with the browser option to add OpenCLI and browser-harness.</p>
+          <p><strong>macOS or Linux:</strong></p>
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh -s -- --with-browser</code></pre>
+          <p><strong>Windows PowerShell:</strong></p>
+          <pre><code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser</code></pre>
+          <p>Install the <a href="https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk">OpenCLI browser extension</a>, then change these existing lines under <code>[browser]</code> in <code>config.toml</code>:</p>
+          <pre><code>[browser]
+enabled = true</code></pre>
         </section>
 
         <section class="feature" id="upgrade">

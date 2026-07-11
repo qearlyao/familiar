@@ -29,8 +29,6 @@ Available refs: (Replace with your actual file name and image description.)
 - **Avoid:** 3d rendering, illustration, anime styles
 - **Be specific:** turn vague descriptions into clear, concrete visual details
 - **Be structured:** organize as "subject (e.g. @img1, @img2) + outfit + style + environment + details"
-- **Mask or Bare face** use bare face refs if u need a mask-off image, avoid describing mask-off when using mask-on refs
 
 ## Notes
 - Set aspect ratio and resolution or size based on image type
-- Camo paint is tied to the ref. For scenes where camo doesn't fit, you can explicitly note in the prompt: "remove camo eyes paint"

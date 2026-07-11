@@ -59,8 +59,8 @@ cache_retention = "short"
 thinking_level = "medium"
 
 [heartbeat]
-enabled = true
-# Before enabling, replace the placeholder HEARTBEAT.md in the workspace.
+enabled = false
+# Before enabling, review and customize HEARTBEAT.md in the workspace.
 # The first heartbeat can fire once idle time reaches idle_threshold_minutes.
 # Later heartbeats repeat every interval_minutes while the DM remains idle.
 # Only owner/user messages reset the idle timer; agent replies and tool work do not.

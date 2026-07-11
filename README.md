@@ -5,6 +5,11 @@ It keeps durable chat logs, model/provider settings, media attachments, TTS, web
 search/fetch tools, memory/LCM recall, scheduled heartbeat/cron prompts, and
 optional real-browser control in one workspace.
 
+## New Here?
+
+Follow the [beginner quick start](https://qearlyao.github.io/familiar/) to install Familiar,
+add the three required values, and begin your first conversation.
+
 This project is still early. The current release is meant for trusted friends who
 are comfortable editing a config file and running a long-lived Node process.
 
@@ -311,8 +316,8 @@ Familiar stores browser screenshots under the active workspace data directory:
 ## Heartbeat
 
 Heartbeat is disabled by default. Before setting `[heartbeat].enabled = true`,
-replace the workspace `HEARTBEAT.md` placeholder; Familiar only tells the agent
-to read that file when the idle-triggered heartbeat fires.
+review and customize the workspace `HEARTBEAT.md`; Familiar tells the agent to
+use that file as its menu when the idle-triggered heartbeat fires.
 
 ## Cron Jobs
 

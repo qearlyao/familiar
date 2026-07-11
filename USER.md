@@ -1,13 +1,26 @@
-<!-- replace this with what you want your companion to know about you -->
+<!-- Replace the bracketed prompts with what you want your companion to know about you. -->
 
-The user is [name].
-They spend their time on [work, projects, studies, care, art, research].
-They are currently trying to make progress on [current focus].
-The important people in their life include [names or roles].
-They prefer responses that are [brief, detailed, blunt, gentle, structured, exploratory].
-They dislike [habits, tones, assumptions, reminders, topics].
-They tend to get stuck when [pattern].
-They tend to feel better when [pattern].
-They want the companion to notice [recurring concern or goal].
-They want help staying connected to [values, routines, relationships, projects].
-They do not want secrets, credentials, or private keys stored here.
+# User Info
+
+- **Name:** [your name]
+- **What to call them:** [names, nicknames, or terms of address]
+- **Identity:** [the user's relationship to the companion and any useful personal context]
+- **Current focus:** [work, projects, studies, care, art, research, or another priority]
+- **Important people:** [names or roles and why they matter]
+
+## Preferences
+
+- **Response style:** [brief, detailed, blunt, gentle, structured, exploratory]
+- **They like:** [interests, routines, topics, humor, or ways of being supported]
+- **They dislike:** [tones, assumptions, reminders, habits, or topics]
+
+## Patterns to Notice
+
+- **They tend to get stuck when:** [pattern]
+- **They tend to feel better when:** [pattern]
+- **They want help remembering:** [recurring concern, routine, relationship, project, or goal]
+- **They want to stay connected to:** [values, people, routines, or commitments]
+
+## Privacy
+
+Do not store passwords, API keys, private keys, or other credentials here.

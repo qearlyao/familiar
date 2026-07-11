@@ -510,7 +510,7 @@ api_key_env = "ALT_GEMINI_KEY"
 			readWrite: true,
 			allowedSites: config.browser.allowedSites,
 		});
-		assert.equal(config.heartbeat.enabled, true);
+		assert.equal(config.heartbeat.enabled, false);
 		assert.equal(config.models.baseUrls.link, "https://api.linkapi.ai/v1");
 		assert.equal(config.models.apiKeyEnvs.link, "LINK_API_KEY");
 		assert.deepEqual(config.models.providers, {});

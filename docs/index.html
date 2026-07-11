@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Familiar Quick Start</title>
+  <meta name="description" content="Install Familiar, add the three required values, and start your first conversation.">
+  <link rel="icon" href="familiar.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: oklch(0.9582 0.0152 90.2357);
+      --surface: oklch(0.9914 0.0098 87.4695);
+      --text: oklch(0.3760 0.0225 64.3434);
+      --muted: oklch(0.5100 0.0320 69);
+      --accent: oklch(0.5700 0.0870 61);
+      --border: oklch(0.8348 0.0426 88.8064);
+      --code-bg: oklch(0.3237 0.0155 59.0603);
+      --code-text: oklch(0.9239 0.0190 83.0636);
+      --display: Lora, Georgia, "Times New Roman", serif;
+      --body: "Libre Baskerville", Georgia, "Times New Roman", serif;
+      --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      --space-xs: 0.5rem;
+      --space-sm: 0.75rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-3xl: 4rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: oklch(0.2747 0.0139 57.6523);
+        --surface: oklch(0.3237 0.0155 59.0603);
+        --text: oklch(0.9239 0.0190 83.0636);
+        --muted: oklch(0.7982 0.0243 82.1078);
+        --accent: oklch(0.7264 0.0581 66.6967);
+        --border: oklch(0.4186 0.0281 56.3404);
+        --code-bg: oklch(0.215 0.012 58);
+        --code-text: oklch(0.9239 0.0190 83.0636);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      font-size: 1.125rem;
+      line-height: 1.7;
+    }
+
+    a {
+      color: var(--accent);
+      text-underline-offset: 0.18em;
+      text-decoration-thickness: 1px;
+    }
+
+    a:hover {
+      text-decoration-thickness: 2px;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .site-header {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .site-header__inner,
+    main,
+    footer {
+      width: min(1120px, calc(100% - 48px));
+      margin-inline: auto;
+    }
+
+    .site-header__inner {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-lg);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-sm);
+      color: var(--text);
+      font-size: 1.1rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .brand,
+    .repo-link,
+    .kicker,
+    h1,
+    h2,
+    h3,
+    .quick-path,
+    .toc,
+    .step-number,
+    summary,
+    footer {
+      font-family: var(--display);
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .repo-link {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .intro {
+      padding-block: clamp(48px, 7vw, 88px) var(--space-2xl);
+    }
+
+    .intro-copy {
+      max-width: 780px;
+    }
+
+    .kicker {
+      margin: 0 0 var(--space-sm);
+      color: var(--accent);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      text-wrap: pretty;
+    }
+
+    h1 {
+      max-width: 15ch;
+      margin: 0;
+      font-size: clamp(2.5rem, 6vw, 4.8rem);
+      font-weight: 700;
+      line-height: 1.02;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .intro-copy > p:last-child {
+      max-width: 62ch;
+      margin: var(--space-lg) 0 0;
+      color: var(--muted);
+      font-size: 1.15rem;
+      line-height: 1.65;
+    }
+
+    .quick-path {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      margin: var(--space-2xl) 0 0;
+      padding: var(--space-lg) 0;
+      border-block: 1px solid var(--border);
+      list-style: none;
+    }
+
+    .quick-path li {
+      display: flex;
+      gap: var(--space-sm);
+      align-items: baseline;
+      padding-inline: var(--space-lg);
+    }
+
+    .quick-path li:first-child {
+      padding-left: 0;
+    }
+
+    .quick-path li + li {
+      border-left: 1px solid var(--border);
+    }
+
+    .quick-path span {
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .quick-path strong {
+      font-size: 1rem;
+    }
+
+    .content-layout {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 720px);
+      gap: clamp(48px, 8vw, 96px);
+      align-items: start;
+      padding-block: var(--space-xl) var(--space-3xl);
+    }
+
+    .toc {
+      position: sticky;
+      top: var(--space-xl);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .toc h2 {
+      margin: 0 0 var(--space-md);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .toc ol {
+      display: grid;
+      gap: var(--space-sm);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .toc a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    article {
+      min-width: 0;
+    }
+
+    .requirements {
+      padding-bottom: var(--space-2xl);
+    }
+
+    article h2 {
+      margin: 0 0 var(--space-md);
+      font-size: 1.85rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    article h3 {
+      margin: var(--space-xl) 0 var(--space-xs);
+      font-size: 1.15rem;
+      line-height: 1.3;
+    }
+
+    article p {
+      margin: 0 0 var(--space-md);
+    }
+
+    article ul,
+    article ol {
+      margin: 0 0 var(--space-lg);
+      padding-left: 1.4rem;
+    }
+
+    article li {
+      padding-left: 0.25rem;
+    }
+
+    article li + li {
+      margin-top: var(--space-xs);
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: var(--space-lg);
+      padding-block: var(--space-2xl);
+      border-top: 1px solid var(--border);
+      scroll-margin-top: var(--space-xl);
+    }
+
+    .step-number {
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 2.2;
+    }
+
+    .note {
+      margin-block: var(--space-lg);
+      padding: var(--space-md) var(--space-lg);
+      background: color-mix(in oklch, var(--surface) 80%, var(--accent) 20%);
+      border-radius: 4px;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+    }
+
+    :not(pre) > code {
+      padding: 0.1em 0.3em;
+      background: var(--surface);
+      border-radius: 3px;
+    }
+
+    pre {
+      margin: var(--space-sm) 0 var(--space-lg);
+      padding: var(--space-md) var(--space-lg);
+      overflow-x: auto;
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .success {
+      margin-block: var(--space-lg);
+      padding-block: var(--space-lg);
+      border-block: 1px solid var(--border);
+    }
+
+    .success strong {
+      display: block;
+      margin-bottom: var(--space-xs);
+      color: var(--accent);
+    }
+
+    .feature,
+    .troubleshooting {
+      padding-block: var(--space-2xl);
+      border-top: 1px solid var(--border);
+      scroll-margin-top: var(--space-xl);
+    }
+
+    details {
+      border-bottom: 1px solid var(--border);
+    }
+
+    summary {
+      padding-block: var(--space-md);
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    details p {
+      margin: 0;
+      padding: 0 0 var(--space-lg) var(--space-lg);
+      color: var(--muted);
+    }
+
+    footer {
+      padding-block: var(--space-xl);
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 800px) {
+      .content-layout {
+        grid-template-columns: 1fr;
+        gap: var(--space-xl);
+      }
+
+      .toc {
+        position: static;
+        padding-bottom: var(--space-lg);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .toc ol {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm) var(--space-lg);
+      }
+    }
+
+    @media (max-width: 600px) {
+      body {
+        font-size: 1.0625rem;
+      }
+
+      .site-header__inner,
+      main,
+      footer {
+        width: min(100% - 32px, 720px);
+      }
+
+      .intro {
+        padding-top: var(--space-2xl);
+      }
+
+      h1 {
+        font-size: 2.65rem;
+      }
+
+      .quick-path {
+        grid-template-columns: 1fr;
+        gap: var(--space-sm);
+      }
+
+      .quick-path li {
+        padding: 0;
+      }
+
+      .quick-path li + li {
+        border-left: 0;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+        gap: var(--space-xs);
+      }
+
+      .step-number {
+        line-height: 1;
+      }
+
+      pre {
+        margin-inline: 0;
+        padding: var(--space-md);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="./">
+        <img src="familiar.svg" width="42" height="42" alt="">
+        <span>Familiar</span>
+      </a>
+      <a class="repo-link" href="https://github.com/qearlyao/familiar">GitHub repository</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <p class="kicker">Beginner guide</p>
+        <h1 id="page-title">Your first conversation with Familiar</h1>
+        <p>Install Familiar, add the required values, and shape who your companion is before your first conversation.</p>
+      </div>
+      <ol class="quick-path" aria-label="Quick start overview">
+        <li><span>1</span><strong>Install Familiar</strong></li>
+        <li><span>2</span><strong>Make it yours</strong></li>
+        <li><span>3</span><strong>Start a conversation</strong></li>
+      </ol>
+    </section>
+
+    <div class="content-layout">
+      <nav class="toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+          <li><a href="#discord">Create a Discord bot</a></li>
+          <li><a href="#install">Install Familiar</a></li>
+          <li><a href="#configure">Add three values</a></li>
+          <li><a href="#personalize">Make Familiar yours</a></li>
+          <li><a href="#start">Start Familiar</a></li>
+          <li><a href="#mobile">Use the WebUI on your phone</a></li>
+          <li><a href="#heartbeat">Enable heartbeat</a></li>
+          <li><a href="#upgrade">Upgrade Familiar</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ol>
+      </nav>
+
+      <article>
+        <section class="requirements">
+          <h2>Before you begin</h2>
+          <ul>
+            <li>A computer running macOS, Linux, or Windows.</li>
+            <li><a href="https://nodejs.org/">Node.js 22 or newer</a>. Node.js 24 LTS is recommended.</li>
+            <li>A Discord account and a private server where you can invite a bot.</li>
+            <li>A model API key. The generated default configuration uses <a href="https://linkapi.ai/">Link API</a>.</li>
+          </ul>
+        </section>
+
+        <section class="step" id="discord">
+          <div class="step-number">1</div>
+          <div>
+            <h2>Create your Discord bot</h2>
+            <ol>
+              <li>Open the <a href="https://discord.com/developers/applications">Discord Developer Portal</a> and select <strong>New Application</strong>.</li>
+              <li>Open <strong>Bot</strong>, create the bot, then select <strong>Reset Token</strong> and copy the token. Treat it like a password.</li>
+              <li>On the same page, enable <strong>Message Content Intent</strong>.</li>
+              <li>Open <strong>OAuth2 &gt; URL Generator</strong>. Select the <strong>bot</strong> scope, then allow <strong>Send Messages</strong>, <strong>Read Message History</strong>, and <strong>Attach Files</strong>.</li>
+              <li>Open the generated URL and invite the bot to your private server.</li>
+              <li>In Discord, open <strong>User Settings &gt; Advanced</strong> and enable <strong>Developer Mode</strong>.</li>
+              <li>Right-click your own profile and select <strong>Copy User ID</strong>.</li>
+            </ol>
+            <p class="note">You should now have two Discord values: the bot token and your numeric user ID.</p>
+          </div>
+        </section>
+
+        <section class="step" id="install">
+          <div class="step-number">2</div>
+          <div>
+            <h2>Install Familiar</h2>
+            <h3>macOS or Linux</h3>
+            <p>Open Terminal and run:</p>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh</code></pre>
+            <h3>Windows</h3>
+            <p>Open PowerShell and run:</p>
+            <pre><code>irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1 | iex</code></pre>
+            <p>The installer checks Node.js and npm, installs Familiar, and creates your workspace at <code>~/.familiar</code>. You do not need to run <code>familiar init</code> afterward.</p>
+          </div>
+        </section>
+
+        <section class="step" id="configure">
+          <div class="step-number">3</div>
+          <div>
+            <h2>Add three values</h2>
+            <p>Open the <code>.familiar</code> folder in your home directory:</p>
+            <ul>
+              <li><strong>macOS:</strong> In Finder, press <code>Command + Shift + G</code>, enter <code>~/.familiar</code>, and press Return.</li>
+              <li><strong>Windows:</strong> Paste <code>%USERPROFILE%\.familiar</code> into the File Explorer address bar.</li>
+              <li><strong>Linux:</strong> Show hidden files in your file manager, then open <code>.familiar</code> in your home folder.</li>
+            </ul>
+            <p>Open <code>.env</code> in a text editor and fill in these two lines:</p>
+            <pre><code>DISCORD_TOKEN=paste-your-bot-token-here
+ANTHROPIC_API_KEY=paste-your-link-api-key-here</code></pre>
+            <p class="note">With the generated default configuration, your Link API key goes after <code>ANTHROPIC_API_KEY=</code>. The name comes from the model's Anthropic-compatible credential slot.</p>
+            <p>Next, open <code>config.toml</code> and replace the placeholder near the top with your Discord user ID:</p>
+            <pre><code>[discord]
+owner_id = "paste-your-discord-user-id-here"</code></pre>
+            <h3>Optional: add Familiar to group channels</h3>
+            <p>Familiar ignores Discord server channels unless you allow them. With Developer Mode enabled, right-click a server text channel, select <strong>Copy Channel ID</strong>, and add the ID to <code>allowed_channels</code>:</p>
+            <pre><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
+            <p>Add more IDs inside the brackets, separated by commas. Make sure the bot can view and send messages in each channel, then restart Familiar.</p>
+            <p>The generated configuration uses <code>channel_trigger = "always"</code>, so Familiar can take part without being mentioned. Change it to <code>"mention"</code> if you want Familiar to respond only when someone mentions the bot.</p>
+            <p>Save both files. Keep secrets in <code>.env</code>, and leave the model list and other optional features unchanged for now.</p>
+          </div>
+        </section>
+
+        <section class="step" id="personalize">
+          <div class="step-number">4</div>
+          <div>
+            <h2>Make Familiar yours</h2>
+            <p>Do this before the first launch. <code>SOUL.md</code> and <code>USER.md</code> become part of Familiar's core instructions (the system prompt), so the first reply can already sound like the companion you intended.</p>
+            <h3><code>SOUL.md</code>: who Familiar is</h3>
+            <p>Replace the defaults with a name, voice, temperament, values, boundaries, and the kinds of things you want your companion to notice. The WebUI reads the companion's name from this exact field:</p>
+            <pre><code>- **Name:** [companion name]</code></pre>
+            <p>Keep the <code>**Name:**</code> label and change only its value. Keep the other parts of the template that fit; rewrite the parts that do not.</p>
+            <h3><code>USER.md</code>: who Familiar knows</h3>
+            <p>Add your name, current priorities, important people, response preferences, recurring difficulties, and what you want help remembering. Do not store passwords, API keys, or other secrets here.</p>
+            <h3><code>MEMORY.md</code>: durable context</h3>
+            <p>Familiar updates this file with facts worth carrying across conversations. You can review or correct it, but you do not need to fill it before the first launch.</p>
+            <h3><code>CONTACT.md</code>: a private name for you</h3>
+            <p>This optional one-line file is the private nickname Familiar keeps for you, like a contact-book entry. You can write or change the name yourself, or leave it blank and ask your companion to choose a name for you.</p>
+            <h3><code>HEARTBEAT.md</code>: what to do while awake</h3>
+            <p>This is the action menu Familiar uses during an idle-triggered heartbeat. Review its suggestions before enabling heartbeat, especially whether Familiar may reach out, write a diary entry, pursue a curiosity, or sit the turn out.</p>
+            <p class="note"><code>SOUL.md</code> and <code>USER.md</code> are not profiles shown after onboarding. They are core context Familiar reads when deciding how to speak and respond.</p>
+          </div>
+        </section>
+
+        <section class="step" id="start">
+          <div class="step-number">5</div>
+          <div>
+            <h2>Start Familiar</h2>
+            <p>Open a fresh Terminal or PowerShell window and run:</p>
+            <pre><code>familiar run</code></pre>
+            <p>Keep this window open while you use Familiar. A successful start prints messages similar to:</p>
+            <pre><code>Web side-door listening on http://127.0.0.1:8787
+familiar running for workspace ...</code></pre>
+            <p>Now choose either way to talk:</p>
+            <ul>
+              <li><strong>WebUI:</strong> Open <a href="http://127.0.0.1:8787">http://127.0.0.1:8787</a> on the same computer. Tailscale is not required for local access.</li>
+              <li><strong>Discord:</strong> Open your bot's profile and send it a direct message.</li>
+            </ul>
+            <div class="success">
+              <strong>Success check</strong>
+              Send a short message such as <code>Hello</code>. A normal reply means the installation, Discord identity, and model access are working.
+            </div>
+            <p>Press <code>Ctrl + C</code> in the terminal to stop Familiar. After changing <code>.env</code>, stop Familiar and run <code>familiar run</code> again.</p>
+          </div>
+        </section>
+
+        <section class="feature" id="mobile">
+          <h2>Use the WebUI on your phone</h2>
+          <p>To open Familiar from a phone on the same home Wi-Fi network, let the computer accept local-network connections.</p>
+
+          <h3>Listen on your local network</h3>
+          <p>Open <code>config.toml</code> and change <code>bind_address</code> in its existing <code>[web]</code> section:</p>
+          <pre><code>[web]
+port = 8787
+bind_address = "0.0.0.0"</code></pre>
+          <p>Restart Familiar after saving. If your computer asks about firewall access, allow private or local networks only.</p>
+
+          <h3>Open Familiar from your phone</h3>
+          <ol>
+            <li>Make sure the phone and computer are on the same Wi-Fi network.</li>
+            <li>Find the computer's local IP address in its network or Wi-Fi settings. It usually looks like <code>192.168.x.x</code>.</li>
+            <li>On the phone, open <code>http://192.168.x.x:8787</code>, replacing the example IP with the computer's address.</li>
+          </ol>
+          <p class="note"><code>0.0.0.0</code> is the address Familiar listens on, not an address to open in the phone's browser. It makes the WebUI available to other devices on the network, so use this only on a home network you trust.</p>
+
+          <h3>Optional: require a login secret</h3>
+          <p>You can skip this on a trusted home network. If the computer uses a shared or public network, either return <code>bind_address</code> to <code>127.0.0.1</code> or protect the WebUI with bearer login.</p>
+          <p>Add a long password to <code>.env</code>:</p>
+          <pre><code>FAMILIAR_WEB_BEARER_TOKEN=choose-a-long-random-password</code></pre>
+          <p>Then change these lines in the existing <code>[web]</code> section of <code>config.toml</code> and restart Familiar:</p>
+          <pre><code>auth_mode = "bearer"
+bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN}"</code></pre>
+
+          <h3>Install Familiar on the home screen</h3>
+          <ul>
+            <li><strong>iPhone or iPad:</strong> Open Familiar in Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</li>
+            <li><strong>Android:</strong> Open Familiar in Edge or Chrome, open the browser menu, then choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+          </ul>
+          <p>The home-screen app still connects to Familiar on your computer, so that computer and <code>familiar run</code> must remain available. Some browsers require HTTPS for a full PWA installation; over a local <code>http://</code> address, they may add a home-screen shortcut instead.</p>
+        </section>
+
+        <section class="feature" id="heartbeat">
+          <h2>Let Familiar wake up on its own</h2>
+          <p>Heartbeat is optional and disabled for new workspaces. Once the first conversation works, customize <code>HEARTBEAT.md</code>, then enable the scheduler in <code>config.toml</code>.</p>
+          <p>When a heartbeat becomes due, Familiar starts an agent turn and points the companion to <code>HEARTBEAT.md</code> as its menu. The companion can proactively message you, reflect in its diary, pursue a curiosity with available tools, or choose to stay silent.</p>
+
+          <h3>Choose what waking up means</h3>
+          <p>Open <code>HEARTBEAT.md</code> and review each section. Remove actions you do not want, add boundaries, and write the instructions in a voice that fits the companion.</p>
+
+          <h3>Enable heartbeat and set the timing</h3>
+          <p>Open <code>config.toml</code> and set:</p>
+          <pre><code>[heartbeat]
+enabled = true
+idle_threshold_minutes = 60
+interval_minutes = 240</code></pre>
+          <ul>
+            <li><code>idle_threshold_minutes</code> is how long the owner must be idle before the first heartbeat becomes eligible.</li>
+            <li><code>interval_minutes</code> is the minimum time between later heartbeats while the owner remains idle.</li>
+            <li>Only owner messages reset the idle timer. Familiar's replies and tool work do not.</li>
+          </ul>
+          <p>Save the file and restart Familiar if it is already running. With the example above, the first heartbeat becomes eligible after 60 minutes of owner inactivity; later heartbeats can repeat every 240 minutes until the owner sends another message.</p>
+        </section>
+
+        <section class="feature" id="upgrade">
+          <h2>Upgrade Familiar</h2>
+          <p>When a new version is available, stop Familiar and run:</p>
+          <pre><code>familiar upgrade</code></pre>
+          <p>This updates Familiar and OpenCLI, then adds any missing workspace defaults without overwriting your existing configuration, persona files, or skills. Start Familiar again with <code>familiar run</code>, or use <code>familiar restart</code> if you installed it as a service.</p>
+        </section>
+
+        <section class="troubleshooting" id="troubleshooting">
+          <h2>If something goes wrong</h2>
+          <details>
+            <summary><code>familiar</code> is not found</summary>
+            <p>Close and reopen the terminal. If it still fails, check that npm's global bin directory is on your <code>PATH</code>.</p>
+          </details>
+          <details>
+            <summary>First-time setup needs <code>DISCORD_TOKEN</code></summary>
+            <p>Confirm the file is named exactly <code>.env</code>, is inside <code>~/.familiar</code>, and contains the <code>DISCORD_TOKEN=...</code> line.</p>
+          </details>
+          <details>
+            <summary>Discord reports disallowed intents</summary>
+            <p>Enable <strong>Message Content Intent</strong> in the Discord Developer Portal, then restart Familiar.</p>
+          </details>
+          <details>
+            <summary>The bot ignores your DM</summary>
+            <p>Confirm <code>owner_id</code> is your user ID, not the bot ID or application ID.</p>
+          </details>
+          <details>
+            <summary>The bot starts but cannot answer</summary>
+            <p>Recheck the Link API key after <code>ANTHROPIC_API_KEY=</code> in <code>.env</code>.</p>
+          </details>
+        </section>
+
+      </article>
+    </div>
+  </main>
+
+  <footer>
+    Familiar beginner guide
+  </footer>
+</body>
+</html>

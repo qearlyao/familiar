@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 - 2026-07-16
+
+### Added
+
+- Add a beginner and advanced setup guide covering first-time setup, mobile WebUI access, heartbeat, upgrades, and optional media and browser integrations.
+- Add provider- and model-scoped OpenRouter routing preferences for Anthropic Messages requests, including normal agent turns and LCM summaries.
+- Tell the companion where its configured diary directory is located.
+
+### Changed
+
+- Show only the thinking levels supported by the active model across Discord and the WebUI, including `max` where available.
+- Keep heartbeat disabled in new workspace configuration until `HEARTBEAT.md` is reviewed, with clearer starter persona templates.
+- Bump the pi dependency set to `0.80.7`, bringing current model and provider metadata plus upstream runtime fixes.
+
+### Fixed
+
+- Apply ambient diary recall setting changes on the next message without requiring a restart.
+- Enforce ambient recall `min_query_length` against raw inbound text instead of author and timestamp prompt wrappers.
+- Resolve uncataloged `xai/*` fallback models through xAI's standard API endpoint.
+
 ## 0.6.3 - 2026-07-09
 
 ### Added

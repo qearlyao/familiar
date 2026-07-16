@@ -46,6 +46,7 @@ Prefer the reference board.
 	it("appends visible skills inside the persona system reminder after note-to-self", () => {
 		const prompt = buildSystemPrompt(
 			{ soul: "# Soul", user: "# User", memory: "# Memory", inner: null },
+			"/workspace/memories/diaries",
 			"<available_skills>\n</available_skills>",
 		);
 
@@ -66,7 +67,7 @@ Prefer the reference board.
 			const persona = await loadPersona(config);
 
 			assert.equal(persona.inner, null);
-			assert.doesNotMatch(buildSystemPrompt(persona), /INNER\.md/);
+			assert.doesNotMatch(buildSystemPrompt(persona, config.memory.diariesDir), /INNER\.md/);
 		});
 	});
 

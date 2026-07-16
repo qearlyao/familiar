@@ -70,7 +70,11 @@ export async function createFamiliarAgent(
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);
-	let systemPrompt = buildSystemPrompt(persona, formatFamiliarSkillsForPrompt(skillsResult.skills));
+	let systemPrompt = buildSystemPrompt(
+		persona,
+		config.memory.diariesDir,
+		formatFamiliarSkillsForPrompt(skillsResult.skills),
+	);
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
@@ -270,7 +274,11 @@ export async function createFamiliarAgent(
 		applyConfigOverridesToConfig(nextConfig);
 		const nextPersona = await loadPersona(nextConfig);
 		const nextSkillsResult = loadFamiliarSkills(nextConfig);
-		const nextSystemPrompt = buildSystemPrompt(nextPersona, formatFamiliarSkillsForPrompt(nextSkillsResult.skills));
+		const nextSystemPrompt = buildSystemPrompt(
+			nextPersona,
+			nextConfig.memory.diariesDir,
+			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
+		);
 		const nextDefaultModel = createConfiguredModel(nextConfig);
 		getRequestApiKey(nextConfig, nextDefaultModel);
 		return {

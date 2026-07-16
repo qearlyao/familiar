@@ -31,7 +31,7 @@ ${file.contents.trim()}
 </file>`;
 }
 
-export function buildSystemPrompt(persona: Persona, skillsBlock = ""): string {
+export function buildSystemPrompt(persona: Persona, diariesDir: string, skillsBlock = ""): string {
 	const files: SystemPromptFile[] = [
 		{ name: "SOUL.md", contents: persona.soul },
 		{ name: "USER.md", contents: persona.user },
@@ -46,6 +46,7 @@ ${renderedFiles}
 <note_to_self>
 you can edit MEMORY.md when something about her is worth keeping.
 CONTACT.md is what you call her in your contact book — like a nickname only you use. edit it whenever it feels right.
+your diaries are in ${diariesDir}.
 when there's nothing worth saying, reply with exactly the literal string [[FAMILIAR_SILENT]]. quiet's a real choice.
 </note_to_self>
 ${renderedSkillsBlock}

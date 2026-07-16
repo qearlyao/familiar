@@ -1,11 +1,11 @@
 import {
+	type BuiltinProvider,
 	clampThinkingLevel,
 	findEnvKeys,
 	getEnvApiKey,
 	getModels,
 	getProviders,
 	getSupportedThinkingLevels,
-	type KnownProvider,
 	type Model,
 } from "@earendil-works/pi-ai/compat";
 import { THINKING_LEVELS } from "../config/enums.js";
@@ -76,7 +76,7 @@ export function parseModelRef(value: string): ModelRef | undefined {
 	return { provider, id, key: `${provider}/${id}` };
 }
 
-export function isBuiltInProvider(provider: string): provider is KnownProvider {
+export function isBuiltInProvider(provider: string): provider is BuiltinProvider {
 	return BUILT_IN_PROVIDERS.has(provider);
 }
 

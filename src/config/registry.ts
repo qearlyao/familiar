@@ -6,6 +6,8 @@ export type ConfigKey =
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
+	| "tts.voice_id"
+	| "tts.model_id"
 	| "image_gen.enabled"
 	| "image_gen.model"
 	| "image_gen.fallback_model"
@@ -42,6 +44,13 @@ export interface RegistryEntry {
 function requireBoolean(value: unknown, key: string): boolean {
 	if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
 	return value;
+}
+
+function requireString(value: unknown, key: string, allowEmpty = false): string {
+	if (typeof value !== "string") throw new Error(`${key} must be a string`);
+	const trimmed = value.trim();
+	if (!allowEmpty && !trimmed) throw new Error(`${key} must not be empty`);
+	return trimmed;
 }
 
 function requirePositiveInt(value: unknown, key: string): number {
@@ -113,6 +122,20 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		},
 		apply: ({ scheduler }) => {
 			scheduler.rearmHeartbeat();
+		},
+	},
+	"tts.voice_id": {
+		read: (config) => config.tts.voiceId,
+		validate: (value) => requireString(value, "tts.voice_id", true),
+		write: (config, value) => {
+			config.tts.voiceId = value as string;
+		},
+	},
+	"tts.model_id": {
+		read: (config) => config.tts.modelId,
+		validate: (value) => requireString(value, "tts.model_id"),
+		write: (config, value) => {
+			config.tts.modelId = value as string;
 		},
 	},
 	"image_gen.enabled": {

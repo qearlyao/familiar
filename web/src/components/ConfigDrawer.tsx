@@ -8,6 +8,7 @@ import {
   Image,
   MonitorSmartphone,
   Palette,
+  Volume2,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import { ThemeSection } from "./config/ThemeSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
+import { TtsSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { useConfig } from "@/lib/useConfig";
@@ -166,6 +168,17 @@ export function ConfigDrawer({
             icon={HeartPulse}
           >
             <HeartbeatSection
+              values={configData?.values}
+              disabled={!ready || busy}
+              onChange={setConfig}
+            />
+          </Section>
+          <Section
+            title="voice"
+            description="which voice and model your companion speaks with."
+            icon={Volume2}
+          >
+            <TtsSection
               values={configData?.values}
               disabled={!ready || busy}
               onChange={setConfig}

@@ -559,6 +559,8 @@ export type ConfigKey =
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
   | "heartbeat.intervalMs"
+  | "tts.voice_id"
+  | "tts.model_id"
   | "memory.lcm.enabled"
   | "memory.lcm.model"
   | "memory.lcm.contextThreshold"
@@ -590,6 +592,8 @@ export interface ConfigPayload {
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;
     "heartbeat.intervalMs": ConfigValue<number>;
+    "tts.voice_id": ConfigValue<string>;
+    "tts.model_id": ConfigValue<string>;
     "memory.lcm.enabled": ConfigValue<boolean>;
     "memory.lcm.model": ConfigValue<string>;
     "memory.lcm.contextThreshold": ConfigValue<number>;

@@ -114,29 +114,31 @@ export function NumberInput({
   );
 }
 
-const MODEL_REF = /^[^/\s]+\/[^\s]+$/;
-
-export function ModelRefInput({
-  value,
-  placeholder,
-  allowEmpty,
-  disabled,
-  onCommit,
-}: {
+interface TextInputProps {
   value: string | undefined;
   placeholder?: string;
-  allowEmpty: boolean;
+  allowEmpty?: boolean;
+  pattern?: RegExp;
   disabled: boolean;
   onCommit: (next: string) => Promise<void>;
-}) {
+}
+
+export function TextInput({
+  value,
+  placeholder,
+  allowEmpty = false,
+  pattern,
+  disabled,
+  onCommit,
+}: TextInputProps) {
   const live = value ?? "";
   const field = useCommittedInput(
     live,
     (draft) => {
       const trimmed = draft.trim();
       if (trimmed === live) return "reset";
-      if (!trimmed) return allowEmpty ? { value: "" } : "reset";
-      if (!MODEL_REF.test(trimmed)) return "invalid";
+      if (!trimmed) return allowEmpty ? { value: "" } : pattern ? "reset" : "invalid";
+      if (pattern && !pattern.test(trimmed)) return "invalid";
       return { value: trimmed };
     },
     onCommit,
@@ -152,6 +154,7 @@ export function ModelRefInput({
       spellCheck={false}
       placeholder={placeholder}
       disabled={disabled || field.busy}
+      aria-invalid={field.invalid || undefined}
       className={`h-9 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground focus-visible:ring-3 focus-visible:outline-none disabled:opacity-50 ${
         field.invalid
           ? "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/40"
@@ -159,4 +162,10 @@ export function ModelRefInput({
       }`}
     />
   );
+}
+
+const MODEL_REF = /^[^/\s]+\/[^\s]+$/;
+
+export function ModelRefInput(props: TextInputProps & { allowEmpty: boolean }) {
+  return <TextInput {...props} pattern={MODEL_REF} />;
 }

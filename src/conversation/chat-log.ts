@@ -278,6 +278,7 @@ function isChatLogRecord(value: unknown): value is ChatLogRecord {
 export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog {
 	const dir = chatChannelDir(config, channel);
 	const lockPath = chatLockPath(config, channel);
+	let appendTail: Promise<void> = Promise.resolve();
 	return {
 		channel,
 		dir,
@@ -308,10 +309,16 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 			}
 			return records.sort((a, b) => a.recordId - b.recordId);
 		},
-		async append(record: ChatLogRecord): Promise<void> {
-			const recordPath = chatLogPath(config, channel, new Date(record.ts));
-			await mkdir(dirname(recordPath), { recursive: true });
-			await appendFile(recordPath, `${JSON.stringify(record)}\n`, "utf8");
+		append(record: ChatLogRecord): Promise<void> {
+			// appendFile can split large writes, allowing concurrent calls to interleave and corrupt the JSONL stream.
+			const operation = appendTail.then(async () => {
+				const recordPath = chatLogPath(config, channel, new Date(record.ts));
+				await mkdir(dirname(recordPath), { recursive: true });
+				await appendFile(recordPath, `${JSON.stringify(record)}\n`, "utf8");
+			});
+			// Return the original promise so callers see failures, but keep later appends from inheriting the rejection.
+			appendTail = operation.catch(() => undefined);
+			return operation;
 		},
 		async acquire(owner: string): Promise<void> {
 			await mkdir(dirname(lockPath), { recursive: true });

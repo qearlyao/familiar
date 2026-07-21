@@ -406,6 +406,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
 	const ttsVoiceSettings = (tts.voice_settings ?? {}) as Record<string, unknown>;
+	const ttsCartesia = (tts.cartesia ?? {}) as Record<string, unknown>;
 	const imageGen = (parsed.image_gen ?? {}) as Record<string, unknown>;
 	const media = (parsed.media ?? {}) as Record<string, unknown>;
 	const generatedMedia = (media.generated ?? {}) as Record<string, unknown>;
@@ -683,6 +684,11 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 					true,
 					"tts.voice_settings.use_speaker_boost",
 				),
+			},
+			cartesia: {
+				apiKeyEnv: readOptionalString(ttsCartesia.api_key_env, "CARTESIA_API_KEY"),
+				voiceId: readOptionalString(ttsCartesia.voice_id, ""),
+				modelId: readOptionalString(ttsCartesia.model_id, "sonic-3.5"),
 			},
 		},
 		imageGen: {

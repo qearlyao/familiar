@@ -39,7 +39,7 @@ export const CRON_FREQUENCIES = [
 ] as const satisfies readonly CronFrequency[];
 export const CRON_DELIVERY_MODES = ["queue", "follow_up"] as const satisfies readonly CronDeliveryMode[];
 export const WEB_AUTH_MODES = ["tailscale-only", "bearer", "public-2fa"] as const satisfies readonly WebAuthMode[];
-export const TTS_PROVIDERS = ["elevenlabs"] as const satisfies readonly TtsProvider[];
+export const TTS_PROVIDERS = ["elevenlabs", "cartesia"] as const satisfies readonly TtsProvider[];
 export const IMAGE_GEN_APIS = ["openrouter-images"] as const satisfies readonly ImageGenApi[];
 export const MEDIA_UNDERSTANDING_PROVIDERS = [
 	"groq",

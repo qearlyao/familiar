@@ -9,7 +9,7 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
-export type TtsProvider = "elevenlabs";
+export type TtsProvider = "elevenlabs" | "cartesia";
 export type ImageGenApi = "openrouter-images";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
@@ -151,6 +151,11 @@ export interface Config {
 		outputFormat: string;
 		maxInputChars: number;
 		voiceSettings: TtsVoiceSettings;
+		cartesia: {
+			apiKeyEnv: string;
+			voiceId: string;
+			modelId: string;
+		};
 	};
 	imageGen: {
 		enabled: boolean;

@@ -134,12 +134,18 @@ link = "LINK_API_KEY"
 # compat = { force_adaptive_thinking = true } # for adaptive-thinking Claude aliases
 
 [tts]
+# provider = "cartesia" switches speech to Cartesia; the flat keys below stay ElevenLabs settings.
 provider = "elevenlabs"
 api_key_env = "ELEVENLABS_API_KEY"
 voice_id = "${ELEVENLABS_VOICE_ID:-}"
 model_id = "eleven_v3"
 output_format = "mp3_44100_128"
 max_input_chars = 5000
+
+[tts.cartesia]
+api_key_env = "CARTESIA_API_KEY"
+voice_id = "${CARTESIA_VOICE_ID:-}"
+model_id = "sonic-3.5"
 
 [tts.voice_settings]
 # ElevenLabs v2/v2.5 voice settings. For eleven_v3, Familiar sends only stability and omits v2-only fields.

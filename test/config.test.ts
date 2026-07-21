@@ -37,6 +37,11 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.modelId, "eleven_multilingual_v2");
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
+		assert.deepEqual(config.tts.cartesia, {
+			apiKeyEnv: "CARTESIA_API_KEY",
+			voiceId: "",
+			modelId: "sonic-3.5",
+		});
 		assert.deepEqual(config.imageGen, {
 			enabled: true,
 			model: "openrouter/google/gemini-2.5-flash-image",
@@ -119,6 +124,32 @@ provider = "other"
 		);
 
 		await assert.rejects(() => loadConfig(workspacePath), /tts\.provider/);
+	});
+
+	it("loads the cartesia provider config", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		delete process.env.ELEVENLABS_VOICE_ID;
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[tts]
+provider = "cartesia"
+
+[tts.cartesia]
+api_key_env = "MY_CARTESIA_KEY"
+voice_id = "cartesia-voice"
+model_id = "sonic-3"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.tts.provider, "cartesia");
+		assert.deepEqual(config.tts.cartesia, {
+			apiKeyEnv: "MY_CARTESIA_KEY",
+			voiceId: "cartesia-voice",
+			modelId: "sonic-3",
+		});
 	});
 
 	it("loads ElevenLabs voice settings", async (t) => {

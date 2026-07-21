@@ -559,8 +559,11 @@ export type ConfigKey =
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
   | "heartbeat.intervalMs"
+  | "tts.provider"
   | "tts.voice_id"
   | "tts.model_id"
+  | "tts.cartesia.voice_id"
+  | "tts.cartesia.model_id"
   | "memory.lcm.enabled"
   | "memory.lcm.model"
   | "memory.lcm.contextThreshold"
@@ -587,13 +590,18 @@ export interface ConfigValue<T = unknown> {
   source: SettingSource;
 }
 
+export type TtsProvider = "elevenlabs" | "cartesia";
+
 export interface ConfigPayload {
   values: {
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;
     "heartbeat.intervalMs": ConfigValue<number>;
+    "tts.provider": ConfigValue<TtsProvider>;
     "tts.voice_id": ConfigValue<string>;
     "tts.model_id": ConfigValue<string>;
+    "tts.cartesia.voice_id": ConfigValue<string>;
+    "tts.cartesia.model_id": ConfigValue<string>;
     "memory.lcm.enabled": ConfigValue<boolean>;
     "memory.lcm.model": ConfigValue<string>;
     "memory.lcm.contextThreshold": ConfigValue<number>;

@@ -10,13 +10,17 @@ import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 
 const ELEVENLABS_TTS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech";
+const CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes";
+const CARTESIA_VERSION = "2026-03-01";
 const AUDIO_EXTENSIONS = ["mp3", "opus", "pcm", "ulaw", "alaw"] as const;
 const TTS_NOTICE_PREFIX = "Generated speech audio attachment:";
 const ttsSchema = Type.Object(
 	{
 		text: Type.String({ description: "Text to synthesize as speech." }),
 		voiceId: Type.Optional(
-			Type.String({ description: "Optional ElevenLabs voice ID. Overrides the configured voice_id." }),
+			Type.String({
+				description: "Optional voice ID for the active TTS provider. Overrides the configured voice id.",
+			}),
 		),
 	},
 	{ additionalProperties: false },
@@ -75,17 +79,32 @@ export function buildElevenLabsVoiceSettings(config: Config): ElevenLabsVoiceSet
 	};
 }
 
-async function readElevenLabsError(response: Response): Promise<string> {
+export function buildCartesiaRequestBody(config: Config, text: string, voiceId: string): Record<string, unknown> {
+	return {
+		model_id: config.tts.cartesia.modelId,
+		transcript: text,
+		voice: { mode: "id", id: voiceId },
+		// ponytail: mp3 44100/128k hardcoded; add a cartesia output_format config key if another container is ever needed
+		output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
+	};
+}
+
+async function readTtsError(response: Response): Promise<string> {
 	const text = await response.text().catch(() => "");
 	if (!text.trim()) return `${response.status} ${response.statusText}`.trim();
 	try {
 		const parsed = JSON.parse(text) as unknown;
-		if (parsed && typeof parsed === "object" && "detail" in parsed) {
-			const detail = (parsed as { detail?: unknown }).detail;
-			if (typeof detail === "string") return detail;
-			if (detail && typeof detail === "object" && "message" in detail) {
-				const message = (detail as { message?: unknown }).message;
-				if (typeof message === "string") return message;
+		if (parsed && typeof parsed === "object") {
+			if ("error" in parsed && typeof (parsed as { error?: unknown }).error === "string") {
+				return (parsed as { error: string }).error;
+			}
+			if ("detail" in parsed) {
+				const detail = (parsed as { detail?: unknown }).detail;
+				if (typeof detail === "string") return detail;
+				if (detail && typeof detail === "object" && "message" in detail) {
+					const message = (detail as { message?: unknown }).message;
+					if (typeof message === "string") return message;
+				}
 			}
 		}
 	} catch {}
@@ -109,46 +128,65 @@ export function createTtsTool(
 			if (text.length > config.tts.maxInputChars) {
 				throw new Error(`tts text is too long (${text.length}/${config.tts.maxInputChars} chars).`);
 			}
-			const voiceId = input.voiceId?.trim() || config.tts.voiceId.trim();
-			if (!voiceId) throw new Error("tts.voice_id is not configured and no voiceId was provided.");
-			const apiKey = process.env[config.tts.apiKeyEnv];
-			if (!apiKey) throw new Error(`Missing ElevenLabs API key env: ${config.tts.apiKeyEnv}`);
+			const provider = config.tts.provider;
+			const providerConfig = provider === "cartesia" ? config.tts.cartesia : config.tts;
+			const voiceId = input.voiceId?.trim() || providerConfig.voiceId.trim();
+			if (!voiceId) {
+				const voiceKey = provider === "cartesia" ? "tts.cartesia.voice_id" : "tts.voice_id";
+				throw new Error(`${voiceKey} is not configured and no voiceId was provided.`);
+			}
+			const apiKey = process.env[providerConfig.apiKeyEnv];
+			if (!apiKey) throw new Error(`Missing ${provider} API key env: ${providerConfig.apiKeyEnv}`);
 
 			const outputFormat = config.tts.outputFormat;
-			const url = new URL(`${ELEVENLABS_TTS_BASE_URL}/${encodeURIComponent(voiceId)}`);
-			url.searchParams.set("output_format", outputFormat);
-			const response = await fetch(url, {
-				method: "POST",
-				headers: {
-					"content-type": "application/json",
-					"xi-api-key": apiKey,
-				},
-				body: JSON.stringify({
-					text,
-					model_id: config.tts.modelId,
-					voice_settings: buildElevenLabsVoiceSettings(config),
-				}),
-				signal,
-			});
+			let response: Response;
+			if (provider === "cartesia") {
+				response = await fetch(CARTESIA_TTS_URL, {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+						authorization: `Bearer ${apiKey}`,
+						"cartesia-version": CARTESIA_VERSION,
+					},
+					body: JSON.stringify(buildCartesiaRequestBody(config, text, voiceId)),
+					signal,
+				});
+			} else {
+				const url = new URL(`${ELEVENLABS_TTS_BASE_URL}/${encodeURIComponent(voiceId)}`);
+				url.searchParams.set("output_format", outputFormat);
+				response = await fetch(url, {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+						"xi-api-key": apiKey,
+					},
+					body: JSON.stringify({
+						text,
+						model_id: config.tts.modelId,
+						voice_settings: buildElevenLabsVoiceSettings(config),
+					}),
+					signal,
+				});
+			}
 			if (!response.ok) {
-				throw new Error(`ElevenLabs TTS failed: ${await readElevenLabsError(response)}`);
+				throw new Error(`${provider} TTS failed: ${await readTtsError(response)}`);
 			}
 
 			const buffer = Buffer.from(await response.arrayBuffer());
 			const attachmentDir = await ensureGeneratedAttachmentsDir(config);
-			const extension = audioExtension(outputFormat);
+			const extension = provider === "cartesia" ? "mp3" : audioExtension(outputFormat);
 			const id = `tts_${randomUUID()}`;
 			const name = `${id}.${extension}`;
 			const localPath = resolve(attachmentDir, name);
 			await writeFile(localPath, buffer);
-			const mimeType = audioMimeType(outputFormat);
+			const mimeType = provider === "cartesia" ? "audio/mpeg" : audioMimeType(outputFormat);
 			const attachment = {
 				id,
 				name,
 				mimeType,
 				size: buffer.length,
 				localPath,
-				provider: "elevenlabs",
+				provider,
 				toolName: "tts",
 			} as const;
 			mediaSink.add(attachment);

@@ -1,13 +1,18 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
+import { TTS_PROVIDERS } from "./enums.js";
 import type { Config } from "./index.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
+import type { TtsProvider } from "./types.js";
 
 export type ConfigKey =
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
+	| "tts.provider"
 	| "tts.voice_id"
 	| "tts.model_id"
+	| "tts.cartesia.voice_id"
+	| "tts.cartesia.model_id"
 	| "image_gen.enabled"
 	| "image_gen.model"
 	| "image_gen.fallback_model"
@@ -124,6 +129,18 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			scheduler.rearmHeartbeat();
 		},
 	},
+	"tts.provider": {
+		read: (config) => config.tts.provider,
+		validate: (value) => {
+			if (typeof value !== "string" || !(TTS_PROVIDERS as readonly string[]).includes(value)) {
+				throw new Error(`tts.provider must be one of: ${TTS_PROVIDERS.join(", ")}`);
+			}
+			return value;
+		},
+		write: (config, value) => {
+			config.tts.provider = value as TtsProvider;
+		},
+	},
 	"tts.voice_id": {
 		read: (config) => config.tts.voiceId,
 		validate: (value) => requireString(value, "tts.voice_id", true),
@@ -136,6 +153,20 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		validate: (value) => requireString(value, "tts.model_id"),
 		write: (config, value) => {
 			config.tts.modelId = value as string;
+		},
+	},
+	"tts.cartesia.voice_id": {
+		read: (config) => config.tts.cartesia.voiceId,
+		validate: (value) => requireString(value, "tts.cartesia.voice_id", true),
+		write: (config, value) => {
+			config.tts.cartesia.voiceId = value as string;
+		},
+	},
+	"tts.cartesia.model_id": {
+		read: (config) => config.tts.cartesia.modelId,
+		validate: (value) => requireString(value, "tts.cartesia.model_id"),
+		write: (config, value) => {
+			config.tts.cartesia.modelId = value as string;
 		},
 	},
 	"image_gen.enabled": {

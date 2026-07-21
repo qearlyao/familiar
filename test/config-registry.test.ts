@@ -19,4 +19,21 @@ describe("TTS config registry", () => {
 		assert.throws(() => model.validate("  ", config), /tts\.model_id must not be empty/);
 		assert.throws(() => voice.validate(123, config), /tts\.voice_id must be a string/);
 	});
+
+	it("validates the provider switch and cartesia ids", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const provider = CONFIG_REGISTRY["tts.provider"];
+		const voice = CONFIG_REGISTRY["tts.cartesia.voice_id"];
+		const model = CONFIG_REGISTRY["tts.cartesia.model_id"];
+
+		provider.write(config, provider.validate("cartesia", config));
+		voice.write(config, voice.validate("  voice-abc  ", config));
+		model.write(config, model.validate("sonic-3.5", config));
+
+		assert.equal(provider.read(config), "cartesia");
+		assert.equal(voice.read(config), "voice-abc");
+		assert.equal(model.read(config), "sonic-3.5");
+		assert.throws(() => provider.validate("other", config), /tts\.provider must be one of/);
+		assert.throws(() => model.validate("  ", config), /tts\.cartesia\.model_id must not be empty/);
+	});
 });

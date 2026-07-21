@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { audioExtension, audioMimeType, buildElevenLabsVoiceSettings } from "../src/media/tts.js";
+import { audioExtension, audioMimeType, buildCartesiaRequestBody, buildElevenLabsVoiceSettings } from "../src/media/tts.js";
 import { configWithDataDir } from "./helpers.js";
 
 describe("tts audio formats", () => {
@@ -61,6 +61,23 @@ describe("ElevenLabs voice settings", () => {
 
 		assert.deepEqual(buildElevenLabsVoiceSettings(config), {
 			stability: 0.45,
+		});
+	});
+});
+
+describe("Cartesia request body", () => {
+	it("builds an id-voice mp3 request", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			tts: {
+				cartesia: { apiKeyEnv: "CARTESIA_API_KEY", voiceId: "voice-abc", modelId: "sonic-3.5" },
+			},
+		});
+
+		assert.deepEqual(buildCartesiaRequestBody(config, "hello there", "voice-abc"), {
+			model_id: "sonic-3.5",
+			transcript: "hello there",
+			voice: { mode: "id", id: "voice-abc" },
+			output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
 		});
 	});
 });

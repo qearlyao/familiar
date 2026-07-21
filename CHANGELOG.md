@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.1 - 2026-07-21
+
+### Added
+
+- Add Cartesia as a second TTS provider, with live WebUI controls for provider, voice, and model settings.
+
+### Changed
+
+- Refresh the README as a product introduction with WebUI, mobile, and Discord screenshots while keeping setup and operator guidance easy to reach.
+- Bump the pi dependency set to `0.80.10`, adding Kimi K3 and Grok 4.5 model support and improving Kimi thinking and deferred-tool compatibility.
+
+### Fixed
+
+- Serialize concurrent chat-history writes so large records cannot interleave and corrupt JSONL logs, especially on Windows.
+
 ## 0.7.0 - 2026-07-16
 
 ### Added

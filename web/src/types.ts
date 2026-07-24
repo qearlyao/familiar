@@ -8,6 +8,8 @@ export interface Message {
   attachments?: Attachment[];
   usage?: Usage;
   silent?: boolean;
+  /** Set on user messages sent from a book's margins; the reader filters on it. */
+  bookId?: string;
   ts: number;
 }
 

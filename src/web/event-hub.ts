@@ -159,6 +159,7 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 					messageId: record.messageId,
 					role: "user",
 					who: record.authorName || getContactNickname(WEB_USER_NAME),
+					bookId: record.bookId,
 					ts: toUnixMs(record.ts),
 				});
 				publishDelta(runtime.channelKey, record.messageId, "text", record.text, toUnixMs(record.ts));

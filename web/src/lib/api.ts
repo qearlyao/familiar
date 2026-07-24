@@ -13,6 +13,7 @@ interface WireMessage {
   attachments?: Attachment[];
   usage?: Usage;
   silent?: boolean;
+  bookId?: string;
   ts: number;
 }
 
@@ -33,6 +34,7 @@ function wireToMessage(wire: WireMessage): Message {
       attachments: wire.attachments,
       usage: wire.usage,
       silent: wire.silent,
+      bookId: wire.bookId,
       ts: wire.ts,
     };
   }
@@ -63,6 +65,7 @@ function wireToMessage(wire: WireMessage): Message {
     attachments: wire.attachments,
     usage: wire.usage,
     silent: wire.silent,
+    bookId: wire.bookId,
     ts: wire.ts,
   };
 }
@@ -88,6 +91,7 @@ export type StreamEvent =
       messageId: string;
       role: "assistant" | "user";
       who: string;
+      bookId?: string;
     }
   | {
       type: "delta";
@@ -407,11 +411,13 @@ export async function sendMessage(
   clientId: string,
   channelKey?: string,
   attachments: File[] = [],
+  bookId?: string,
 ): Promise<{ id: string; ts: number; channelKey: string }> {
   const body = new FormData();
   body.set("text", text);
   body.set("clientId", clientId);
   if (channelKey) body.set("channelKey", channelKey);
+  if (bookId) body.set("bookId", bookId);
   for (const attachment of attachments) body.append("attachments", attachment, attachment.name);
   const res = await fetch("/api/web/send", { method: "POST", body });
   if (!res.ok) {
@@ -553,6 +559,146 @@ export async function fetchMemes(): Promise<MemeFamily[]> {
   if (!res.ok) throw new Error(`memes: ${res.status}`);
   const body = (await res.json()) as { families: MemeFamily[] };
   return body.families;
+}
+
+export interface BookPosition {
+  chapter: number;
+  offsetRatio: number;
+  updatedAt: number;
+}
+
+export interface BookSummary {
+  id: string;
+  title: string;
+  author?: string;
+  language?: string;
+  format: "epub" | "text";
+  chapterCount: number;
+  coverUrl?: string;
+  createdAt: number;
+  position?: BookPosition;
+  percent?: number;
+}
+
+export interface BookChapterInfo {
+  index: number;
+  title: string;
+  chars: number;
+}
+
+export interface BookDetail extends BookSummary {
+  chapters: BookChapterInfo[];
+}
+
+export interface BookChapter {
+  index: number;
+  title: string;
+  html: string;
+  chars: number;
+}
+
+export interface MarginaliaEntry {
+  id: string;
+  chapter: number;
+  quote: string;
+  prefix: string;
+  suffix: string;
+  note?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export async function fetchBooks(): Promise<BookSummary[]> {
+  const res = await fetch("/api/web/books");
+  if (!res.ok) throw new Error(`books: ${res.status}`);
+  const body = (await res.json()) as { books: BookSummary[] };
+  return body.books;
+}
+
+export async function fetchBook(id: string): Promise<BookDetail> {
+  const res = await fetch(`/api/web/book?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`book: ${res.status}`);
+  const body = (await res.json()) as { book: BookDetail };
+  return body.book;
+}
+
+export async function fetchBookChapter(id: string, index: number): Promise<BookChapter> {
+  const res = await fetch(`/api/web/book/chapter?id=${encodeURIComponent(id)}&index=${index}`);
+  if (!res.ok) throw new Error(`book/chapter: ${res.status}`);
+  return (await res.json()) as BookChapter;
+}
+
+export async function uploadBook(file: File): Promise<BookSummary> {
+  const body = new FormData();
+  body.append("attachments", file, file.name);
+  const res = await fetch("/api/web/books", { method: "POST", body });
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(errBody.error ?? `books: ${res.status}`);
+  }
+  const parsed = (await res.json()) as { book: BookSummary };
+  return parsed.book;
+}
+
+export async function deleteBook(id: string): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/book", "DELETE", { id }, "book");
+}
+
+export async function saveBookPosition(
+  id: string,
+  chapter: number,
+  offsetRatio: number,
+): Promise<number | undefined> {
+  const body = await jsonRequest<{ ok: true; percent?: number }>(
+    "/api/web/book/position",
+    "PUT",
+    { id, chapter, offsetRatio },
+    "book/position",
+  );
+  return body.percent;
+}
+
+/** The book's durable margin-conversation log — mirrored turns from the main session, never LCM-compressed. */
+export async function fetchBookConversation(id: string, channelKey: string): Promise<Message[]> {
+	const params = new URLSearchParams({ id, channelKey });
+	const res = await fetch(`/api/web/book/conversation?${params}`);
+  if (!res.ok) throw new Error(`book/conversation: ${res.status}`);
+  const body = (await res.json()) as { messages: WireMessage[] };
+  return body.messages.map(wireToMessage);
+}
+
+export async function fetchMarginalia(id: string): Promise<MarginaliaEntry[]> {
+  const res = await fetch(`/api/web/book/marginalia?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`book/marginalia: ${res.status}`);
+  const body = (await res.json()) as { entries: MarginaliaEntry[] };
+  return body.entries;
+}
+
+export async function createMarginalia(
+  id: string,
+  draft: { chapter: number; quote: string; prefix: string; suffix: string; note?: string },
+): Promise<MarginaliaEntry> {
+  const body = await jsonRequest<{ entry: MarginaliaEntry }>(
+    "/api/web/book/marginalia",
+    "POST",
+    { id, ...draft },
+    "book/marginalia",
+  );
+  return body.entry;
+}
+
+export async function updateMarginalia(id: string, entryId: string, note: string): Promise<MarginaliaEntry> {
+  const body = await jsonRequest<{ entry: MarginaliaEntry }>(
+    "/api/web/book/marginalia",
+    "PUT",
+    { id, entryId, note },
+    "book/marginalia",
+  );
+  return body.entry;
+}
+
+export async function deleteMarginalia(id: string, entryId: string): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/book/marginalia", "DELETE", { id, entryId }, "book/marginalia");
 }
 
 export type ConfigKey =

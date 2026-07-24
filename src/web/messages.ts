@@ -311,6 +311,19 @@ export function webMessagesFromRecords(
 	return messages;
 }
 
+export function webMessagesForBook(
+	config: Config,
+	records: readonly ChatLogRecord[],
+	assistantName: string,
+	bookId: string,
+): WebMessage[] {
+	let inBookTurn = false;
+	return webMessagesFromRecords(config, records, assistantName).filter((message) => {
+		if (message.role === "user") inBookTurn = message.bookId === bookId;
+		return inBookTurn;
+	});
+}
+
 export function webHistoryPayload(
 	config: Config,
 	records: readonly ChatLogRecord[],
@@ -410,6 +423,7 @@ export function webMessageFromRecord(
 			role: "user",
 			who: record.authorName || getContactNickname(WEB_USER_NAME),
 			text: record.text,
+			bookId: record.bookId,
 			attachments: webAttachments(config, record.attachments),
 			ts: toUnixMs(record.ts),
 		};

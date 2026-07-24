@@ -10,9 +10,10 @@ import type { ConversationRuntime, InboundMessageInput } from "../runtime/conver
 import { isRecord } from "../util/guards.js";
 import type { WebAuth } from "./auth.js";
 import { requestAuthContext, sessionCookie, verifyTotp } from "./auth.js";
+import { assertBookId } from "./book-library.js";
 import { HttpError, readJsonBody, sendJson } from "./http.js";
 import { memeCatalogPath, parseMemeCatalog } from "./memes.js";
-import { webHistoryPayload } from "./messages.js";
+import { webHistoryPayload, webMessagesForBook } from "./messages.js";
 import {
 	isMultipartContentType,
 	isWebUploadAttachment,
@@ -72,6 +73,11 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 			webHistoryPayload(config, runtime.getRecords(), personaName, runtime.channelKey, { limit, before }),
 		);
 	});
+	route("GET", "/api/web/book/conversation", async (_request, response, url) => {
+		const bookId = assertBookId(url.searchParams.get("id") ?? "");
+		const runtime = await getRuntime(getChannelKeyFromRequest(url));
+		sendJson(response, 200, { messages: webMessagesForBook(config, runtime.getRecords(), personaName, bookId) });
+	});
 	route("GET", "/api/web/memes", async (_request, response) => {
 		try {
 			const markdown = await readFile(memeCatalogPath(config), "utf8");
@@ -101,6 +107,10 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 		if (!body.text.trim() && attachments.length === 0) {
 			throw new HttpError(400, "text or attachment is required");
 		}
+		if (body.bookId !== undefined && typeof body.bookId !== "string") {
+			throw new HttpError(400, "bookId must be a string");
+		}
+		const bookId = typeof body.bookId === "string" ? assertBookId(body.bookId) : undefined;
 		const id = messageId("user");
 		const ts = Date.now();
 		const input: InboundMessageInput = {
@@ -108,6 +118,7 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 			authorId: config.discord.ownerId,
 			authorName: getContactNickname(WEB_USER_NAME),
 			text: body.text,
+			bookId,
 			isBot: false,
 			mentionedBot: true,
 			remoteTimestamp: new Date(ts).toISOString(),

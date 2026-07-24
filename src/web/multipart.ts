@@ -78,7 +78,7 @@ export async function readMultipartBody(
 		const disposition = parseContentDisposition(headers["content-disposition"] ?? "");
 		const name = disposition.name;
 		if (!name) continue;
-		if (name === "text" || name === "channelKey" || name === "clientId") {
+		if (name === "text" || name === "channelKey" || name === "clientId" || name === "bookId") {
 			body[name] = Buffer.from(contentBinary, "binary").toString("utf8");
 			continue;
 		}

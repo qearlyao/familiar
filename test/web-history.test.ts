@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import { materializeInboundAttachments } from "../src/media/inbound-attachments.js";
-import { webHistoryPayload, webMessagesFromRecords } from "../src/web/messages.js";
+import { webHistoryPayload, webMessagesForBook, webMessagesFromRecords } from "../src/web/messages.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 function base(recordId: number, ts: string) {
@@ -103,6 +103,7 @@ function twoTurnRecords(): ChatLogRecord[] {
 			authorId: "owner",
 			authorName: "Q",
 			text: "first ask",
+			bookId: "aaaaaaaaaa",
 			isBot: false,
 			mentionedBot: true,
 			attachments: [],
@@ -166,6 +167,7 @@ function twoTurnRecords(): ChatLogRecord[] {
 			authorId: "owner",
 			authorName: "Q",
 			text: "second ask",
+			bookId: "bbbbbbbbbb",
 			isBot: false,
 			mentionedBot: true,
 			attachments: [],
@@ -212,6 +214,14 @@ function twoTurnRecords(): ChatLogRecord[] {
 }
 
 describe("web history", () => {
+	it("returns only complete turns started from the requested book", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const messages = webMessagesForBook(config, twoTurnRecords(), "Ghost", "aaaaaaaaaa");
+
+		assert.deepEqual(messages.map((message) => message.id), ["u1", "msg-a"]);
+		assert.equal(messages[0]?.bookId, "aaaaaaaaaa");
+	});
+
 	it("keeps local text attachment previews out of visible user text", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const [attachment] = await materializeInboundAttachments(config, [

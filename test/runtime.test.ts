@@ -22,10 +22,12 @@ describe("ConversationRuntime", () => {
 				authorId: "owner",
 				authorName: "qearlyao",
 				text: "hello",
+				bookId: "aaaaaaaaaa",
 				remoteTimestamp: "2026-05-09T03:34:16.881Z",
 			});
 
 			assert.equal(record.ts, "2026-05-09T03:34:16.881Z");
+			assert.equal(record.bookId, "aaaaaaaaaa");
 			const prompt = runtime.buildSteerPromptForRecord(record);
 			assert.match(prompt, / @ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} GMT[+-]\d{1,2}/);
 			assert.doesNotMatch(prompt, /2026-05-09T03:34:16\.881Z/);

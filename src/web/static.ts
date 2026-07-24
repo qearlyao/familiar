@@ -26,6 +26,9 @@ function mimeType(path: string): string {
 	if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
 	if (extension === ".gif") return "image/gif";
 	if (extension === ".webp") return "image/webp";
+	if (extension === ".avif") return "image/avif";
+	if (extension === ".bmp") return "image/bmp";
+	if (extension === ".tif" || extension === ".tiff") return "image/tiff";
 	if (extension === ".ico") return "image/x-icon";
 	if (extension === ".mp3") return "audio/mpeg";
 	if (extension === ".opus" || extension === ".ogg") return "audio/ogg";
@@ -44,8 +47,13 @@ export async function serveStatic(response: ServerResponse, requestPath: string)
 	let filePath = candidate;
 	const fileStat = await stat(filePath).catch(() => undefined);
 	if (!fileStat?.isFile()) filePath = join(DIST_DIR, "index.html");
+	// Hashed assets are immutable; everything else (index.html, manifest,
+	// icons) must revalidate or rebuilds stay invisible behind heuristic caching.
+	const cacheControl = relative(DIST_DIR, filePath).startsWith("assets/")
+		? "public, max-age=31536000, immutable"
+		: "no-cache";
 	const stream = createReadStream(filePath);
-	response.writeHead(200, { "content-type": mimeType(filePath) });
+	response.writeHead(200, { "content-type": mimeType(filePath), "cache-control": cacheControl });
 	stream.pipe(response);
 	return true;
 }
@@ -67,6 +75,28 @@ function parseRangeHeader(rangeHeader: string | undefined, size: number): { star
 		return undefined;
 	}
 	return { start, end: Math.min(end, size - 1) };
+}
+
+export function servePrivateFile(response: ServerResponse, filePath: string, size: number, rangeHeader?: string): void {
+	const range = parseRangeHeader(rangeHeader, size);
+	if (range) {
+		response.writeHead(206, {
+			"content-type": mimeType(filePath),
+			"content-length": String(range.end - range.start + 1),
+			"content-range": `bytes ${range.start}-${range.end}/${size}`,
+			"accept-ranges": "bytes",
+			"cache-control": "private, max-age=31536000, immutable",
+		});
+		createReadStream(filePath, { start: range.start, end: range.end }).pipe(response);
+		return;
+	}
+	response.writeHead(200, {
+		"content-type": mimeType(filePath),
+		"content-length": String(size),
+		"accept-ranges": "bytes",
+		"cache-control": "private, max-age=31536000, immutable",
+	});
+	createReadStream(filePath).pipe(response);
 }
 
 export async function serveAttachment(
@@ -113,25 +143,7 @@ export async function serveAttachment(
 		}
 		const fileStat = await stat(fileRealPath).catch(() => undefined);
 		if (!fileStat?.isFile()) continue;
-		const range = parseRangeHeader(rangeHeader, fileStat.size);
-		if (range) {
-			response.writeHead(206, {
-				"content-type": mimeType(filePath),
-				"content-length": String(range.end - range.start + 1),
-				"content-range": `bytes ${range.start}-${range.end}/${fileStat.size}`,
-				"accept-ranges": "bytes",
-				"cache-control": "private, max-age=31536000, immutable",
-			});
-			createReadStream(fileRealPath, { start: range.start, end: range.end }).pipe(response);
-			return true;
-		}
-		response.writeHead(200, {
-			"content-type": mimeType(filePath),
-			"content-length": String(fileStat.size),
-			"accept-ranges": "bytes",
-			"cache-control": "private, max-age=31536000, immutable",
-		});
-		createReadStream(fileRealPath).pipe(response);
+		servePrivateFile(response, fileRealPath, fileStat.size, rangeHeader);
 		return true;
 	}
 	sendText(response, 404, "Not found");

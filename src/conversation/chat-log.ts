@@ -63,6 +63,7 @@ export interface InboundChatRecord extends ChatRecordBase {
 	authorId: string;
 	authorName?: string;
 	text: string;
+	bookId?: string;
 	isBot: boolean;
 	mentionedBot: boolean;
 	attachments: StoredAttachment[];

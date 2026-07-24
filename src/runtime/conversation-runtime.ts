@@ -22,6 +22,7 @@ export interface InboundMessageInput {
 	authorId: string;
 	authorName?: string;
 	text: string;
+	bookId?: string;
 	isBot?: boolean;
 	mentionedBot?: boolean;
 	attachments?: InboundChatRecord["attachments"];
@@ -346,6 +347,7 @@ export class ConversationRuntime {
 			authorId: input.authorId,
 			authorName: input.authorName,
 			text: input.text.trim(),
+			bookId: input.bookId,
 			isBot: input.isBot ?? false,
 			mentionedBot: input.mentionedBot ?? false,
 			attachments: input.attachments ?? [],

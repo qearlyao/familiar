@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Config } from "../config/index.js";
 import type { WebAuth } from "./auth.js";
+import { serveBookAsset } from "./book-routes.js";
 import { errorMessage } from "./errors.js";
 import { HttpError, sendJson } from "./http.js";
 import { serveAttachment } from "./static.js";
@@ -29,6 +30,9 @@ export function createWebRouteRegistry(config: Config, auth: WebAuth): WebRouteR
 		try {
 			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
 				return serveAttachment(config, response, url.pathname, request.headers.range);
+			}
+			if (request.method === "GET" && url.pathname.startsWith("/api/web/books/assets/")) {
+				return serveBookAsset(config, response, url.pathname, request.headers.range);
 			}
 			const handler = webRoutes.get(`${request.method} ${url.pathname}`);
 			// await is load-bearing: it keeps handler rejections inside this try so the catch maps HttpError to a status.

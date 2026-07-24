@@ -11,6 +11,7 @@ import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { registerWebAgentRoutes } from "./agent-routes.js";
 import { createAuth, loadWebSessionStore } from "./auth.js";
 import { registerWebAuthRoutes } from "./auth-routes.js";
+import { registerWebBookRoutes } from "./book-routes.js";
 import { registerWebConfigRoutes } from "./config-routes.js";
 import { registerWebConversationRoutes } from "./conversation-routes.js";
 import { registerWebDiaryRoutes } from "./diary-routes.js";
@@ -89,6 +90,7 @@ export async function startWebDaemon(
 		publish: eventHub.publish,
 	});
 	registerWebConfigRoutes(route, config, agentCore);
+	registerWebBookRoutes(route, config);
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);

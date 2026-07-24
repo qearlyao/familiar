@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import { strToU8, zipSync } from "fflate";
+import sharp from "sharp";
 
 import {
 	assertBookId,
@@ -29,7 +30,7 @@ const PIXEL_PNG = Buffer.from(
 	"base64",
 );
 
-function tinyEpub(extraChapterHtml = ""): Buffer {
+function tinyEpub(extraChapterHtml = "", extraFiles: Record<string, Uint8Array> = {}): Buffer {
 	const files: Record<string, Uint8Array> = {
 		"META-INF/container.xml": strToU8(`<?xml version="1.0"?>
 			<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -44,6 +45,7 @@ function tinyEpub(extraChapterHtml = ""): Buffer {
 					<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
 					<item id="one" href="one.xhtml" media-type="application/xhtml+xml"/>
 					<item id="two" href="two.xhtml" media-type="application/xhtml+xml"/>
+					<item id="style" href="stylesheet.css" media-type="text/css"/>
 					<item id="cover" href="images/pixel.png" media-type="image/png" properties="cover-image"/>
 				</manifest>
 				<spine><itemref idref="two"/><itemref idref="one"/></spine>
@@ -52,18 +54,20 @@ function tinyEpub(extraChapterHtml = ""): Buffer {
 			<nav><ol><li><a href="one.xhtml">Opening</a></li><li><a href="two.xhtml">Second First</a></li></ol></nav>
 		</body></html>`),
 		"OPS/one.xhtml": strToU8(`<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head>
-			<style>body { color: red }</style><script>alert(1)</script></head><body>
+			<link rel="stylesheet" href="stylesheet.css"/><script>alert(1)</script></head><body>
 			<h1 id="opening" style="color:red" onclick="bad()">Fallback Heading</h1>
 			<p class="lead" onmouseover="bad()">Hello <strong>reader</strong>.</p>
-			<img src="images/pixel.png" onerror="bad()" style="width:100px" alt="pixel"/>
+			<img src="images/pixel.png" class="decor" onerror="bad()" style="width:100px" alt="pixel"/>
 			<svg><image href="images/pixel.png"/></svg>
 			<a href="two.xhtml#next">Next chapter</a><script>bad()</script>
 			${extraChapterHtml}
-		</body></html>`),
+			</body></html>`),
+		"OPS/stylesheet.css": strToU8(`.lead { color: red; background-color: red; } @import url(https://example.com/remote.css); @font-face { src: url(https://example.com/font.woff2); }`),
 		"OPS/two.xhtml": strToU8(`<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><body>
 			<h2>Ignored fallback</h2><p>Spine order comes first.</p>
 		</body></html>`),
 		"OPS/images/pixel.png": PIXEL_PNG,
+		...extraFiles,
 	};
 	return Buffer.from(zipSync(files));
 }
@@ -101,6 +105,9 @@ describe("web books", () => {
 		assert.doesNotMatch(first.html, /javascript:|<a\b|href=/i);
 		assert.match(first.html, /<h1 id="opening">Fallback Heading<\/h1>/);
 		assert.match(first.html, /<p class="lead">Hello <strong>reader<\/strong>\.<\/p>/);
+		assert.match(first.css ?? "", /\.reader-content \.lead\s*\{\s*color: red/);
+		assert.doesNotMatch(first.css ?? "", /@import|@font-face|https:\/\//i);
+		assert.match(first.html, /<img[^>]+class="decor"/);
 		assert.match(first.html, /Next chapter/);
 		const assetName = /\/api\/web\/books\/assets\/[a-f0-9]{10}\/([a-f0-9]+\.png)/.exec(first.html)?.[1];
 		assert.ok(assetName);
@@ -126,6 +133,34 @@ describe("web books", () => {
 
 		assert.doesNotMatch(chapter.html, /<script\b/i);
 		assert.match(chapter.html, /&amp;lt;script&amp;gt;literal&amp;lt;\/script&amp;gt;/);
+	});
+
+	it("re-encodes white-ground ornament images as ink on transparency", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		// 16x4 white strip with a black 8px run: grayscale, white ground, real ink.
+		const raw = Buffer.alloc(16 * 4 * 3, 255);
+		raw.fill(0, 24 * 3, 32 * 3);
+		const ornament = await sharp(raw, { raw: { width: 16, height: 4, channels: 3 } })
+			.png()
+			.toBuffer();
+		const record = await ingestBook(config, {
+			name: "ornament.epub",
+			buffer: tinyEpub('<img src="images/ornament.png" alt="scene break"/>', {
+				"OPS/images/ornament.png": ornament,
+			}),
+		});
+		const chapter = await readWebBookChapter(config, record.id, 1);
+
+		const inkName = /\/api\/web\/books\/assets\/[a-f0-9]{10}\/([a-f0-9]{16}-ornament\.png)/.exec(chapter.html)?.[1];
+		assert.ok(inkName, "ornament img src should point at the converted asset");
+		const stored = await readFile(resolve(bookDir(config, record.id), "assets", inkName));
+		const metadata = await sharp(stored).metadata();
+		assert.equal(metadata.hasAlpha, true);
+		// The photographic pixel asset keeps its original bytes and name.
+		assert.deepEqual(
+			await readFile(resolve(bookDir(config, record.id), "assets", "cover.png")),
+			PIXEL_PNG,
+		);
 	});
 
 	it("ingests TXT and Markdown as escaped paragraph HTML", async (t) => {

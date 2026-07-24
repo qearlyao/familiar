@@ -555,12 +555,15 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
               onClick={onViewportClick}
             >
               {chapterData ? (
-                <div
-                  ref={contentRef}
-                  className="reader-content"
-                  style={{ fontSize: `${fontSize}px` }}
-                  dangerouslySetInnerHTML={chapterHtml}
-                />
+                <>
+                  {chapterData.css ? <style>{chapterData.css}</style> : null}
+                  <div
+                    ref={contentRef}
+                    className="reader-content"
+                    style={{ fontSize: `${fontSize}px` }}
+                    dangerouslySetInnerHTML={chapterHtml}
+                  />
+                </>
               ) : null}
             </div>
           </div>

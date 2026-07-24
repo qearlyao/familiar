@@ -8,6 +8,7 @@ import type { Config } from "../config/index.js";
 import { atomicWriteJson, isEnoent } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import { type BookChapter, type BookRecord, booksDir } from "./book-library.js";
+import { convertOrnamentAssets } from "./epub-ornaments.js";
 import { HttpError } from "./http.js";
 import type { WebUploadAttachment } from "./multipart.js";
 
@@ -20,6 +21,7 @@ interface ParsedBook {
 	format: BookRecord["format"];
 	chapters: Array<BookChapter & { html: string }>;
 	assets: Map<string, Uint8Array>;
+	css?: string;
 	cover?: { file: string; bytes: Uint8Array };
 }
 
@@ -76,6 +78,49 @@ const ALLOWED_TAGS = new Set([
 	"div",
 ]);
 const DROP_TAGS = new Set(["head", "script", "style", "link", "meta", "iframe", "object", "embed"]);
+const MAX_EPUB_CSS_BYTES = 256 * 1024;
+const SAFE_CSS_PROPERTIES = new Set([
+	"-webkit-hyphens",
+	"background-color",
+	"border",
+	"border-bottom",
+	"border-bottom-left-radius",
+	"border-bottom-right-radius",
+	"border-top",
+	"border-top-left-radius",
+	"border-top-right-radius",
+	"clear",
+	"color",
+	"display",
+	"float",
+	"font-family",
+	"font-size",
+	"font-style",
+	"font-variant",
+	"font-weight",
+	"height",
+	"hyphens",
+	"letter-spacing",
+	"line-height",
+	"margin",
+	"margin-bottom",
+	"margin-left",
+	"margin-right",
+	"margin-top",
+	"max-width",
+	"min-height",
+	"padding",
+	"padding-left",
+	"padding-right",
+	"padding-top",
+	"page-break-inside",
+	"text-align",
+	"text-decoration",
+	"text-indent",
+	"text-transform",
+	"vertical-align",
+	"width",
+]);
 
 export async function ingestBook(config: Config, attachment: WebUploadAttachment): Promise<BookRecord> {
 	if (attachment.buffer.length > MAX_BOOK_BYTES) throw new HttpError(413, "book upload exceeds 80 MB");
@@ -95,6 +140,7 @@ export async function ingestBook(config: Config, attachment: WebUploadAttachment
 		const message = error instanceof Error ? error.message : String(error);
 		throw new HttpError(422, `invalid epub: ${message}`);
 	}
+	await renameOrnamentAssets(parsed, id);
 	await mkdir(tempDir, { recursive: true });
 	try {
 		await writeFile(resolve(tempDir, `source.${upload.extension}`), attachment.buffer);
@@ -104,6 +150,7 @@ export async function ingestBook(config: Config, attachment: WebUploadAttachment
 				writeFile(resolve(tempDir, "chapters", `${chapter.index}.html`), chapter.html, "utf8"),
 			),
 		);
+		if (parsed.css) await writeFile(resolve(tempDir, "styles.css"), parsed.css, "utf8");
 		if (parsed.assets.size > 0 || parsed.cover) {
 			await mkdir(resolve(tempDir, "assets"), { recursive: true });
 			await Promise.all(
@@ -129,6 +176,19 @@ export async function ingestBook(config: Config, attachment: WebUploadAttachment
 		await rm(tempDir, { recursive: true, force: true });
 		throw error;
 	}
+}
+
+async function renameOrnamentAssets(parsed: ParsedBook, id: string): Promise<void> {
+	const renames = await convertOrnamentAssets(parsed.assets);
+	if (renames.size === 0) return;
+	const rewrite = (text: string): string => {
+		for (const [from, to] of renames) {
+			text = text.replaceAll(`/api/web/books/assets/${id}/${from}`, `/api/web/books/assets/${id}/${to}`);
+		}
+		return text;
+	};
+	for (const chapter of parsed.chapters) chapter.html = rewrite(chapter.html);
+	if (parsed.css) parsed.css = rewrite(parsed.css);
 }
 
 function classifyUpload(attachment: WebUploadAttachment): {
@@ -206,6 +266,14 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 	const manifestById = new Map(manifest.map((item) => [item.id, item]));
 	const labels = chapterLabels(files, normalizedOpfPath, manifest, spineNode);
 	const assets = new Map<string, Uint8Array>();
+	const css = manifest
+		.filter((item) => item.mediaType === "text/css" || extname(item.href).toLowerCase() === ".css")
+		.map((item) => {
+			const stylesheetPath = resolveZipReference(normalizedOpfPath, item.href);
+			return sanitizeStylesheet(readZipText(files, stylesheetPath), stylesheetPath, id, files, assets);
+		})
+		.filter(Boolean)
+		.join("\n");
 	const spine = records(spineNode.itemref);
 	const chapters = spine.map((itemref, index) => {
 		const idref = attr(itemref, "idref");
@@ -230,6 +298,7 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 		format: "epub",
 		chapters,
 		assets,
+		...(css ? { css } : {}),
 		...(cover ? { cover } : {}),
 	};
 }
@@ -299,20 +368,79 @@ function sanitizeChapter(
 	files: Map<string, Uint8Array>,
 	assets: Map<string, Uint8Array>,
 ): string {
-	const rewrite = (source: string): string => {
-		const decodedSource = source.trim();
-		const rewrittenPrefix = `/api/web/books/assets/${id}/`;
-		if (decodedSource.startsWith(rewrittenPrefix)) return decodedSource;
-		if (/^javascript:/i.test(decodedSource)) return "";
-		const zipPath = resolveZipReference(chapterPath, decodedSource);
-		const bytes = files.get(zipPath);
-		if (!bytes) throw new Error(`missing image ${zipPath}`);
-		const extension = safeAssetExtension(zipPath);
-		const assetPath = `${createHash("sha256").update(zipPath).digest("hex").slice(0, 16)}${extension}`;
-		assets.set(assetPath, bytes);
-		return `/api/web/books/assets/${id}/${assetPath}`;
-	};
+	const rewrite = (source: string): string => rewriteAsset(source, chapterPath, id, files, assets);
 	return chapterBuilder.build(sanitizeOrderedNodes(parseOrderedMarkup(xhtml), rewrite));
+}
+
+function sanitizeStylesheet(
+	css: string,
+	stylesheetPath: string,
+	id: string,
+	files: Map<string, Uint8Array>,
+	assets: Map<string, Uint8Array>,
+): string {
+	if (Buffer.byteLength(css, "utf8") > MAX_EPUB_CSS_BYTES) return "";
+	const cleaned = css
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/@(?:charset|import|namespace)\b[^;{}]*(?:;|$)/gi, "")
+		.replace(/@(?:font-face|page)\b[^{]*\{[^{}]*\}/gi, "")
+		.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (_match, _quote: string, source: string) => {
+			const decodedSource = source.trim();
+			if (!decodedSource || /^(?:data:|https?:|\/\/|#)/i.test(decodedSource)) return 'url("")';
+			const rewritten = rewriteAsset(decodedSource, stylesheetPath, id, files, assets);
+			return rewritten ? `url("${rewritten}")` : 'url("")';
+		});
+	const scoped = cleaned.replace(/([^{}]+)\{([^{}]*)\}/g, (_match, selector: string, body: string) => {
+		const scopedSelector = selector
+			.split(",")
+			.map((part) => part.trim())
+			.filter((part) => part && !part.startsWith("@"))
+			.map((part) => `.reader-content ${part}`)
+			.join(", ");
+		return scopedSelector ? `${scopedSelector}{${sanitizeCssDeclarations(body)}}` : "";
+	});
+	return scoped;
+}
+
+function sanitizeCssDeclarations(body: string): string {
+	const declarations: string[] = [];
+	for (const match of body.matchAll(/(?:^|;)\s*([-\w]+)\s*:\s*([^;{}]*)/g)) {
+		const property = match[1]!.toLowerCase();
+		const value = match[2]!.trim();
+		if (!SAFE_CSS_PROPERTIES.has(property) || !safeCssValue(value)) continue;
+		declarations.push(`${property}: ${value};`);
+	}
+	return declarations.join(" ");
+}
+
+function safeCssValue(value: string): boolean {
+	if (/[<>]/.test(value) || /(?:expression|javascript:)/i.test(value)) return false;
+	for (const match of value.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)) {
+		const source = match[2]!.trim();
+		if (source && !source.startsWith("/api/web/books/assets/")) return false;
+	}
+	return true;
+}
+
+function rewriteAsset(
+	source: string,
+	basePath: string,
+	id: string,
+	files: Map<string, Uint8Array>,
+	assets: Map<string, Uint8Array>,
+): string {
+	const decodedSource = source.trim();
+	const rewrittenPrefix = `/api/web/books/assets/${id}/`;
+	if (decodedSource.startsWith(rewrittenPrefix)) return decodedSource;
+	if (/^(?:javascript:|data:|https?:|\/\/)/i.test(decodedSource)) return "";
+	const zipPath = resolveZipReference(basePath, decodedSource);
+	const bytes = files.get(zipPath);
+	if (!bytes) throw new Error(`missing asset ${zipPath}`);
+	const extension = safeAssetExtension(zipPath);
+	const assetPath = `${createHash("sha256").update(zipPath).digest("hex").slice(0, 16)}${extension}`;
+	assets.set(assetPath, bytes);
+	return `${rewrittenPrefix}${assetPath}`;
 }
 
 interface OrderedElement {

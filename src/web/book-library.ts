@@ -109,14 +109,18 @@ export async function readWebBookChapter(
 	config: Config,
 	id: string,
 	index: number,
-): Promise<BookChapter & { html: string }> {
+): Promise<BookChapter & { html: string; css?: string }> {
 	const book = await readBookRecord(config, id);
 	if (!Number.isSafeInteger(index) || index < 0 || index >= book.chapters.length) {
 		throw new HttpError(404, "book chapter not found");
 	}
 	const chapter = book.chapters[index]!;
 	try {
-		return { ...chapter, html: await readFile(resolve(bookDir(config, id), "chapters", `${index}.html`), "utf8") };
+		const [html, css] = await Promise.all([
+			readFile(resolve(bookDir(config, id), "chapters", `${index}.html`), "utf8"),
+			readFileOrNull(resolve(bookDir(config, id), "styles.css"), "utf8"),
+		]);
+		return { ...chapter, html, ...(css ? { css } : {}) };
 	} catch (error) {
 		if (isEnoent(error)) throw new HttpError(404, "book chapter not found");
 		throw error;

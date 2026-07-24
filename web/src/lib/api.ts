@@ -595,6 +595,7 @@ export interface BookChapter {
   title: string;
   html: string;
   chars: number;
+  css?: string;
 }
 
 export interface MarginaliaEntry {

@@ -749,6 +749,11 @@
   display: block;
   break-inside: avoid;
 }
+/* Ornament assets are re-encoded at ingest as black ink on transparency;
+   in dark mode invert the ink toward the page foreground. */
+.dark .reader-content img[src$="-ornament.png"] {
+  filter: invert(0.87);
+}
 .reader-content a {
   color: inherit;
   text-decoration: none;

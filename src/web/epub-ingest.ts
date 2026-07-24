@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, extname, posix, resolve } from "node:path";
-import { XMLParser } from "fast-xml-parser";
+import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import { strFromU8, unzipSync } from "fflate";
 
 import type { Config } from "../config/index.js";
@@ -31,6 +31,17 @@ interface ManifestItem {
 }
 
 const xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, trimValues: false });
+const chapterParser = new XMLParser({
+	preserveOrder: true,
+	ignoreAttributes: false,
+	trimValues: false,
+	parseTagValue: false,
+	transformTagName: (name) => name.toLowerCase(),
+	transformAttributeName: (name) => name.toLowerCase(),
+	htmlEntities: true,
+	processEntities: { maxExpansionDepth: 32, maxTotalExpansions: 10_000, maxExpandedLength: 1_000_000 },
+});
+const chapterBuilder = new XMLBuilder({ preserveOrder: true, ignoreAttributes: false, suppressEmptyNode: true });
 const ALLOWED_TAGS = new Set([
 	"h1",
 	"h2",
@@ -64,7 +75,7 @@ const ALLOWED_TAGS = new Set([
 	"span",
 	"div",
 ]);
-const VOID_TAGS = new Set(["img", "hr", "br"]);
+const DROP_TAGS = new Set(["head", "script", "style", "link", "meta", "iframe", "object", "embed"]);
 
 export async function ingestBook(config: Config, attachment: WebUploadAttachment): Promise<BookRecord> {
 	if (attachment.buffer.length > MAX_BOOK_BYTES) throw new HttpError(413, "book upload exceeds 80 MB");
@@ -288,13 +299,8 @@ function sanitizeChapter(
 	files: Map<string, Uint8Array>,
 	assets: Map<string, Uint8Array>,
 ): string {
-	let html = /<body\b[^>]*>([\s\S]*?)<\/body\s*>/i.exec(xhtml)?.[1] ?? xhtml;
-	html = html
-		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(/<(script|style|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-		.replace(/<\/?(?:script|style|link|meta|iframe|object|embed)\b[^>]*>/gi, "");
 	const rewrite = (source: string): string => {
-		const decodedSource = decodeHtml(source).trim();
+		const decodedSource = source.trim();
 		const rewrittenPrefix = `/api/web/books/assets/${id}/`;
 		if (decodedSource.startsWith(rewrittenPrefix)) return decodedSource;
 		if (/^javascript:/i.test(decodedSource)) return "";
@@ -306,38 +312,94 @@ function sanitizeChapter(
 		assets.set(assetPath, bytes);
 		return `/api/web/books/assets/${id}/${assetPath}`;
 	};
-	html = html.replace(
-		/<svg\b[^>]*>[\s\S]*?<image\b([^>]*)\/?\s*>[\s\S]*?<\/svg\s*>/gi,
-		(_match, attributes: string) => {
-			const source = attribute(attributes, "xlink:href") ?? attribute(attributes, "href");
-			return source ? `<img src="${escapeAttribute(rewrite(source))}">` : "";
-		},
-	);
-	html = html.replace(/<img\b([^>]*)>/gi, (_match, attributes: string) => {
-		const source = attribute(attributes, "src");
-		const rewritten = source ? rewrite(source) : "";
-		const alt = attribute(attributes, "alt");
-		return `<img${rewritten ? ` src="${escapeAttribute(rewritten)}"` : ""}${alt ? ` alt="${escapeAttribute(alt)}"` : ""}>`;
-	});
-	return html.replace(/<\/?([a-z][\w:-]*)\b([^>]*)>/gi, (match, rawTag: string, rawAttributes: string) => {
-		const tag = rawTag.toLowerCase();
-		if (!ALLOWED_TAGS.has(tag)) return "";
-		if (match.startsWith("</")) return VOID_TAGS.has(tag) ? "" : `</${tag}>`;
-		const kept: string[] = [];
+	return chapterBuilder.build(sanitizeOrderedNodes(parseOrderedMarkup(xhtml), rewrite));
+}
+
+interface OrderedElement {
+	tag: string;
+	children: Record<string, unknown>[];
+	attributes: Record<string, unknown>;
+}
+
+function parseOrderedMarkup(markup: string): Record<string, unknown>[] {
+	const value: unknown = chapterParser.parse(markup);
+	if (!Array.isArray(value) || !value.every(isRecord)) throw new Error("XHTML root is invalid");
+	return value;
+}
+
+function orderedElement(node: Record<string, unknown>): OrderedElement | undefined {
+	for (const [key, value] of Object.entries(node)) {
+		if (key === ":@" || key.startsWith("#") || key.startsWith("?")) continue;
+		if (!Array.isArray(value) || !value.every(isRecord)) throw new Error(`XHTML element ${key} is invalid`);
+		return {
+			tag: key.split(":").at(-1)!,
+			children: value,
+			attributes: isRecord(node[":@"]) ? node[":@"] : {},
+		};
+	}
+	return undefined;
+}
+
+function sanitizeOrderedNodes(
+	nodes: Record<string, unknown>[],
+	rewrite: (source: string) => string,
+): Record<string, unknown>[] {
+	const sanitized: Record<string, unknown>[] = [];
+	for (const node of nodes) {
+		const text = node["#text"];
+		if (typeof text === "string" || typeof text === "number") {
+			sanitized.push({ "#text": String(text) });
+			continue;
+		}
+		const element = orderedElement(node);
+		if (!element || DROP_TAGS.has(element.tag)) continue;
+		const children = sanitizeOrderedNodes(element.children, rewrite);
+		if (element.tag === "svg") {
+			sanitized.push(...children);
+			continue;
+		}
+		if (element.tag === "img" || element.tag === "image") {
+			const image = sanitizeImage(element, rewrite);
+			if (image) sanitized.push(image);
+			continue;
+		}
+		if (!ALLOWED_TAGS.has(element.tag)) {
+			sanitized.push(...children);
+			continue;
+		}
+		const attributes: Record<string, string> = {};
 		for (const name of ["id", "class"]) {
-			const value = attribute(rawAttributes, name);
-			if (value) kept.push(`${name}="${escapeAttribute(value)}"`);
+			const value = attr(element.attributes, name);
+			if (value) attributes[`@_${name}`] = value;
 		}
-		if (tag === "img") {
-			for (const name of ["src", "alt", "title", "width", "height"]) {
-				const value = attribute(rawAttributes, name);
-				if (value && (name !== "src" || value.startsWith(`/api/web/books/assets/${id}/`))) {
-					kept.push(`${name}="${escapeAttribute(value)}"`);
-				}
-			}
-		}
-		return `<${tag}${kept.length ? ` ${kept.join(" ")}` : ""}>`;
-	});
+		const clean: Record<string, unknown> = { [element.tag]: children };
+		if (Object.keys(attributes).length) clean[":@"] = attributes;
+		sanitized.push(clean);
+	}
+	return sanitized;
+}
+
+function sanitizeImage(
+	element: OrderedElement,
+	rewrite: (source: string) => string,
+): Record<string, unknown> | undefined {
+	const source =
+		element.tag === "image"
+			? (attr(element.attributes, "xlink:href") ?? attr(element.attributes, "href"))
+			: attr(element.attributes, "src");
+	if (element.tag === "image" && !source) return undefined;
+	const attributes: Record<string, string> = {};
+	if (source) {
+		const rewritten = rewrite(source);
+		if (rewritten) attributes["@_src"] = rewritten;
+	}
+	for (const name of ["id", "class", "alt", "title", "width", "height"]) {
+		const value = attr(element.attributes, name);
+		if (value) attributes[`@_${name}`] = value;
+	}
+	const image: Record<string, unknown> = { img: [] };
+	if (Object.keys(attributes).length) image[":@"] = attributes;
+	return image;
 }
 
 function findCoverItem(
@@ -445,41 +507,32 @@ function safeAssetExtension(path: string, mimeType = ""): string {
 	return ".bin";
 }
 
-function attribute(attributes: string, name: string): string | undefined {
-	const escaped = name.replace(":", "\\:");
-	const match = new RegExp(`(?:^|\\s)${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, "i").exec(attributes);
-	return match?.[1] ?? match?.[2] ?? match?.[3];
-}
-
 function firstHeading(html: string): string | undefined {
 	const heading = /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i.exec(html)?.[1];
 	return heading ? htmlText(heading) : undefined;
 }
 
 function htmlText(html: string): string {
-	return decodeHtml(html.replace(/<[^>]*>/g, ""))
-		.replace(/\s+/g, " ")
-		.trim();
+	return orderedText(parseMarkupFragment(html)).replace(/\s+/g, " ").trim();
 }
 
-function decodeHtml(value: string): string {
-	return value
-		.replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
-		.replace(/&#x([\da-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
-		.replace(/&nbsp;/gi, "\u00a0")
-		.replace(/&amp;/gi, "&")
-		.replace(/&lt;/gi, "<")
-		.replace(/&gt;/gi, ">")
-		.replace(/&quot;/gi, '"')
-		.replace(/&apos;/gi, "'");
+function parseMarkupFragment(markup: string): Record<string, unknown>[] {
+	return parseOrderedMarkup(`<body>${markup}</body>`);
+}
+
+function orderedText(nodes: Record<string, unknown>[]): string {
+	return nodes
+		.map((node) => {
+			const text = node["#text"];
+			if (typeof text === "string" || typeof text === "number") return String(text);
+			const element = orderedElement(node);
+			return element ? orderedText(element.children) : "";
+		})
+		.join("");
 }
 
 function escapeHtml(value: string): string {
 	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
-
-function escapeAttribute(value: string): string {
-	return escapeHtml(value).replaceAll("'", "&#39;");
 }
 
 async function unusedBookId(config: Config): Promise<string> {

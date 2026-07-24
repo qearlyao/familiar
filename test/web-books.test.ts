@@ -29,7 +29,7 @@ const PIXEL_PNG = Buffer.from(
 	"base64",
 );
 
-function tinyEpub(): Buffer {
+function tinyEpub(extraChapterHtml = ""): Buffer {
 	const files: Record<string, Uint8Array> = {
 		"META-INF/container.xml": strToU8(`<?xml version="1.0"?>
 			<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -58,6 +58,7 @@ function tinyEpub(): Buffer {
 			<img src="images/pixel.png" onerror="bad()" style="width:100px" alt="pixel"/>
 			<svg><image href="images/pixel.png"/></svg>
 			<a href="two.xhtml#next">Next chapter</a><script>bad()</script>
+			${extraChapterHtml}
 		</body></html>`),
 		"OPS/two.xhtml": strToU8(`<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><body>
 			<h2>Ignored fallback</h2><p>Spine order comes first.</p>
@@ -111,6 +112,20 @@ describe("web books", () => {
 		assert.equal(detail.coverUrl, `/api/web/books/assets/${record.id}/cover.png`);
 		assert.equal(detail.chapterCount, 2);
 		assert.equal((await listWebBooks(config))[0]?.id, record.id);
+	});
+
+	it("rebuilds malicious XHTML without exposing nested tags or double-decoded entities", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const record = await ingestBook(config, {
+			name: "hostile.epub",
+			buffer: tinyEpub(
+				"<scr<script>ipt></scr<script>ipt><p>&amp;lt;script&amp;gt;literal&amp;lt;/script&amp;gt;</p>",
+			),
+		});
+		const chapter = await readWebBookChapter(config, record.id, 1);
+
+		assert.doesNotMatch(chapter.html, /<script\b/i);
+		assert.match(chapter.html, /&amp;lt;script&amp;gt;literal&amp;lt;\/script&amp;gt;/);
 	});
 
 	it("ingests TXT and Markdown as escaped paragraph HTML", async (t) => {

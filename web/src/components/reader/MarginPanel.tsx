@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, BookOpenText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchBookConversation, type BookSummary } from "@/lib/api";
 import { useChat } from "@/lib/useChat";
 import type { Message } from "../../types";
 import { MessageList } from "../MessageList";
+import { formatMarginMessage, type PendingPage, type PendingQuote } from "./marginMessage";
 
-export interface PendingQuote {
-  quote: string;
-  chapterTitle?: string;
-}
+export type { PendingPage, PendingQuote } from "./marginMessage";
 
 /**
  * Turns sent from a book's margins live in the MAIN session (one companion,
@@ -26,10 +24,28 @@ function bookTurns(messages: Message[], bookId: string): Message[] {
   return out;
 }
 
-function formatQuoteMessage(pending: PendingQuote, bookTitle: string, text: string): string {
-  const cite = pending.chapterTitle ? `— *${bookTitle}*, ${pending.chapterTitle}` : `— *${bookTitle}*`;
-  const quoted = `> ${pending.quote.replaceAll("\n", "\n> ")}`;
-  return `${quoted}\n${cite}\n\n${text}`;
+function Chip({
+  dismissLabel,
+  onDrop,
+  children,
+}: {
+  dismissLabel: string;
+  onDrop: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">{children}</div>
+      <button
+        type="button"
+        aria-label={dismissLabel}
+        onClick={onDrop}
+        className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -39,12 +55,19 @@ function formatQuoteMessage(pending: PendingQuote, bookTitle: string, text: stri
 export function MarginPanel({
   book,
   pendingQuote,
+  pendingPage,
   onClearQuote,
+  onClearPage,
+  onGrabPage,
   onClose,
 }: {
   book: BookSummary;
   pendingQuote?: PendingQuote;
+  pendingPage?: PendingPage;
   onClearQuote: () => void;
+  onClearPage: () => void;
+  /** Capture the page the reader is on right now as a pending chip. */
+  onGrabPage: () => void;
   onClose: () => void;
 }) {
   const chat = useChat();
@@ -95,9 +118,10 @@ export function MarginPanel({
   const submit = useCallback(async () => {
     const text = draft.trim();
     if (!text || !chat.activeSessionKey) return;
-    const outgoing = pendingQuote ? formatQuoteMessage(pendingQuote, book.title, text) : text;
+    const outgoing = formatMarginMessage(book.title, text, pendingQuote, pendingPage);
     setDraft("");
     onClearQuote();
+    onClearPage();
     try {
       await chat.send(outgoing, [], book.id);
       setSendError(undefined);
@@ -105,7 +129,7 @@ export function MarginPanel({
       setDraft(text);
       setSendError(err instanceof Error ? err.message : String(err));
     }
-  }, [book.id, book.title, chat, draft, onClearQuote, pendingQuote]);
+  }, [book.id, book.title, chat, draft, onClearPage, onClearQuote, pendingPage, pendingQuote]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -158,23 +182,37 @@ export function MarginPanel({
         ) : null}
         <div className="flex flex-col gap-2 rounded-lg bg-muted/70 px-3 py-2.5 transition-shadow focus-within:ring-3 focus-within:ring-ring/25">
           {pendingQuote ? (
-            <div className="flex items-start gap-2">
-              <p className="line-clamp-3 min-w-0 flex-1 font-serif text-xs italic leading-[1.9] text-muted-foreground">
+            <Chip dismissLabel="drop the quoted passage" onDrop={onClearQuote}>
+              <p className="line-clamp-3 font-serif text-xs italic leading-[1.9] text-muted-foreground">
                 <span className="rounded-xs bg-primary/15 box-decoration-clone px-1 py-0.5">
                   {pendingQuote.quote}
                 </span>
               </p>
-              <button
-                type="button"
-                aria-label="drop the quoted passage"
-                onClick={onClearQuote}
-                className="mt-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
+            </Chip>
+          ) : null}
+          {pendingPage ? (
+            <Chip dismissLabel="drop the page" onDrop={onClearPage}>
+              <p className="flex items-center gap-1.5 font-serif text-xs italic text-muted-foreground">
+                <BookOpenText className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  the page you're on
+                  {pendingPage.chapterTitle ? ` · ${pendingPage.chapterTitle}` : ` · ch ${pendingPage.chapterIndex + 1}`}
+                </span>
+              </p>
+            </Chip>
           ) : null}
           <div className="flex items-end gap-2">
+            {!pendingPage ? (
+              <button
+                type="button"
+                aria-label="send the page you're on"
+                title="send the page you're on"
+                onClick={onGrabPage}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                <BookOpenText className="size-4" />
+              </button>
+            ) : null}
             <textarea
               ref={textareaRef}
               value={draft}
@@ -191,7 +229,9 @@ export function MarginPanel({
                   ? "finding the thread…"
                   : pendingQuote
                     ? "ask about this passage…"
-                    : "write in the margin…"
+                    : pendingPage
+                      ? "ask about this page…"
+                      : "write in the margin…"
               }
               className="min-h-6 min-w-0 flex-1 resize-none bg-transparent font-serif text-sm leading-relaxed placeholder:italic placeholder:text-muted-foreground/60 focus:outline-none"
             />

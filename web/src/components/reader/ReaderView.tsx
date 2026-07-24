@@ -14,7 +14,8 @@ import { loadMode, saveMode, type ThemeMode } from "@/lib/theme";
 import { buildTextIndex, rangeToOffsets, type TextIndex } from "./anchors";
 import { usePagination } from "./usePagination";
 import { useMarginalia } from "./useMarginalia";
-import { MarginPanel, type PendingQuote } from "./MarginPanel";
+import { MarginPanel, type PendingPage, type PendingQuote } from "./MarginPanel";
+import { visiblePage } from "./visiblePage";
 import { NoteCard, SelectionToolbar, type SelectionAnchor } from "./SelectionToolbar";
 
 const CHROME_IDLE_MS = 3000;
@@ -95,6 +96,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
   const [selection, setSelection] = useState<SelectionState>();
   const [noteTarget, setNoteTarget] = useState<NoteTarget>();
   const [pendingQuote, setPendingQuote] = useState<PendingQuote>();
+  const [pendingPage, setPendingPage] = useState<PendingPage>();
   const [panelOpen, setPanelOpen] = useState(false);
   const [menu, setMenu] = useState<"toc" | "type">();
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -352,10 +354,24 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     setPendingQuote({
       quote: textIndex.text.slice(activeSelection.start, activeSelection.end).trim(),
       chapterTitle: chapterData?.title,
+      chapterIndex: chapter,
+      start: activeSelection.start,
+      end: activeSelection.end,
     });
     setPanelOpen(true);
     clearSelection();
-  }, [activeSelection, chapterData?.title, clearSelection, textIndex]);
+  }, [activeSelection, chapter, chapterData?.title, clearSelection, textIndex]);
+
+  // Reads what's on screen at tap time. One-shot, like the quote chip: consumed
+  // by the message it's attached to, so there's no sticky state to forget.
+  const grabPage = useCallback(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!textIndex || !viewport || !content) return;
+    const found = visiblePage(textIndex, viewport, content);
+    if (!found) return;
+    setPendingPage({ ...found, chapterTitle: chapterData?.title, chapterIndex: chapter });
+  }, [chapter, chapterData?.title, textIndex]);
 
   const markSelection = useCallback(
     async (openNote: boolean) => {
@@ -609,7 +625,10 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
             <MarginPanel
               book={book}
               pendingQuote={pendingQuote}
+              pendingPage={pendingPage}
               onClearQuote={() => setPendingQuote(undefined)}
+              onClearPage={() => setPendingPage(undefined)}
+              onGrabPage={grabPage}
               onClose={() => setPanelOpen(false)}
             />
           </aside>
@@ -618,7 +637,10 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
             <MarginPanel
               book={book}
               pendingQuote={pendingQuote}
+              pendingPage={pendingPage}
               onClearQuote={() => setPendingQuote(undefined)}
+              onClearPage={() => setPendingPage(undefined)}
+              onGrabPage={grabPage}
               onClose={() => setPanelOpen(false)}
             />
           </div>

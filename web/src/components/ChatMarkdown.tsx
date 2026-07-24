@@ -1,14 +1,24 @@
 import { useMemo } from "react";
+import { BookOpenText } from "lucide-react";
 import { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { MediaPreview } from "@/components/MediaPreview";
+import { pageQuoteCitation } from "@/components/reader/marginMessage";
 import { remarkImageParagraphs } from "@/lib/chatMarkdownLayout";
 import { remarkLegacyChatMedia } from "@/lib/chatMarkdownMedia";
 import { cn } from "@/lib/utils";
 
 const remarkPlugins = [remarkGfm, remarkLegacyChatMedia, remarkImageParagraphs];
+
+/** Plain text of a hast subtree; soft line breaks survive inside text values. */
+function hastText(node: unknown): string {
+  if (node == null || typeof node !== "object") return "";
+  const el = node as { type?: string; value?: string; children?: unknown[] };
+  if (el.type === "text") return el.value ?? "";
+  return (el.children ?? []).map(hastText).join("");
+}
 
 function markdownComponents(align: "start" | "end"): Components {
   return {
@@ -37,6 +47,22 @@ function markdownComponents(align: "start" | "end"): Components {
           alt={alt ?? "image"}
           className={cn("my-1 block w-fit max-w-full", align === "end" && "ml-auto")}
         />
+      );
+    },
+    // A page sent from a book's margins is context, not conversation: fold it
+    // behind its citation line so the exchange stays readable.
+    blockquote(props) {
+      const { node, children, ...blockquoteProps } = props;
+      const citation = pageQuoteCitation(hastText(node));
+      if (!citation) return <blockquote {...blockquoteProps}>{children}</blockquote>;
+      return (
+        <details>
+          <summary className="flex w-fit max-w-full cursor-pointer list-none items-center gap-1.5 font-serif text-xs italic text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <BookOpenText className="size-3.5 shrink-0" />
+            <span className="truncate">{citation}</span>
+          </summary>
+          <blockquote {...blockquoteProps}>{children}</blockquote>
+        </details>
       );
     },
     table(props) {

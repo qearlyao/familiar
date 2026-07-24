@@ -20,6 +20,7 @@ interface ParsedBook {
 	language?: string;
 	format: BookRecord["format"];
 	chapters: Array<BookChapter & { html: string }>;
+	toc: number[];
 	assets: Map<string, Uint8Array>;
 	css?: string;
 	cover?: { file: string; bytes: Uint8Array };
@@ -166,6 +167,7 @@ export async function ingestBook(config: Config, attachment: WebUploadAttachment
 			format: parsed.format,
 			createdAt: Date.now(),
 			chapters: parsed.chapters.map(({ index, title, chars }) => ({ index, title, chars })),
+			toc: parsed.toc,
 			...(parsed.cover ? { cover: { file: parsed.cover.file } } : {}),
 		};
 		await atomicWriteJson(resolve(tempDir, "book.json"), book);
@@ -213,6 +215,7 @@ function parseTextBook(text: string, title: string): ParsedBook {
 		title,
 		format: "text",
 		assets: new Map(),
+		toc: parts.map((_, index) => index),
 		chapters: parts.map((part, index) => {
 			const html = textToHtml(part);
 			return { index, title: parts.length === 1 ? title : `part ${index + 1}`, html, chars: htmlText(html).length };
@@ -262,6 +265,12 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 	const metadata = child(packageNode, "metadata");
 	const manifestNode = child(packageNode, "manifest");
 	const spineNode = child(packageNode, "spine");
+	const guide = records(packageNode.guide)[0];
+	const tocReference = guide
+		? records(guide.reference).find((reference) => attr(reference, "type")?.toLowerCase() === "toc")
+		: undefined;
+	const tocHref = tocReference ? attr(tocReference, "href") : undefined;
+	const inlineTocPath = tocHref ? resolveZipReference(normalizedOpfPath, tocHref) : undefined;
 	const manifest = records(manifestNode.item).map(parseManifestItem);
 	const manifestById = new Map(manifest.map((item) => [item.id, item]));
 	const labels = chapterLabels(files, normalizedOpfPath, manifest, spineNode);
@@ -275,11 +284,13 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 		.filter(Boolean)
 		.join("\n");
 	const spine = records(spineNode.itemref);
+	const chapterIndexes = new Map<string, number>();
 	const chapters = spine.map((itemref, index) => {
 		const idref = attr(itemref, "idref");
 		const item = idref ? manifestById.get(idref) : undefined;
 		if (!item) throw new Error(`spine item ${index} is missing from manifest`);
 		const chapterPath = resolveZipReference(normalizedOpfPath, item.href);
+		chapterIndexes.set(chapterPath, index);
 		const html = sanitizeChapter(readZipText(files, chapterPath), chapterPath, id, files, assets);
 		return {
 			index,
@@ -289,6 +300,11 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 		};
 	});
 	if (chapters.length === 0) throw new Error("spine has no chapters");
+	const toc = [...labels.keys()].flatMap((path) => {
+		if (path === inlineTocPath) return [];
+		const index = chapterIndexes.get(path);
+		return index === undefined ? [] : [index];
+	});
 	const coverItem = findCoverItem(metadata, manifest, manifestById);
 	const cover = coverItem ? extractCover(files, normalizedOpfPath, coverItem) : undefined;
 	return {
@@ -297,6 +313,7 @@ function parseEpub(buffer: Buffer, id: string): ParsedBook {
 		...(childText(metadata, "language")?.trim() ? { language: childText(metadata, "language")!.trim() } : {}),
 		format: "epub",
 		chapters,
+		toc: toc.length ? toc : chapters.map((chapter) => chapter.index),
 		assets,
 		...(css ? { css } : {}),
 		...(cover ? { cover } : {}),
@@ -597,7 +614,6 @@ function xmlText(value: unknown): string {
 	if (typeof value === "string" || typeof value === "number") return String(value);
 	if (Array.isArray(value)) return value.map(xmlText).join(" ");
 	if (!isRecord(value)) return "";
-	if (typeof value["#text"] === "string" || typeof value["#text"] === "number") return String(value["#text"]);
 	return Object.entries(value)
 		.filter(([key]) => !key.startsWith("@_"))
 		.map(([, childValue]) => xmlText(childValue))

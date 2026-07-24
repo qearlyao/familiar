@@ -22,6 +22,7 @@ export interface BookRecord {
 	format: "epub" | "text";
 	createdAt: number;
 	chapters: BookChapter[];
+	toc: number[];
 	cover?: { file: string };
 }
 
@@ -46,6 +47,7 @@ export interface BookSummary {
 
 export interface BookDetail extends BookSummary {
 	chapters: BookChapter[];
+	toc: BookChapter[];
 }
 
 export interface MarginaliaEntry {
@@ -102,7 +104,11 @@ export async function listWebBooks(config: Config): Promise<BookSummary[]> {
 
 export async function readWebBook(config: Config, id: string): Promise<BookDetail> {
 	const book = await readBookRecord(config, id);
-	return { ...bookSummary(book, await readBookPosition(config, id)), chapters: book.chapters };
+	return {
+		...bookSummary(book, await readBookPosition(config, id)),
+		chapters: book.chapters,
+		toc: book.toc.map((index) => book.chapters[index]!),
+	};
 }
 
 export async function readWebBookChapter(
@@ -291,6 +297,17 @@ function parseBookRecord(value: unknown): BookRecord {
 	if (cover !== undefined && (!isRecord(cover) || typeof cover.file !== "string")) {
 		throw new Error("Invalid book cover metadata");
 	}
+	const rawToc = value.toc;
+	if (
+		rawToc !== undefined &&
+		(!Array.isArray(rawToc) ||
+			rawToc.some(
+				(index) => !Number.isSafeInteger(index) || (index as number) < 0 || (index as number) >= chapters.length,
+			) ||
+			new Set(rawToc).size !== rawToc.length)
+	) {
+		throw new Error("Invalid book contents metadata");
+	}
 	return {
 		id: value.id,
 		title: value.title,
@@ -299,6 +316,7 @@ function parseBookRecord(value: unknown): BookRecord {
 		format: value.format,
 		createdAt: value.createdAt,
 		chapters,
+		toc: rawToc === undefined ? chapters.map((chapter) => chapter.index) : rawToc.map((index) => index as number),
 		...(cover ? { cover: { file: cover.file as string } } : {}),
 	};
 }

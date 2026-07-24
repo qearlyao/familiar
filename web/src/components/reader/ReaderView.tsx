@@ -514,7 +514,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
               aria-label="contents"
               className="absolute top-12 right-3 z-30 max-h-[60vh] w-max min-w-44 max-w-80 origin-top-right animate-in overflow-y-auto rounded-xl bg-popover py-3 shadow-xl duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] sm:right-6 motion-reduce:animate-none"
             >
-              {detail.chapters.map((c) => {
+              {detail.toc.map((c) => {
                 const isCurrent = c.index === chapter;
                 return (
                   <button

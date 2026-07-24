@@ -42,7 +42,7 @@ export function registerWebBookRoutes(route: RegisterWebRoute, config: Config): 
 		const attachment = Array.isArray(body.attachments) ? body.attachments.find(isWebUploadAttachment) : undefined;
 		if (!attachment) throw new HttpError(400, "book file is required");
 		const ingested = await ingestBook(config, attachment);
-		const { chapters: _chapters, ...book } = await readWebBook(config, ingested.id);
+		const { chapters: _chapters, toc: _toc, ...book } = await readWebBook(config, ingested.id);
 		sendJson(response, 201, { book });
 	});
 

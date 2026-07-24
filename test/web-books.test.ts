@@ -72,6 +72,50 @@ function tinyEpub(extraChapterHtml = "", extraFiles: Record<string, Uint8Array> 
 	return Buffer.from(zipSync(files));
 }
 
+function tinyNcxEpub(): Buffer {
+	return Buffer.from(
+		zipSync({
+			"META-INF/container.xml": strToU8(`<?xml version="1.0"?>
+				<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+					<rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles>
+				</container>`),
+			"OPS/package.opf": strToU8(`<?xml version="1.0"?>
+				<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
+					<metadata><dc:title>NCX Book</dc:title><meta name="cover" content="cover"/></metadata>
+					<manifest>
+						<item id="titlepage" href="titlepage.xhtml" media-type="application/xhtml+xml"/>
+						<item id="image" href="image.xhtml" media-type="application/xhtml+xml"/>
+						<item id="contents" href="contents.xhtml" media-type="application/xhtml+xml"/>
+						<item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+						<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+						<item id="cover" href="cover.png" media-type="image/png"/>
+					</manifest>
+					<spine toc="ncx"><itemref idref="titlepage"/><itemref idref="image"/><itemref idref="contents"/><itemref idref="chapter"/></spine>
+					<guide><reference type="toc" href="contents.xhtml"/></guide>
+				</package>`),
+			"OPS/toc.ncx": strToU8(`<?xml version="1.0"?>
+				<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+					<navMap>
+						<navPoint id="image"><navLabel>
+							<text>Full Page Image</text>
+						</navLabel><content src="image.xhtml"/></navPoint>
+						<navPoint id="contents"><navLabel>
+							<text>Contents</text>
+						</navLabel><content src="contents.xhtml"/></navPoint>
+						<navPoint id="chapter"><navLabel>
+							<text>Chapter 1</text>
+						</navLabel><content src="chapter.xhtml"/></navPoint>
+					</navMap>
+				</ncx>`),
+			"OPS/titlepage.xhtml": strToU8(`<html><body><img src="cover.png" alt="cover"/></body></html>`),
+			"OPS/image.xhtml": strToU8(`<html><body><img src="cover.png" alt="ornament"/></body></html>`),
+			"OPS/contents.xhtml": strToU8(`<html><body><h1>Contents</h1></body></html>`),
+			"OPS/chapter.xhtml": strToU8(`<html><body><h1>1</h1><p>Chapter text.</p></body></html>`),
+			"OPS/cover.png": PIXEL_PNG,
+		}),
+	);
+}
+
 async function expectHttpStatus(run: () => Promise<unknown>, status: number): Promise<void> {
 	await assert.rejects(run, (error) => {
 		assert.equal(error instanceof HttpError, true);
@@ -98,6 +142,7 @@ describe("web books", () => {
 			["Second First", "Opening"],
 		);
 		assert.ok(record.chapters.every((chapter) => chapter.chars > 0));
+		assert.deepEqual(record.toc, [1, 0]);
 
 		const first = await readWebBookChapter(config, record.id, 1);
 		assert.doesNotMatch(first.html, /<(?:html|head|body|script|style)\b/i);
@@ -118,7 +163,26 @@ describe("web books", () => {
 		const detail = await readWebBook(config, record.id);
 		assert.equal(detail.coverUrl, `/api/web/books/assets/${record.id}/cover.png`);
 		assert.equal(detail.chapterCount, 2);
+		assert.deepEqual(
+			detail.toc.map((chapter) => chapter.title),
+			["Opening", "Second First"],
+		);
 		assert.equal((await listWebBooks(config))[0]?.id, record.id);
+	});
+
+	it("uses NCX labels and keeps non-navigation spine items out of the contents", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const record = await ingestBook(config, { name: "ncx.epub", buffer: tinyNcxEpub() });
+
+		assert.deepEqual(
+			record.chapters.map((chapter) => chapter.title),
+			["chapter 1", "Full Page Image", "Contents", "Chapter 1"],
+		);
+		assert.deepEqual(record.toc, [1, 3]);
+		assert.deepEqual(
+			(await readWebBook(config, record.id)).toc.map((chapter) => chapter.title),
+			["Full Page Image", "Chapter 1"],
+		);
 	});
 
 	it("rebuilds malicious XHTML without exposing nested tags or double-decoded entities", async (t) => {

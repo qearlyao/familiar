@@ -588,6 +588,7 @@ export interface BookChapterInfo {
 
 export interface BookDetail extends BookSummary {
   chapters: BookChapterInfo[];
+  toc: BookChapterInfo[];
 }
 
 export interface BookChapter {

@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { copyFile, cp, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { config as loadDotenv } from "dotenv";
+import { parseEnv } from "node:util";
 
 import { createFamiliarAgent } from "./agent/factory.js";
 import { loadConfig } from "./config/index.js";
@@ -35,6 +34,15 @@ const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
 const DEFAULT_WORKSPACE_PATH = resolve(homedir(), ".familiar");
 const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "backfill", "prune", "backup", "help", "--help"]);
 const RESTART_EXIT_DELAY_MS = 1500;
+
+function loadWorkspaceEnv(envPath: string, override: boolean): void {
+	if (!existsSync(envPath)) return;
+	if (override) {
+		Object.assign(process.env, parseEnv(readFileSync(envPath, "utf8")));
+		return;
+	}
+	process.loadEnvFile(envPath);
+}
 
 interface PackageJson {
 	version?: unknown;
@@ -139,14 +147,10 @@ async function initWorkspace(workspaceInput?: string): Promise<void> {
 async function runDaemon(workspaceInput?: string): Promise<void> {
 	const workspacePath = resolveWorkspaceInput(workspaceInput);
 	const envPath = resolve(workspacePath, ".env");
-	if (existsSync(envPath)) {
-		loadDotenv({ path: envPath, override: false });
-	}
+	loadWorkspaceEnv(envPath, false);
 	const config = await loadConfig(workspacePath);
 	const reloadConfig = async () => {
-		if (existsSync(envPath)) {
-			loadDotenv({ path: envPath, override: true });
-		}
+		loadWorkspaceEnv(envPath, true);
 		return loadConfig(workspacePath);
 	};
 	await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
@@ -254,9 +258,7 @@ async function main(): Promise<void> {
 			return;
 		}
 		const envPath = resolve(workspacePath, ".env");
-		if (existsSync(envPath)) {
-			loadDotenv({ path: envPath, override: false });
-		}
+		loadWorkspaceEnv(envPath, false);
 		const config = await loadConfig(workspacePath);
 		await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
 		await runMemoryOperator(config, args);

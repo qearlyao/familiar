@@ -28,7 +28,7 @@ async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 			diariesDir: resolve(memoryRootDir, "diaries"),
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
-				api: "gemini",
+				format: "gemini",
 				provider: "google",
 				model: "gemini-embedding-test",
 				baseUrl: "https://embedding.test",

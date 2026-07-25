@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { createPartFromBase64, createPartFromUri, createUserContent, FileState, GoogleGenAI } from "@google/genai";
 import type { Config } from "../config/index.js";
@@ -54,7 +55,7 @@ class VideoUnderstandingDeadline {
 
 	async sleep(ms: number): Promise<void> {
 		const delay = Math.min(ms, remainingVideoUnderstandingMs(this.expiresAt));
-		await new Promise((resolve) => setTimeout(resolve, delay));
+		await sleep(delay);
 		remainingVideoUnderstandingMs(this.expiresAt);
 	}
 }

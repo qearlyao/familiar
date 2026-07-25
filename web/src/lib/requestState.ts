@@ -1,15 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
-export function useIsMounted() {
-  const ref = useRef(true);
-  useEffect(() => {
-    ref.current = true;
-    return () => {
-      ref.current = false;
-    };
-  }, []);
-  return ref;
-}
+import { useCallback, useState } from "react";
 
 interface RunOptions<T> {
   busy?: "load" | "mutate";
@@ -19,7 +8,6 @@ interface RunOptions<T> {
 }
 
 export function useRequestState() {
-  const alive = useIsMounted();
   const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
@@ -31,21 +19,18 @@ export function useRequestState() {
       setError(undefined);
       try {
         const result = await work();
-        if (!alive.current) return undefined;
         opts.apply?.(result);
         return result;
       } catch (err) {
-        if (alive.current) {
-          opts.onError?.();
-          setError(err instanceof Error ? err.message : String(err));
-        }
+        opts.onError?.();
+        setError(err instanceof Error ? err.message : String(err));
         if (opts.rethrow) throw err;
         return undefined;
       } finally {
-        if (alive.current) setBusy(false);
+        setBusy(false);
       }
     },
-    [alive],
+    [],
   );
 
   return { error, isLoading, isMutating, run };

@@ -415,10 +415,6 @@ export class LcmContextTransformer {
 		if (rows.length === 0) return;
 		const items: LcmContextItem[] = [];
 		for (const row of rows) {
-			if (row.type === "raw") {
-				// Raw history is owned by transcripts; legacy raw context rows must not replay it.
-				continue;
-			}
 			const summary = this.lcmStore.getSummary(row.summaryId);
 			if (!summary) {
 				console.error(`memory LCM context item dropped because summary ${row.summaryId} is missing`);
@@ -524,11 +520,8 @@ function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextIte
 		const timestamp = (item.message as { timestamp?: number }).timestamp;
 		const happenedAt =
 			typeof timestamp === "number" && Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
-		if (item.type === "raw") {
-			continue;
-		}
-		if (item.persistedSummaryId !== undefined) {
-			stored.push({ type: "summary", summaryId: item.persistedSummaryId, fingerprint: item.id, happenedAt });
+		if (item.type === "summary" && item.persistedSummaryId !== undefined) {
+			stored.push({ summaryId: item.persistedSummaryId, fingerprint: item.id, happenedAt });
 		}
 	}
 	return stored;

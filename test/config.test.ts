@@ -478,7 +478,6 @@ api_key_env = "ALT_GEMINI_KEY"
 		assert.equal(config.memory.archiveDir, resolve(workspacePath, "memories", "archive"));
 		assert.deepEqual(config.memory.embedding, {
 			format: "gemini",
-			api: "gemini",
 			provider: "google",
 			model: "gemini-embedding-2",
 			baseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -740,7 +739,6 @@ system_prompt_path = "prompts/lcm-system.md"
 		assert.equal(config.memory.rootDir, resolve(workspacePath, "brain"));
 		assert.deepEqual(config.memory.embedding, {
 			format: "gemini",
-			api: "gemini",
 			provider: "google",
 			model: "custom-embedding",
 			baseUrl: "https://memory.example.test/v1beta",
@@ -1188,7 +1186,6 @@ api_key_env = "LOCAL_GATEWAY_KEY"
 
 		assert.deepEqual(config.memory.embedding, {
 			format: "gemini",
-			api: "gemini",
 			provider: "local-gateway",
 			model: "media-embed",
 			baseUrl: "http://localhost:8788/v1",
@@ -1289,7 +1286,7 @@ base_url = "https://api.openai.com/v1"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.embedding\.format/);
 	});
 
-	it("accepts deprecated memory embedding api alias but createEmbeddingProvider gates non-gemini formats", async (t) => {
+	it("rejects deprecated memory embedding api alias", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
 			t,
@@ -1301,13 +1298,10 @@ base_url = "https://api.openai.com/v1"
 `),
 		);
 
-		const config = await loadConfig(workspacePath);
-
-		assert.equal(config.memory.embedding.format, "openai");
-		assert.equal(config.memory.embedding.api, "openai");
+		await assert.rejects(() => loadConfig(workspacePath), /Unknown config value: memory\.embedding\.api/);
 	});
 
-	it("loads snake_case agent cache retention and accepts deprecated camelCase alias", async (t) => {
+	it("loads snake_case agent cache retention and rejects deprecated camelCase alias", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const canonicalWorkspace = await createWorkspace(
 			t,
@@ -1323,7 +1317,19 @@ cacheRetention = "none"
 		);
 
 		assert.equal((await loadConfig(canonicalWorkspace)).agent.cacheRetention, "short");
-		assert.equal((await loadConfig(legacyWorkspace)).agent.cacheRetention, "none");
+		await assert.rejects(() => loadConfig(legacyWorkspace), /Unknown config value: agent\.cacheRetention/);
+	});
+
+	it("rejects legacy manual agent model settings", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+api = "anthropic-messages"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /Unknown config value: agent\.api/);
 	});
 
 	it("loads data retention settings", async (t) => {

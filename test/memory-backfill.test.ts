@@ -41,7 +41,7 @@ async function createHarness(t: { after(fn: () => Promise<void>): void }) {
 			diariesDir: resolve(memoryDir, "diaries"),
 			archiveDir: resolve(memoryDir, "archive"),
 			embedding: {
-				api: "gemini",
+				format: "gemini",
 				provider: "fake",
 				model: "fake-embedding",
 				baseUrl: "https://embedding.test",

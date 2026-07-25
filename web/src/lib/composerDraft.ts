@@ -1,5 +1,3 @@
-import { legacyMemeToken } from "./legacyMemeToken.js";
-
 export interface DraftMeme {
   name: string;
   url: string;
@@ -55,7 +53,7 @@ function fallbackTextIndex(blocks: DraftBlock[]): number {
 
 export function serializeDraftBlocks(blocks: DraftBlock[]): string {
   const parts = blocks.flatMap((block) => {
-    if (block.type === "meme") return [legacyMemeToken(block)];
+    if (block.type === "meme") return [`![${block.name}](${block.url})`];
     return meaningfulText(block.value) ? [block.value.trim()] : [];
   });
   return parts.join("\n").trim();

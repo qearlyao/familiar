@@ -32,7 +32,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async (t) => {
 		const store = await openStore(t);
 		try {
-			assert.equal(store.schemaVersion(), 7);
+			assert.equal(store.schemaVersion(), 9);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -76,7 +76,6 @@ describe("LcmStore", () => {
 				kind: "image",
 				note: "blue lantern on a table",
 			});
-			assert.equal(store.searchRecordsLexical("lantern").length, 1);
 			assert.equal(store.listSegments()[0]?.metadata?.reason, "initial");
 		} finally {
 			store.close();
@@ -146,85 +145,6 @@ describe("LcmStore", () => {
 					{ recordId: second, sourceRef: "chat:2", snapshot: { kind: "assistant" } },
 				],
 			);
-		} finally {
-			store.close();
-		}
-	});
-
-	it("sanitizes lexical FTS queries and returns empty operator-only searches", async (t) => {
-		const store = await openStore(t);
-		try {
-			const id = store.insertRecord({
-				segmentId: "seg-a",
-				kind: "user",
-				text: "I won't / can't forget this.",
-				happenedAt: "2026-05-10T01:00:00.000Z",
-				source: source(1),
-			});
-			store.insertSummary({
-				segmentId: "seg-a",
-				depth: 1,
-				status: "ready",
-				text: "The summary says we won't forget this.",
-				source: { sourceType: "manual", sourceRef: "summary:1" },
-				sourceItems: [{ recordId: id }],
-			});
-
-			assert.equal(store.searchRecordsLexical("won't").map((record) => record.id)[0], id);
-			assert.equal(store.searchSummariesLexical("won't").length, 1);
-			assert.deepEqual(store.searchRecordsLexical(":"), []);
-			assert.deepEqual(store.searchRecordsLexical("OR"), []);
-		} finally {
-			store.close();
-		}
-	});
-
-	it("removes contentless FTS rows when segment cascade deletes records", async (t) => {
-		const store = await openStore(t);
-		try {
-			store.insertRecord({
-				segmentId: "seg-a",
-				kind: "user",
-				text: "cascade-only lexical marker",
-				happenedAt: "2026-05-10T01:00:00.000Z",
-				source: source(1),
-			});
-			assert.equal(store.searchRecordsLexical("cascade-only").length, 1);
-
-			store.db.transaction(() => {
-				const records = store.listRecords("seg-a");
-				for (const record of records) {
-					store.db.prepare("DELETE FROM lcm_records_fts WHERE rowid = ?").run(record.id);
-				}
-				store.db.prepare("DELETE FROM lcm_segments WHERE id = ?").run("seg-a");
-			}).immediate();
-
-			assert.equal(store.searchRecordsLexical("cascade-only").length, 0);
-		} finally {
-			store.close();
-		}
-	});
-
-	it("keeps contentless FTS rows stable when reopening the store", async (t) => {
-		const path = await tempDbPath(t);
-		let store = new LcmStore({ path });
-		try {
-			store.insertRecord({
-				segmentId: "seg-a",
-				kind: "user",
-				text: "stable reopen marker",
-				happenedAt: "2026-05-10T01:00:00.000Z",
-				source: source(1),
-			});
-			assert.equal(store.searchRecordsLexical("stable").length, 1);
-		} finally {
-			store.close();
-		}
-
-		store = new LcmStore({ path });
-		try {
-			assert.equal(store.searchRecordsLexical("stable").length, 1);
-			assert.equal((store.db.prepare("SELECT COUNT(*) AS n FROM lcm_records_fts").get() as { n: number }).n, 1);
 		} finally {
 			store.close();
 		}
@@ -358,33 +278,6 @@ describe("LcmStore", () => {
 
 			assert.deepEqual(store.getSummaryParents(parent), []);
 			assert.deepEqual(store.getSummaryChildren(child), []);
-		} finally {
-			store.close();
-		}
-	});
-
-	it("does not index boundary records into lexical FTS", async (t) => {
-		const store = await openStore(t);
-		try {
-			store.insertRecord({
-				segmentId: "seg-a",
-				kind: "boundary",
-				text: "",
-				happenedAt: "2026-05-10T01:00:00.000Z",
-				source: source("boundary"),
-			});
-			const normal = store.insertRecord({
-				segmentId: "seg-a",
-				kind: "user",
-				text: "Session planning note",
-				happenedAt: "2026-05-10T01:01:00.000Z",
-				source: source(1),
-			});
-
-			assert.deepEqual(
-				store.searchRecordsLexical("Session").map((record) => record.id),
-				[normal],
-			);
 		} finally {
 			store.close();
 		}
@@ -647,60 +540,125 @@ describe("LcmStore", () => {
 	it("replaceContextItems atomically replaces rows with sequential ordinals", async (t) => {
 		const store = await openStore(t);
 		try {
-			const first = store.insertRecord({
+			const firstRecord = store.insertRecord({
 				segmentId: "seg-context",
 				kind: "user",
 				text: "first context raw",
 				happenedAt: "2026-05-10T01:00:00.000Z",
 				source: source(1),
 			});
-			const second = store.insertRecord({
+			const secondRecord = store.insertRecord({
 				segmentId: "seg-context",
 				kind: "assistant",
 				text: "second context raw",
 				happenedAt: "2026-05-10T01:01:00.000Z",
 				source: source(2),
 			});
-			const third = store.insertRecord({
-				segmentId: "seg-context",
-				kind: "user",
-				text: "third context raw",
-				happenedAt: "2026-05-10T01:02:00.000Z",
-				source: source(3),
-			});
-			const summaryId = store.insertSummary({
+			const firstSummaryId = store.insertSummary({
 				segmentId: "seg-context",
 				depth: 1,
 				status: "ready",
-				text: "context summary",
-				coversFromRecordId: first,
-				coversToRecordId: second,
-				source: { sourceType: "manual", sourceRef: "sum:context" },
+				text: "first context summary",
+				coversFromRecordId: firstRecord,
+				coversToRecordId: firstRecord,
+				source: { sourceType: "manual", sourceRef: "sum:context:first" },
 			});
-
+			const secondSummaryId = store.insertSummary({
+				segmentId: "seg-context",
+				depth: 1,
+				status: "ready",
+				text: "second context summary",
+				coversFromRecordId: secondRecord,
+				coversToRecordId: secondRecord,
+				source: { sourceType: "manual", sourceRef: "sum:context:second" },
+			});
 			store.replaceContextItems("room-context", [
-				{ type: "raw", recordId: first, fingerprint: "raw:first", happenedAt: "2026-05-10T01:00:00.000Z" },
-				{ type: "raw", recordId: second, fingerprint: "raw:second", happenedAt: "2026-05-10T01:01:00.000Z" },
-				{ type: "raw", recordId: third, fingerprint: "raw:third", happenedAt: "2026-05-10T01:02:00.000Z" },
+				{ summaryId: firstSummaryId, fingerprint: "summary:first", happenedAt: null },
+				{ summaryId: secondSummaryId, fingerprint: "summary:second", happenedAt: null },
 			]);
 			store.replaceContextItems("room-context", [
-				{ type: "summary", summaryId, fingerprint: "summary:first-second", happenedAt: null },
-				{ type: "raw", recordId: third, fingerprint: "raw:third", happenedAt: "2026-05-10T01:02:00.000Z" },
+				{ summaryId: secondSummaryId, fingerprint: "summary:second", happenedAt: null },
 			]);
 
 			assert.deepEqual(
 				store.listContextItems("room-context").map((item) => ({
 					ordinal: item.ordinal,
-					type: item.type,
-					recordId: item.recordId,
 					summaryId: item.summaryId,
 					fingerprint: item.fingerprint,
 				})),
-				[
-					{ ordinal: 0, type: "summary", recordId: null, summaryId, fingerprint: "summary:first-second" },
-					{ ordinal: 1, type: "raw", recordId: third, summaryId: null, fingerprint: "raw:third" },
-				],
+				[{ ordinal: 0, summaryId: secondSummaryId, fingerprint: "summary:second" }],
 			);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("migrates legacy context items by preserving summaries and dropping raw rows", async (t) => {
+		const path = await tempDbPath(t);
+		let store = new LcmStore({ path });
+		let summaryId: number;
+		try {
+			const recordId = store.insertRecord({
+				segmentId: "seg-legacy-context",
+				kind: "user",
+				text: "legacy raw context",
+				happenedAt: "2026-05-10T01:00:00.000Z",
+				source: source(1),
+			});
+			summaryId = store.insertSummary({
+				segmentId: "seg-legacy-context",
+				depth: 1,
+				status: "ready",
+				text: "legacy context summary",
+				coversFromRecordId: recordId,
+				coversToRecordId: recordId,
+				source: { sourceType: "manual", sourceRef: "sum:legacy-context" },
+			});
+			store.db.exec(`
+				DROP TABLE lcm_context_items;
+				CREATE TABLE lcm_context_items (
+					session_key TEXT NOT NULL,
+					ordinal INTEGER NOT NULL,
+					item_type TEXT NOT NULL CHECK(item_type IN ('raw', 'summary')),
+					record_id INTEGER REFERENCES lcm_records(id) ON DELETE CASCADE,
+					summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+					fingerprint TEXT NOT NULL,
+					happened_at TEXT,
+					updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+					PRIMARY KEY(session_key, ordinal)
+				);
+			`);
+			const insert = store.db.prepare(
+				`INSERT INTO lcm_context_items (
+					session_key, ordinal, item_type, record_id, summary_id, fingerprint, happened_at
+				 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			);
+			insert.run("room-legacy", 0, "raw", recordId, null, "legacy:raw", null);
+			insert.run("room-legacy", 1, "summary", null, summaryId, "legacy:summary", null);
+		} finally {
+			store.close();
+		}
+
+		store = new LcmStore({ path });
+		try {
+			assert.equal(store.schemaVersion(), 9);
+			assert.deepEqual(
+				store.listContextItems("room-legacy").map((item) => ({
+					ordinal: item.ordinal,
+					summaryId: item.summaryId,
+					fingerprint: item.fingerprint,
+				})),
+				[{ ordinal: 1, summaryId, fingerprint: "legacy:summary" }],
+			);
+			const columns = store.db.prepare("PRAGMA table_info(lcm_context_items)").all() as Array<{
+				name: string;
+				notnull: number;
+			}>;
+			assert.deepEqual(
+				columns.map((column) => column.name),
+				["session_key", "ordinal", "summary_id", "fingerprint", "happened_at", "updated_at"],
+			);
+			assert.equal(columns.find((column) => column.name === "summary_id")?.notnull, 1);
 		} finally {
 			store.close();
 		}

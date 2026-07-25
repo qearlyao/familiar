@@ -268,9 +268,6 @@ there for custom Anthropic-compatible aliases that route to adaptive-thinking
 Claude models, or at provider level only when every model behind the provider
 needs it.
 
-Legacy manual `agent.api` / `agent.model_id` / `agent.base_url` config is still
-accepted as an escape hatch for older configs and one-off custom endpoints.
-
 ## WebUI Behind A Reverse Proxy
 
 The default `tailscale-only` auth mode currently means "trust the network

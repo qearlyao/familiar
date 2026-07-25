@@ -7,10 +7,9 @@ import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { MediaPreview } from "@/components/MediaPreview";
 import { pageQuoteCitation } from "@/components/reader/marginMessage";
 import { remarkImageParagraphs } from "@/lib/chatMarkdownLayout";
-import { remarkLegacyChatMedia } from "@/lib/chatMarkdownMedia";
 import { cn } from "@/lib/utils";
 
-const remarkPlugins = [remarkGfm, remarkLegacyChatMedia, remarkImageParagraphs];
+const remarkPlugins = [remarkGfm, remarkImageParagraphs];
 
 /** Plain text of a hast subtree; soft line breaks survive inside text values. */
 function hastText(node: unknown): string {

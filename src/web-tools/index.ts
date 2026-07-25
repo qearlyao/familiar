@@ -1,6 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
-import type { Config } from "../config/index.js";
 import { PageCache } from "./cache.js";
 import { loadWebConfig } from "./config.js";
 import { createJinaProvider, createTinyfishProvider } from "./fetch-providers.js";
@@ -14,7 +13,6 @@ import {
 	type LoadedConfig,
 	type SearchProvider,
 	type SearchProviderName,
-	WEB_UNTRUSTED_PREFIX,
 	webFetchSchema,
 	webSearchSchema,
 } from "./types.js";
@@ -158,11 +156,7 @@ export function createFetchProviders(config: LoadedConfig): FetchProvider[] {
 	return providers;
 }
 
-export function webContentWarning(): string {
-	return WEB_UNTRUSTED_PREFIX;
-}
-
-export function createWebTools(_config: Config): AgentTool<any>[] {
+export function createWebTools(): AgentTool<any>[] {
 	const loaded = loadWebConfig();
 	return [makeSearchTool(loaded), makeFetchTool(loaded)];
 }

@@ -32,7 +32,7 @@ export function createFamiliarTools(
 		editTool,
 		createTtsTool(config, mediaSink),
 		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
-		...createWebTools(config),
+		...createWebTools(),
 		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),
 	];

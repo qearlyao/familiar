@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 9;
 
 export function runLcmMigrations(db: Database.Database): void {
 	db.pragma("journal_mode = WAL");
@@ -54,12 +54,6 @@ export function runLcmMigrations(db: Database.Database): void {
 			CREATE INDEX IF NOT EXISTS idx_lcm_records_source ON lcm_records(source_type, source_path, source_record_id);
 			CREATE INDEX IF NOT EXISTS idx_lcm_records_session ON lcm_records(session_id, channel_key, happened_at);
 
-			CREATE VIRTUAL TABLE IF NOT EXISTS lcm_records_fts USING fts5(
-				text_full,
-				content='',
-				contentless_delete=1
-			);
-
 			CREATE TABLE IF NOT EXISTS lcm_summaries (
 				id INTEGER PRIMARY KEY,
 				summary_key TEXT NOT NULL UNIQUE,
@@ -84,12 +78,6 @@ export function runLcmMigrations(db: Database.Database): void {
 
 			CREATE INDEX IF NOT EXISTS idx_lcm_summaries_segment ON lcm_summaries(segment_id, depth, id);
 			CREATE INDEX IF NOT EXISTS idx_lcm_summaries_status ON lcm_summaries(status, pinned);
-
-			CREATE VIRTUAL TABLE IF NOT EXISTS lcm_summaries_fts USING fts5(
-				text_full,
-				content='',
-				contentless_delete=1
-			);
 
 			CREATE TABLE IF NOT EXISTS lcm_summary_sources (
 				summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
@@ -116,20 +104,12 @@ export function runLcmMigrations(db: Database.Database): void {
 			CREATE TABLE IF NOT EXISTS lcm_context_items (
 				session_key TEXT NOT NULL,
 				ordinal INTEGER NOT NULL,
-				item_type TEXT NOT NULL CHECK(item_type IN ('raw', 'summary')),
-				record_id INTEGER REFERENCES lcm_records(id) ON DELETE CASCADE,
-				summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+				summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
 				fingerprint TEXT NOT NULL,
 				happened_at TEXT,
 				updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-				PRIMARY KEY(session_key, ordinal),
-				CHECK ((item_type = 'raw' AND record_id IS NOT NULL AND summary_id IS NULL)
-					OR (item_type = 'summary' AND summary_id IS NOT NULL AND record_id IS NULL))
+				PRIMARY KEY(session_key, ordinal)
 			);
-
-			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_session ON lcm_context_items(session_key);
-			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_record ON lcm_context_items(record_id);
-			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_summary ON lcm_context_items(summary_id);
 
 			CREATE TABLE IF NOT EXISTS lcm_session_state (
 				session_key TEXT PRIMARY KEY,
@@ -141,7 +121,13 @@ export function runLcmMigrations(db: Database.Database): void {
 
 		migrateRecordPartsColumn(db);
 		migrateSummarySnapshotColumn(db);
-		migrateContentlessFts(db);
+		migrateContextItemsSummaryOnly(db);
+		db.exec(`
+			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_session ON lcm_context_items(session_key);
+			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_summary ON lcm_context_items(summary_id);
+			DROP TABLE IF EXISTS lcm_records_fts;
+			DROP TABLE IF EXISTS lcm_summaries_fts;
+		`);
 		writeMeta(db, "schema_version", String(SCHEMA_VERSION));
 	};
 	if (db.inTransaction) run();
@@ -160,11 +146,6 @@ export function writeMeta(db: Database.Database, key: string, value: string): vo
 	).run(key, value);
 }
 
-function migrateContentlessFts(db: Database.Database): void {
-	migrateOneFts(db, "lcm_records_fts", "lcm_records", "text_full");
-	migrateOneFts(db, "lcm_summaries_fts", "lcm_summaries", "text_full");
-}
-
 function migrateRecordPartsColumn(db: Database.Database): void {
 	const columns = db.prepare("PRAGMA table_info(lcm_records)").all() as Array<{ name: string }>;
 	if (columns.some((column) => column.name === "parts_json")) return;
@@ -177,21 +158,27 @@ function migrateSummarySnapshotColumn(db: Database.Database): void {
 	db.prepare("ALTER TABLE lcm_summaries ADD COLUMN snapshot_json TEXT").run();
 }
 
-function migrateOneFts(db: Database.Database, ftsTable: string, sourceTable: string, textColumn: string): void {
-	const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(ftsTable) as
-		| { sql: string }
-		| undefined;
-	if (row?.sql.includes("contentless_delete=1")) return;
-	const run = () => {
-		db.prepare(`DROP TABLE ${ftsTable}`).run();
-		db.prepare(`CREATE VIRTUAL TABLE ${ftsTable} USING fts5(${textColumn}, content='', contentless_delete=1)`).run();
-		const rows = db.prepare(`SELECT id, ${textColumn} FROM ${sourceTable}`).all() as {
-			id: number;
-			[key: string]: unknown;
-		}[];
-		const insert = db.prepare(`INSERT INTO ${ftsTable}(rowid, ${textColumn}) VALUES (?, ?)`);
-		for (const source of rows) insert.run(source.id, source[textColumn]);
-	};
-	if (db.inTransaction) run();
-	else db.transaction(run).immediate();
+function migrateContextItemsSummaryOnly(db: Database.Database): void {
+	const columns = db.prepare("PRAGMA table_info(lcm_context_items)").all() as Array<{ name: string }>;
+	if (!columns.some((column) => column.name === "item_type" || column.name === "record_id")) return;
+	db.exec(`
+		CREATE TABLE lcm_context_items_next (
+			session_key TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			summary_id INTEGER NOT NULL REFERENCES lcm_summaries(id) ON DELETE CASCADE,
+			fingerprint TEXT NOT NULL,
+			happened_at TEXT,
+			updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+			PRIMARY KEY(session_key, ordinal)
+		);
+		INSERT INTO lcm_context_items_next (
+			session_key, ordinal, summary_id, fingerprint, happened_at, updated_at
+		)
+		SELECT item.session_key, item.ordinal, item.summary_id, item.fingerprint, item.happened_at, item.updated_at
+		FROM lcm_context_items item
+		JOIN lcm_summaries summary ON summary.id = item.summary_id
+		WHERE item.item_type = 'summary';
+		DROP TABLE lcm_context_items;
+		ALTER TABLE lcm_context_items_next RENAME TO lcm_context_items;
+	`);
 }

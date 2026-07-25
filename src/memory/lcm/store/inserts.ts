@@ -35,9 +35,6 @@ export function insertRecordPrepared(db: Database.Database, normalized: Normaliz
 			jsonOrNull(normalized.parts),
 		);
 	const id = Number(inserted.lastInsertRowid);
-	if (normalized.kind !== "boundary") {
-		db.prepare("INSERT INTO lcm_records_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
-	}
 	const row = db.prepare("SELECT * FROM lcm_records WHERE id = ?").get(id) as LcmRecordRow | undefined;
 	if (!row) throw new Error(`Failed to read inserted LCM record: ${id}`);
 	return row;
@@ -75,7 +72,6 @@ export function insertSummaryPrepared(
 			jsonOrNull(normalized.metadata),
 		);
 	const id = Number(inserted.lastInsertRowid);
-	db.prepare("INSERT INTO lcm_summaries_fts(rowid, text_full) VALUES (?, ?)").run(id, normalized.text);
 	insertEdges(id, normalized.sourceItems, normalized.parents);
 	return id;
 }

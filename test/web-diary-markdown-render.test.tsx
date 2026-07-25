@@ -17,17 +17,18 @@ describe("diary markdown React rendering", () => {
 	it("renders the diary markdown dialect through the page surface", () => {
 		const html = renderToStaticMarkup(
 			createElement(MarkdownView, {
-				content: "# Quiet Day\n\n## Quiet Day\n\nfirst wrapped\nline\n\n- `code` and **bold**\n\n> *quoted* line",
+				content:
+					"# **Quiet** [Day](#day)\n\n## Quiet Day\n\nfirst wrapped\nline\n09:12: kettle on\nstill same beat\n\n- `code` and **bold**\n\n> _quoted_ [line](#line)",
 				title: "Quiet Day",
 			}),
 		);
 
 		assert.match(html, /class="warm-prose diary-prose"/);
-		assert.doesNotMatch(html, /<h2>Quiet Day<\/h2>[\s\S]*<h2>Quiet Day<\/h2>/);
+		assert.doesNotMatch(html, /<strong>Quiet<\/strong>/);
 		assert.match(html, /<h2>Quiet Day<\/h2>/);
-		assert.match(html, /<p>first wrapped line<\/p>/);
-		assert.match(html, /<ul><li><code>code<\/code> and <strong>bold<\/strong><\/li><\/ul>/);
-		assert.match(html, /<blockquote><em>quoted<\/em> line<\/blockquote>/);
+		assert.match(html, /<p>first wrapped\nline<\/p>\n<p>09:12: kettle on\nstill same beat<\/p>/);
+		assert.match(html, /<li><code>code<\/code> and <strong>bold<\/strong><\/li>/);
+		assert.match(html, /<blockquote>\n<p><em>quoted<\/em> <a href="#line">line<\/a><\/p>\n<\/blockquote>/);
 	});
 
 	it("maps deeper headings to h3", () => {

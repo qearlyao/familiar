@@ -12,7 +12,7 @@ import {
 	DIARY_CHUNK_CORPUS,
 	diaryChunksToIndexInputs,
 	indexDiaryMarkdown,
-} from "../src/memory/diary/index.js";
+} from "../src/memory/diary/chunks.js";
 
 async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-diary-chunks-"));

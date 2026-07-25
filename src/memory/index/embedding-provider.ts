@@ -32,7 +32,7 @@ interface GeminiEmbeddingResponse {
 }
 
 export function createEmbeddingProvider(config: Config, options: EmbeddingProviderOptions = {}): EmbeddingProvider {
-	const format = config.memory.embedding.format ?? config.memory.embedding.api;
+	const format = config.memory.embedding.format;
 	if (format === "gemini") return new GeminiEmbeddingProvider(config, options.fetchFn ?? fetch);
 	throw new Error(
 		`NotImplementedError: memory.embedding.format=${format} is recognized but only gemini is implemented in v0`,

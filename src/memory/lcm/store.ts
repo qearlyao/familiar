@@ -4,7 +4,6 @@ import { dirname, resolve } from "node:path";
 import Database from "better-sqlite3";
 
 import type { Config } from "../../config/index.js";
-import { normalizeFtsMatchQuery } from "../index/fts-query.js";
 import { runInTransaction } from "../util.js";
 import { readMeta, runLcmMigrations } from "./schema.js";
 import { lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store/index-ids.js";
@@ -183,38 +182,6 @@ export class LcmStore {
 		return rows.map(recordFromRow);
 	}
 
-	searchRecordsLexical(query: string, limit = 10): StoredLcmRecord[] {
-		const matchQuery = normalizeFtsMatchQuery(query);
-		if (!matchQuery) return [];
-		const rows = this.db
-			.prepare(
-				`SELECT r.*
-				 FROM lcm_records_fts f
-				 JOIN lcm_records r ON r.id = f.rowid
-				 WHERE lcm_records_fts MATCH ?
-				 ORDER BY f.rank
-				 LIMIT ?`,
-			)
-			.all(matchQuery, limit) as LcmRecordRow[];
-		return rows.map(recordFromRow);
-	}
-
-	searchSummariesLexical(query: string, limit = 10): StoredLcmSummary[] {
-		const matchQuery = normalizeFtsMatchQuery(query);
-		if (!matchQuery) return [];
-		const rows = this.db
-			.prepare(
-				`SELECT s.*
-				 FROM lcm_summaries_fts f
-				 JOIN lcm_summaries s ON s.id = f.rowid
-				 WHERE lcm_summaries_fts MATCH ?
-				 ORDER BY f.rank
-				 LIMIT ?`,
-			)
-			.all(matchQuery, limit) as LcmSummaryRow[];
-		return rows.map((row) => summaryFromRow(row));
-	}
-
 	insertSummary(input: LcmSummaryInput): number {
 		if (!Number.isInteger(input.depth) || input.depth < 0) {
 			throw new Error("LCM summary depth must be an integer >= 0");
@@ -272,19 +239,11 @@ export class LcmStore {
 			this.db.prepare("DELETE FROM lcm_context_items WHERE session_key = ?").run(sessionKey);
 			const insert = this.db.prepare(
 				`INSERT INTO lcm_context_items (
-					session_key, ordinal, item_type, record_id, summary_id, fingerprint, happened_at
-				 ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					session_key, ordinal, summary_id, fingerprint, happened_at
+				 ) VALUES (?, ?, ?, ?, ?)`,
 			);
 			for (const [ordinal, item] of items.entries()) {
-				insert.run(
-					sessionKey,
-					ordinal,
-					item.type,
-					item.type === "raw" ? item.recordId : null,
-					item.type === "summary" ? item.summaryId : null,
-					item.fingerprint,
-					item.happenedAt,
-				);
+				insert.run(sessionKey, ordinal, item.summaryId, item.fingerprint, item.happenedAt);
 			}
 		};
 		if (this.db.inTransaction) run();
@@ -294,7 +253,7 @@ export class LcmStore {
 	listContextItems(sessionKey: string): StoredLcmContextItem[] {
 		const rows = this.db
 			.prepare(
-				`SELECT session_key, ordinal, item_type, record_id, summary_id, fingerprint, happened_at, updated_at
+				`SELECT session_key, ordinal, summary_id, fingerprint, happened_at, updated_at
 				 FROM lcm_context_items
 				 WHERE session_key = ?
 				 ORDER BY ordinal ASC`,
@@ -354,8 +313,6 @@ export class LcmStore {
 			affectedSegments: [],
 			rawRecordsDeleted: 0,
 			summariesDeleted: 0,
-			recordFtsRowsDeleted: 0,
-			summaryFtsRowsDeleted: 0,
 			indexDeletes: [],
 		};
 		if (retainDepth === -1) return report;
@@ -382,15 +339,6 @@ export class LcmStore {
 					for (const summary of summaries) {
 						report.indexDeletes.push({ corpus: "lcm_summary", sourceId: lcmSummaryIndexSourceId(summary.id) });
 					}
-					report.summaryFtsRowsDeleted += this.db
-						.prepare(
-							`DELETE FROM lcm_summaries_fts
-							 WHERE rowid IN (
-								SELECT id FROM lcm_summaries
-								WHERE segment_id = ? AND pinned = 0 AND depth < ?
-							 )`,
-						)
-						.run(segmentId, retainDepth).changes;
 					report.summariesDeleted += this.db
 						.prepare("DELETE FROM lcm_summaries WHERE segment_id = ? AND pinned = 0 AND depth < ?")
 						.run(segmentId, retainDepth).changes;
@@ -405,9 +353,6 @@ export class LcmStore {
 				for (const record of records) {
 					report.indexDeletes.push({ corpus: "lcm_record", sourceId: lcmRecordIndexSourceId(record.id) });
 				}
-				report.recordFtsRowsDeleted += this.db
-					.prepare("DELETE FROM lcm_records_fts WHERE rowid IN (SELECT id FROM lcm_records WHERE segment_id = ?)")
-					.run(segmentId).changes;
 				report.rawRecordsDeleted += this.db
 					.prepare("DELETE FROM lcm_records WHERE segment_id = ?")
 					.run(segmentId).changes;

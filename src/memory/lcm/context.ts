@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai/compat";
+import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai/compat";
 
 import { buildEvictionScoreContext, scoreEvictable, tokenBag } from "./eviction-score.js";
-import type { LcmAttachmentNote, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
+import type { LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export interface LcmContextCompactionConfig {
 	contextThreshold: number;
@@ -31,10 +31,7 @@ export interface LcmContextRawItem {
 	record?: StoredLcmRecord | null;
 }
 
-type LcmRecordTokenInput = string | Pick<StoredLcmRecord, "kind" | "text" | "attachments">;
-
 const MESSAGE_OVERHEAD_TOKENS = 6;
-const RECORD_OVERHEAD_TOKENS = 4;
 const IMAGE_TOKEN_ESTIMATE = 1200;
 export function estimateTextTokens(text: string): number {
 	if (!text) return 0;
@@ -46,14 +43,6 @@ export function estimateTextTokens(text: string): number {
 		else nonAscii += 1;
 	}
 	return Math.ceil(ascii / 3) + nonAscii;
-}
-
-export function estimateLcmRecordTokens(recordOrText: LcmRecordTokenInput): number {
-	const text = typeof recordOrText === "string" ? recordOrText : recordOrText.text;
-	const attachments = typeof recordOrText === "string" ? null : recordOrText.attachments;
-	const attachmentText = attachments?.map(renderAttachmentForEstimate).filter(Boolean).join("\n") ?? "";
-	const contentTokens = estimateTextTokens([text, attachmentText].filter(Boolean).join("\n"));
-	return contentTokens > 0 ? contentTokens + RECORD_OVERHEAD_TOKENS : 0;
 }
 
 export function estimateAgentMessageTokens(message: AgentMessage): number {
@@ -89,15 +78,6 @@ export function createRawContextItems(messages: readonly AgentMessage[]): LcmCon
 		message,
 		tokens: estimateAgentMessageTokens(message),
 	}));
-}
-
-export function lcmRecordToAgentMessage(record: StoredLcmRecord): AgentMessage {
-	const timestamp = Date.parse(record.happenedAt);
-	const messageTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
-	if (record.parts?.length) return structuredLcmRecordToAgentMessage(record, messageTimestamp);
-	if (record.kind === "assistant") return fallbackAssistantMessage(record.text, messageTimestamp);
-	if (record.kind === "tool") return fallbackAssistantMessage(record.text, messageTimestamp);
-	return { role: "user", content: record.text, timestamp: messageTimestamp };
 }
 
 export function renderLcmRecordPartsForSummary(parts: readonly LcmRecordPart[]): string {
@@ -322,12 +302,6 @@ function estimateJsonTokens(value: unknown): number {
 	return estimateTextTokens(JSON.stringify(value) ?? "");
 }
 
-function renderAttachmentForEstimate(attachment: LcmAttachmentNote): string {
-	return [attachment.name, attachment.kind, attachment.mimeType, attachment.text, attachment.note]
-		.filter((part): part is string => typeof part === "string" && part.length > 0)
-		.join(" ");
-}
-
 export function selectRetainedSummaries(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
 	const ready = summaries
 		.filter((summary) => summary.status === "ready" && summary.text.trim().length > 0)
@@ -363,106 +337,6 @@ function compareSummaries(a: StoredLcmSummary, b: StoredLcmSummary): number {
 		(a.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) - (b.coversFromRecordId ?? Number.MAX_SAFE_INTEGER) ||
 		a.id - b.id
 	);
-}
-
-function structuredLcmRecordToAgentMessage(record: StoredLcmRecord, timestamp: number): AgentMessage {
-	if (record.kind === "tool") {
-		const result = record.parts?.find((part): part is Extract<LcmRecordPart, { kind: "tool_result" }> => {
-			return part.kind === "tool_result";
-		});
-		if (!result) return fallbackAssistantMessage(record.text, timestamp);
-		return {
-			role: "toolResult",
-			toolCallId: result.toolCallId,
-			toolName: result.toolName,
-			content: [{ type: "text", text: stringifyPartValue(result.output) }],
-			details: result.output,
-			isError: result.isError ?? false,
-			timestamp,
-		};
-	}
-	if (record.kind === "assistant") {
-		return {
-			...fallbackAssistantMessage("", timestamp),
-			content: structuredAssistantContent(record.parts ?? []),
-			stopReason: record.parts?.some((part) => part.kind === "tool_call") ? "toolUse" : "stop",
-		};
-	}
-	return {
-		role: "user",
-		content: structuredUserContent(record.parts ?? [], record.text),
-		timestamp,
-	};
-}
-
-function structuredAssistantContent(parts: readonly LcmRecordPart[]): AssistantMessage["content"] {
-	const content: AssistantMessage["content"] = [];
-	for (const part of parts) {
-		if (part.kind === "text" && part.text) {
-			content.push({
-				type: "text",
-				text: part.text,
-				...(part.signature ? { textSignature: part.signature } : {}),
-			});
-		} else if (part.kind === "thinking" && part.text) {
-			content.push({
-				type: "thinking",
-				thinking: part.text,
-				...(part.signature ? { thinkingSignature: part.signature } : {}),
-			});
-		} else if (part.kind === "tool_call") {
-			content.push({
-				type: "toolCall",
-				id: part.toolCallId,
-				name: part.toolName,
-				arguments: normalizeToolArguments(part.arguments),
-				...(part.signature ? { thoughtSignature: part.signature } : {}),
-			});
-		}
-	}
-	return content.length ? content : [{ type: "text", text: "" }];
-}
-
-function structuredUserContent(parts: readonly LcmRecordPart[], fallback: string): UserMessage["content"] {
-	const text = parts
-		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
-		.map((part) => part.text)
-		.join("\n")
-		.trim();
-	return text || fallback;
-}
-
-function fallbackAssistantMessage(text: string, timestamp: number): AssistantMessage {
-	return {
-		role: "assistant",
-		content: [{ type: "text", text }],
-		api: "lcm" as Api,
-		provider: "familiar",
-		model: "lcm-record",
-		usage: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			totalTokens: 0,
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-		},
-		stopReason: "stop",
-		timestamp,
-	};
-}
-
-function normalizeToolArguments(value: unknown): Record<string, any> {
-	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : {};
-}
-
-function stringifyPartValue(value: unknown): string {
-	if (typeof value === "string") return value;
-	try {
-		return JSON.stringify(value);
-	} catch {
-		return String(value);
-	}
 }
 
 function formatJsonForSummary(value: unknown): string {

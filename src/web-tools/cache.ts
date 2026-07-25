@@ -17,7 +17,6 @@ export class PageCache {
 			this.entries.delete(url);
 			return undefined;
 		}
-		entry.lastAccessed = Date.now();
 		this.entries.delete(url);
 		this.entries.set(url, entry);
 		return entry;
@@ -26,12 +25,10 @@ export class PageCache {
 	set(url: string, content: string, provider: FetchProviderName): void {
 		if (content.length > MAX_CACHE_CHARS_PER_PAGE) return;
 		if (this.entries.has(url)) this.entries.delete(url);
-		const now = Date.now();
 		this.entries.set(url, {
 			content,
 			provider,
-			fetchedAt: now,
-			lastAccessed: now,
+			fetchedAt: Date.now(),
 		});
 		while (this.entries.size > this.capacity) {
 			const oldest = this.entries.keys().next().value as string | undefined;

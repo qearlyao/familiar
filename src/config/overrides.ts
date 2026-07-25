@@ -13,7 +13,6 @@ function normalize(value: unknown): Record<string, unknown> {
 	const input = value as Record<string, unknown>;
 	const out: Record<string, unknown> = {};
 	for (const [key, v] of Object.entries(input)) {
-		if (typeof key !== "string") continue;
 		out[key] = v;
 	}
 	return out;

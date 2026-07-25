@@ -81,8 +81,6 @@ export type {
 	WebAuthMode,
 } from "./types.js";
 
-const loggedConfigWarnings = new Set<string>();
-
 const DEFAULT_MEMORY_EMBEDDING_BASE_URLS: Record<string, string> = {
 	google: "https://generativelanguage.googleapis.com/v1beta",
 };
@@ -103,12 +101,6 @@ type BrowserHarnessFlatConfig = {
 	cloudTimeoutMinutes?: number;
 	cloudProxyCountryCode?: string;
 };
-
-function warnOnce(key: string, message: string): void {
-	if (loggedConfigWarnings.has(key)) return;
-	loggedConfigWarnings.add(key);
-	console.warn(message);
-}
 
 function rejectDefined(path: string, value: unknown, mode: BrowserHarnessMode): void {
 	if (value !== undefined) throw new Error(`Config value ${path} is only valid when browser.harness_mode = "${mode}"`);
@@ -446,30 +438,19 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const memoryEmbedding = (memory.embedding ?? {}) as Record<string, unknown>;
 	const memoryAmbient = (memory.ambient ?? {}) as Record<string, unknown>;
 	const memoryLcm = (memory.lcm ?? {}) as Record<string, unknown>;
+	assertKnownKeys(agent, "agent", ["model", "cache_retention", "thinking_level"]);
+	assertKnownKeys(memoryEmbedding, "memory.embedding", [
+		"format",
+		"provider",
+		"model",
+		"base_url",
+		"api_key_env",
+		"dimensions",
+		"batch_size",
+	]);
 
 	const ownerId = readString(discord.owner_id, "discord.owner_id");
-	const model = readOptionalString(agent.model, "");
-	const provider = readOptionalString(agent.provider, "custom");
-	const modelId = readOptionalString(agent.model_id, "");
-	const api = readOptionalString(agent.api, "");
-	const baseUrl = readOptionalString(agent.base_url, "");
-	const apiKeyEnv = readOptionalString(agent.api_key_env, "");
-	const legacyModel = modelId ? `${provider}/${modelId}` : "";
-	const agentModel = model || legacyModel;
-	const usingLegacyAgentModel = !model;
-	let agentCacheRetentionRaw: unknown = agent.cache_retention;
-	if (agentCacheRetentionRaw === undefined && agent.cacheRetention !== undefined) {
-		warnOnce(
-			"agent.cacheRetention",
-			"Config value agent.cacheRetention is deprecated; use agent.cache_retention instead.",
-		);
-		agentCacheRetentionRaw = agent.cacheRetention;
-	}
-	if (usingLegacyAgentModel && (!api || !modelId || !baseUrl || !apiKeyEnv)) {
-		throw new Error(
-			'Set agent.model = "provider/model", or for a legacy custom endpoint set all of agent.api, agent.model_id, agent.base_url, and agent.api_key_env.',
-		);
-	}
+	const agentModel = readString(agent.model, "agent.model").trim();
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
 	assertKnownKeys(models, "models", ["allow", "base_urls", "api_key_envs", "openrouter_routing", "providers"]);
@@ -478,19 +459,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
 	const openRouterRouting = readOpenRouterRouting(models.openrouter_routing, modelBaseUrls);
 	const configuredProviders = readConfiguredProviders(models.providers);
-	let memoryEmbeddingFormatRaw: unknown = memoryEmbedding.format;
-	if (memoryEmbeddingFormatRaw === undefined && memoryEmbedding.api !== undefined) {
-		warnOnce(
-			"memory.embedding.api",
-			"Config value memory.embedding.api is deprecated; use memory.embedding.format instead.",
-		);
-		memoryEmbeddingFormatRaw = memoryEmbedding.api;
-	}
 	const memoryEmbeddingFormat = readEnum(
-		readOptionalString(memoryEmbeddingFormatRaw, "gemini"),
-		memoryEmbedding.format === undefined && memoryEmbedding.api !== undefined
-			? "memory.embedding.api"
-			: "memory.embedding.format",
+		readOptionalString(memoryEmbedding.format, "gemini"),
+		"memory.embedding.format",
 		MEMORY_EMBEDDING_FORMATS,
 	);
 	const memoryEmbeddingProvider = readConfigString(memoryEmbedding.provider, "google", "memory.embedding.provider");
@@ -546,12 +517,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		if (modelAllow.length > 0 && !modelAllow.includes(memoryLcmRef.key)) {
 			throw new Error(`Config value memory.lcm.model is not in models.allow: ${memoryLcmRef.key}`);
 		}
-		memoryLcmBaseUrl =
-			resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId) ??
-			(usingLegacyAgentModel && memoryLcmRef.key === legacyModel ? baseUrl : undefined);
-		memoryLcmApiKeyEnv =
-			resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId) ??
-			(usingLegacyAgentModel && memoryLcmRef.provider === provider ? apiKeyEnv : undefined);
+		memoryLcmBaseUrl = resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId);
+		memoryLcmApiKeyEnv = resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId);
 		memoryLcmFreshTailMaxTokens = readOptionalInteger(
 			memoryLcm.fresh_tail_max_tokens,
 			"memory.lcm.fresh_tail_max_tokens",
@@ -625,16 +592,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		agent: {
 			model: agentModel,
-			api: usingLegacyAgentModel ? api : undefined,
-			modelId: usingLegacyAgentModel ? modelId : undefined,
-			baseUrl: usingLegacyAgentModel ? baseUrl : undefined,
-			apiKeyEnv: usingLegacyAgentModel ? apiKeyEnv : undefined,
-			provider: usingLegacyAgentModel ? provider : undefined,
 			cacheRetention: readEnum(
-				readOptionalString(agentCacheRetentionRaw, "long"),
-				agent.cache_retention === undefined && agent.cacheRetention !== undefined
-					? "agent.cacheRetention"
-					: "agent.cache_retention",
+				readOptionalString(agent.cache_retention, "long"),
+				"agent.cache_retention",
 				CACHE_RETENTIONS,
 			),
 			thinkingLevel: readEnum(
@@ -751,7 +711,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
 				format: memoryEmbeddingFormat,
-				api: memoryEmbeddingFormat,
 				provider: memoryEmbeddingProvider,
 				model: memoryEmbeddingModel,
 				baseUrl: memoryEmbeddingBaseUrl,

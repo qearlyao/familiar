@@ -8,9 +8,7 @@ import {
 	createAgentMessageFingerprint,
 	createRawContextItems,
 	estimateAgentMessageTokens,
-	estimateLcmRecordTokens,
 	estimateTextTokens,
-	lcmRecordToAgentMessage,
 	selectLcmCompactionCandidatePromptAware,
 } from "../src/memory/lcm/context.js";
 import {
@@ -143,17 +141,6 @@ describe("LCM context helpers", () => {
 		assert.ok(estimateAgentMessageTokens(withSignatures) > estimateAgentMessageTokens(base));
 	});
 
-	it("estimates LCM record text with attachment notes", () => {
-		const plain = estimateLcmRecordTokens(record(1, "user", "short"));
-		const withAttachment = estimateLcmRecordTokens({
-			...record(2, "user", "short"),
-			attachments: [{ name: "sketch.png", kind: "image", note: "compact toolbar sketch" }],
-		});
-
-		assert.ok(plain > 0);
-		assert.ok(withAttachment > plain);
-	});
-
 	it("creates stable AgentMessage fingerprints independent of starting index", () => {
 		const messages: AgentMessage[] = [
 			{ role: "user", content: "first stable detail", timestamp: 1 },
@@ -168,45 +155,6 @@ describe("LCM context helpers", () => {
 			createRawContextItems(messages).map((item) => item.id),
 			first,
 		);
-	});
-
-	it("lcmRecordToAgentMessage reconstructs structured content blocks from tool_call parts", () => {
-		const unsigned = lcmRecordToAgentMessage({
-			...record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]"),
-			parts: [
-				{ kind: "text", text: "I'll check." },
-				{ kind: "thinking", text: "Need the current plan." },
-				{ kind: "tool_call", toolCallId: "call-1", toolName: "read", arguments: { path: "PLAN.md" } },
-			],
-		});
-		const message = lcmRecordToAgentMessage({
-			...record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]"),
-			parts: [
-				{ kind: "text", text: "I'll check.", signature: "sig-text ".repeat(12) },
-				{ kind: "thinking", text: "Need the current plan.", signature: "sig-thinking ".repeat(12) },
-				{
-					kind: "tool_call",
-					toolCallId: "call-1",
-					toolName: "read",
-					arguments: { path: "PLAN.md" },
-					signature: "sig-thought ".repeat(12),
-				},
-			],
-		});
-
-		assert.equal(message.role, "assistant");
-		assert.deepEqual(message.content, [
-			{ type: "text", text: "I'll check.", textSignature: "sig-text ".repeat(12) },
-			{ type: "thinking", thinking: "Need the current plan.", thinkingSignature: "sig-thinking ".repeat(12) },
-			{
-				type: "toolCall",
-				id: "call-1",
-				name: "read",
-				arguments: { path: "PLAN.md" },
-				thoughtSignature: "sig-thought ".repeat(12),
-			},
-		]);
-		assert.ok(estimateAgentMessageTokens(message) > estimateAgentMessageTokens(unsigned));
 	});
 
 	it("prompt-aware candidate selection preserves tool_call and tool_result pair integrity", () => {

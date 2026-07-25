@@ -5,7 +5,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import { AmbientDiaryInjector } from "../src/memory/diary/ambient-injector.js";
 import { __memoryServiceTest } from "../src/memory/service.js";
-import { retrieveAmbientDiary } from "../src/memory/diary/index.js";
+import { retrieveAmbientDiary } from "../src/memory/diary/ambient.js";
 import type { EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import type { MemorySearchHit } from "../src/memory/index/store.js";
 import { FakeRetrievalStore as FakeStore, memoryHit } from "./memory-fakes.js";

@@ -110,14 +110,12 @@ export type LoadedConfig = {
 	apiKeys: Partial<
 		Record<"BRAVE_API_KEY" | "TAVILY_API_KEY" | "EXA_API_KEY" | "JINA_API_KEY" | "TINYFISH_API_KEY", string>
 	>;
-	warnings: string[];
 };
 
 export type PageCacheEntry = {
 	content: string;
 	provider: FetchProviderName;
 	fetchedAt: number;
-	lastAccessed: number;
 };
 
 export class ProviderError extends Error {

@@ -6,7 +6,6 @@ export type VectorCapability = "sqlite-vec" | "blob-js";
 
 export interface SqliteVecAvailable {
 	available: true;
-	registerOnDb(db: Database.Database): void;
 }
 
 export interface SqliteVecUnavailable {
@@ -16,9 +15,7 @@ export interface SqliteVecUnavailable {
 export type SqliteVecState = SqliteVecAvailable | SqliteVecUnavailable;
 
 type SqliteVecModule = {
-	load?: (db: Database.Database) => void;
-	default?: { load?: (db: Database.Database) => void };
-	loadablePathFor?: () => string;
+	load: (db: Database.Database) => void;
 };
 
 const requireOptional = createRequire(import.meta.url);
@@ -41,26 +38,8 @@ export function loadSqliteVec(db: Database.Database): SqliteVecState {
 	}
 }
 
-export function isSqliteVecLoadedForDb(db: Database.Database): boolean {
-	return loadedDbs.has(db);
-}
-
 function registerModuleOnDb(mod: SqliteVecModule, db: Database.Database): void {
-	if (typeof mod.load === "function") {
-		mod.load(db);
-		return;
-	}
-	if (typeof mod.default?.load === "function") {
-		mod.default.load(db);
-		return;
-	}
-	if (typeof mod.loadablePathFor === "function") {
-		const loadExtension = (db as Database.Database & { loadExtension?: (path: string) => void }).loadExtension;
-		if (typeof loadExtension !== "function") throw new Error("better-sqlite3 does not support loadExtension");
-		loadExtension.call(db, mod.loadablePathFor());
-		return;
-	}
-	throw new Error("sqlite-vec module does not expose load(db) or loadablePathFor()");
+	mod.load(db);
 }
 
 function logUnavailableOnce(): void {
@@ -71,10 +50,6 @@ function logUnavailableOnce(): void {
 
 const availableState: SqliteVecAvailable = {
 	available: true,
-	registerOnDb(db: Database.Database): void {
-		const state = loadSqliteVec(db);
-		if (!state.available) throw new Error("sqlite-vec unavailable");
-	},
 };
 
 export const __memoryVecTest = {

@@ -48,7 +48,6 @@
 		"better-sqlite3": "^12.10.0",
 		"cross-spawn": "^7.0.6",
 		"discord.js": "^14.26.3",
-		"dotenv": "^16.4.5",
 		"fast-xml-parser": "^5.7.3",
 		"fflate": "^0.8.2",
 		"sharp": "^0.35.0",

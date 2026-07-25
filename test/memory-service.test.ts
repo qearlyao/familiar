@@ -31,7 +31,7 @@ async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 			diariesDir: resolve(memoryRootDir, "diaries"),
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
-				api: "gemini",
+				format: "gemini",
 				provider: "google",
 				model: "gemini-embedding-test",
 				baseUrl: "https://embedding.test",
@@ -298,12 +298,20 @@ describe("MemoryService", () => {
 
 				const lcmStoreBeforeReset = LcmStore.open(config);
 				try {
-					const recordId = lcmStoreBeforeReset.listRecords()[0]?.id;
-					assert.ok(recordId);
+					const record = lcmStoreBeforeReset.listRecords()[0];
+					assert.ok(record);
+					const summaryId = lcmStoreBeforeReset.insertSummary({
+						segmentId: record.segmentId,
+						depth: 1,
+						status: "ready",
+						text: "Remember the compact toolbar.",
+						coversFromRecordId: record.id,
+						coversToRecordId: record.id,
+						source: { sourceType: "manual", sourceRef: "summary:compact-toolbar" },
+					});
 					lcmStoreBeforeReset.replaceContextItems("web-web-room", [
 						{
-							type: "raw",
-							recordId,
+							summaryId,
 							fingerprint: "runtime:compact-toolbar",
 							happenedAt: "2026-05-10T01:00:00.000Z",
 						},
@@ -854,9 +862,7 @@ describe("MemoryService", () => {
 
 				const store = LcmStore.open(config);
 				try {
-					const contextItems = store.listContextItems("room-rotation-invalidate");
-					assert.equal(contextItems.some((item) => item.type === "summary"), false);
-					assert.equal(contextItems.filter((item) => item.type === "raw").length, 0);
+					assert.equal(store.listContextItems("room-rotation-invalidate").length, 0);
 				} finally {
 					store.close();
 				}
@@ -922,8 +928,7 @@ describe("MemoryService", () => {
 
 				const store = LcmStore.open(config);
 				try {
-					const contextItems = store.listContextItems("room-rehydrate-raws");
-					assert.equal(contextItems.filter((item) => item.type === "raw").length, 0);
+					assert.equal(store.listContextItems("room-rehydrate-raws").length, 0);
 				} finally {
 					store.close();
 				}
@@ -1181,77 +1186,6 @@ describe("MemoryService", () => {
 				const store = LcmStore.open(config);
 				try {
 					assert.ok((store.getSessionState("room-cold-once")?.compactionDebt ?? 0) >= 0);
-				} finally {
-					store.close();
-				}
-			} finally {
-				service.close();
-			}
-		});
-	});
-
-	it("ignores legacy persisted raw LCM items after restart", async (t) => {
-		const baseConfig = await memoryConfig(t);
-		const config = {
-			...baseConfig,
-			memory: {
-				...baseConfig.memory,
-				lcm: {
-					...baseConfig.memory.lcm,
-					enabled: true,
-					freshTailCount: 1,
-					leafChunkTokens: 10_000,
-					leafTargetTokens: 0,
-					maxRounds: 1,
-				},
-			},
-		};
-		const history = Array.from({ length: 10 }, (_, index) => ({
-			role: "user" as const,
-			content: `history item ${index + 1}`,
-			timestamp: index + 1,
-		}));
-
-		await withEmbeddingFetch([1, 0, 0], async () => {
-			let service = createMemoryService(config, { summarizer: fixedSummary("unused") });
-			try {
-				await service.transformContext(history, undefined, {
-					sessionKey: "room-rehydrate-raws",
-					sessionId: "session-a",
-					model: { contextWindow: 10_000 } as any,
-				});
-			} finally {
-				service.close();
-			}
-			const legacyStore = LcmStore.open(config);
-			try {
-				const recordId = legacyStore.listRecords()[0]?.id;
-				assert.ok(recordId);
-				legacyStore.replaceContextItems("room-rehydrate-raws", [
-					{ type: "raw", recordId, fingerprint: "legacy:history-item-1", happenedAt: null },
-				]);
-			} finally {
-				legacyStore.close();
-			}
-
-			service = createMemoryService(config, { summarizer: fixedSummary("unused") });
-			try {
-				const afterRestart = await service.transformContext(
-					[{ role: "user" as const, content: "fresh tail after restart", timestamp: 11 }],
-					undefined,
-					{
-						sessionKey: "room-rehydrate-raws",
-						sessionId: "session-a",
-						model: { contextWindow: 10_000 } as any,
-					},
-				);
-
-				assert.equal(afterRestart.length, 1);
-				assert.doesNotMatch(renderMessages(afterRestart), /history item/);
-				assert.match(renderMessages(afterRestart), /fresh tail after restart/);
-				const store = LcmStore.open(config);
-				try {
-					assert.equal(store.listContextItems("room-rehydrate-raws").length, 0);
 				} finally {
 					store.close();
 				}
@@ -1845,55 +1779,6 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("drops legacy persisted LCM raw context items without trying to replay them", async (t) => {
-		const baseConfig = await memoryConfig(t);
-		const config = lcmCompactionConfig(baseConfig);
-		const store = LcmStore.open(config);
-		try {
-			const recordId = store.insertRecord({
-				segmentId: "room-missing-record:seg-1",
-				kind: "user",
-				text: "orphaned raw context",
-				happenedAt: "2026-05-10T01:00:00.000Z",
-				channelKey: "room-missing-record",
-				source: { sourceType: "manual", sourceRef: "runtime:orphan" },
-			});
-			store.replaceContextItems("room-missing-record", [
-				{
-					type: "raw",
-					recordId,
-					fingerprint: "runtime:orphan",
-					happenedAt: "2026-05-10T01:00:00.000Z",
-				},
-			]);
-			store.db.pragma("foreign_keys = OFF");
-			store.db.prepare("DELETE FROM lcm_records WHERE id = ?").run(recordId);
-			store.db.pragma("foreign_keys = ON");
-		} finally {
-			store.close();
-		}
-
-		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer: fixedSummary("unused") });
-			try {
-				const rendered = await service.transformContext(
-					[{ role: "user" as const, content: "fresh after orphan", timestamp: 2 }],
-					undefined,
-					{ sessionKey: "room-missing-record", sessionId: "session-a", model: { contextWindow: 10_000 } as any },
-				);
-				assert.equal(rendered.length, 1);
-				assert.match(contentText(rendered[0]), /fresh after orphan/);
-				const cleanedStore = LcmStore.open(config);
-				try {
-					assert.equal(cleanedStore.listContextItems("room-missing-record").length, 0);
-				} finally {
-					cleanedStore.close();
-				}
-			} finally {
-				service.close();
-			}
-		});
-	});
 });
 
 function memoryLog() {

@@ -1,6 +1,7 @@
-import type { Paragraph, PhrasingContent, Root, RootContent } from "mdast";
+import type { Image, Paragraph, PhrasingContent, Root, RootContent } from "mdast";
 
 export const CHAT_MARKDOWN_MEDIA_SPLIT_CLASS = "chat-markdown-media-split";
+const IMAGE_URL_RE = /\.(?:jpe?g|png|gif|webp)(?:\?[^\s]*)?$/i;
 
 function hasVisibleChildren(children: PhrasingContent[]): boolean {
   return children.some((child) => child.type !== "text" || child.value.trim().length > 0);
@@ -15,13 +16,20 @@ function paragraph(children: PhrasingContent[], splitByMedia = false): Paragraph
   };
 }
 
+function bareImage(node: PhrasingContent): Image | undefined {
+  const child = node.type === "link" && node.children.length === 1 ? node.children[0] : undefined;
+  if (node.type !== "link" || node.title != null || child?.type !== "text" || child.value !== node.url) return;
+  return IMAGE_URL_RE.test(node.url) ? { type: "image", url: node.url, alt: "" } : undefined;
+}
+
 function splitImageParagraph(parent: Paragraph): RootContent[] {
-  if (!parent.children.some((child) => child.type === "image")) return [parent];
+  const children = parent.children.map((child) => bareImage(child) ?? child);
+  if (!children.some((child) => child.type === "image")) return [parent];
 
   const blocks: RootContent[] = [];
   let textChildren: PhrasingContent[] = [];
 
-  for (const child of parent.children) {
+  for (const child of children) {
     if (child.type !== "image") {
       textChildren.push(child);
       continue;

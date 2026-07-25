@@ -5,110 +5,55 @@ import {
 	CHAT_MARKDOWN_MEDIA_SPLIT_CLASS,
 	remarkImageParagraphs,
 } from "../web/src/lib/chatMarkdownLayout.js";
-import { remarkLegacyChatMedia, splitLegacyChatMedia } from "../web/src/lib/chatMarkdownMedia.js";
 
-function gfmAutolinkedMemeTree({ layout = false } = {}) {
-	const url = "https://files.catbox.moe/faj921.png";
-	const transform = remarkLegacyChatMedia();
-	const layoutTransform = remarkImageParagraphs();
-	const tree: Parameters<typeof transform>[0] = {
-		type: "root",
-		children: [
-			{
-				type: "paragraph",
-				children: [
-					{ type: "text", value: "ur my hero\nmeme: falling in love (" },
-					{
-						type: "link",
-						title: null,
-						url,
-						children: [{ type: "text", value: url }],
-					},
-					{ type: "text", value: ")\nlove u" },
-				],
-			},
-		],
-	};
-	transform(tree);
-	if (layout) layoutTransform(tree);
-	return tree;
-}
-
-describe("chat markdown media parser", () => {
-	it("parses meme labels that contain parentheses", () => {
-		const text =
-			"meme: i'll burn two holes in your ass (vulgar joke) (https://files.catbox.moe/e3knpt.jpg)";
-
-		assert.deepEqual(splitLegacyChatMedia(text), [
-			{
-				type: "image",
-				url: "https://files.catbox.moe/e3knpt.jpg",
-				alt: "i'll burn two holes in your ass (vulgar joke)",
-			},
-		]);
-	});
-
-	it("keeps non-image URLs as text", () => {
-		const text = "read https://example.com/docs and then meme: okay (https://files.catbox.moe/faj921.png)";
-
-		assert.deepEqual(splitLegacyChatMedia(text), [
-			{ type: "text", value: "read https://example.com/docs and then" },
-			{ type: "image", url: "https://files.catbox.moe/faj921.png", alt: "okay" },
-		]);
-	});
-
-	it("recombines legacy meme text after gfm autolinks the url", () => {
-		assert.deepEqual(gfmAutolinkedMemeTree().children, [
-			{
-				type: "paragraph",
-				children: [
-					{ type: "text", value: "ur my hero\n" },
-					{ type: "image", url: "https://files.catbox.moe/faj921.png", alt: "falling in love" },
-					{ type: "text", value: "love u" },
-				],
-			},
-		]);
-	});
-
-	it("splits mixed image paragraphs only in the explicit layout pass", () => {
-		const splitParagraphData = {
-			hProperties: { className: CHAT_MARKDOWN_MEDIA_SPLIT_CLASS },
-		};
-
-		assert.deepEqual(gfmAutolinkedMemeTree({ layout: true }).children, [
-			{
-				type: "paragraph",
-				data: splitParagraphData,
-				children: [{ type: "text", value: "ur my hero\n" }],
-			},
-			{
-				type: "paragraph",
-				data: splitParagraphData,
-				children: [{ type: "image", url: "https://files.catbox.moe/faj921.png", alt: "falling in love" }],
-			},
-			{
-				type: "paragraph",
-				data: splitParagraphData,
-				children: [{ type: "text", value: "love u" }],
-			},
-		]);
-	});
-
-	it("does not mark plain markdown paragraphs as media split blocks", () => {
-		const transform = remarkImageParagraphs();
-		const tree: Parameters<typeof transform>[0] = {
-			type: "root",
+describe("chat markdown media layout", () => {
+	it("renders a bare image URL as a split image paragraph", () => {
+		const url = "https://files.catbox.moe/faj921.png";
+		const tree = {
+			type: "root" as const,
 			children: [
-				{ type: "paragraph", children: [{ type: "text", value: "first paragraph" }] },
-				{ type: "paragraph", children: [{ type: "text", value: "second paragraph" }] },
+				{
+					type: "paragraph" as const,
+					children: [
+						{ type: "text" as const, value: "before" },
+						{ type: "link" as const, title: null, url, children: [{ type: "text" as const, value: url }] },
+						{ type: "text" as const, value: "after" },
+					],
+				},
 			],
 		};
 
-		transform(tree);
+		remarkImageParagraphs()(tree);
 
+		const data = { hProperties: { className: CHAT_MARKDOWN_MEDIA_SPLIT_CLASS } };
 		assert.deepEqual(tree.children, [
-			{ type: "paragraph", children: [{ type: "text", value: "first paragraph" }] },
-			{ type: "paragraph", children: [{ type: "text", value: "second paragraph" }] },
+			{ type: "paragraph", data, children: [{ type: "text", value: "before" }] },
+			{ type: "paragraph", data, children: [{ type: "image", url, alt: "" }] },
+			{ type: "paragraph", data, children: [{ type: "text", value: "after" }] },
 		]);
+	});
+
+	it("leaves ordinary links and paragraphs unchanged", () => {
+		const tree = {
+			type: "root" as const,
+			children: [
+				{
+					type: "paragraph" as const,
+					children: [
+						{
+							type: "link" as const,
+							title: null,
+							url: "https://example.com/docs",
+							children: [{ type: "text" as const, value: "docs" }],
+						},
+					],
+				},
+			],
+		};
+		const before = structuredClone(tree);
+
+		remarkImageParagraphs()(tree);
+
+		assert.deepEqual(tree, before);
 	});
 });

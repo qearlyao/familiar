@@ -70,9 +70,7 @@ export interface LcmSummarySourceRow {
 export interface LcmContextItemRow {
 	session_key: string;
 	ordinal: number;
-	item_type: string;
-	record_id: number | null;
-	summary_id: number | null;
+	summary_id: number;
 	fingerprint: string;
 	happened_at: string | null;
 	updated_at: number;

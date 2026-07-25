@@ -1,8 +1,7 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
 import { TTS_PROVIDERS } from "./enums.js";
-import type { Config } from "./index.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
-import type { TtsProvider } from "./types.js";
+import type { Config, TtsProvider } from "./types.js";
 
 export type ConfigKey =
 	| "heartbeat.enabled"
@@ -185,9 +184,7 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			return ref.key;
 		},
 		write: (config, value) => {
-			const ref = parseModelRef(value as string);
-			if (!ref) return;
-			config.imageGen.model = ref.key;
+			config.imageGen.model = value as string;
 		},
 	},
 	"image_gen.fallback_model": {
@@ -204,9 +201,7 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 				config.imageGen.fallbackModel = undefined;
 				return;
 			}
-			const ref = parseModelRef(value as string);
-			if (!ref) return;
-			config.imageGen.fallbackModel = ref.key;
+			config.imageGen.fallbackModel = value as string;
 		},
 	},
 	"memory.lcm.enabled": {
@@ -226,8 +221,7 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			return ref.key;
 		},
 		write: (config, value) => {
-			const ref = parseModelRef(value as string);
-			if (!ref) return;
+			const ref = parseModelRef(value as string)!;
 			config.memory.lcm.model = ref.key;
 			config.memory.lcm.provider = ref.provider;
 			config.memory.lcm.modelId = ref.id;

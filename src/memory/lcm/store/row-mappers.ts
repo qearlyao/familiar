@@ -109,33 +109,14 @@ export function summarySourceFromRow(row: LcmSummarySourceRow): StoredLcmSummary
 }
 
 export function contextItemFromRow(row: LcmContextItemRow): StoredLcmContextItem {
-	if (row.item_type === "raw") {
-		if (row.record_id === null) throw new Error(`Invalid raw LCM context item at ordinal ${row.ordinal}`);
-		return {
-			sessionKey: row.session_key,
-			ordinal: row.ordinal,
-			type: "raw",
-			recordId: row.record_id,
-			summaryId: null,
-			fingerprint: row.fingerprint,
-			happenedAt: row.happened_at,
-			updatedAt: row.updated_at,
-		};
-	}
-	if (row.item_type === "summary") {
-		if (row.summary_id === null) throw new Error(`Invalid summary LCM context item at ordinal ${row.ordinal}`);
-		return {
-			sessionKey: row.session_key,
-			ordinal: row.ordinal,
-			type: "summary",
-			recordId: null,
-			summaryId: row.summary_id,
-			fingerprint: row.fingerprint,
-			happenedAt: row.happened_at,
-			updatedAt: row.updated_at,
-		};
-	}
-	throw new Error(`Unknown LCM context item type: ${row.item_type}`);
+	return {
+		sessionKey: row.session_key,
+		ordinal: row.ordinal,
+		summaryId: row.summary_id,
+		fingerprint: row.fingerprint,
+		happenedAt: row.happened_at,
+		updatedAt: row.updated_at,
+	};
 }
 
 export function sessionStateFromRow(row: LcmSessionStateRow): StoredLcmSessionState {

@@ -14,6 +14,5 @@ export function loadWebConfig(): LoadedConfig {
 			JINA_API_KEY: readEnvKey("JINA_API_KEY"),
 			TINYFISH_API_KEY: readEnvKey("TINYFISH_API_KEY"),
 		},
-		warnings: [],
 	};
 }

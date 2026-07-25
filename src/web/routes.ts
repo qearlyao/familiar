@@ -10,12 +10,13 @@ import { serveAttachment } from "./static.js";
 export type WebRoute = (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<void>;
 export type RegisterWebRoute = (method: string, pathname: string, handler: WebRoute) => void;
 
-export interface WebRouteRegistry {
+export function createWebRouteRegistry(
+	config: Config,
+	auth: WebAuth,
+): {
 	route: RegisterWebRoute;
 	handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean>;
-}
-
-export function createWebRouteRegistry(config: Config, auth: WebAuth): WebRouteRegistry {
+} {
 	const webRoutes = new Map<string, WebRoute>();
 	const route = (method: string, pathname: string, handler: WebRoute): void => {
 		webRoutes.set(`${method} ${pathname}`, handler);

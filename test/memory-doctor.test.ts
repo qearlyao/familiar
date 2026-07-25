@@ -20,7 +20,7 @@ async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
 	return configWithDataDir(t, dataDir, {
 		memory: {
 			embedding: {
-				api: "gemini",
+				format: "gemini",
 				provider: "fake",
 				model: "fake-embedding",
 				baseUrl: "https://embedding.test",
@@ -98,26 +98,25 @@ describe("memory doctor and operator", () => {
 			service.lcmStore.closeSegment("seg-empty");
 
 			const live = insertRecord(service, "seg-context", "context record");
-			service.lcmStore.db
-				.prepare(
-					`INSERT INTO lcm_context_items(session_key, ordinal, item_type, record_id, fingerprint, happened_at)
-					 VALUES (?, ?, 'raw', ?, ?, ?)`,
-				)
-				.run("session-a", 1, live, "a", "2026-05-10T01:00:00.000Z");
-			service.lcmStore.db
-				.prepare(
-					`INSERT INTO lcm_context_items(session_key, ordinal, item_type, record_id, fingerprint, happened_at)
-					 VALUES (?, ?, 'raw', ?, ?, ?)`,
-				)
-				.run("session-a", 3, live, "b", "2026-05-10T01:01:00.000Z");
-
-			service.lcmStore.insertSummary({
+			const summaryId = service.lcmStore.insertSummary({
 				segmentId: "seg-context",
 				depth: 1,
 				status: "ready",
 				text: "summary without snapshot",
 				source: source("missing-snapshot"),
 			});
+			service.lcmStore.db
+				.prepare(
+					`INSERT INTO lcm_context_items(session_key, ordinal, summary_id, fingerprint, happened_at)
+					 VALUES (?, ?, ?, ?, ?)`,
+				)
+				.run("session-a", 1, summaryId, "a", "2026-05-10T01:00:00.000Z");
+			service.lcmStore.db
+				.prepare(
+					`INSERT INTO lcm_context_items(session_key, ordinal, summary_id, fingerprint, happened_at)
+					 VALUES (?, ?, ?, ?, ?)`,
+				)
+				.run("session-a", 3, summaryId, "b", "2026-05-10T01:01:00.000Z");
 
 			service.memoryStore.db
 				.prepare("UPDATE memory_chunks SET embedding_dimensions = ? WHERE id = ?")
@@ -142,6 +141,15 @@ describe("memory doctor and operator", () => {
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			const recordId = insertRecord(service, "seg-clean", "record to keep");
+			const summaryId = service.lcmStore.insertSummary({
+				segmentId: "seg-clean",
+				depth: 1,
+				status: "ready",
+				text: "summary to keep",
+				coversFromRecordId: recordId,
+				coversToRecordId: recordId,
+				source: source("summary-to-keep"),
+			});
 			indexChunk(service, LCM_RECORD_CORPUS, "lcm_record:999999");
 			service.memoryStore.db.pragma("foreign_keys = OFF");
 			service.memoryStore.db
@@ -152,10 +160,10 @@ describe("memory doctor and operator", () => {
 			service.lcmStore.closeSegment("seg-empty");
 			service.lcmStore.db
 				.prepare(
-					`INSERT INTO lcm_context_items(session_key, ordinal, item_type, record_id, fingerprint, happened_at)
-					 VALUES (?, ?, 'raw', ?, ?, ?)`,
+					`INSERT INTO lcm_context_items(session_key, ordinal, summary_id, fingerprint, happened_at)
+					 VALUES (?, ?, ?, ?, ?)`,
 				)
-				.run("session-clean", 2, recordId, "fp", "2026-05-10T01:00:00.000Z");
+				.run("session-clean", 2, summaryId, "fp", "2026-05-10T01:00:00.000Z");
 
 			const report = runDoctor({ lcm: service.lcmStore, index: service.memoryStore });
 			const result = applyDoctorFixes({ lcm: service.lcmStore, index: service.memoryStore }, report);

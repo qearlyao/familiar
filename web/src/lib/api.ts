@@ -1,67 +1,15 @@
-import type { Attachment, Message, Step, ToolEvent, Usage } from "../types";
+import type { Message } from "../types";
+import type { WebMessage, WebStreamEvent } from "../../../src/web/types.js";
 import type { ControlCommand } from "@/lib/slashCommands";
 
-interface WireMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  who: string;
-  steps?: Step[];
-  text?: string;
-  thinking?: string;
-  thinkingMs?: number;
-  tools?: ToolEvent[];
-  attachments?: Attachment[];
-  usage?: Usage;
-  silent?: boolean;
-  bookId?: string;
-  ts: number;
-}
-
-function stepId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `step-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+type WireMessage = WebMessage;
 
 function wireToMessage(wire: WireMessage): Message {
-  if (wire.steps) {
-    return {
-      id: wire.id,
-      role: wire.role,
-      who: wire.who,
-      steps: wire.steps,
-      attachments: wire.attachments,
-      usage: wire.usage,
-      silent: wire.silent,
-      bookId: wire.bookId,
-      ts: wire.ts,
-    };
-  }
-  const steps: Step[] = [];
-  if (wire.thinking || wire.thinkingMs != null) {
-    const endedAt = wire.ts;
-    const startedAt = endedAt - (wire.thinkingMs ?? 0);
-    steps.push({
-      kind: "thinking",
-      id: stepId(),
-      text: wire.thinking ?? "",
-      startedAt,
-      endedAt,
-      complete: true,
-    });
-  }
-  for (const tool of wire.tools ?? []) {
-    steps.push({ kind: "tool", id: tool.id, tool });
-  }
-  if (wire.text) {
-    steps.push({ kind: "text", id: stepId(), text: wire.text, complete: true });
-  }
   return {
     id: wire.id,
     role: wire.role,
     who: wire.who,
-    steps,
+    steps: wire.steps ?? [],
     attachments: wire.attachments,
     usage: wire.usage,
     silent: wire.silent,
@@ -82,99 +30,7 @@ export interface SessionInfo {
   context?: { tokens: number; limit: number };
 }
 
-export type StreamEvent =
-  | {
-      type: "message_started";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      role: "assistant" | "user";
-      who: string;
-      bookId?: string;
-    }
-  | {
-      type: "delta";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      part: "thinking" | "text";
-      content: string;
-    }
-  | {
-      type: "message_completed";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      thinkingMs?: number;
-      attachments?: Attachment[];
-      silent?: boolean;
-      usage?: {
-        input: number;
-        output: number;
-        cacheRead: number;
-        cacheWrite: number;
-        cost: number;
-      };
-    }
-  | {
-      type: "message_replaced";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      oldMessageId: string;
-      newMessageId: string;
-    }
-  | {
-      type: "message_deleted";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-    }
-  | {
-      type: "message_edited";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      text: string;
-    }
-  | {
-      type: "tool_event";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      tool: ToolEvent;
-    }
-  | {
-      type: "status";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      kind: "thinking" | "tool" | "idle" | "queued";
-      detail?: string;
-    }
-  | {
-      type: "error";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      code: "rate_limited" | "tool_failed" | "abort" | "unknown";
-      message: string;
-    }
-  | {
-      type: "model_error";
-      eventId: string;
-      ts: number;
-      channelKey?: string;
-      messageId: string;
-      message: string;
-    }
-  | { type: "replay_window_lost"; eventId: string; ts: number; channelKey?: string };
+export type StreamEvent = WebStreamEvent;
 
 export type StreamFrame = StreamEvent | { type: "pong"; ts: number };
 
@@ -184,6 +40,12 @@ export interface HistoryResponse {
   messages: Message[];
   hasMore: boolean;
   channelKey: string;
+}
+
+async function getJson<T>(url: string, label: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${label}: ${res.status}`);
+  return (await res.json()) as T;
 }
 
 export interface DiarySummary {
@@ -228,9 +90,7 @@ export interface GalleryItem {
 }
 
 export async function fetchGallery(): Promise<GalleryItem[]> {
-  const res = await fetch("/api/web/gallery");
-  if (!res.ok) throw new Error(`gallery: ${res.status}`);
-  const body = (await res.json()) as { items: GalleryItem[] };
+  const body = await getJson<{ items: GalleryItem[] }>("/api/web/gallery", "gallery");
   return body.items;
 }
 
@@ -255,9 +115,7 @@ export interface WebSkillEntry extends WebSkillSummary {
 }
 
 export async function fetchAuthMode(): Promise<{ mode: string; personaName: string }> {
-  const res = await fetch("/api/web/auth/mode");
-  if (!res.ok) throw new Error(`auth/mode: ${res.status}`);
-  const body = (await res.json()) as { mode: string; personaName?: string };
+  const body = await getJson<{ mode: string; personaName?: string }>("/api/web/auth/mode", "auth/mode");
   return { mode: body.mode, personaName: body.personaName ?? "Familiar" };
 }
 
@@ -294,9 +152,7 @@ export async function loginWithBearerToken(
 }
 
 export async function fetchAuthDevices(): Promise<WebAuthDevice[]> {
-  const res = await fetch("/api/web/auth/devices");
-  if (!res.ok) throw new Error(`auth/devices: ${res.status}`);
-  const body = (await res.json()) as { devices: WebAuthDevice[] };
+  const body = await getJson<{ devices: WebAuthDevice[] }>("/api/web/auth/devices", "auth/devices");
   return body.devices;
 }
 
@@ -319,18 +175,17 @@ export async function logoutAuthSession(): Promise<void> {
 }
 
 export async function fetchSessions(): Promise<SessionInfo[]> {
-  const res = await fetch("/api/web/sessions");
-  if (!res.ok) throw new Error(`sessions: ${res.status}`);
-  const body = (await res.json()) as { sessions: SessionInfo[] };
+  const body = await getJson<{ sessions: SessionInfo[] }>("/api/web/sessions", "sessions");
   return body.sessions;
 }
 
 export async function fetchHistory(channelKey?: string, limit = 50): Promise<HistoryResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (channelKey) params.set("channelKey", channelKey);
-  const res = await fetch(`/api/web/history?${params.toString()}`);
-  if (!res.ok) throw new Error(`history: ${res.status}`);
-  const body = (await res.json()) as { messages: WireMessage[]; hasMore: boolean; channelKey: string };
+  const body = await getJson<{ messages: WireMessage[]; hasMore: boolean; channelKey: string }>(
+    `/api/web/history?${params.toString()}`,
+    "history",
+  );
   return {
     messages: body.messages.map(wireToMessage),
     hasMore: body.hasMore,
@@ -339,32 +194,24 @@ export async function fetchHistory(channelKey?: string, limit = 50): Promise<His
 }
 
 export async function fetchDiaries(): Promise<DiarySummary[]> {
-  const res = await fetch("/api/web/diaries");
-  if (!res.ok) throw new Error(`diaries: ${res.status}`);
-  const body = (await res.json()) as { diaries: DiarySummary[] };
+  const body = await getJson<{ diaries: DiarySummary[] }>("/api/web/diaries", "diaries");
   return body.diaries;
 }
 
 export async function fetchDiary(date: string): Promise<DiaryEntry> {
   const params = new URLSearchParams({ date });
-  const res = await fetch(`/api/web/diary?${params.toString()}`);
-  if (!res.ok) throw new Error(`diary: ${res.status}`);
-  const body = (await res.json()) as { diary: DiaryEntry };
+  const body = await getJson<{ diary: DiaryEntry }>(`/api/web/diary?${params.toString()}`, "diary");
   return body.diary;
 }
 
 export async function fetchFiles(): Promise<WebFileSummary[]> {
-  const res = await fetch("/api/web/files");
-  if (!res.ok) throw new Error(`files: ${res.status}`);
-  const body = (await res.json()) as { files: WebFileSummary[] };
+  const body = await getJson<{ files: WebFileSummary[] }>("/api/web/files", "files");
   return body.files;
 }
 
 export async function fetchFile(id: WebFileId): Promise<WebFileEntry> {
   const params = new URLSearchParams({ id });
-  const res = await fetch(`/api/web/file?${params.toString()}`);
-  if (!res.ok) throw new Error(`file: ${res.status}`);
-  const body = (await res.json()) as { file: WebFileEntry };
+  const body = await getJson<{ file: WebFileEntry }>(`/api/web/file?${params.toString()}`, "file");
   return body.file;
 }
 
@@ -374,17 +221,13 @@ export async function saveFile(id: WebFileId, content: string): Promise<WebFileE
 }
 
 export async function fetchSkills(): Promise<WebSkillSummary[]> {
-  const res = await fetch("/api/web/skills");
-  if (!res.ok) throw new Error(`skills: ${res.status}`);
-  const body = (await res.json()) as { skills: WebSkillSummary[] };
+  const body = await getJson<{ skills: WebSkillSummary[] }>("/api/web/skills", "skills");
   return body.skills;
 }
 
 export async function fetchSkill(id: string): Promise<WebSkillEntry> {
   const params = new URLSearchParams({ id });
-  const res = await fetch(`/api/web/skill?${params.toString()}`);
-  if (!res.ok) throw new Error(`skill: ${res.status}`);
-  const body = (await res.json()) as { skill: WebSkillEntry };
+  const body = await getJson<{ skill: WebSkillEntry }>(`/api/web/skill?${params.toString()}`, "skill");
   return body.skill;
 }
 
@@ -471,9 +314,10 @@ export interface AgentSettings {
 export async function fetchAgentSettings(channelKey?: string): Promise<AgentSettings> {
   const params = new URLSearchParams();
   if (channelKey) params.set("channelKey", channelKey);
-  const res = await fetch(`/api/web/agent/settings${params.toString() ? `?${params.toString()}` : ""}`);
-  if (!res.ok) throw new Error(`agent/settings: ${res.status}`);
-  return (await res.json()) as AgentSettings;
+  return getJson<AgentSettings>(
+    `/api/web/agent/settings${params.toString() ? `?${params.toString()}` : ""}`,
+    "agent/settings",
+  );
 }
 
 export interface AvailableModels {
@@ -482,9 +326,7 @@ export interface AvailableModels {
 }
 
 export async function fetchAvailableModels(): Promise<AvailableModels> {
-  const res = await fetch("/api/web/agent/models");
-  if (!res.ok) throw new Error(`agent/models: ${res.status}`);
-  const body = (await res.json()) as AvailableModels;
+  const body = await getJson<AvailableModels>("/api/web/agent/models", "agent/models");
   return { models: body.models, added: body.added ?? [] };
 }
 
@@ -555,9 +397,7 @@ export interface MemeFamily {
 }
 
 export async function fetchMemes(): Promise<MemeFamily[]> {
-  const res = await fetch("/api/web/memes");
-  if (!res.ok) throw new Error(`memes: ${res.status}`);
-  const body = (await res.json()) as { families: MemeFamily[] };
+  const body = await getJson<{ families: MemeFamily[] }>("/api/web/memes", "memes");
   return body.families;
 }
 
@@ -611,23 +451,17 @@ export interface MarginaliaEntry {
 }
 
 export async function fetchBooks(): Promise<BookSummary[]> {
-  const res = await fetch("/api/web/books");
-  if (!res.ok) throw new Error(`books: ${res.status}`);
-  const body = (await res.json()) as { books: BookSummary[] };
+  const body = await getJson<{ books: BookSummary[] }>("/api/web/books", "books");
   return body.books;
 }
 
 export async function fetchBook(id: string): Promise<BookDetail> {
-  const res = await fetch(`/api/web/book?id=${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`book: ${res.status}`);
-  const body = (await res.json()) as { book: BookDetail };
+  const body = await getJson<{ book: BookDetail }>(`/api/web/book?id=${encodeURIComponent(id)}`, "book");
   return body.book;
 }
 
 export async function fetchBookChapter(id: string, index: number): Promise<BookChapter> {
-  const res = await fetch(`/api/web/book/chapter?id=${encodeURIComponent(id)}&index=${index}`);
-  if (!res.ok) throw new Error(`book/chapter: ${res.status}`);
-  return (await res.json()) as BookChapter;
+  return getJson<BookChapter>(`/api/web/book/chapter?id=${encodeURIComponent(id)}&index=${index}`, "book/chapter");
 }
 
 export async function uploadBook(file: File): Promise<BookSummary> {
@@ -662,17 +496,19 @@ export async function saveBookPosition(
 
 /** The book's durable margin-conversation log — mirrored turns from the main session, never LCM-compressed. */
 export async function fetchBookConversation(id: string, channelKey: string): Promise<Message[]> {
-	const params = new URLSearchParams({ id, channelKey });
-	const res = await fetch(`/api/web/book/conversation?${params}`);
-  if (!res.ok) throw new Error(`book/conversation: ${res.status}`);
-  const body = (await res.json()) as { messages: WireMessage[] };
+  const params = new URLSearchParams({ id, channelKey });
+  const body = await getJson<{ messages: WireMessage[] }>(
+    `/api/web/book/conversation?${params}`,
+    "book/conversation",
+  );
   return body.messages.map(wireToMessage);
 }
 
 export async function fetchMarginalia(id: string): Promise<MarginaliaEntry[]> {
-  const res = await fetch(`/api/web/book/marginalia?id=${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`book/marginalia: ${res.status}`);
-  const body = (await res.json()) as { entries: MarginaliaEntry[] };
+  const body = await getJson<{ entries: MarginaliaEntry[] }>(
+    `/api/web/book/marginalia?id=${encodeURIComponent(id)}`,
+    "book/marginalia",
+  );
   return body.entries;
 }
 
@@ -776,9 +612,7 @@ export interface ConfigPayload {
 export type ConfigValues = ConfigPayload["values"];
 
 export async function fetchConfig(): Promise<ConfigPayload> {
-  const res = await fetch("/api/web/config");
-  if (!res.ok) throw new Error(`config: ${res.status}`);
-  return (await res.json()) as ConfigPayload;
+  return getJson<ConfigPayload>("/api/web/config", "config");
 }
 
 export async function setConfig(key: ConfigKey, value: unknown): Promise<ConfigPayload> {

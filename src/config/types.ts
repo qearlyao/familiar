@@ -107,11 +107,6 @@ export interface Config {
 	};
 	agent: {
 		model: string;
-		api?: string;
-		modelId?: string;
-		baseUrl?: string;
-		apiKeyEnv?: string;
-		provider?: string;
 		cacheRetention: CacheRetention;
 		thinkingLevel: ThinkingLevel;
 	};
@@ -208,8 +203,7 @@ export interface Config {
 		diariesDir: string;
 		archiveDir: string;
 		embedding: {
-			format?: MemoryEmbeddingFormat;
-			api: MemoryEmbeddingFormat;
+			format: MemoryEmbeddingFormat;
 			provider: string;
 			model: string;
 			baseUrl: string;

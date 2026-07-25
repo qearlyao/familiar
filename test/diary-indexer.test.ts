@@ -10,7 +10,7 @@ import {
 	indexDiaryFile,
 	listDiaryMarkdownFiles,
 	removeDiaryFileIndex,
-} from "../src/memory/diary/index.js";
+} from "../src/memory/diary/indexer.js";
 import { ChunkIndexer } from "../src/memory/index/chunk-indexer.js";
 import type { EmbeddingInput, EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";

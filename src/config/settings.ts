@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { isThinkingLevel } from "../models/index.js";
 import { atomicWriteJson, createWriteQueue, readFileOrNull } from "../util/fs.js";
-import type { Config, DiscordChannelTrigger, ThinkingLevel } from "./index.js";
+import type { Config, DiscordChannelTrigger, ThinkingLevel } from "./types.js";
 
 export type SettingSource = "config" | "override";
 
@@ -22,7 +22,6 @@ export interface ChannelSettings {
 
 export interface SettingsStore {
 	path: string;
-	getChannelSettings(channelKey: string): ChannelSettings;
 	getChannelModel(channelKey: string): EffectiveSetting<string | undefined>;
 	getChannelThinkingLevel(channelKey: string, fallback: ThinkingLevel): EffectiveSetting<ThinkingLevel>;
 	getChannelTrigger(channelKey: string, fallback: DiscordChannelTrigger): EffectiveSetting<DiscordChannelTrigger>;
@@ -99,9 +98,6 @@ export async function loadSettingsStore(config: Config): Promise<SettingsStore> 
 
 	return {
 		path,
-		getChannelSettings(channelKey: string): ChannelSettings {
-			return { ...file.channels[channelKey] };
-		},
 		getChannelModel(channelKey: string): EffectiveSetting<string | undefined> {
 			const model = file.channels[channelKey]?.model;
 			return model ? { value: model, source: "override" } : { value: undefined, source: "config" };

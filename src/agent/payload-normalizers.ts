@@ -3,22 +3,6 @@ import type { OpenRouterRoutingConfig } from "../config/index.js";
 import { addOpenRouterRouting } from "../models/openrouter-routing.js";
 import { isRecord } from "../util/guards.js";
 
-// TODO: remove once pi-ai handles store:false reasoning replay upstream.
-function stripOpenAIStoredReasoningItems(payload: unknown, model: Model<any>): unknown {
-	if (model.api !== "openai-responses" && model.api !== "azure-openai-responses") return payload;
-	const nextPayload = structuredClone(payload);
-	if (!isRecord(nextPayload)) return nextPayload;
-	const request = nextPayload as { input?: unknown; store?: unknown };
-	if (request.store !== false) return nextPayload;
-	const input = request.input;
-	if (!Array.isArray(input)) return nextPayload;
-	request.input = input.filter((item) => {
-		if (!item || typeof item !== "object" || Array.isArray(item)) return true;
-		return (item as { type?: unknown }).type !== "reasoning";
-	});
-	return nextPayload;
-}
-
 function moveAnthropicCacheControlBeforeInjectedMemory(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "anthropic-messages") return payload;
 	if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
@@ -47,9 +31,5 @@ export function normalizeProviderPayload(
 	model: Model<any>,
 	routing?: OpenRouterRoutingConfig,
 ): unknown {
-	return addOpenRouterRouting(
-		moveAnthropicCacheControlBeforeInjectedMemory(stripOpenAIStoredReasoningItems(payload, model), model),
-		model,
-		routing,
-	);
+	return addOpenRouterRouting(moveAnthropicCacheControlBeforeInjectedMemory(payload, model), model, routing);
 }

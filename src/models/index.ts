@@ -193,17 +193,6 @@ export function resolveModel(ref: ModelRef, config?: Config): Model<any> {
 export function createConfiguredModel(config: Config): Model<any> {
 	const ref = parseModelRef(config.agent.model);
 	if (!ref) throw new Error(`Invalid agent.model: ${config.agent.model}`);
-	if (config.agent.api && config.agent.modelId && config.agent.baseUrl && config.agent.provider) {
-		const legacyRef: ModelRef = {
-			provider: config.agent.provider,
-			id: config.agent.modelId,
-			key: `${config.agent.provider}/${config.agent.modelId}`,
-		};
-		return applyConfiguredBaseUrl(
-			config,
-			synthesizeConfiguredModel(legacyRef, config.agent.api, config.agent.baseUrl),
-		);
-	}
 	return resolveModel(ref, config);
 }
 
@@ -216,9 +205,7 @@ export function resolveProviderSetting(
 }
 
 export function resolveModelApiKey(config: Config, model: Model<any>): string | undefined {
-	const configuredEnv =
-		resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id) ??
-		(model.provider === config.agent.provider ? config.agent.apiKeyEnv : undefined);
+	const configuredEnv = resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id);
 	if (configuredEnv) return process.env[configuredEnv];
 	return getEnvApiKey(model.provider);
 }
@@ -234,12 +221,6 @@ function hasVertexAdcEnvironment(): boolean {
 	return !!project && !!location;
 }
 
-export function modelCanAuthenticate(config: Config, model: Model<any>): boolean {
-	if (model.provider === "google-vertex")
-		return resolveModelApiKey(config, model) !== undefined || hasVertexAdcEnvironment();
-	return !requiresExplicitApiKey(config, model);
-}
-
 export function assertModelCanAuthenticate(config: Config, model: Model<any>): void {
 	if (model.provider === "google-vertex") {
 		if (resolveModelApiKey(config, model) !== undefined || hasVertexAdcEnvironment()) return;
@@ -251,9 +232,7 @@ export function assertModelCanAuthenticate(config: Config, model: Model<any>): v
 }
 
 export function describeModelAuth(config: Config, model: Model<any>): string {
-	const configuredEnv =
-		resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id) ??
-		(model.provider === config.agent.provider ? config.agent.apiKeyEnv : undefined);
+	const configuredEnv = resolveProviderSetting(config.models.apiKeyEnvs, model.provider, model.id);
 	if (configuredEnv) return configuredEnv;
 	if (config.models.providers[model.provider]) return `models.api_key_envs.${model.provider}`;
 	if (model.provider === "google-vertex") {
@@ -268,10 +247,6 @@ export function isAllowedModel(config: Config, ref: ModelRef): boolean {
 	return (
 		config.models.allow.length === 0 || config.models.allow.includes(ref.key) || loadAddedModels().includes(ref.key)
 	);
-}
-
-export function formatAllowedModels(config: Config): string {
-	return config.models.allow.length > 0 ? config.models.allow.join("\n") : "(no allowlist configured)";
 }
 
 export function clampConfiguredThinkingLevel(model: Model<any>, level: ThinkingLevel): ThinkingLevel {

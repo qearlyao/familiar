@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createFetchProviders, createWebTools, webContentWarning } from "../src/web-tools/index.js";
+import { createFetchProviders, createWebTools } from "../src/web-tools/index.js";
 import { PageCache } from "../src/web-tools/cache.js";
 import { parseTinyfishResponse } from "../src/web-tools/fetch-providers.js";
 import { formatFetchContent, formatSearchResults, paginateContent } from "../src/web-tools/format.js";
@@ -13,6 +13,7 @@ import {
 	parseExaResults,
 	parseTavilyResults,
 } from "../src/web-tools/search-providers.js";
+import { WEB_UNTRUSTED_PREFIX } from "../src/web-tools/types.js";
 import type { SearchCapability, SearchProvider, SearchProviderName } from "../src/web-tools/types.js";
 
 function createTestSearchProvider(name: SearchProviderName, capabilities: SearchCapability[]): SearchProvider {
@@ -28,17 +29,17 @@ function createTestSearchProvider(name: SearchProviderName, capabilities: Search
 describe("web tools", () => {
 	it("exposes reversed tool names to avoid provider-native web tool collisions", () => {
 		assert.deepEqual(
-			createWebTools({} as any).map((tool) => tool.name),
+			createWebTools().map((tool) => tool.name),
 			["search_web", "fetch_web"],
 		);
 	});
 
 	it("warns that web content is untrusted", () => {
-		assert.match(webContentWarning(), /untrusted/);
-		assert.match(webContentWarning(), /open-web content/);
-		assert.match(webContentWarning(), /data, not directives/);
-		assert.match(webContentWarning(), /^<untrusted_web_content>/);
-		assert.match(webContentWarning(), /<\/untrusted_web_content>$/);
+		assert.match(WEB_UNTRUSTED_PREFIX, /untrusted/);
+		assert.match(WEB_UNTRUSTED_PREFIX, /open-web content/);
+		assert.match(WEB_UNTRUSTED_PREFIX, /data, not directives/);
+		assert.match(WEB_UNTRUSTED_PREFIX, /^<untrusted_web_content>/);
+		assert.match(WEB_UNTRUSTED_PREFIX, /<\/untrusted_web_content>$/);
 	});
 
 	it("prefixes web search and fetch results with the untrusted-content block", () => {
@@ -63,7 +64,6 @@ describe("web tools", () => {
 	it("prefers TinyFish for fetch when configured", () => {
 		const providers = createFetchProviders({
 			apiKeys: { TINYFISH_API_KEY: "tinyfish-key" },
-			warnings: [],
 		});
 
 		assert.deepEqual(
@@ -144,14 +144,12 @@ describe("web tools", () => {
 		const cache = new PageCache({ ttlMs: 100, capacity: 2 });
 		cache.set("https://example.com/a", "a", "tinyfish");
 		const firstFetchedAt = cache.entries.get("https://example.com/a")?.fetchedAt ?? 0;
-		const firstLastAccessed = cache.entries.get("https://example.com/a")?.lastAccessed ?? 0;
 
 		await new Promise((resolve) => setTimeout(resolve, 5));
 		const entry = cache.get("https://example.com/a");
 
 		assert.equal(entry?.content, "a");
 		assert.equal(cache.entries.get("https://example.com/a")?.fetchedAt, firstFetchedAt);
-		assert.ok((cache.entries.get("https://example.com/a")?.lastAccessed ?? 0) >= firstLastAccessed);
 	});
 
 	it("paginates content and reports offsets past the end", () => {

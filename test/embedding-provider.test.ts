@@ -21,7 +21,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",
@@ -95,7 +95,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "local-gateway",
 					model: "embed",
 					baseUrl: "http://localhost:9999/v1beta",
@@ -142,7 +142,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "models/gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",
@@ -170,7 +170,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",
@@ -191,7 +191,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",
@@ -212,7 +212,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",
@@ -233,7 +233,7 @@ describe("embedding provider", () => {
 		const config = await configWithDataDir(t, dataDir, {
 			memory: {
 				embedding: {
-					api: "gemini",
+					format: "gemini",
 					provider: "google",
 					model: "gemini-embedding-2",
 					baseUrl: "https://gateway.example.test/v1beta",

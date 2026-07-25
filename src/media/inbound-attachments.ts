@@ -7,7 +7,7 @@ import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { IMAGE_EXTENSION_BY_MIME, sniffImageMimeType } from "../util/image-mime.js";
 import { MAX_INBOUND_ATTACHMENT_BYTES, MAX_INBOUND_ATTACHMENTS, MAX_INBOUND_TOTAL_BYTES } from "./attachment-limits.js";
-import { attachmentsDir, publicAttachmentPath } from "./generated-media.js";
+import { attachmentsDir } from "./generated-media.js";
 import { ensureInlineImageDerivative, MAX_INLINE_IMAGE_BASE64_BYTES } from "./image-derivatives.js";
 import { deriveInboundAttachmentText } from "./media-understanding.js";
 
@@ -364,8 +364,4 @@ export function promptAttachmentNotes(attachments: StoredAttachment[]): string {
 		})
 		.join("\n")
 		.trim();
-}
-
-export function publicInboundAttachmentPath(config: Config, localPath: string): string {
-	return publicAttachmentPath(config, localPath);
 }

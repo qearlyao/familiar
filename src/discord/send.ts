@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { Message, MessageCreateOptions } from "discord.js";
 import type { Config } from "../config/index.js";
@@ -18,16 +19,12 @@ interface DiscordAttachmentFile {
 	contentType: string;
 }
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function delayBetweenBurstChunks(config: Config, channel: DiscordChatChannel): Promise<void> {
 	if (config.discord.chunkMode !== "newline") return;
 	if (channel.isSendable()) {
 		void channel.sendTyping().catch(() => undefined);
 	}
-	await sleep(NEWLINE_BURST_DELAY_MS);
+	await delay(NEWLINE_BURST_DELAY_MS);
 }
 
 export function normalizeOutboundText(text: string): string {

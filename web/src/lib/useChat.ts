@@ -146,7 +146,7 @@ export function useChat(): ChatHook {
   const activeAssistantMessageIdsRef = useRef<Set<string>>(new Set());
   const pendingLatestAssistantActionRef = useRef<LatestAssistantAction | undefined>(undefined);
   const pendingLatestAssistantMessageIdRef = useRef<string | undefined>(undefined);
-  const latestAssistantActionResyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestAssistantActionResyncTimerRef = useRef<number | null>(null);
   const scheduleLatestAssistantActionRecoveryRef = useRef<() => void>(() => undefined);
 
   const appendSystemMessage = useCallback((text: string) => {
@@ -490,9 +490,9 @@ export function useChat(): ChatHook {
     let cancelled = false;
     let ws: WebSocket | null = null;
     let reconnectAttempts = 0;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectTimer: number | null = null;
+    let heartbeatTimer: number | null = null;
+    let resyncTimer: number | null = null;
 
     lastEventIdRef.current = null;
     activeAssistantMessageIdsRef.current.clear();
@@ -621,7 +621,7 @@ export function useChat(): ChatHook {
         setConnection("closed");
         const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** reconnectAttempts);
         reconnectAttempts += 1;
-        reconnectTimer = setTimeout(connect, delay);
+        reconnectTimer = window.setTimeout(connect, delay);
       });
 
       socket.addEventListener("error", () => {

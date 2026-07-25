@@ -162,6 +162,8 @@ describe("memory LCM backfill", () => {
 			assert.equal(report.recordsInserted, 10);
 			assert.equal(harness.lcmStore.listRecords().length, 10);
 			assert.equal(harness.lcmStore.listSegments().length, 1);
+			assert.equal(harness.lcmStore.listSegments()[0]?.status, "closed");
+			assert.equal(harness.lcmStore.listSegments()[0]?.closedAt, outbound(10).ts);
 			assert.equal(harness.memoryStore.searchLexical("inbound", { corpus: LCM_RECORD_CORPUS, limit: 20 }).length, 5);
 			assert.equal(report.indexedChunks, 10);
 		} finally {
@@ -223,6 +225,10 @@ describe("memory LCM backfill", () => {
 
 			assert.equal(report.segmentsCreated, 2);
 			assert.equal(harness.lcmStore.listSegments().length, 2);
+			assert.deepEqual(
+				harness.lcmStore.listSegments().map((segment) => segment.status),
+				["closed", "closed"],
+			);
 			assert.equal(harness.lcmStore.listRecords().length, 4);
 		} finally {
 			await harness.close();

@@ -138,6 +138,7 @@ export async function backfillFromChatLogs(deps: BackfillDeps, options: Backfill
 						await indexLcmRecords({ indexer: deps.indexer, records: inserted, signal: options.signal })
 					).ids.length;
 				}
+				deps.lcmStore.closeSegment(group.segmentId, group.records.at(-1)!.ts);
 			}
 			if (!(await tick())) break;
 			emit("chat_records", chatFile.sourcePath);

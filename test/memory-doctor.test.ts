@@ -178,6 +178,49 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
+	it("closes stale active segments for explicit raw-record pruning", async (t) => {
+		const config = await tempConfig(t);
+		const service = MemoryService.createWithoutRuntime(config);
+		try {
+			insertRecord(service, "backfill-room-history", "historical backfill raw");
+			service.lcmStore.ensureSegment({ id: "backfill-room-empty" });
+			service.lcmStore.ensureSegment({
+				id: "room:seg-1",
+				channelKey: "room",
+				startedAt: "2026-05-10T01:00:00.000Z",
+			});
+			insertRecord(service, "room:seg-1", "superseded runtime raw");
+			service.lcmStore.ensureSegment({
+				id: "room:seg-2",
+				channelKey: "room",
+				startedAt: "2026-05-10T03:00:00.000Z",
+			});
+			insertRecord(service, "room:seg-2", "current runtime raw");
+
+			const report = runDoctor({ lcm: service.lcmStore, index: service.memoryStore });
+			assert.equal(report.findings.filter((finding) => finding.kind === "stale_active_segment").length, 3);
+
+			const result = applyDoctorFixes({ lcm: service.lcmStore, index: service.memoryStore }, report);
+			assert.match(result.summary, /memory prune --new-session-retain-depth 0 --yes/);
+			assert.equal(service.lcmStore.getSegment("backfill-room-history")?.status, "closed");
+			assert.equal(service.lcmStore.getSegment("backfill-room-empty"), null);
+			assert.equal(service.lcmStore.getSegment("room:seg-1")?.status, "closed");
+			assert.equal(service.lcmStore.getSegment("room:seg-2")?.status, "active");
+			assert.deepEqual(
+				service.lcmStore.listRecords().map((record) => record.text),
+				["historical backfill raw", "superseded runtime raw", "current runtime raw"],
+			);
+
+			await __memoryOperatorTest.prune(service, { retainDepth: 0, yes: true, vacuum: false });
+			assert.deepEqual(
+				service.lcmStore.listRecords().map((record) => record.text),
+				["current runtime raw"],
+			);
+		} finally {
+			service.close();
+		}
+	});
+
 	it("reindexes LCM records", async (t) => {
 		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);

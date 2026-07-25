@@ -20,10 +20,19 @@ export interface DoctorStores {
 	index: MemoryStore;
 }
 
+interface StaleActiveSegment {
+	id: string;
+	channelKey: string | null;
+	closedAt: string;
+	records: number;
+	reason: "backfill" | "superseded";
+}
+
 export function runDoctor(stores: DoctorStores, opts: Record<string, never> = {}): DoctorReport {
 	void opts;
 	const findings: DoctorFinding[] = [];
 	findDanglingIndexSources(stores, findings);
+	findStaleActiveSegments(stores, findings);
 	findOrphanEmptySegments(stores, findings);
 	findStaleLcmIndexRows(stores, findings);
 	findBrokenContextOrdering(stores, findings);
@@ -63,6 +72,10 @@ export function applyDoctorFixes(stores: DoctorStores, report: DoctorReport): { 
 	runInTransaction(stores.index.db, runIndexFixes);
 
 	const runLcmFixes = () => {
+		for (const segment of staleActiveSegments(stores.lcm)) {
+			stores.lcm.closeSegment(segment.id, segment.closedAt);
+			fixed += 1;
+		}
 		fixed += stores.lcm.db
 			.prepare(
 				`DELETE FROM lcm_segments
@@ -107,9 +120,61 @@ export function applyDoctorFixes(stores: DoctorStores, report: DoctorReport): { 
 	if (report.findings.some((finding) => finding.kind === "requires_reindex")) {
 		warnings.push("reindex requirement was not cleared; run 'familiar memory reindex --force'");
 	}
+	if (report.findings.some((finding) => finding.kind === "stale_active_segment")) {
+		warnings.push(
+			"stale active segments were closed; run 'familiar memory prune --new-session-retain-depth 0 --yes' to delete their raw records",
+		);
+	}
 
 	const summary = [`fixed ${fixed} item(s)`, ...warnings].join("; ");
 	return { fixed, summary };
+}
+
+function findStaleActiveSegments(stores: DoctorStores, findings: DoctorFinding[]): void {
+	for (const segment of staleActiveSegments(stores.lcm)) {
+		findings.push({
+			kind: "stale_active_segment",
+			detail:
+				segment.reason === "backfill"
+					? `historical backfill segment ${segment.id} is still active (${segment.records} raw record(s))`
+					: `segment ${segment.id} was superseded by a newer active segment for ${segment.channelKey} (${segment.records} raw record(s))`,
+			fixable: true,
+		});
+	}
+}
+
+function staleActiveSegments(store: LcmStore): StaleActiveSegment[] {
+	return store.db
+		.prepare(
+			`SELECT s.id,
+			        s.channel_key AS channelKey,
+			        COALESCE(MAX(r.happened_at), s.started_at) AS closedAt,
+			        COUNT(r.id) AS records,
+			        CASE WHEN s.id LIKE 'backfill-%' THEN 'backfill' ELSE 'superseded' END AS reason
+			 FROM lcm_segments s
+			 LEFT JOIN lcm_records r ON r.segment_id = s.id
+			 WHERE s.status = 'active'
+			   AND (
+			     s.id LIKE 'backfill-%'
+			     OR (
+			       s.channel_key IS NOT NULL
+			       AND EXISTS (
+			         SELECT 1
+			         FROM lcm_segments newer
+			         WHERE newer.status = 'active'
+			           AND newer.id NOT LIKE 'backfill-%'
+			           AND newer.channel_key = s.channel_key
+			           AND (
+			             newer.started_at > s.started_at
+			             OR (newer.started_at = s.started_at AND newer.id > s.id)
+			           )
+			       )
+			     )
+			   )
+			 GROUP BY s.id
+			 ORDER BY s.started_at, s.id`,
+		)
+		.all() as StaleActiveSegment[];
 }
 
 function findDanglingIndexSources(stores: DoctorStores, findings: DoctorFinding[]): void {

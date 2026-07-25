@@ -408,6 +408,28 @@ familiar memory backfill
 familiar memory backup
 ```
 
+When `memory status` reports that a reindex is required, rebuild every corpus
+with:
+
+```sh
+familiar memory reindex --force
+```
+
+Reindexing is resumable. If the process is interrupted or an embedding request
+fails, rerun the same command with the same corpus scope and embedding config.
+Familiar reuses completed embeddings and requests only the unfinished work.
+
+To discard an incomplete generation and rebuild its corpus scope from the
+beginning, run:
+
+```sh
+familiar memory reindex --force --restart
+```
+
+`--restart` repeats all embedding requests for that scope. Use it only for a
+true from-scratch rebuild or after changing the embedding config during an
+interrupted run.
+
 Use `familiar memory help` for the full list.
 
 ## Inspect Payloads

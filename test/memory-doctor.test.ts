@@ -14,7 +14,7 @@ import { lcmRecordIndexSourceId } from "../src/memory/lcm/store.js";
 import { MemoryService } from "../src/memory/service.js";
 import { __memoryOperatorTest } from "../src/memory/operator.js";
 
-async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
+async function tempConfig(t: { after(fn: () => Promise<void>): void }, batchSize = 8) {
 	const dataDir = await mkdtemp(resolve(tmpdir(), "familiar-memory-doctor-"));
 	t.after(() => rm(dataDir, { recursive: true, force: true }));
 	return configWithDataDir(t, dataDir, {
@@ -26,7 +26,7 @@ async function tempConfig(t: { after(fn: () => Promise<void>): void }) {
 				baseUrl: "https://embedding.test",
 				dimensions: 3,
 				apiKeyEnv: "",
-				batchSize: 8,
+				batchSize,
 			},
 		},
 	});
@@ -205,6 +205,13 @@ describe("memory doctor and operator", () => {
 			service.memoryStore.db
 				.prepare("INSERT OR REPLACE INTO memory_meta(k, v) VALUES ('requires_reindex', '1')")
 				.run();
+			await __memoryOperatorTest.reindex(
+				config,
+				service,
+				{ corpus: "lcm_record", force: true },
+				new FakeEmbeddingProvider(),
+			);
+			assert.equal(service.memoryStore.stats().requiresReindex, true);
 
 			const failingProvider = new FakeEmbeddingProvider();
 			failingProvider.embed = async () => {
@@ -216,16 +223,133 @@ describe("memory doctor and operator", () => {
 			);
 			assert.equal(service.memoryStore.stats().requiresReindex, true);
 
-			await __memoryOperatorTest.reindex(
-				config,
-				service,
-				{ corpus: "lcm_record", force: true },
-				new FakeEmbeddingProvider(),
-			);
-			assert.equal(service.memoryStore.stats().requiresReindex, true);
-
 			await __memoryOperatorTest.reindex(config, service, { force: true }, new FakeEmbeddingProvider());
 			assert.equal(service.memoryStore.stats().requiresReindex, false);
+		} finally {
+			service.close();
+		}
+	});
+
+	it("resumes an interrupted reindex generation and restarts the next completed generation", async (t) => {
+		const config = await tempConfig(t, 2);
+		const service = MemoryService.createWithoutRuntime(config);
+		try {
+			for (let index = 0; index < 5; index++) insertRecord(service, "seg-resume", `record ${index}`);
+			const firstProvider = new FakeEmbeddingProvider();
+			const embed = firstProvider.embed.bind(firstProvider);
+			let calls = 0;
+			firstProvider.embed = async (inputs, signal) => {
+				calls += 1;
+				if (calls === 2) throw new Error("second batch failed");
+				return embed(inputs, signal);
+			};
+
+			await assert.rejects(
+				__memoryOperatorTest.reindex(config, service, { force: true }, firstProvider),
+				/second batch failed/,
+			);
+			assert.equal((service.memoryStore.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 2);
+			assert.ok(
+				service.memoryStore.db.prepare("SELECT v FROM memory_meta WHERE k = 'reindex_in_progress'").get(),
+			);
+			await assert.rejects(
+				__memoryOperatorTest.reindex(
+					config,
+					service,
+					{ corpus: "lcm_record", force: true },
+					new FakeEmbeddingProvider(),
+				),
+				/different reindex is already in progress/,
+			);
+			assert.equal(
+				(service.memoryStore.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n,
+				2,
+			);
+
+			const resumedProvider = new FakeEmbeddingProvider();
+			await __memoryOperatorTest.reindex(config, service, { force: true }, resumedProvider);
+			assert.deepEqual(
+				resumedProvider.batches.map((batch) => batch.length),
+				[2, 1],
+			);
+			assert.equal(
+				service.memoryStore.db.prepare("SELECT v FROM memory_meta WHERE k = 'reindex_in_progress'").get(),
+				undefined,
+			);
+
+			const nextProvider = new FakeEmbeddingProvider();
+			await __memoryOperatorTest.reindex(config, service, { force: true }, nextProvider);
+			assert.deepEqual(
+				nextProvider.batches.map((batch) => batch.length),
+				[2, 2, 1],
+			);
+		} finally {
+			service.close();
+		}
+	});
+
+	it("restarts an interrupted reindex generation from the first batch", async (t) => {
+		const config = await tempConfig(t, 2);
+		const service = MemoryService.createWithoutRuntime(config);
+		try {
+			for (let index = 0; index < 3; index++) insertRecord(service, "seg-restart", `restart ${index}`);
+			const failingProvider = new FakeEmbeddingProvider();
+			const embed = failingProvider.embed.bind(failingProvider);
+			let calls = 0;
+			failingProvider.embed = async (inputs, signal) => {
+				calls += 1;
+				if (calls === 2) throw new Error("second batch failed");
+				return embed(inputs, signal);
+			};
+			await assert.rejects(
+				__memoryOperatorTest.reindex(config, service, { force: true }, failingProvider),
+				/second batch failed/,
+			);
+
+			config.memory.embedding.baseUrl = "https://replacement-embedding.test";
+			const restartedProvider = new FakeEmbeddingProvider();
+			await __memoryOperatorTest.reindex(config, service, { force: true, restart: true }, restartedProvider);
+			assert.deepEqual(
+				restartedProvider.batches.map((batch) => batch.length),
+				[2, 1],
+			);
+		} finally {
+			service.close();
+		}
+	});
+
+	it("rejects a concurrent reindex for the same generation", async (t) => {
+		const config = await tempConfig(t);
+		const service = MemoryService.createWithoutRuntime(config);
+		try {
+			insertRecord(service, "seg-concurrent", "concurrent record");
+			const provider = new FakeEmbeddingProvider();
+			const embed = provider.embed.bind(provider);
+			let releaseBatch: () => void = () => {};
+			const batchBlocked = new Promise<void>((resolve) => {
+				releaseBatch = resolve;
+			});
+			let batchStarted: () => void = () => {};
+			const started = new Promise<void>((resolve) => {
+				batchStarted = resolve;
+			});
+			provider.embed = async (inputs, signal) => {
+				batchStarted();
+				await batchBlocked;
+				return embed(inputs, signal);
+			};
+
+			const running = __memoryOperatorTest.reindex(config, service, { force: true }, provider);
+			await started;
+			try {
+				await assert.rejects(
+					__memoryOperatorTest.reindex(config, service, { force: true }, new FakeEmbeddingProvider()),
+					/already running/,
+				);
+			} finally {
+				releaseBatch();
+			}
+			await running;
 		} finally {
 			service.close();
 		}

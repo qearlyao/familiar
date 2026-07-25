@@ -3,17 +3,33 @@ import { mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
+import { isDeepStrictEqual } from "node:util";
 import type { Config as FamiliarConfig } from "../config/index.js";
 import { indexAllDiaryFiles } from "./diary/indexer.js";
 import { applyDoctorFixes, type DoctorFinding, runDoctor } from "./doctor.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
 import { createEmbeddingProvider, type EmbeddingProvider } from "./index/embedding-provider.js";
+import { readMeta, writeMeta } from "./index/schema.js";
 import type { MemoryIndexStore } from "./index/store.js";
 import { type BackfillReport, backfillFromChatLogs } from "./lcm/backfill.js";
 import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
 import { type MemoryOperatorService, MemoryService } from "./service.js";
 import { runInTransaction } from "./util.js";
+
+const REINDEX_RUN_KEY = "reindex_in_progress";
+
+interface ReindexRun {
+	version: 1;
+	corpora: string[];
+	force: boolean;
+	embeddingFormat: string;
+	embeddingProvider: string;
+	embeddingModel: string;
+	embeddingBaseUrl: string;
+	embeddingDimensions: number;
+	ownerPid: number | null;
+}
 
 export async function runMemoryOperator(config: FamiliarConfig, argv: string[]): Promise<void> {
 	const [command, ...args] = argv;
@@ -60,7 +76,7 @@ export function memoryHelp(): string {
 		"Usage:",
 		"  familiar memory [workspace] status [--json]",
 		"  familiar memory [workspace] doctor [--clean]",
-		"  familiar memory [workspace] reindex [--corpus <name>] [--force]",
+		"  familiar memory [workspace] reindex [--corpus <name>] [--force] [--restart]",
 		"  familiar memory [workspace] backfill [--channels <ch1,ch2>] [--data-dir <path>] [--dry-run]",
 		"  familiar memory [workspace] prune --new-session-retain-depth <N> [--yes] [--vacuum]",
 		"  familiar memory [workspace] backup <out-dir>",
@@ -160,59 +176,78 @@ function runDoctorCommand(service: MemoryOperatorService, args: string[]): void 
 async function reindex(
 	config: FamiliarConfig,
 	service: MemoryOperatorService,
-	options: { corpus?: string; force: boolean },
+	options: { corpus?: string; force: boolean; restart?: boolean },
 	embeddingProvider?: EmbeddingProvider,
 	signal?: AbortSignal,
 ): Promise<void> {
 	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
-	const runDelete = () => {
-		for (const corpus of corpora) deleteCorpus(service.memoryStore, corpus);
-	};
-	runInTransaction(service.memoryStore.db, runDelete);
-
-	const indexer = options.force
-		? new ChunkIndexer({
-				store: service.memoryStore,
-				embeddingProvider: embeddingProvider ?? createEmbeddingProvider(config),
-			})
-		: embeddingProvider
-			? new ChunkIndexer({ store: service.memoryStore, embeddingProvider })
-			: service.indexer;
-	let chunks = 0;
-	if (corpora.includes("lcm_record")) {
+	const run = reindexRun(config, corpora, options.force);
+	const mode = beginReindex(service.memoryStore, run, options.restart ?? false);
+	console.log(`${mode} ${formatReindexRun(run)}`);
+	try {
+		const indexer = options.force
+			? new ChunkIndexer({
+					store: service.memoryStore,
+					embeddingProvider: embeddingProvider ?? createEmbeddingProvider(config),
+				})
+			: embeddingProvider
+				? new ChunkIndexer({ store: service.memoryStore, embeddingProvider })
+				: service.indexer;
+		const batchSize = config.memory.embedding.batchSize;
+		let chunks = 0;
+		if (corpora.includes("lcm_record")) {
+			const records = service.lcmStore.listRecords();
+			for (let offset = 0; offset < records.length; offset += batchSize) {
+				if (signal?.aborted) {
+					console.log(`Reindexed ${chunks} chunk(s)`);
+					return;
+				}
+				const result = await indexLcmRecords({
+					indexer,
+					records: records.slice(offset, offset + batchSize),
+					signal,
+				});
+				chunks += result.ids.length;
+				printProgress(chunks);
+			}
+		}
+		if (corpora.includes("lcm_summary")) {
+			const summaries = service.lcmStore.listSummaries();
+			for (let offset = 0; offset < summaries.length; offset += batchSize) {
+				if (signal?.aborted) {
+					console.log(`Reindexed ${chunks} chunk(s)`);
+					return;
+				}
+				const result = await indexLcmSummaries({
+					indexer,
+					summaries: summaries.slice(offset, offset + batchSize),
+					signal,
+				});
+				chunks += result.ids.length;
+				printProgress(chunks);
+			}
+		}
+		if (corpora.includes("diary_chunk")) {
+			if (signal?.aborted) {
+				console.log(`Reindexed ${chunks} chunk(s)`);
+				return;
+			}
+			const result = await indexAllDiaryFiles({ config, indexer, signal });
+			for (const file of result.files) {
+				if (signal?.aborted) break;
+				chunks += file.result.ids.length;
+				printProgress(chunks);
+			}
+		}
 		if (signal?.aborted) {
 			console.log(`Reindexed ${chunks} chunk(s)`);
 			return;
 		}
-		const result = await indexLcmRecords({ indexer, records: service.lcmStore.listRecords(), signal });
-		chunks += result.ids.length;
-		printProgress(chunks);
+		finishReindex(service.memoryStore, run, options.force && !options.corpus);
+		console.log(`Reindexed ${chunks} chunk(s)`);
+	} finally {
+		releaseReindex(service.memoryStore, run);
 	}
-	if (corpora.includes("lcm_summary")) {
-		if (signal?.aborted) {
-			console.log(`Reindexed ${chunks} chunk(s)`);
-			return;
-		}
-		const result = await indexLcmSummaries({ indexer, summaries: service.lcmStore.listSummaries(), signal });
-		chunks += result.ids.length;
-		printProgress(chunks);
-	}
-	if (corpora.includes("diary_chunk")) {
-		if (signal?.aborted) {
-			console.log(`Reindexed ${chunks} chunk(s)`);
-			return;
-		}
-		const result = await indexAllDiaryFiles({ config, indexer, signal });
-		for (const file of result.files) {
-			if (signal?.aborted) break;
-			chunks += file.result.ids.length;
-			printProgress(chunks);
-		}
-	}
-	if (options.force && !options.corpus && !signal?.aborted) {
-		service.memoryStore.db.prepare("DELETE FROM memory_meta WHERE k = 'requires_reindex'").run();
-	}
-	console.log(`Reindexed ${chunks} chunk(s)`);
 }
 
 async function backfill(
@@ -271,13 +306,18 @@ async function backup(config: FamiliarConfig, service: MemoryOperatorService, ou
 	void config;
 }
 
-function parseReindexArgs(args: string[]): { corpus?: string; force: boolean } {
+function parseReindexArgs(args: string[]): { corpus?: string; force: boolean; restart: boolean } {
 	let corpus: string | undefined;
 	let force = false;
+	let restart = false;
 	for (let index = 0; index < args.length; index++) {
 		const arg = args[index];
 		if (arg === "--force") {
 			force = true;
+			continue;
+		}
+		if (arg === "--restart") {
+			restart = true;
 			continue;
 		}
 		if (arg === "--corpus") {
@@ -287,7 +327,7 @@ function parseReindexArgs(args: string[]): { corpus?: string; force: boolean } {
 		}
 		throw new Error(`Unknown reindex argument: ${arg}`);
 	}
-	return { corpus, force };
+	return { corpus, force, restart };
 }
 
 function parseBackfillArgs(
@@ -361,6 +401,109 @@ function hasOnlyFlags(args: string[], allowed: readonly string[]): boolean {
 		if (!allowed.includes(arg)) throw new Error(`Unknown argument: ${arg}`);
 	}
 	return true;
+}
+
+function reindexRun(config: FamiliarConfig, corpora: string[], force: boolean): ReindexRun {
+	return {
+		version: 1,
+		corpora,
+		force,
+		embeddingFormat: config.memory.embedding.format,
+		embeddingProvider: config.memory.embedding.provider,
+		embeddingModel: config.memory.embedding.model,
+		embeddingBaseUrl: config.memory.embedding.baseUrl,
+		embeddingDimensions: config.memory.embedding.dimensions,
+		ownerPid: null,
+	};
+}
+
+function readReindexRun(store: MemoryIndexStore): ReindexRun | null {
+	const raw = readMeta(store.db, REINDEX_RUN_KEY);
+	if (!raw) return null;
+	const parsed = JSON.parse(raw) as Partial<ReindexRun>;
+	if (
+		parsed.version !== 1 ||
+		!Array.isArray(parsed.corpora) ||
+		!parsed.corpora.every((corpus) => typeof corpus === "string") ||
+		typeof parsed.force !== "boolean" ||
+		typeof parsed.embeddingFormat !== "string" ||
+		typeof parsed.embeddingProvider !== "string" ||
+		typeof parsed.embeddingModel !== "string" ||
+		typeof parsed.embeddingBaseUrl !== "string" ||
+		typeof parsed.embeddingDimensions !== "number" ||
+		(parsed.ownerPid !== null && (!Number.isInteger(parsed.ownerPid) || (parsed.ownerPid ?? 0) < 1))
+	) {
+		throw new Error(`Invalid ${REINDEX_RUN_KEY} metadata`);
+	}
+	return parsed as ReindexRun;
+}
+
+function sameReindexRun(left: ReindexRun, right: ReindexRun): boolean {
+	return isDeepStrictEqual({ ...left, ownerPid: null }, { ...right, ownerPid: null });
+}
+
+function beginReindex(
+	store: MemoryIndexStore,
+	run: ReindexRun,
+	restart: boolean,
+): "Starting" | "Restarting" | "Resuming" {
+	return runInTransaction(store.db, () => {
+		const active = readReindexRun(store);
+		if (active?.ownerPid && processIsRunning(active.ownerPid)) {
+			throw new Error(`Reindex is already running in process ${active.ownerPid}`);
+		}
+		if (
+			active &&
+			!sameReindexRun(active, run) &&
+			(!restart || active.corpora.join("\0") !== run.corpora.join("\0"))
+		) {
+			throw new Error(
+				`A different reindex is already in progress (${formatReindexRun(active)}); ` +
+					"resume it with the same arguments or restart the same corpus scope",
+			);
+		}
+		if (!active || restart) {
+			for (const corpus of run.corpora) deleteCorpus(store, corpus);
+			writeMeta(store.db, REINDEX_RUN_KEY, JSON.stringify({ ...run, ownerPid: process.pid }));
+			return active ? "Restarting" : "Starting";
+		}
+		writeMeta(store.db, REINDEX_RUN_KEY, JSON.stringify({ ...active, ownerPid: process.pid }));
+		return "Resuming";
+	});
+}
+
+function finishReindex(store: MemoryIndexStore, run: ReindexRun, clearRequired: boolean): void {
+	runInTransaction(store.db, () => {
+		const active = readReindexRun(store);
+		if (!active || active.ownerPid !== process.pid || !sameReindexRun(active, run)) {
+			throw new Error("Reindex ownership was lost before completion");
+		}
+		store.db.prepare("DELETE FROM memory_meta WHERE k = ?").run(REINDEX_RUN_KEY);
+		if (clearRequired) store.db.prepare("DELETE FROM memory_meta WHERE k = 'requires_reindex'").run();
+	});
+}
+
+function releaseReindex(store: MemoryIndexStore, run: ReindexRun): void {
+	runInTransaction(store.db, () => {
+		const active = readReindexRun(store);
+		if (!active || active.ownerPid !== process.pid || !sameReindexRun(active, run)) return;
+		writeMeta(store.db, REINDEX_RUN_KEY, JSON.stringify({ ...active, ownerPid: null }));
+	});
+}
+
+function processIsRunning(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code !== "ESRCH";
+	}
+}
+
+function formatReindexRun(run: ReindexRun): string {
+	return `reindex (${run.corpora.join(", ")}; ${run.embeddingProvider}/${run.embeddingModel}; dim=${run.embeddingDimensions}${
+		run.force ? "; force" : ""
+	})`;
 }
 
 function deleteCorpus(store: MemoryIndexStore, corpus: string): void {

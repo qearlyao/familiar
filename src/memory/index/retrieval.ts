@@ -1,6 +1,6 @@
 import { positiveIntegerOrDefault } from "../util.js";
 import type { EmbeddingProvider } from "./embedding-provider.js";
-import type { MemoryChunkSourceRef, MemorySearchHit, StoredMemoryChunk } from "./store.js";
+import type { MemorySearchHit, StoredMemoryChunk } from "./store.js";
 export interface MemoryRetrievalStore {
 	searchLexical(query: string, options?: number | MemoryRetrievalSearchOptions): MemorySearchHit[];
 	searchSemantic(query: Float32Array, options?: number | MemoryRetrievalSearchOptions): MemorySearchHit[];
@@ -216,17 +216,11 @@ function memoryDedupeKeys(chunk: StoredMemoryChunk): string[] {
 }
 
 function normalizeMemoryText(text: string): string {
-	const normalized = text
+	return text
 		.replace(/^\s*\[[^\]]+\]\s*/, "")
 		.replace(/\s+/g, " ")
 		.trim()
 		.toLowerCase();
-	// Transitional shim for already-indexed legacy chunks that duplicated visible text.
-	const half = normalized.length / 2;
-	if (Number.isInteger(half) && normalized.slice(0, half).trim() === normalized.slice(half).trim()) {
-		return normalized.slice(0, half).trim();
-	}
-	return normalized;
 }
 
 function roundedChunkTimestamp(chunk: StoredMemoryChunk): number | null {
@@ -258,7 +252,7 @@ function matchesScope(chunk: StoredMemoryChunk, scope: MemoryRetrievalScope | un
 	const sourceIds = uniqueStrings(scope?.sourceIds);
 	if (
 		sourceIds.length > 0 &&
-		!chunkSources(chunk).some((source) => source.sourceId && sourceIds.includes(source.sourceId))
+		!chunk.sources.some((source) => source.sourceId && sourceIds.includes(source.sourceId))
 	) {
 		return false;
 	}
@@ -266,7 +260,7 @@ function matchesScope(chunk: StoredMemoryChunk, scope: MemoryRetrievalScope | un
 	const sourceRefs = uniqueStrings(scope?.sourceRefs);
 	if (
 		sourceRefs.length > 0 &&
-		!chunkSources(chunk).some((source) => source.sourceRef && sourceRefs.includes(source.sourceRef))
+		!chunk.sources.some((source) => source.sourceRef && sourceRefs.includes(source.sourceRef))
 	) {
 		return false;
 	}
@@ -316,12 +310,6 @@ function parseIsoTime(value: string | undefined): number | null {
 	if (!value) return null;
 	const parsed = Date.parse(value);
 	return Number.isFinite(parsed) ? parsed : null;
-}
-
-function chunkSources(chunk: StoredMemoryChunk): MemoryChunkSourceRef[] {
-	return chunk.sources.length > 0 || !chunk.sourceId
-		? chunk.sources
-		: [{ corpus: chunk.corpus, sourceId: chunk.sourceId, sourceRef: chunk.sourceRef, chunkIndex: chunk.chunkIndex }];
 }
 
 function uniqueStrings(values: readonly string[] | undefined): string[] {

@@ -242,15 +242,8 @@ describe("retrieveMemory", () => {
 			timestamp: "2026-05-09T05:07:28.805Z",
 			source: { sourceRef: "chat/file.jsonl#1439" },
 		});
-		const doubledBackfill = hit(
-			3,
-			"lcm_record",
-			"doubled",
-			"fish pie, you mean? looks cursed.fish pie, you mean? looks cursed.",
-			0.03,
-		);
 		const cleanRuntime = hit(4, "lcm_record", "clean-runtime", "fish pie, you mean? looks cursed.", 0.04);
-		const store = new FakeStore([runtime, backfill, doubledBackfill, cleanRuntime], new Map());
+		const store = new FakeStore([runtime, backfill, cleanRuntime], new Map());
 
 		const results = await retrieveMemory({
 			query: "stargazy pie",
@@ -263,7 +256,7 @@ describe("retrieveMemory", () => {
 
 		assert.deepEqual(
 			results.map((result) => result.id),
-			[1, 3],
+			[1, 4],
 		);
 	});
 

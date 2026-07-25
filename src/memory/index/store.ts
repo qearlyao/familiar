@@ -99,9 +99,6 @@ interface MemoryChunkRow {
 	id: number;
 	content_hash: string;
 	corpus: string;
-	source_id?: string | null;
-	source_ref?: string | null;
-	chunk_index?: number;
 	text_full: string;
 	snippet: string;
 	token_count: number | null;
@@ -704,19 +701,14 @@ function sourcesJsonSelect(chunkIdExpr: string): string {
 
 function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {
 	const sources = sourceRefsFromRow(row);
-	const primary = sources[0] ?? {
-		corpus: row.corpus,
-		sourceId: row.source_id ?? null,
-		sourceRef: row.source_ref ?? null,
-		chunkIndex: row.chunk_index ?? 0,
-	};
+	const primary = sources[0];
 	return {
 		id: row.id,
 		contentHash: row.content_hash,
 		corpus: row.corpus,
-		sourceId: primary.sourceId,
-		sourceRef: primary.sourceRef,
-		chunkIndex: primary.chunkIndex,
+		sourceId: primary?.sourceId ?? null,
+		sourceRef: primary?.sourceRef ?? null,
+		chunkIndex: primary?.chunkIndex ?? 0,
 		sources,
 		text: row.text_full,
 		snippet: row.snippet,
@@ -730,27 +722,13 @@ function rowToChunk(row: MemoryChunkRow): StoredMemoryChunk {
 }
 
 function sourceRefsFromRow(row: MemoryChunkRow): MemoryChunkSourceRef[] {
-	if ("sources_json" in row && typeof row.sources_json === "string" && row.sources_json) {
-		try {
-			const parsed = JSON.parse(row.sources_json) as unknown;
-			if (Array.isArray(parsed)) {
-				return parsed.filter(isSourceRef);
-			}
-		} catch {
-			return [];
-		}
+	if (typeof row.sources_json !== "string" || !row.sources_json) return [];
+	try {
+		const parsed = JSON.parse(row.sources_json) as unknown;
+		return Array.isArray(parsed) ? parsed.filter(isSourceRef) : [];
+	} catch {
+		return [];
 	}
-	const sourceId = row.source_id ?? null;
-	return sourceId
-		? [
-				{
-					corpus: row.corpus,
-					sourceId,
-					sourceRef: row.source_ref ?? null,
-					chunkIndex: row.chunk_index ?? 0,
-				},
-			]
-		: [];
 }
 
 function isSourceRef(value: unknown): value is MemoryChunkSourceRef {

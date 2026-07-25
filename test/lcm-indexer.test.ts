@@ -256,13 +256,6 @@ describe("LCM indexer", () => {
 					},
 				],
 			});
-			const doubledLegacy = storedRecord({
-				id: 5,
-				kind: "assistant",
-				text:
-					"fish pie, you mean? yeah, heard of it. bones and regret.\n" +
-					"fish pie, you mean? yeah, heard of it. bones and regret.",
-			});
 			const quotedThinking = storedRecord({
 				id: 6,
 				kind: "user",
@@ -271,19 +264,16 @@ describe("LCM indexer", () => {
 
 			const result = await indexLcmRecords({
 				indexer,
-				records: [userRecord, visibleAssistant, planningOnlyAssistant, toolResult, doubledLegacy, quotedThinking],
+				records: [userRecord, visibleAssistant, planningOnlyAssistant, toolResult, quotedThinking],
 			});
 
-			assert.equal(result.embedded, 4);
+			assert.equal(result.embedded, 3);
 			assert.deepEqual(provider.batches[0], [
 				"noooo, it's called Stargazy pie",
 				"Stargazy pie is Cornish and tied to Mousehole.",
-				"fish pie, you mean? yeah, heard of it. bones and regret.",
 				"[thinking] is a literal tag I want to discuss, not an internal block.",
 			]);
 			assert.equal(memoryStore.searchLexical("Mousehole", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 1);
-			const fishHit = memoryStore.searchLexical("bones regret", { corpus: LCM_RECORD_CORPUS, limit: 10 })[0];
-			assert.equal(fishHit?.chunk.text, "fish pie, you mean? yeah, heard of it. bones and regret.");
 			assert.equal(memoryStore.searchLexical("planning", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
 			assert.equal(memoryStore.searchLexical("tool_call", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
 			assert.equal(memoryStore.searchLexical("raw result", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);

@@ -102,7 +102,6 @@ export function summarySourceFromRow(row: LcmSummarySourceRow): StoredLcmSummary
 		summaryId: row.summary_id,
 		ord: row.ord,
 		recordId: row.record_id,
-		sourceSummaryId: row.source_summary_id,
 		sourceRef: row.source_ref,
 		snapshot: parseJsonObject(row.snapshot_json),
 	};

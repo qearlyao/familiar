@@ -8,7 +8,9 @@ export interface MemoryIndexMigrationOptions {
 	embeddingDimensions: number;
 }
 
-const SCHEMA_VERSION = 4;
+// v5: legacy memory_chunks source columns dropped; pre-v5 indexes may hold
+// duplicated visible text, so upgrading flags requires_reindex once.
+const SCHEMA_VERSION = 5;
 
 export function runMemoryIndexMigrations(db: Database.Database, options: MemoryIndexMigrationOptions): void {
 	db.pragma("journal_mode = WAL");
@@ -68,7 +70,9 @@ export function runMemoryIndexMigrations(db: Database.Database, options: MemoryI
 		);
 	`);
 
+	const previousVersion = Number(readMeta(db, "schema_version") ?? "0");
 	migrateMemoryIndexSources(db);
+	if (previousVersion > 0 && previousVersion < 5) writeMeta(db, "requires_reindex", "1");
 	reconcileEmbeddingConfig(db, options);
 	const vectorCapability = reconcileVectorTable(db, options, vec.available);
 	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
@@ -161,6 +165,12 @@ function migrateMemoryIndexSources(db: Database.Database): void {
 				 FROM memory_chunks
 				 WHERE source_id IS NOT NULL`,
 			).run();
+			db.exec(`
+				DROP INDEX IF EXISTS idx_memory_chunks_source;
+				ALTER TABLE memory_chunks DROP COLUMN source_id;
+				ALTER TABLE memory_chunks DROP COLUMN source_ref;
+				ALTER TABLE memory_chunks DROP COLUMN chunk_index;
+			`);
 		}).immediate();
 	}
 

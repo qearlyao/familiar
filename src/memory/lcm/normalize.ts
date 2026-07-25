@@ -185,14 +185,14 @@ function appendTextPart(parts: LcmRecordPart[], text: string): void {
 }
 
 function appendAssistantFinalText(parts: LcmRecordPart[], text: string): void {
-	const normalized = text.trim();
-	if (!normalized) return;
+	if (!text.trim()) return;
 	const existingText = parts
 		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
 		.map((part) => part.text)
-		.join("")
-		.trim();
-	if (existingText === normalized) return;
+		.join(" ");
+	// Whitespace-insensitive: delta parts and the final text can differ in separators.
+	const comparable = (value: string) => value.replace(/\s+/g, " ").trim();
+	if (comparable(existingText) === comparable(text)) return;
 	appendTextPart(parts, text);
 }
 

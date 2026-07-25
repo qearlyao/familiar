@@ -64,7 +64,7 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 				sourceType: "manual",
 				sourceRef: `lcm_condense:d${input.depth + 1}:${group.map((summary) => summary.id).join("-")}`,
 			},
-			sourceItems: group.map((summary) => ({ summaryId: summary.id, sourceRef: `lcm_summary:${summary.id}` })),
+			sourceItems: group.map((summary) => ({ sourceRef: `lcm_summary:${summary.id}` })),
 			parents: group.map((summary) => summary.id),
 			metadata: {
 				source: "condense",

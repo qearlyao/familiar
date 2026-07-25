@@ -371,16 +371,14 @@ export class LcmStore {
 	private insertSummarySources(summaryId: number, sources: LcmSummarySourceInput[]): void {
 		const insert = this.db.prepare(
 			`INSERT INTO lcm_summary_sources (
-				summary_id, ord, record_id, source_summary_id, source_ref, snapshot_json
-			 ) VALUES (?, ?, ?, ?, ?, ?)`,
+				summary_id, ord, record_id, source_ref, snapshot_json
+			 ) VALUES (?, ?, ?, ?, ?)`,
 		);
 		for (const [index, source] of sources.entries()) {
-			// source_summary_id is advisory only; the canonical parent edge is lcm_summary_parents.
 			insert.run(
 				summaryId,
 				index,
 				source.recordId ?? null,
-				null,
 				source.sourceRef ?? null,
 				jsonOrNull(source.snapshot ?? null),
 			);

@@ -181,19 +181,14 @@ function memoryTextForLcmRecord(record: StoredLcmRecord): string {
 }
 
 function visibleTextFromRecord(record: StoredLcmRecord): string {
-	if (!record.parts?.length) return normalizeVisibleText(record.text, record.kind).trim();
-	const text = record.parts
-		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
-		.map((part) => part.text.trim())
-		.filter(Boolean)
-		.join("\n")
-		.trim();
-	return normalizeVisibleText(text, record.kind).trim();
-}
-
-function normalizeVisibleText(text: string, kind: StoredLcmRecord["kind"]): string {
-	const visible = kind === "assistant" ? stripNoisyRecordMarkers(text) : text;
-	return collapseDuplicatedVisibleText(visible);
+	const text = record.parts?.length
+		? record.parts
+				.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
+				.map((part) => part.text.trim())
+				.filter(Boolean)
+				.join("\n")
+		: record.text;
+	return (record.kind === "assistant" ? stripNoisyRecordMarkers(text) : text).trim();
 }
 
 function stripNoisyRecordMarkers(text: string): string {
@@ -210,27 +205,4 @@ function isNoisyRecordMarkerLine(line: string): boolean {
 	if (/^\[tool_call:\s*[\w.-]+\s*\(.*\)\]$/.test(trimmed)) return true;
 	if (/^\[tool_result:\s*[\w.-]+\s*->\s*.*\]$/.test(trimmed)) return true;
 	return false;
-}
-
-function collapseDuplicatedVisibleText(text: string): string {
-	let normalized = text.trim();
-	for (let iteration = 0; iteration < 4; iteration += 1) {
-		const collapsed = collapseOnce(normalized);
-		if (collapsed === normalized) return normalized;
-		normalized = collapsed;
-	}
-	return normalized;
-}
-
-function collapseOnce(text: string): string {
-	for (let split = Math.floor(text.length / 2); split >= 24; split -= 1) {
-		const left = text.slice(0, split).trim();
-		const right = text.slice(split).trim();
-		if (left && normalizeComparableText(left) === normalizeComparableText(right)) return left;
-	}
-	return text;
-}
-
-function normalizeComparableText(text: string): string {
-	return text.replace(/\s+/g, " ").trim().toLowerCase();
 }

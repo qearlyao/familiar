@@ -521,4 +521,43 @@ describe("MemoryIndexStore", () => {
 			store.close();
 		}
 	});
+
+	it("drops legacy memory_chunks source columns and flags a reindex on upgrade", async (t) => {
+		const path = await tempDbPath(t);
+		let store = openStore(path);
+		let chunkId: number;
+		try {
+			chunkId = store.insertChunk({
+				corpus: "lcm_record",
+				text: "legacy chunk text",
+				embedding: vector([1, 0, 0]),
+			});
+			// Rebuild the pre-v5 shape: source columns on memory_chunks, no mapping rows.
+			store.db.exec(`
+				ALTER TABLE memory_chunks ADD COLUMN source_id TEXT;
+				ALTER TABLE memory_chunks ADD COLUMN source_ref TEXT;
+				ALTER TABLE memory_chunks ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT 0;
+				CREATE INDEX idx_memory_chunks_source ON memory_chunks(corpus, source_id);
+				UPDATE memory_chunks SET source_id = 'lcm:record:9', source_ref = 'chat:9';
+				DELETE FROM memory_index_sources;
+				UPDATE memory_meta SET v = '4' WHERE k = 'schema_version';
+			`);
+		} finally {
+			store.close();
+		}
+
+		store = openStore(path);
+		try {
+			const columns = store.db.prepare("PRAGMA table_info(memory_chunks)").all() as Array<{ name: string }>;
+			assert.ok(!columns.some((column) => ["source_id", "source_ref", "chunk_index"].includes(column.name)));
+			const chunk = store.getChunk(chunkId);
+			assert.deepEqual(chunk?.sources, [
+				{ corpus: "lcm_record", sourceId: "lcm:record:9", sourceRef: "chat:9", chunkIndex: 0 },
+			]);
+			assert.equal(chunk?.sourceId, "lcm:record:9");
+			assert.equal(store.stats().requiresReindex, true);
+		} finally {
+			store.close();
+		}
+	});
 });

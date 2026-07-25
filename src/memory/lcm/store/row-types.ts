@@ -62,7 +62,6 @@ export interface LcmSummarySourceRow {
 	summary_id: number;
 	ord: number;
 	record_id: number | null;
-	source_summary_id: number | null;
 	source_ref: string | null;
 	snapshot_json: string | null;
 }

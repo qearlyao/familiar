@@ -453,19 +453,12 @@ export class LcmContextTransformer {
 		seen.add(summaryId);
 		const parents = this.lcmStore.getSummaryParents(summaryId);
 		if (parents.length > 0) {
-			// Condensed summaries use canonical parent edges; source rows are legacy advisory lineage.
 			return parents.flatMap((parentId) => this.summaryCoveredSourceIds(parentId, seen));
 		}
-
-		const ids: string[] = [];
-		for (const source of this.lcmStore.getSummarySources(summaryId)) {
-			if (source.sourceSummaryId !== null) {
-				ids.push(...this.summaryCoveredSourceIds(source.sourceSummaryId, seen));
-			} else if (source.sourceRef) {
-				ids.push(source.sourceRef);
-			}
-		}
-		return ids;
+		return this.lcmStore
+			.getSummarySources(summaryId)
+			.map((source) => source.sourceRef)
+			.filter((sourceRef): sourceRef is string => Boolean(sourceRef));
 	}
 }
 

@@ -32,7 +32,7 @@ describe("LcmStore", () => {
 	it("creates the normalized source DB and round-trips records with provenance", async (t) => {
 		const store = await openStore(t);
 		try {
-			assert.equal(store.schemaVersion(), 9);
+			assert.equal(store.schemaVersion(), 10);
 			store.ensureSegment({
 				id: "seg-a",
 				sessionId: "session-a",
@@ -641,7 +641,7 @@ describe("LcmStore", () => {
 
 		store = new LcmStore({ path });
 		try {
-			assert.equal(store.schemaVersion(), 9);
+			assert.equal(store.schemaVersion(), 10);
 			assert.deepEqual(
 				store.listContextItems("room-legacy").map((item) => ({
 					ordinal: item.ordinal,
@@ -659,6 +659,118 @@ describe("LcmStore", () => {
 				["session_key", "ordinal", "summary_id", "fingerprint", "happened_at", "updated_at"],
 			);
 			assert.equal(columns.find((column) => column.name === "summary_id")?.notnull, 1);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("migrates legacy records that duplicated the outbound final text", async (t) => {
+		const path = await tempDbPath(t);
+		const reply = "fish pie, you mean? yeah, heard of it. bones and regret.";
+		let store = new LcmStore({ path });
+		let mergedId: number;
+		let trailingId: number;
+		let flatId: number;
+		let cleanId: number;
+		try {
+			// Merged shape: final text concatenated onto the trailing text part.
+			mergedId = store.insertRecord({
+				segmentId: "seg-dup",
+				kind: "assistant",
+				text: `[thinking] pondering\n${reply}${reply}`,
+				parts: [
+					{ kind: "thinking", text: "pondering" },
+					{ kind: "text", text: `${reply}${reply}` },
+				],
+				source: source("dup-merged"),
+			});
+			// Appended shape: duplicate trailing text part after a tool call.
+			trailingId = store.insertRecord({
+				segmentId: "seg-dup",
+				kind: "assistant",
+				text: `${reply}\n[tool_call: web_search({})]\n${reply}`,
+				parts: [
+					{ kind: "text", text: reply },
+					{ kind: "tool_call", toolCallId: "call-1", toolName: "web_search", arguments: {} },
+					{ kind: "text", text: reply },
+				],
+				source: source("dup-trailing"),
+			});
+			// Legacy no-parts shape: doubled text_full.
+			flatId = store.insertRecord({
+				segmentId: "seg-dup",
+				kind: "assistant",
+				text: `${reply}\n${reply}`,
+				source: source("dup-flat"),
+			});
+			cleanId = store.insertRecord({
+				segmentId: "seg-dup",
+				kind: "assistant",
+				text: reply,
+				parts: [{ kind: "text", text: reply }],
+				source: source("dup-clean"),
+			});
+			store.db.prepare("UPDATE lcm_meta SET v = '9' WHERE k = 'schema_version'").run();
+		} finally {
+			store.close();
+		}
+
+		store = new LcmStore({ path });
+		try {
+			const merged = store.getRecord(mergedId);
+			assert.equal(merged?.text, `[thinking] pondering\n${reply}`);
+			assert.deepEqual(
+				merged?.parts?.map((part) => (part.kind === "text" ? part.text : part.kind)),
+				["thinking", reply],
+			);
+			const trailing = store.getRecord(trailingId);
+			assert.deepEqual(
+				trailing?.parts?.map((part) => (part.kind === "text" ? part.text : part.kind)),
+				[reply, "tool_call"],
+			);
+			assert.equal(store.getRecord(flatId)?.text, reply);
+			assert.equal(store.getRecord(cleanId)?.text, reply);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("backfills summary parents from advisory source_summary_id and drops the column", async (t) => {
+		const path = await tempDbPath(t);
+		let store = new LcmStore({ path });
+		let parentId: number;
+		let childId: number;
+		try {
+			parentId = store.insertSummary({
+				segmentId: "seg-advisory",
+				depth: 1,
+				status: "ready",
+				text: "leaf summary",
+				source: { sourceType: "manual", sourceRef: "sum:advisory-leaf" },
+			});
+			childId = store.insertSummary({
+				segmentId: "seg-advisory",
+				depth: 2,
+				status: "ready",
+				text: "condensed summary",
+				source: { sourceType: "manual", sourceRef: "sum:advisory-condensed" },
+				sourceItems: [{ sourceRef: `lcm_summary:${parentId}` }],
+			});
+			store.db.exec(
+				"ALTER TABLE lcm_summary_sources ADD COLUMN source_summary_id INTEGER REFERENCES lcm_summaries(id) ON DELETE SET NULL",
+			);
+			store.db
+				.prepare("UPDATE lcm_summary_sources SET source_summary_id = ? WHERE summary_id = ?")
+				.run(parentId, childId);
+		} finally {
+			store.close();
+		}
+
+		store = new LcmStore({ path });
+		try {
+			assert.deepEqual(store.getSummaryParents(childId), [parentId]);
+			const columns = store.db.prepare("PRAGMA table_info(lcm_summary_sources)").all() as Array<{ name: string }>;
+			assert.ok(!columns.some((column) => column.name === "source_summary_id"));
 		} finally {
 			store.close();
 		}
@@ -687,7 +799,7 @@ async function storeWithClosedSegments(t: { after(fn: () => Promise<void>): void
 		depth: 2,
 		text: "d2 summary",
 		source: { sourceType: "manual", sourceRef: "sum:a2" },
-		sourceItems: [{ summaryId: 1 }],
+		sourceItems: [{ sourceRef: "lcm_summary:1" }],
 	});
 	store.closeSegment("seg-a", "2026-05-10T02:00:00.000Z");
 

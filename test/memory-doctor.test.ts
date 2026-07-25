@@ -197,6 +197,40 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
+	it("clears requires_reindex only after a successful full forced reindex", async (t) => {
+		const config = await tempConfig(t);
+		const service = MemoryService.createWithoutRuntime(config);
+		try {
+			insertRecord(service, "seg-reindex-flag", "record to reindex");
+			service.memoryStore.db
+				.prepare("INSERT OR REPLACE INTO memory_meta(k, v) VALUES ('requires_reindex', '1')")
+				.run();
+
+			const failingProvider = new FakeEmbeddingProvider();
+			failingProvider.embed = async () => {
+				throw new Error("embedding failed");
+			};
+			await assert.rejects(
+				__memoryOperatorTest.reindex(config, service, { force: true }, failingProvider),
+				/embedding failed/,
+			);
+			assert.equal(service.memoryStore.stats().requiresReindex, true);
+
+			await __memoryOperatorTest.reindex(
+				config,
+				service,
+				{ corpus: "lcm_record", force: true },
+				new FakeEmbeddingProvider(),
+			);
+			assert.equal(service.memoryStore.stats().requiresReindex, true);
+
+			await __memoryOperatorTest.reindex(config, service, { force: true }, new FakeEmbeddingProvider());
+			assert.equal(service.memoryStore.stats().requiresReindex, false);
+		} finally {
+			service.close();
+		}
+	});
+
 	it("backs up both sqlite databases", async (t) => {
 		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);

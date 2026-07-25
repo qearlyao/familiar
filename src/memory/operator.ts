@@ -164,11 +164,6 @@ async function reindex(
 	embeddingProvider?: EmbeddingProvider,
 	signal?: AbortSignal,
 ): Promise<void> {
-	if (options.force) {
-		service.memoryStore.db
-			.prepare("DELETE FROM memory_meta WHERE k IN ('embedding_model', 'embedding_dimensions', 'requires_reindex')")
-			.run();
-	}
 	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
 	const runDelete = () => {
 		for (const corpus of corpora) deleteCorpus(service.memoryStore, corpus);
@@ -213,6 +208,9 @@ async function reindex(
 			chunks += file.result.ids.length;
 			printProgress(chunks);
 		}
+	}
+	if (options.force && !options.corpus && !signal?.aborted) {
+		service.memoryStore.db.prepare("DELETE FROM memory_meta WHERE k = 'requires_reindex'").run();
 	}
 	console.log(`Reindexed ${chunks} chunk(s)`);
 }

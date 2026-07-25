@@ -107,7 +107,6 @@ export interface LcmSummaryParentSnapshot {
 
 export interface LcmSummarySourceInput {
 	recordId?: number | null;
-	summaryId?: number | null;
 	sourceRef?: string | null;
 	snapshot?: Record<string, unknown> | null;
 }
@@ -148,7 +147,6 @@ export interface StoredLcmSummarySource {
 	summaryId: number;
 	ord: number;
 	recordId: number | null;
-	sourceSummaryId: number | null;
 	sourceRef: string | null;
 	snapshot: Record<string, unknown> | null;
 }

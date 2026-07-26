@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 - 2026-07-26
+
+### Fixed
+
+- Keep reader page attachments aligned to the actually visible text so long opening paragraphs no longer lose text at the top of the captured page.
+- Apply live changes to `memory.lcm.new_session_retain_depth` on the next `/new` session rotation without requiring a restart.
+- Reject EPUB stylesheets containing HTML comment openers and update PostCSS past its source-map path traversal advisory.
+
 ## 0.8.0 - 2026-07-26
 
 ### Added

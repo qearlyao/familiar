@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.0 - 2026-07-26
+
+### Added
+
+- Add a shared EPUB library and paginated WebUI reader with durable reading state, annotations, and book-scoped conversations.
+- Let reader margin messages attach the visible page or selected passage with chapter and offset citations.
+
+### Changed
+
+- Preserve sanitized publisher styles, separate EPUB navigation contents from the reading spine, and adapt supported ornaments to reader themes.
+- Make memory reindexing resumable across interruptions, with transient embedding retries, concurrent-run protection, and `--restart` for deliberate clean rebuilds.
+- Bump the pi dependency set to `0.82.1`, bringing refreshed model and provider metadata plus upstream retry, caching, and OpenAI Codex WebSocket fixes.
+
+### Fixed
+
+- Rebuild uploaded EPUB markup through strict allowlists so executable content cannot survive ingestion.
+- Close and repair stale active memory segments so completed backfills do not block explicit pruning.
+
+### Breaking
+
+- The memory index schema has changed and upgraded indexes are marked for a full rebuild. **Run `familiar memory reindex --force` as soon as possible after upgrading to `0.8.0`, before relying on memory recall.** Reindexing is resumable; rerun the same command after an interruption, or use `--restart` only to discard partial progress and rebuild from scratch.
+- Remove legacy manual agent endpoint fields and deprecated config aliases. Migrate `agent.api`, `agent.model_id`, `agent.base_url`, and `agent.api_key_env` to `agent.model` plus `models.providers`, `models.base_urls`, and `models.api_key_envs`; rename `agent.cacheRetention` to `agent.cache_retention` and `memory.embedding.api` to `memory.embedding.format`.
+
 ## 0.7.1 - 2026-07-21
 
 ### Added

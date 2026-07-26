@@ -146,10 +146,14 @@ describe("page boundary trimming", () => {
 	});
 
 	it("drops paragraphs that trim away to nothing", () => {
-		const result = pageSegments("one\n\ntwo", [
-			{ start: 0, end: 3 },
-			{ start: 5, end: 8 },
-		]);
+		const result = pageSegments(
+			"one\n\ntwo",
+			[
+				{ start: 0, end: 3 },
+				{ start: 5, end: 8 },
+			],
+			{ start: 0, end: 8 },
+		);
 		assert.deepEqual(
 			result?.segments.map((s: { text: string }) => s.text),
 			["one", "two"],
@@ -159,6 +163,13 @@ describe("page boundary trimming", () => {
 	});
 
 	it("returns undefined when nothing is visible", () => {
-		assert.equal(pageSegments("text", []), undefined);
+		assert.equal(pageSegments("text", [], { start: 0, end: 0 }), undefined);
+	});
+
+	it("keeps a long paragraph when its beginning is visible", () => {
+		const text = `${"a".repeat(120)}. ${"b".repeat(120)}. ${"c".repeat(120)}.`;
+		const result = pageSegments(text, [{ start: 0, end: text.length }], { start: 0, end: text.length });
+		assert.equal(result?.start, 0);
+		assert.equal(result?.segments[0]?.text, text);
 	});
 });

@@ -25,6 +25,32 @@ function spanOf(index: TextIndex, block: HTMLElement): { start: number; end: num
   return { start: first.start, end: last.start + (last.node.textContent?.length ?? 0) };
 }
 
+function pointOffset(index: TextIndex, x: number, y: number): number | undefined {
+  const position = document.caretPositionFromPoint?.(x, y);
+  const range = document.caretRangeFromPoint?.(x, y);
+  const node = position?.offsetNode ?? range?.startContainer;
+  const offset = position?.offset ?? range?.startOffset;
+  if (node?.nodeType !== Node.TEXT_NODE || offset === undefined) return undefined;
+  const entry = index.nodes.find(({ node: textNode }) => textNode === node);
+  return entry ? entry.start + offset : undefined;
+}
+
+function visibleOffsets(index: TextIndex, entry: TextIndex["nodes"][number], rects: DOMRect[]): { start: number; end: number } {
+  const entryEnd = entry.start + (entry.node.textContent?.length ?? 0);
+  const offsets: number[] = [];
+  for (const rect of [rects[0]!, rects[rects.length - 1]!]) {
+    const inset = Math.min(1, rect.width / 2);
+    for (const x of [rect.left + inset, rect.right - inset]) {
+      const offset = pointOffset(index, x, rect.top + rect.height / 2);
+      if (offset !== undefined) offsets.push(offset);
+    }
+  }
+  if (offsets.length === 0) throw new Error("Unable to resolve visible page text bounds");
+  const start = Math.max(entry.start, Math.min(entryEnd, Math.min(...offsets)));
+  const end = Math.max(start, Math.min(entryEnd, Math.max(...offsets)));
+  return { start, end: end === start && start < entryEnd ? start + 1 : end };
+}
+
 /**
  * What's actually on screen, snapped out to whole paragraphs. Columns flow
  * horizontally, so "visible" is a horizontal band: a text node is on this page
@@ -40,11 +66,13 @@ export function visiblePage(
   const bounds = viewport.getBoundingClientRect();
   const blocks: HTMLElement[] = [];
   const range = document.createRange();
+  let firstVisible: { entry: TextIndex["nodes"][number]; rects: DOMRect[] } | undefined;
+  let lastVisible: typeof firstVisible;
 
-  for (const { node } of index.nodes) {
-    if (!node.textContent?.trim()) continue;
-    range.selectNodeContents(node);
-    const onPage = Array.from(range.getClientRects()).some(
+  for (const entry of index.nodes) {
+    if (!entry.node.textContent?.trim()) continue;
+    range.selectNodeContents(entry.node);
+    const rects = Array.from(range.getClientRects()).filter(
       (rect) =>
         rect.width > 0 &&
         rect.left >= bounds.left - EDGE_SLACK &&
@@ -52,11 +80,16 @@ export function visiblePage(
         rect.bottom > bounds.top &&
         rect.top < bounds.bottom,
     );
-    if (!onPage) continue;
-    const block = blockAncestor(node, content);
+    if (rects.length === 0) continue;
+    firstVisible ??= { entry, rects };
+    lastVisible = { entry, rects };
+    const block = blockAncestor(entry.node, content);
     if (blocks[blocks.length - 1] !== block) blocks.push(block);
   }
 
+  if (!firstVisible || !lastVisible) return undefined;
   const spans = blocks.map((block) => spanOf(index, block)).filter((s): s is { start: number; end: number } => !!s);
-  return pageSegments(index.text, spans);
+  const start = visibleOffsets(index, firstVisible.entry, firstVisible.rects).start;
+  const end = visibleOffsets(index, lastVisible.entry, lastVisible.rects).end;
+  return pageSegments(index.text, spans, { start, end });
 }

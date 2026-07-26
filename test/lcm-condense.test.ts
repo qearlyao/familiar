@@ -269,7 +269,7 @@ describe("LCM condense", () => {
 			lcmStore: store,
 			memoryStore: nullMemoryStore(),
 			indexer: nullIndexer(),
-			newSessionRetainDepth: 2,
+			newSessionRetainDepth: () => 2,
 		});
 		const summarizer: LcmSummarizer = {
 			async summarizeLeaf(input) {
@@ -332,7 +332,7 @@ describe("LCM condense", () => {
 			lcmStore: store,
 			memoryStore: nullMemoryStore(),
 			indexer: nullIndexer(),
-			newSessionRetainDepth: 2,
+			newSessionRetainDepth: () => 2,
 		});
 		let condensedCalls = 0;
 		let now = 100_000;
@@ -440,7 +440,7 @@ describe("LCM condense", () => {
 					lcmStore: store,
 					memoryStore: nullMemoryStore(),
 					indexer: nullIndexer(),
-					newSessionRetainDepth: 2,
+					newSessionRetainDepth: () => 2,
 				}),
 				now: () => now,
 			});

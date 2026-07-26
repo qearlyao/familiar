@@ -10,7 +10,7 @@ export interface LcmSegmentManagerOptions {
 	lcmStore: LcmStore;
 	memoryStore: MemoryIndexStore;
 	indexer: ChunkIndexer;
-	newSessionRetainDepth: number;
+	newSessionRetainDepth: () => number;
 	onRotate?: (sessionKey: string) => void;
 }
 
@@ -18,7 +18,7 @@ export class LcmSegmentManager {
 	private readonly lcmStore: LcmStore;
 	private readonly memoryStore: MemoryIndexStore;
 	private readonly indexer: ChunkIndexer;
-	private readonly newSessionRetainDepth: number;
+	private readonly newSessionRetainDepth: () => number;
 	private readonly onRotate?: (sessionKey: string) => void;
 	private readonly activeSegments = new Map<string, string>();
 	private readonly segmentCounters = new Map<string, number>();
@@ -121,7 +121,7 @@ export class LcmSegmentManager {
 				this.lcmStore.clearContextItems(runtime.channelKey);
 				this.lcmStore.clearSessionState(runtime.channelKey);
 				const retention = this.lcmStore.applyNewSessionRetention({
-					newSessionRetainDepth: this.newSessionRetainDepth,
+					newSessionRetainDepth: this.newSessionRetainDepth(),
 					activeSegmentId: nextSegmentId,
 				});
 				indexDeletes = retention.indexDeletes;

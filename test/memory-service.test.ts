@@ -450,6 +450,46 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("uses the live new-session retention setting when rotating segments", async (t) => {
+		const config = await memoryConfig(t);
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = MemoryService.createWithoutRuntime(config);
+			const log = memoryLog();
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "web-web-live-retention",
+				log,
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
+			try {
+				await runtime.ingestInbound({
+					messageId: "m1",
+					authorId: "owner",
+					text: "retention baseline",
+				});
+				await service.flush();
+				service.lcmStore.insertSummary({
+					segmentId: "web-web-live-retention:seg-1",
+					depth: 2,
+					status: "ready",
+					text: "old retained summary",
+					source: { sourceType: "manual", sourceRef: "summary:live-retention" },
+				});
+				assert.equal(service.lcmStore.listSummaries().length, 1);
+
+				config.memory.lcm.newSessionRetainDepth = 3;
+				await runtime.resetConversation("new conversation requested");
+				await service.flush();
+
+				assert.equal(service.lcmStore.listSummaries().length, 0);
+			} finally {
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
 	it("automatically summarizes old LCM context once it exceeds the leaf trigger", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = {

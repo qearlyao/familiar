@@ -199,6 +199,21 @@ describe("web books", () => {
 		assert.match(chapter.html, /&amp;lt;script&amp;gt;literal&amp;lt;\/script&amp;gt;/);
 	});
 
+	it("rejects overlapping HTML comments in EPUB stylesheets", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const record = await ingestBook(config, {
+			name: "hostile-css.epub",
+			buffer: tinyEpub("", {
+				"OPS/stylesheet.css": strToU8(
+					`.safe { color: green; } <!<!--nested-->-- .dangerous { color: red; } -->`,
+				),
+			}),
+		});
+		const chapter = await readWebBookChapter(config, record.id, 1);
+
+		assert.equal(chapter.css, undefined);
+	});
+
 	it("re-encodes white-ground ornament images as ink on transparency", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		// 16x4 white strip with a black 8px run: grayscale, white ground, real ink.

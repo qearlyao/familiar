@@ -396,9 +396,8 @@ function sanitizeStylesheet(
 	files: Map<string, Uint8Array>,
 	assets: Map<string, Uint8Array>,
 ): string {
-	if (Buffer.byteLength(css, "utf8") > MAX_EPUB_CSS_BYTES) return "";
+	if (Buffer.byteLength(css, "utf8") > MAX_EPUB_CSS_BYTES || css.includes("<!--")) return "";
 	const cleaned = css
-		.replace(/<!--[\s\S]*?-->/g, "")
 		.replace(/\/\*[\s\S]*?\*\//g, "")
 		.replace(/@(?:charset|import|namespace)\b[^;{}]*(?:;|$)/gi, "")
 		.replace(/@(?:font-face|page)\b[^{]*\{[^{}]*\}/gi, "")

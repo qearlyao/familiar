@@ -3,6 +3,12 @@ name: mcporter
 description: MCP tool-calling via CLI. Use this to interact with MCP servers (e.g. games) through bash commands.
 ---
 
+## How to Use
+
+```
+npm install -g mcporter
+```
+
 ## Config
 
 Location: `~/.mcporter/mcporter.json`

@@ -152,10 +152,15 @@ export class ConversationRuntime {
 
 	private async initialize(): Promise<void> {
 		await this.log.acquire(`familiar-${process.pid}-${this.channelKey}`);
-		this.records = await this.log.read();
-		this.nextRecordId = this.records.reduce((max, record) => Math.max(max, record.recordId), 0) + 1;
-		this.lastUserInteractionAt = this.findLastUserInteractionAt();
-		this.rebuildPendingJobs();
+		try {
+			this.records = await this.log.read();
+			this.nextRecordId = this.records.reduce((max, record) => Math.max(max, record.recordId), 0) + 1;
+			this.lastUserInteractionAt = this.findLastUserInteractionAt();
+			this.rebuildPendingJobs();
+		} catch (error) {
+			await this.log.release().catch(() => undefined);
+			throw error;
+		}
 	}
 
 	private findLastUserInteractionAt(): number {

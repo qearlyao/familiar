@@ -1,5 +1,7 @@
-import { appendFile, mkdir, open, readdir, readFile, rm } from "node:fs/promises";
+import { appendFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+
+import lockfile from "proper-lockfile";
 
 import type { Config } from "../config/index.js";
 import { isEnoent, readFileOrNull } from "../util/fs.js";
@@ -270,6 +272,23 @@ function isPidAlive(pid: number): boolean {
 	}
 }
 
+// v0.8.1 wrote a plain file here; proper-lockfile needs the path free for its lock directory.
+// ponytail: migration-only — delete this plus extractOwnerPid/isPidAlive once every deploy has booted on 0.8.2+.
+async function clearLegacyLock(lockPath: string): Promise<void> {
+	const existing = await lstat(lockPath).catch((error: unknown) => {
+		if (isEnoent(error)) return null;
+		throw error;
+	});
+	if (!existing || existing.isDirectory()) return;
+	if (!existing.isFile()) throw new Error(`Chat channel lock path is neither a lock file nor a lock dir: ${lockPath}`);
+	const existingOwner = (await readFileOrNull(lockPath, "utf8"))?.trim() ?? "";
+	const existingPid = extractOwnerPid(existingOwner);
+	if (existingPid !== undefined && isPidAlive(existingPid)) {
+		throw new Error(`Chat channel is already locked by ${existingOwner}`);
+	}
+	await rm(lockPath, { force: true });
+}
+
 function isChatLogRecord(value: unknown): value is ChatLogRecord {
 	if (!value || typeof value !== "object") return false;
 	const record = value as Record<string, unknown>;
@@ -279,6 +298,9 @@ function isChatLogRecord(value: unknown): value is ChatLogRecord {
 export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog {
 	const dir = chatChannelDir(config, channel);
 	const lockPath = chatLockPath(config, channel);
+	const ownerPath = `${lockPath}.owner`;
+	const staleMs = 30_000;
+	let releaseLock: (() => Promise<void>) | undefined;
 	let appendTail: Promise<void> = Promise.resolve();
 	return {
 		channel,
@@ -322,34 +344,47 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 			return operation;
 		},
 		async acquire(owner: string): Promise<void> {
-			await mkdir(dirname(lockPath), { recursive: true });
+			await mkdir(dir, { recursive: true });
+			await clearLegacyLock(lockPath);
+			let acquiredRelease: (() => Promise<void>) | undefined;
 			try {
-				const handle = await open(lockPath, "wx");
-				try {
-					await handle.writeFile(`${owner}\n`, "utf8");
-				} finally {
-					await handle.close();
-				}
-				return;
+				acquiredRelease = await lockfile.lock(dir, {
+					realpath: false,
+					lockfilePath: lockPath,
+					retries: 0,
+					stale: staleMs,
+					update: staleMs / 2,
+					// The lease heartbeat lost the lock (blocked event loop, disk stall). Drop our claim quietly;
+					// the default handler rethrows from a timer callback and takes the whole process down.
+					onCompromised: (error) => {
+						releaseLock = undefined;
+						console.error(`chat lease compromised for ${lockPath}`, error);
+					},
+				});
+				await writeFile(ownerPath, `${owner}\n`, "utf8");
+				releaseLock = acquiredRelease;
 			} catch (error) {
-				if (getErrorCode(error) !== "EEXIST") throw error;
-			}
-			const existingOwner = (await readFileOrNull(lockPath, "utf8"))?.trim() ?? "";
-			const existingPid = extractOwnerPid(existingOwner);
-			if (existingPid !== undefined && !isPidAlive(existingPid)) {
-				await rm(lockPath, { force: true });
-				const handle = await open(lockPath, "wx");
-				try {
-					await handle.writeFile(`${owner}\n`, "utf8");
-				} finally {
-					await handle.close();
+				if (acquiredRelease) {
+					await acquiredRelease();
+					throw error;
 				}
-				return;
+				if (getErrorCode(error) !== "ELOCKED") throw error;
+				const existingOwner = (await readFileOrNull(ownerPath, "utf8"))?.trim() ?? "";
+				throw new Error(`Chat channel is already locked by ${existingOwner || "another familiar process"}`);
 			}
-			throw new Error(`Chat channel is already locked by ${existingOwner || "another familiar process"}`);
 		},
 		async release(): Promise<void> {
-			await rm(lockPath, { force: true });
+			const release = releaseLock;
+			releaseLock = undefined;
+			if (!release) return;
+			// Drop the owner marker while we still hold the lock, or we race the next holder's write.
+			await rm(ownerPath, { force: true });
+			try {
+				await release();
+			} catch (error) {
+				const code = getErrorCode(error);
+				if (code !== "ERELEASED" && code !== "ENOTACQUIRED") throw error;
+			}
 		},
 	};
 }

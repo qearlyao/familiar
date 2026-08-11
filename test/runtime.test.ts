@@ -1,11 +1,38 @@
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
+import { dirname } from "node:path";
 
-import { createChatLog } from "../src/conversation/chat-log.js";
+import { chatLogPath, createChatLog } from "../src/conversation/chat-log.js";
 import { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("ConversationRuntime", () => {
+	it("releases the chat lease when initialization cannot read history", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const channel = { service: "web", scope: "web", channelId: "owner" } as const;
+		const chatPath = chatLogPath(config, channel);
+		await mkdir(dirname(chatPath), { recursive: true });
+		await writeFile(chatPath, "{invalid json\n", "utf8");
+
+		await assert.rejects(
+			ConversationRuntime.connect({
+				channelKey: "web-web-owner",
+				log: createChatLog(config, channel),
+				ownerId: "owner",
+			}),
+		);
+
+		await writeFile(chatPath, "", "utf8");
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, channel),
+			ownerId: "owner",
+		});
+		t.after(() => runtime.disconnect());
+	});
+
 	it("renders prompt timestamps in local time while preserving stored UTC timestamps", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

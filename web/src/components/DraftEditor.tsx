@@ -143,10 +143,10 @@ export function DraftEditor({
               }}
               onKeyDown={(e) => {
                 if (onCommandKeyDown?.(e)) return;
-                const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                  if (isMobile) {
-                    // Mobile: Enter always inserts newline, user must tap Send button
+                  if (isCoarsePointer) {
+                    // Coarse pointer: Enter always inserts newline, user must tap Send button
                     return;
                   } else {
                     // Desktop: Enter sends (unless Shift held)

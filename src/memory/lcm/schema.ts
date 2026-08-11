@@ -1,8 +1,5 @@
 import type Database from "better-sqlite3";
 
-import { flattenLcmRecordParts } from "./normalize.js";
-import type { LcmRecordPart } from "./types.js";
-
 const SCHEMA_VERSION = 10;
 
 export function runLcmMigrations(db: Database.Database): void {
@@ -119,12 +116,9 @@ export function runLcmMigrations(db: Database.Database): void {
 			);
 		`);
 
-		const previousVersion = Number(readMeta(db, "schema_version") ?? "0");
 		migrateRecordPartsColumn(db);
 		migrateSummarySnapshotColumn(db);
 		migrateContextItemsSummaryOnly(db);
-		migrateAdvisorySummaryLineage(db);
-		if (previousVersion > 0 && previousVersion < 10) migrateDuplicatedRecordText(db);
 		db.exec(`
 			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_session ON lcm_context_items(session_key);
 			CREATE INDEX IF NOT EXISTS idx_lcm_context_items_summary ON lcm_context_items(summary_id);
@@ -159,110 +153,6 @@ function migrateSummarySnapshotColumn(db: Database.Database): void {
 	const columns = db.prepare("PRAGMA table_info(lcm_summaries)").all() as Array<{ name: string }>;
 	if (columns.some((column) => column.name === "snapshot_json")) return;
 	db.prepare("ALTER TABLE lcm_summaries ADD COLUMN snapshot_json TEXT").run();
-}
-
-/**
- * source_summary_id was an advisory summary-to-summary edge superseded by
- * lcm_summary_parents. Condensation always wrote both, so the backfill is a
- * safety net for summaries that somehow only carry the advisory edge.
- */
-function migrateAdvisorySummaryLineage(db: Database.Database): void {
-	const columns = db.prepare("PRAGMA table_info(lcm_summary_sources)").all() as Array<{ name: string }>;
-	if (!columns.some((column) => column.name === "source_summary_id")) return;
-	db.exec(`
-		INSERT OR IGNORE INTO lcm_summary_parents (summary_id, parent_summary_id, ord)
-		SELECT summary_id, source_summary_id, ord
-		FROM lcm_summary_sources
-		WHERE source_summary_id IS NOT NULL
-			AND summary_id NOT IN (SELECT summary_id FROM lcm_summary_parents);
-		ALTER TABLE lcm_summary_sources DROP COLUMN source_summary_id;
-	`);
-}
-
-/**
- * Records written before appendAssistantFinalText guarded the outbound final
- * text stored it twice: merged into the trailing text part or appended as a
- * duplicate trailing part. One-time cleanup so index/context read canonical
- * rows without runtime collapse heuristics.
- */
-function migrateDuplicatedRecordText(db: Database.Database): void {
-	const rows = db
-		.prepare("SELECT id, text_full, parts_json FROM lcm_records WHERE kind IN ('user', 'assistant')")
-		.all() as Array<{ id: number; text_full: string; parts_json: string | null }>;
-	const update = db.prepare(
-		"UPDATE lcm_records SET text_full = ?, parts_json = ?, updated_at = unixepoch() WHERE id = ?",
-	);
-	for (const row of rows) {
-		const parts = parseRecordParts(row.parts_json);
-		if (parts) {
-			const cleaned = collapseDuplicatedParts(parts);
-			if (!cleaned) continue;
-			update.run(flattenLcmRecordParts(cleaned), JSON.stringify(cleaned), row.id);
-		} else {
-			const collapsed = collapseDuplicatedText(row.text_full);
-			if (collapsed !== row.text_full) update.run(collapsed, row.parts_json, row.id);
-		}
-	}
-}
-
-function parseRecordParts(json: string | null): LcmRecordPart[] | null {
-	if (!json) return null;
-	try {
-		const parsed = JSON.parse(json) as unknown;
-		return Array.isArray(parsed) && parsed.length > 0 ? (parsed as LcmRecordPart[]) : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Returns cleaned parts, or null when nothing changed. The duplicate was
- * always the full visible text re-appended at the end — either merged into
- * the trailing text part or pushed as a new one — so a single suffix split of
- * the trailing text part covers every shape.
- * ponytail: O(n²) scan per record, fine for a one-time pass over a chat log.
- */
-function collapseDuplicatedParts(parts: LcmRecordPart[]): LcmRecordPart[] | null {
-	const last = parts.at(-1);
-	if (last?.kind !== "text") return null;
-	const earlier = parts
-		.slice(0, -1)
-		.filter((part): part is Extract<LcmRecordPart, { kind: "text" }> => part.kind === "text")
-		.map((part) => part.text)
-		.join("\n");
-	for (let split = 0; split <= last.text.length; split += 1) {
-		const prefix = last.text.slice(0, split);
-		const suffix = last.text.slice(split);
-		const left = normalizeComparableText([earlier, prefix].join("\n"));
-		if (left.length < 24 || left !== normalizeComparableText(suffix)) continue;
-		const next = parts.slice(0, -1);
-		if (prefix.trim()) next.push({ ...last, text: prefix });
-		return next;
-	}
-	return null;
-}
-
-function collapseDuplicatedText(text: string): string {
-	let normalized = text.trim();
-	for (let iteration = 0; iteration < 4; iteration += 1) {
-		const collapsed = collapseOnce(normalized);
-		if (collapsed === normalized) return normalized;
-		normalized = collapsed;
-	}
-	return normalized;
-}
-
-function collapseOnce(text: string): string {
-	for (let split = Math.floor(text.length / 2); split >= 24; split -= 1) {
-		const left = text.slice(0, split).trim();
-		const right = text.slice(split).trim();
-		if (left && normalizeComparableText(left) === normalizeComparableText(right)) return left;
-	}
-	return text;
-}
-
-function normalizeComparableText(text: string): string {
-	return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function migrateContextItemsSummaryOnly(db: Database.Database): void {

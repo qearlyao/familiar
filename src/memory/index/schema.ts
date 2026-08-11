@@ -8,8 +8,6 @@ export interface MemoryIndexMigrationOptions {
 	embeddingDimensions: number;
 }
 
-// v5: legacy memory_chunks source columns dropped; pre-v5 indexes may hold
-// duplicated visible text, so upgrading flags requires_reindex once.
 const SCHEMA_VERSION = 5;
 
 export function runMemoryIndexMigrations(db: Database.Database, options: MemoryIndexMigrationOptions): void {
@@ -70,9 +68,6 @@ export function runMemoryIndexMigrations(db: Database.Database, options: MemoryI
 		);
 	`);
 
-	const previousVersion = Number(readMeta(db, "schema_version") ?? "0");
-	migrateMemoryIndexSources(db);
-	if (previousVersion > 0 && previousVersion < 5) writeMeta(db, "requires_reindex", "1");
 	reconcileEmbeddingConfig(db, options);
 	const vectorCapability = reconcileVectorTable(db, options, vec.available);
 	writeMeta(db, "schema_version", String(SCHEMA_VERSION));
@@ -151,51 +146,6 @@ function reconcileVectorTable(
 	} catch {
 		db.prepare("DROP TRIGGER IF EXISTS trg_memory_chunks_delete_vec").run();
 		return "blob-js";
-	}
-}
-
-function migrateMemoryIndexSources(db: Database.Database): void {
-	const columns = db.prepare("PRAGMA table_info(memory_chunks)").all() as { name: string }[];
-	const hasSourceColumns = columns.some((column) => column.name === "source_id");
-	if (hasSourceColumns) {
-		db.transaction(() => {
-			db.prepare(
-				`INSERT OR IGNORE INTO memory_index_sources(chunk_id, corpus, source_id, source_ref, chunk_index)
-				 SELECT id, corpus, source_id, source_ref, chunk_index
-				 FROM memory_chunks
-				 WHERE source_id IS NOT NULL`,
-			).run();
-			db.exec(`
-				DROP INDEX IF EXISTS idx_memory_chunks_source;
-				ALTER TABLE memory_chunks DROP COLUMN source_id;
-				ALTER TABLE memory_chunks DROP COLUMN source_ref;
-				ALTER TABLE memory_chunks DROP COLUMN chunk_index;
-			`);
-		}).immediate();
-	}
-
-	const ftsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_fts'").get() as
-		| { sql: string }
-		| undefined;
-	if (ftsSql && (ftsSql.sql.includes("content='memory_chunks'") || !ftsSql.sql.includes("contentless_delete=1"))) {
-		db.transaction(() => {
-			db.prepare("DROP TABLE memory_fts").run();
-			db.prepare(
-				`CREATE VIRTUAL TABLE memory_fts USING fts5(
-					text_full,
-					snippet,
-					content='',
-					contentless_delete=1
-				)`,
-			).run();
-			const rows = db.prepare("SELECT id, text_full, snippet FROM memory_chunks").all() as {
-				id: number;
-				text_full: string;
-				snippet: string;
-			}[];
-			const insert = db.prepare("INSERT INTO memory_fts(rowid, text_full, snippet) VALUES (?, ?, ?)");
-			for (const row of rows) insert.run(row.id, row.text_full, row.snippet);
-		}).immediate();
 	}
 }
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.2 - 2026-08-12
+
+### Added
+
+- Add an `mcporter` skill with setup and command examples for calling configured MCP servers from the CLI.
+
+### Changed
+
+- Bump the pi dependency set to `0.84.1`, adding Qwen Token Plan Individual and Baseten provider support plus upstream authentication, streaming, and tool-validation fixes.
+
+### Fixed
+
+- Recover stale per-channel chat leases after crashes or restarts while preserving exclusive ownership by a running Familiar process.
+- Detect the active pointer type for WebUI send-key behavior so touchscreen laptops used with a mouse keep desktop Enter handling.
+- Update Discord and WebUI dependencies past `undici` and `nanoid` security advisories.
+
+### Breaking
+
+- Remove the one-time memory migrations shipped in 0.8.0. If upgrading from a version below 0.8.0, install and start 0.8.0 or 0.8.1 first, run `familiar memory reindex --force`, and only then upgrade to 0.8.2.
+
 ## 0.8.1 - 2026-07-26
 
 ### Fixed

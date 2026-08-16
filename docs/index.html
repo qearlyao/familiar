@@ -610,6 +610,22 @@ familiar running for workspace ...</code></pre>
           <h2>Use the WebUI on your phone</h2>
           <p>To open Familiar from a phone on the same home Wi-Fi network, let the computer accept local-network connections.</p>
 
+          <h3>Use Familiar away from home with Tailscale</h3>
+          <p>Tailscale gives your phone a private connection to the computer running Familiar. This setup is for your private tailnet; it does not expose Familiar to the public internet.</p>
+          <ol>
+            <li>Install Tailscale on the home computer and your phone or laptop.</li>
+            <li>Sign in to the same tailnet on both devices and make sure its access rules allow the remote device to reach the home computer.</li>
+            <li>Keep Familiar listening on its default loopback address:</li>
+          </ol>
+          <pre><code>[web]
+port = 8787
+bind_address = "127.0.0.1"</code></pre>
+          <p>Restart Familiar after saving. On the home computer, run:</p>
+          <pre><code>tailscale serve --bg http://127.0.0.1:8787
+tailscale serve status</code></pre>
+          <p>Open the HTTPS address shown by <code>tailscale serve status</code> on your remote device. Keep the computer awake with both Tailscale and Familiar running. See the <a href="https://tailscale.com/docs/reference/tailscale-cli/serve">Tailscale Serve reference</a> for other Serve options.</p>
+          <p class="note">Do not use <code>tailscale funnel</code> for this private setup. Tailscale ACLs decide which devices can reach the computer; the optional Familiar bearer login below adds a second login boundary.</p>
+
           <h3>Listen on your local network</h3>
           <p>Open <code>config.toml</code> and change <code>bind_address</code> in its existing <code>[web]</code> section:</p>
           <pre><code>[web]
@@ -626,7 +642,7 @@ bind_address = "0.0.0.0"</code></pre>
           <p class="note"><code>0.0.0.0</code> is the address Familiar listens on, not an address to open in the phone's browser. It makes the WebUI available to other devices on the network, so use this only on a home network you trust.</p>
 
           <h3>Optional: require a login secret</h3>
-          <p>You can skip this on a trusted home network. If the computer uses a shared or public network, either return <code>bind_address</code> to <code>127.0.0.1</code> or protect the WebUI with bearer login.</p>
+          <p>You can skip this on a trusted home network. For Tailscale, it is optional defense-in-depth; use it if you do not want every permitted tailnet device to open the WebUI automatically. If the computer uses a shared or public network, either return <code>bind_address</code> to <code>127.0.0.1</code> or protect the WebUI with bearer login.</p>
           <p>Add a long password to <code>.env</code>:</p>
           <pre><code>FAMILIAR_WEB_BEARER_TOKEN=choose-a-long-random-password</code></pre>
           <p>Then change these lines in the existing <code>[web]</code> section of <code>config.toml</code> and restart Familiar:</p>

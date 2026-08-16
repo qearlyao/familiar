@@ -608,38 +608,36 @@ familiar running for workspace ...</code></pre>
 
         <section class="feature" id="mobile">
           <h2>Use the WebUI on your phone</h2>
-          <p>To open Familiar from a phone on the same home Wi-Fi network, let the computer accept local-network connections.</p>
+          <p>There are two ways to reach Familiar from another device, and they work at the same time. With Tailscale, one address works both at home and away, so nothing needs to be switched when you leave or come back. The local-network option is for devices without Tailscale, and only works at home.</p>
 
-          <h3>Use Familiar away from home with Tailscale</h3>
-          <p>Tailscale gives your phone a private connection to the computer running Familiar. This setup is for your private tailnet; it does not expose Familiar to the public internet.</p>
+          <h3>Recommended: one address everywhere with Tailscale</h3>
+          <p>Tailscale gives your phone a private connection to the computer running Familiar. When both devices are on your home network, the connection travels directly over the LAN; when you are away, it travels through your private tailnet. You open the same address either way, so one bookmark or home-screen app keeps working wherever you are. This does not expose Familiar to the public internet.</p>
           <ol>
-            <li>Install Tailscale on the home computer and your phone or laptop.</li>
-            <li>Sign in to the same tailnet on both devices and make sure its access rules allow the remote device to reach the home computer.</li>
-            <li>Keep Familiar listening on its default loopback address:</li>
+            <li>On the home computer, download Tailscale from the <a href="https://tailscale.com/download">official download page</a> (macOS, Windows, and Linux installers are listed there) and install it.</li>
+            <li>On your phone, install the Tailscale app from the <a href="https://apps.apple.com/us/app/tailscale/id1470499037">App Store</a> (iPhone/iPad) or <a href="https://play.google.com/store/apps/details?id=com.tailscale.ipn">Google Play</a> (Android).</li>
+            <li>Open Tailscale on both devices and sign in with the <strong>same account</strong> (Google, Apple, Microsoft, or GitHub all work). Signing in creates your private tailnet; two devices on the same account can reach each other by default.</li>
+            <li>Check that both devices show as connected — the Tailscale app lists every device in your tailnet. If you have customized tailnet access rules (ACLs), make sure they allow the phone to reach the home computer; a fresh account needs no changes.</li>
+            <li>On the home computer, run:</li>
           </ol>
-          <pre><code>[web]
-port = 8787
-bind_address = "127.0.0.1"</code></pre>
-          <p>Restart Familiar after saving. On the home computer, run:</p>
           <pre><code>tailscale serve --bg http://127.0.0.1:8787
 tailscale serve status</code></pre>
-          <p>Open the HTTPS address shown by <code>tailscale serve status</code> on your remote device. Keep the computer awake with both Tailscale and Familiar running. See the <a href="https://tailscale.com/docs/reference/tailscale-cli/serve">Tailscale Serve reference</a> for other Serve options.</p>
+          <p>Open the HTTPS address shown by <code>tailscale serve status</code> on the phone, at home or away. No <code>config.toml</code> change is needed: Tailscale forwards to Familiar on the computer itself, so <code>bind_address</code> can stay at its default <code>127.0.0.1</code> and nothing extra is opened to your network. Keep the computer awake with both Tailscale and Familiar running. See the <a href="https://tailscale.com/docs/reference/tailscale-cli/serve">Tailscale Serve reference</a> for other Serve options.</p>
           <p class="note">Do not use <code>tailscale funnel</code> for this private setup. Tailscale ACLs decide which devices can reach the computer; the optional Familiar bearer login below adds a second login boundary.</p>
 
-          <h3>Listen on your local network</h3>
+          <h3>Without Tailscale: your local network</h3>
+          <p>Use this for a phone or laptop that does not run Tailscale and is on the same Wi-Fi or wired LAN as the computer. It does not provide access when you are away from home.</p>
           <p>Open <code>config.toml</code> and change <code>bind_address</code> in its existing <code>[web]</code> section:</p>
           <pre><code>[web]
 port = 8787
 bind_address = "0.0.0.0"</code></pre>
-          <p>Restart Familiar after saving. If your computer asks about firewall access, allow private or local networks only.</p>
-
-          <h3>Open Familiar from your phone</h3>
+          <p>Restart Familiar after saving. If your computer asks about firewall access, allow private or local networks only. Then, from the nearby device:</p>
           <ol>
             <li>Make sure the phone and computer are on the same Wi-Fi network.</li>
             <li>Find the computer's local IP address in its network or Wi-Fi settings. It usually looks like <code>192.168.x.x</code>.</li>
             <li>On the phone, open <code>http://192.168.x.x:8787</code>, replacing the example IP with the computer's address.</li>
           </ol>
           <p class="note"><code>0.0.0.0</code> is the address Familiar listens on, not an address to open in the phone's browser. It makes the WebUI available to other devices on the network, so use this only on a home network you trust.</p>
+          <p>The two setups are independent and can be combined: <code>bind_address = "0.0.0.0"</code> does not interfere with Tailscale, and coming home or leaving never requires changing it. If every remote device runs Tailscale, you do not need <code>0.0.0.0</code> at all.</p>
 
           <h3>Optional: require a login secret</h3>
           <p>You can skip this on a trusted home network. For Tailscale, it is optional defense-in-depth; use it if you do not want every permitted tailnet device to open the WebUI automatically. If the computer uses a shared or public network, either return <code>bind_address</code> to <code>127.0.0.1</code> or protect the WebUI with bearer login.</p>

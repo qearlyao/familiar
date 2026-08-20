@@ -78,6 +78,7 @@ export function createAgentCore(deps: {
 	};
 	sources.set("web", webSource);
 	const priority: ChatService[] = ["discord", "qq", "web"];
+	// Resolve this on each scheduler call so a later live attachment takes over immediately.
 	const primary = (): PlatformSource =>
 		(deps.config.defaultPlatform && sources.get(deps.config.defaultPlatform)) ||
 		priority.map((service) => sources.get(service)).find((source): source is PlatformSource => source !== undefined)!;

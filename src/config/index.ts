@@ -392,6 +392,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const parsed = interpolateValue(parse(raw)) as Record<string, any>;
 
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
+	const qq = (parsed.qq ?? {}) as Record<string, unknown>;
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
 	const browser = (parsed.browser ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
@@ -454,6 +455,10 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const token = readOptionalConfigString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN");
 	const ownerId = readOptionalConfigString(discord.owner_id, "discord.owner_id");
 	if (token && !ownerId) throw new Error("Config value discord.owner_id is required when DISCORD_TOKEN is set");
+	assertKnownKeys(qq, "qq", ["ws_url", "owner_id", "allowed_groups"]);
+	const qqWsUrl = readOptionalConfigString(qq.ws_url, "qq.ws_url");
+	const qqOwnerId = readOptionalConfigString(qq.owner_id, "qq.owner_id");
+	if (qqWsUrl && !qqOwnerId) throw new Error("Config value qq.owner_id is required when qq.ws_url is set");
 	const defaultPlatform =
 		parsed.default_platform === undefined
 			? undefined
@@ -577,6 +582,12 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			),
 			collectDebounceMs: readInteger(discord.collect_debounce_ms, 4000, "discord.collect_debounce_ms"),
 			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
+		},
+		qq: {
+			wsUrl: qqWsUrl,
+			token: readOptionalConfigString(process.env.QQ_ONEBOT_TOKEN, "QQ_ONEBOT_TOKEN"),
+			ownerId: qqOwnerId,
+			allowedGroups: readStringArray(qq.allowed_groups, "qq.allowed_groups"),
 		},
 		web: {
 			port: readInteger(web.port, 8787, "web.port"),

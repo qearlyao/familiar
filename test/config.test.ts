@@ -38,6 +38,47 @@ model = "anthropic/claude-sonnet-4-5"
 		});
 	});
 
+	it("requires qq.owner_id when qq.ws_url is set and parses the qq section", async (t) => {
+		await withoutEnv("DISCORD_TOKEN", async () => {
+			const missingOwnerPath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+
+[qq]
+ws_url = "ws://127.0.0.1:3001"
+`,
+			);
+			await assert.rejects(() => loadConfig(missingOwnerPath), /qq\.owner_id/);
+
+			const workspacePath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+
+[qq]
+ws_url = "ws://127.0.0.1:3001"
+owner_id = "10001"
+allowed_groups = ["30003"]
+`,
+			);
+			const config = await loadConfig(workspacePath);
+			assert.equal(config.qq.wsUrl, "ws://127.0.0.1:3001");
+			assert.equal(config.qq.ownerId, "10001");
+			assert.deepEqual(config.qq.allowedGroups, ["30003"]);
+
+			const emptyConfigPath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+`,
+			);
+			const emptyConfig = await loadConfig(emptyConfigPath);
+			assert.equal(emptyConfig.qq.wsUrl, undefined);
+			assert.deepEqual(emptyConfig.qq.allowedGroups, []);
+		});
+	});
+
 	it("validates default_platform", async (t) => {
 		const workspacePath = await createWorkspace(
 			t,

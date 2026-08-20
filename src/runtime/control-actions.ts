@@ -4,6 +4,16 @@ import { type EffectiveSetting, formatSetting, type SettingsStore } from "../con
 import type { RestartHandler } from "../lifecycle/control.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 
+export function getChannelTriggerSetting(
+	config: Config,
+	settings: SettingsStore,
+	channelKey: string,
+	isDm: boolean,
+): EffectiveSetting<Config["discord"]["channelTrigger"]> {
+	if (isDm) return { value: "always", source: "config" };
+	return settings.getChannelTrigger(channelKey, config.discord.channelTrigger);
+}
+
 export function formatCommandResponse(
 	command: "status" | "compact",
 	runtime: ConversationRuntime,

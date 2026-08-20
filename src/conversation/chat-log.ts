@@ -28,7 +28,7 @@ export interface StoredAttachment {
 	size?: number;
 	remoteUrl?: string;
 	localPath?: string;
-	source?: "discord" | "web" | "generated";
+	source?: "discord" | "qq" | "web" | "generated";
 	sourceUrl?: string;
 	sha256?: string;
 	derived?: {

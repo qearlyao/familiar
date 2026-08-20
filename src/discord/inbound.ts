@@ -1,6 +1,5 @@
 import type { Message } from "discord.js";
 import type { Config } from "../config/index.js";
-import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
 import type { InboundChatRecord } from "../conversation/chat-log.js";
 import { materializeInboundAttachments } from "../media/inbound-attachments.js";
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
@@ -8,16 +7,6 @@ import { isDmChannel, messageMentionsBot } from "./channel.js";
 
 export function getDispatchMode(config: Config, message: Message): "steer" | "queue" | "collect" {
 	return isDmChannel(message.channel) ? config.discord.dmMode : config.discord.channelMode;
-}
-
-export function getChannelTriggerSetting(
-	config: Config,
-	settings: SettingsStore,
-	channelKey: string,
-	isDm: boolean,
-): EffectiveSetting<Config["discord"]["channelTrigger"]> {
-	if (isDm) return { value: "always", source: "config" };
-	return settings.getChannelTrigger(channelKey, config.discord.channelTrigger);
 }
 
 export function canSteerFromRecord(

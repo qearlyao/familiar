@@ -26,6 +26,7 @@ import {
 import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
+import { startQqDaemon } from "./qq/daemon.js";
 import { createAgentCore } from "./runtime/agent-core.js";
 import { startWebDaemon } from "./web/daemon.js";
 
@@ -172,13 +173,14 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
 	let stopping = false;
 	let discordDaemon: ReturnType<typeof startDiscordDaemon> | undefined;
+	let qqDaemon: ReturnType<typeof startQqDaemon> | undefined;
 	let webDaemon: Awaited<ReturnType<typeof startWebDaemon>> | undefined;
 	const stop = async (exitCode = 0) => {
 		if (stopping) return;
 		stopping = true;
 		console.log("Stopping familiar");
 		hotReload.close();
-		await Promise.all([webDaemon?.stop(), discordDaemon?.stop()]);
+		await Promise.all([webDaemon?.stop(), discordDaemon?.stop(), qqDaemon?.stop()]);
 		await agentCore.stop();
 		memoryService.close();
 		process.exit(exitCode);
@@ -197,6 +199,9 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {
 			restart: requestRestart,
 		});
+	}
+	if (config.qq.wsUrl) {
+		qqDaemon = startQqDaemon(config, familiarAgent, settings, agentCore, { restart: requestRestart });
 	}
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");

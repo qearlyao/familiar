@@ -86,6 +86,12 @@ export interface Config {
 		collectDebounceMs: number;
 		allowBotMessages: boolean;
 	};
+	qq: {
+		wsUrl?: string;
+		token?: string;
+		ownerId?: string;
+		allowedGroups: string[];
+	};
 	web: {
 		port: number;
 		authMode: WebAuthMode;

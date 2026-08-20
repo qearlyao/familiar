@@ -16,7 +16,7 @@ import type { RestartHandler } from "../lifecycle/control.js";
 import type { MemoryService } from "../memory/service.js";
 import type { AgentCore, ChatSession } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
-import { applyControlCommand } from "../runtime/control-actions.js";
+import { applyControlCommand, getChannelTriggerSetting } from "../runtime/control-actions.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
 import { isCanceledJob, runAgentTurn } from "../runtime/turn.js";
@@ -39,7 +39,7 @@ import {
 	replyEphemeral,
 	replyInteractionError,
 } from "./commands.js";
-import { canSteerFromRecord, getChannelTriggerSetting, getDispatchMode, toInboundInput } from "./inbound.js";
+import { canSteerFromRecord, getDispatchMode, toInboundInput } from "./inbound.js";
 import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./send.js";
 
 export interface DiscordDaemon {

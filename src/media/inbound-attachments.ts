@@ -23,7 +23,7 @@ const TEXT_ATTACHMENT_PREVIEW_CHARS = 1000;
 const MP4_FILE_TYPE_BRANDS = new Set(["avc1", "dash", "iso2", "isom", "M4V ", "mp41", "mp42", "MSNV"]);
 const AUDIO_CONTAINER_MIME_TYPES = new Set(["audio/mp4", "audio/webm"]);
 
-type AttachmentSource = "discord" | "web";
+type AttachmentSource = "discord" | "qq" | "web";
 
 export interface IncomingAttachment {
 	id?: string;

@@ -97,6 +97,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			...config,
 			...overrides,
 			discord: { ...config.discord, ...overrides.discord },
+			qq: { ...config.qq, ...overrides.qq },
 			web: { ...config.web, ...overrides.web },
 			browser: { ...config.browser, ...overrides.browser },
 			agent: { ...config.agent, ...overrides.agent },

@@ -174,7 +174,7 @@
 
     .quick-path {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 0;
       margin: var(--space-2xl) 0 0;
       padding: var(--space-lg) 0;
@@ -401,6 +401,19 @@
         display: flex;
         flex-wrap: wrap;
         gap: var(--space-sm) var(--space-lg);
+      }
+
+      .quick-path {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-md) var(--space-lg);
+      }
+
+      .quick-path li {
+        padding-inline: 0;
+      }
+
+      .quick-path li + li {
+        border-left: 0;
       }
     }
 

@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Message, MessageCreateOptions } from "discord.js";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
-import { parseAgentReply as parseSilentMarker } from "../runtime/silent-marker.js";
+import { normalizeOutboundText } from "../runtime/silent-marker.js";
 import type { DiscordChatChannel } from "./channel.js";
 import { chunkDiscord } from "./chunking.js";
 
@@ -25,10 +25,6 @@ async function delayBetweenBurstChunks(config: Config, channel: DiscordChatChann
 		void channel.sendTyping().catch(() => undefined);
 	}
 	await delay(NEWLINE_BURST_DELAY_MS);
-}
-
-export function normalizeOutboundText(text: string): string {
-	return text.trim() || "(empty response)";
 }
 
 function fallbackMimeType(name: string): string {
@@ -72,12 +68,6 @@ export async function postDiscordAttachments(
 	const data = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
 	if (!response.ok || !data.id) throw new Error(data.message || `Discord attachment send failed (${response.status})`);
 	return [data.id];
-}
-
-export function parseOutboundReply(text: string): { text: string; silent: boolean } {
-	const parsed = parseSilentMarker(text);
-	if (parsed.silent) return parsed;
-	return { text: normalizeOutboundText(parsed.text), silent: false };
 }
 
 async function sendChunkedMessage(

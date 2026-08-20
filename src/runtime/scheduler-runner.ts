@@ -2,13 +2,6 @@ import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
-import {
-	CRON_SKIPPED,
-	HEARTBEAT_SKIPPED,
-	heartbeatStillDue,
-	runAgentTurn,
-	scheduledUserMessage,
-} from "../discord/turn.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 import {
@@ -22,6 +15,7 @@ import {
 	type SchedulerState,
 	saveSchedulerState,
 } from "./scheduler.js";
+import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn, scheduledUserMessage } from "./turn.js";
 
 type SchedulerAgentWork = {
 	promptScheduledMessage(

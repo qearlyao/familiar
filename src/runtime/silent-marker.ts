@@ -9,3 +9,13 @@ export function parseAgentReply(text: string): { text: string; silent: boolean }
 	if (!text.includes(SILENT_RESPONSE_MARKER)) return { text, silent: false };
 	return { text: text.split(SILENT_RESPONSE_MARKER).join("").trim(), silent: true };
 }
+
+export function normalizeOutboundText(text: string): string {
+	return text.trim() || "(empty response)";
+}
+
+export function parseOutboundReply(text: string): { text: string; silent: boolean } {
+	const parsed = parseAgentReply(text);
+	if (parsed.silent) return parsed;
+	return { text: normalizeOutboundText(parsed.text), silent: false };
+}

@@ -8,10 +8,10 @@ import {
 	createAgentEventRecorder,
 	storedAgentEventFromAgentEvent,
 	updateAgentEventSummary,
-} from "../runtime/agent-events.js";
-import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
-import { isHeartbeatDue } from "../runtime/scheduler.js";
-import { parseOutboundReply } from "./send.js";
+} from "./agent-events.js";
+import type { ConversationRuntime } from "./conversation-runtime.js";
+import { isHeartbeatDue } from "./scheduler.js";
+import { parseOutboundReply } from "./silent-marker.js";
 
 export const HEARTBEAT_SKIPPED = Symbol("heartbeat-skipped");
 export const CRON_SKIPPED = Symbol("cron-skipped");

@@ -12,12 +12,10 @@ import {
 	MessageFlags,
 } from "discord.js";
 
-import type { FamiliarAgent } from "../agent/factory.js";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config } from "../config/index.js";
-import { type EffectiveSetting, formatSetting } from "../config/settings.js";
-import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
-import { normalizeOutboundText } from "./send.js";
+import type { InboundMessageInput } from "../runtime/conversation-runtime.js";
+import { normalizeOutboundText } from "../runtime/silent-marker.js";
 
 export const FAMILIAR_COMMAND_NAME = "familiar";
 const CHANNEL_TRIGGER_CHOICES = ["mention", "always"] as const;
@@ -167,23 +165,6 @@ export async function replyInteractionError(interaction: ChatInputCommandInterac
 	const message = error instanceof Error ? error.message : String(error);
 	console.error("Discord interaction handling failed", error);
 	await replyEphemeral(interaction, `I hit an error while handling that command.\n${message}`);
-}
-
-export function formatCommandResponse(
-	command: "status" | "compact",
-	runtime: ConversationRuntime,
-	familiarAgent: FamiliarAgent,
-	channelTrigger: EffectiveSetting<Config["discord"]["channelTrigger"]>,
-): string {
-	if (command === "status") {
-		return [
-			runtime.formatStatus(),
-			`model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`,
-			`thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`,
-			`channel_trigger: ${formatSetting(channelTrigger)}`,
-		].join("\n");
-	}
-	return "Compact is not wired for this runtime yet. I logged the command, but I won't run lossy compaction here.";
 }
 
 export function getAutocompleteChoices(

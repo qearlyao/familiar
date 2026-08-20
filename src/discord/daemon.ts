@@ -9,15 +9,17 @@ import {
 } from "discord.js";
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
-import { type EffectiveSetting, formatSetting, type SettingsStore } from "../config/settings.js";
+import type { SettingsStore } from "../config/settings.js";
 import { chatChannelKey } from "../conversation/chat-log.js";
 import { saveOwnerIdentity } from "../conversation/owner-identity.js";
 import type { RestartHandler } from "../lifecycle/control.js";
 import type { MemoryService } from "../memory/service.js";
 import type { AgentCore, DiscordWebSession } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
+import { applyControlCommand } from "../runtime/control-actions.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
+import { isCanceledJob, runAgentTurn } from "../runtime/turn.js";
 import {
 	buildChannelRef,
 	type DiscordChatChannel,
@@ -30,7 +32,6 @@ import { isAllowedMessage, withReadyClient } from "./client.js";
 import {
 	EPHEMERAL_REPLY,
 	FAMILIAR_COMMAND_NAME,
-	formatCommandResponse,
 	getAutocompleteChoices,
 	inboundInputFromInteraction,
 	isAllowedInteractionChannel,
@@ -40,70 +41,12 @@ import {
 } from "./commands.js";
 import { canSteerFromRecord, getChannelTriggerSetting, getDispatchMode, toInboundInput } from "./inbound.js";
 import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./send.js";
-import { isCanceledJob, runAgentTurn } from "./turn.js";
 
 export interface DiscordDaemon {
 	stop(): Promise<void>;
 }
 
 const RETRY_MS = 15_000;
-
-async function applyControlCommand(options: {
-	control: NonNullable<ReturnType<ConversationRuntime["parseControlCommand"]>>;
-	runtime: ConversationRuntime;
-	familiarAgent: FamiliarAgent;
-	settings: SettingsStore;
-	channelTrigger: EffectiveSetting<Config["discord"]["channelTrigger"]>;
-	isDm: boolean;
-	activeAgentOwner: string | undefined;
-	restart?: RestartHandler;
-}): Promise<string> {
-	const { control, runtime, familiarAgent, settings, channelTrigger, isDm, activeAgentOwner, restart } = options;
-	if (control.command === "stop") {
-		if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
-		await runtime.resetConversation("stop requested");
-		return "Stopped current work and cleared the chat queue.";
-	}
-	if (control.command === "new") {
-		await familiarAgent.reset(runtime.channelKey);
-		await runtime.resetConversation("new conversation requested");
-		return "Started a fresh agent transcript for this channel.";
-	}
-	if (control.command === "reload") {
-		return familiarAgent.reload();
-	}
-	if (control.command === "restart") {
-		return restart
-			? await restart()
-			: "Restart requested, but no restart handler is configured. Please restart the Familiar process manually.";
-	}
-	if (control.command === "model") {
-		return control.args
-			? await familiarAgent.setModel(runtime.channelKey, control.args)
-			: `Current model: ${formatSetting(familiarAgent.getModel(runtime.channelKey))}`;
-	}
-	if (control.command === "thinking") {
-		return control.args
-			? await familiarAgent.setThinkingLevel(runtime.channelKey, control.args)
-			: `Current thinking: ${formatSetting(familiarAgent.getThinkingLevel(runtime.channelKey))}`;
-	}
-	if (control.command === "channel-trigger") {
-		if (isDm) {
-			return "DM channel trigger is always.";
-		}
-		const triggerInput = control.args.trim().toLowerCase();
-		if (triggerInput && triggerInput !== "mention" && triggerInput !== "always") {
-			throw new Error("Usage: /channel-trigger mention|always");
-		}
-		const trigger = triggerInput === "mention" || triggerInput === "always" ? triggerInput : undefined;
-		if (trigger) {
-			await settings.setChannelTrigger(runtime.channelKey, trigger);
-			return `Channel trigger set to ${trigger} for this channel`;
-		}
-		return `Current channel trigger: ${formatSetting(channelTrigger)}`;
-	}
-	return formatCommandResponse(control.command, runtime, familiarAgent, channelTrigger);
-}
 
 function startTypingIndicator(message: Message): () => void {
 	const sendTyping = () => {

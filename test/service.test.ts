@@ -337,6 +337,23 @@ describe("service management", () => {
 
 		assert.deepEqual(calls, [
 			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
+			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
+		]);
+	});
+
+	it("upgrades OpenCLI only when requested", async () => {
+		const calls: Array<{ command: string; args: string[] }> = [];
+
+		await upgradeFamiliar("/tmp/familiar workspace", {
+			platform: "linux",
+			upgradeOpenCli: true,
+			runCommand: async (command, args) => {
+				calls.push({ command, args });
+			},
+		});
+
+		assert.deepEqual(calls, [
+			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
 			{ command: "npm", args: ["install", "-g", "@jackwener/opencli"] },
 			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
 		]);

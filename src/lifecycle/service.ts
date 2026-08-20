@@ -47,6 +47,7 @@ interface ServiceOptions {
 	homeDir?: string;
 	nodePath?: string;
 	cliPath?: string;
+	upgradeOpenCli?: boolean;
 	resolvePath?: (...paths: string[]) => string;
 	userId?: number;
 	commandExists?: (command: string) => Promise<boolean>;
@@ -609,7 +610,9 @@ export async function upgradeFamiliar(workspacePath: string, options: ServiceOpt
 	const npmCommand = currentPlatform === "win32" ? "npm.cmd" : "npm";
 	const familiarCommand = currentPlatform === "win32" ? "familiar.cmd" : "familiar";
 	await runInteractive(npmCommand, ["install", "-g", "@qearlyao/familiar@latest"], options, "npm upgrade");
-	await runInteractive(npmCommand, ["install", "-g", "@jackwener/opencli"], options, "OpenCLI upgrade");
+	if (options.upgradeOpenCli) {
+		await runInteractive(npmCommand, ["install", "-g", "@jackwener/opencli"], options, "OpenCLI upgrade");
+	}
 	await runInteractive(familiarCommand, ["init", workspacePath], options, "workspace default refresh");
 }
 

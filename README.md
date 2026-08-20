@@ -418,20 +418,35 @@ Dispatch, channel trigger, and collect debounce reuse the `discord.*` settings,
 and owner control commands (`/status`, `/model`, …) work in DMs and allowed
 groups.
 
-NapCat setup (Docker, same machine as familiar):
+NapCat setup (same machine as familiar):
 
-1. Start the container: `docker run -d --name napcat --network host -e NAPCAT_UID=$(id -u) -e NAPCAT_GID=$(id -g) -v ./napcat/config:/app/napcat/config -v ./ntqq:/app/.config/QQ mlikiowa/napcat-docker:latest`
-2. Open the NapCat WebUI at port 6099 and log in by scanning the QR code with
-   the QQ mobile app.
-3. In the WebUI network config, add a **WebSocket server** on port 3001, set an
-   access token, and set the message format (`messagePostFormat`) to `array` —
-   familiar only parses segment arrays, not CQ strings.
+- **Windows:** download `NapCat.Shell.zip` from the
+  [releases page](https://github.com/NapNeko/NapCatQQ/releases), install the
+  latest QQ, then run `launcher.bat` (`launcher-win10.bat` on Windows 10). Pass
+  the account number for quick login: `launcher.bat -q 123456789`. Avoid the
+  `NapCat.Shell.Windows.OneKey.zip` installer — it pins a QQ download URL
+  Tencent has removed, so it currently fails with a 404.
+- **Linux (VPS):** run the installer over SSH:
+  `curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh && sudo bash napcat.sh --docker n --cli y --proxy 0`.
+  The Shell install (`--docker n`) stores the login session under `~/Napcat` so
+  you scan the QR code once; the Docker image does not persist login unless you
+  bind-mount its data directories.
+
+After installing, open the NapCat WebUI at port 6099 (the token is in the
+startup log or `config/webui.json`; on a VPS forward it with
+`ssh -L 6099:127.0.0.1:6099 user@vps`), log in by scanning the QR code with the
+QQ mobile app, then in the network config add a **WebSocket server** on port
+3001 bound to `127.0.0.1`. Set `messagePostFormat` to `array` — familiar only
+parses segment arrays, not CQ strings. Leave the access token empty on a
+same-machine setup; set one and add it to `.env` as `QQ_ONEBOT_TOKEN` if the
+port is exposed.
 
 Use a dedicated small account rather than your main QQ: keep it logged in from
 one place, don't run PC QQ at the same time, and let it idle a few days before
-adding it to groups. On small machines (2C2G), Lagrange.OneBot is the lighter
-choice (~50–100MB vs NapCat's ~300–500MB); it speaks the same protocol and
-defaults to array message format, so the familiar config is identical.
+adding it to groups. `owner_id` is your own QQ number (the human), not the bot
+account. On small machines (2C2G), Lagrange.OneBot is the lighter choice
+(~50–100MB vs NapCat's ~300–500MB); it speaks the same protocol and defaults to
+array message format, so the familiar config is identical.
 
 ## Memory Operator
 

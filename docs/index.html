@@ -672,7 +672,50 @@ owner_id = "paste-your-discord-user-id-here"</code></pre>
           <p>Add more IDs inside the brackets, separated by commas. Make sure the bot can view and send messages in each channel, then restart Familiar. The generated configuration uses <code>channel_trigger = "always"</code>; change it to <code>"mention"</code> if you want Familiar to respond only when someone mentions the bot.</p>
 
           <h3>QQ (OneBot 11)</h3>
-          <p>Familiar connects to any OneBot 11 server's forward WebSocket, so <a href="https://napneko.github.io/">NapCat</a> and <a href="https://lagrangedev.github.io/Lagrange.Doc/">Lagrange.OneBot</a> are interchangeable. Set up the server first (for NapCat: start the Docker container, open the WebUI at port 6099, log in by scanning the QR code, then add a WebSocket server on port 3001 with an access token and <code>messagePostFormat</code> set to <code>array</code>).</p>
+          <p>Familiar connects to any OneBot 11 server's forward WebSocket, so <a href="https://napneko.github.io/">NapCat</a> and <a href="https://lagrangedev.github.io/Lagrange.Doc/">Lagrange.OneBot</a> are interchangeable. Set up the server first, then point Familiar at it. Two accounts are involved and they are <em>different</em>: the <strong>bot account</strong> (a dedicated small account that logs into the OneBot server) and your own QQ number in <code>owner_id</code> (the human whose DMs Familiar responds to).</p>
+
+          <h4>1. Install the OneBot server (NapCat)</h4>
+          <p><strong>Windows</strong> — use the manual Shell package, not the one-key installer:</p>
+          <ol>
+            <li>Download <code>NapCat.Shell.zip</code> from the <a href="https://github.com/NapNeko/NapCatQQ/releases">NapCat releases page</a> and extract it. (The <code>NapCat.Shell.Windows.OneKey.zip</code> installer currently fails with a 404 — see troubleshooting below.)</li>
+            <li>Install the latest <a href="https://im.qq.com/">QQ</a> and log in once normally.</li>
+            <li>Double-click <code>launcher.bat</code> (Windows 10: <code>launcher-win10.bat</code>). To log straight into an account you have used before, pass its number: <code>launcher.bat -q 123456789</code>.</li>
+          </ol>
+          <p><strong>Linux (VPS)</strong> — run the installer over SSH:</p>
+          <pre><code>curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh \
+  && sudo bash napcat.sh --docker n --cli y --proxy 0</code></pre>
+          <p><code>--docker n</code> installs the Shell version, which stores the login session on disk under <code>~/Napcat</code> so you only scan the QR code once. <code>--cli y</code> adds the <code>napcat</code> TUI for configuring from a terminal. The Docker image works too but does not persist your login unless you bind-mount its data directories.</p>
+          <p>The Shell version runs in the background with <code>screen</code>, which does not survive a reboot or restart after a crash on its own. Add a systemd user service so it comes back automatically:</p>
+          <pre><code># ~/.config/systemd/user/napcat.service
+[Unit]
+Description=NapCat (QQ OneBot server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'xvfb-run -a &lt;QQ_EXECUTABLE&gt; --no-sandbox -q 123456789'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target</code></pre>
+          <p>Copy <code>&lt;QQ_EXECUTABLE&gt;</code> and the <code>-q</code> argument from the startup command the installer prints at the end, then enable it and allow it to run while logged out:</p>
+          <pre><code>systemctl --user daemon-reload
+systemctl --user enable --now napcat
+loginctl enable-linger $USER</code></pre>
+          <p><code>loginctl enable-linger</code> is required — without it the user service stops when your SSH session ends.</p>
+
+          <h4>2. Log in and add a WebSocket server</h4>
+          <p>NapCat's WebUI listens on port <strong>6099</strong>. The login token is printed in the startup log as <code>WebUi User Panel Url: http://127.0.0.1:6099/webui?token=...</code> (also in <code>config/webui.json</code>). On a remote VPS, forward the port first: <code>ssh -L 6099:127.0.0.1:6099 user@vps</code>, then open the URL locally.</p>
+          <ol>
+            <li>Log in by scanning the QR code with the QQ mobile app. NapCat will ask you to set a WebUI password on first use.</li>
+            <li>Under network config, add a <strong>WebSocket server</strong> on port <strong>3001</strong> bound to <code>127.0.0.1</code>.</li>
+            <li>Set <code>messagePostFormat</code> to <strong><code>array</code></strong> — Familiar only parses segment arrays, not CQ strings.</li>
+            <li>Leave the token empty for a same-machine setup; set one if the WebSocket is exposed to a network.</li>
+          </ol>
+
+          <h4>3. Point Familiar at it</h4>
           <p>Add the <code>[qq]</code> section to <code>config.toml</code>:</p>
           <pre><code>[qq]
 ws_url = "ws://127.0.0.1:3001"
@@ -680,7 +723,15 @@ owner_id = "your QQ number"
 allowed_groups = []</code></pre>
           <p>If the OneBot server has an access token, put it in <code>.env</code>:</p>
           <pre><code>QQ_ONEBOT_TOKEN=paste-your-onebot-token-here</code></pre>
-          <p>Non-owner DMs and groups outside the allowlist are ignored. Use a dedicated small account rather than your main QQ, and keep it logged in from one place only.</p>
+          <p>Non-owner DMs and groups outside the allowlist are ignored. Use a dedicated small account rather than your main QQ, keep it logged in from one place only, and let it idle a few days before adding it to groups.</p>
+
+          <h4>Troubleshooting (from the Windows smoke test)</h4>
+          <ul>
+            <li><strong>One-key installer returns a 404.</strong> <code>NapCatInstaller.exe</code> pins a QQ download URL (<code>QQ9.9.19.34231</code>) that Tencent has removed, so the one-key package fails on download. Use <code>NapCat.Shell.zip</code> instead, which needs you to install QQ yourself.</li>
+            <li><strong>NapCat asks you to log in every launch.</strong> Quick login only happens when you pass the account number with <code>-q</code>; without it NapCat defaults to QR login even if a session exists. Start with <code>launcher.bat -q 123456789</code>.</li>
+            <li><strong>Sent messages never arrive.</strong> A freshly logged-in account is throttled by QQ anti-spam — the send reports success but the other side sees nothing. Wait a day or two and test with a real person, not just the bot account.</li>
+            <li><strong>Everything looks right but nothing connects.</strong> Check <code>messagePostFormat</code> is <code>array</code>, and confirm the <code>ws_url</code> port matches the WebSocket server you added in the WebUI (not the 6099 WebUI port).</li>
+          </ul>
         </section>
 
         <section class="feature" id="advanced">

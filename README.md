@@ -146,6 +146,8 @@ Follow the [Beginner Quick Start](https://qearlyao.github.io/familiar/). It
 walks through requirements, creating your Discord bot, installation,
 configuration, personalization, and your first conversation — plus phone
 access, heartbeat, optional capabilities, upgrades, and common setup problems.
+Chat platforms are optional: with no Discord or QQ configured, familiar runs
+web-only and the WebUI is the whole interface.
 
 This project is still early. The current release is meant for trusted friends
 who are comfortable editing a config file and running a long-lived Node
@@ -395,6 +397,41 @@ The older slash-style text commands still work as a fallback:
 `/model`, `/thinking`, and `/channel-trigger` are durable per-channel overrides
 stored in `data/settings/channel-overrides.json`. `config.toml` remains the
 fallback/default for channels without overrides.
+
+## QQ (OneBot 11)
+
+Familiar can also live on QQ through any OneBot 11 server — it connects to a
+forward WebSocket, so [NapCat](https://napneko.github.io/) and
+[Lagrange.OneBot](https://lagrangedev.github.io/Lagrange.Doc/) are
+interchangeable. Configure:
+
+```toml
+[qq]
+ws_url = "ws://127.0.0.1:3001"
+owner_id = "your QQ number"
+allowed_groups = [] # group-number allowlist; empty = DMs only
+```
+
+If the OneBot server has an access token, put it in `.env` as
+`QQ_ONEBOT_TOKEN`. Non-owner DMs and groups outside the allowlist are ignored.
+Dispatch, channel trigger, and collect debounce reuse the `discord.*` settings,
+and owner control commands (`/status`, `/model`, …) work in DMs and allowed
+groups.
+
+NapCat setup (Docker, same machine as familiar):
+
+1. Start the container: `docker run -d --name napcat --network host -e NAPCAT_UID=$(id -u) -e NAPCAT_GID=$(id -g) -v ./napcat/config:/app/napcat/config -v ./ntqq:/app/.config/QQ mlikiowa/napcat-docker:latest`
+2. Open the NapCat WebUI at port 6099 and log in by scanning the QR code with
+   the QQ mobile app.
+3. In the WebUI network config, add a **WebSocket server** on port 3001, set an
+   access token, and set the message format (`messagePostFormat`) to `array` —
+   familiar only parses segment arrays, not CQ strings.
+
+Use a dedicated small account rather than your main QQ: keep it logged in from
+one place, don't run PC QQ at the same time, and let it idle a few days before
+adding it to groups. On small machines (2C2G), Lagrange.OneBot is the lighter
+choice (~50–100MB vs NapCat's ~300–500MB); it speaks the same protocol and
+defaults to array message format, so the familiar config is identical.
 
 ## Memory Operator
 

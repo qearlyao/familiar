@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Familiar Quick Start</title>
-  <meta name="description" content="Install Familiar, add the three required values, and start your first conversation.">
+  <meta name="description" content="Install Familiar, add your model key, and start your first conversation.">
   <link rel="icon" href="familiar.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -468,12 +468,13 @@
       <div class="intro-copy">
         <p class="kicker">Beginner guide</p>
         <h1 id="page-title">Your first conversation with Familiar</h1>
-        <p>Install Familiar, add the required values, and shape who your companion is before your first conversation.</p>
+        <p>Install Familiar, add a model key, and shape who your companion is before your first conversation in the WebUI. Chat platforms like Discord or QQ are optional and set up later.</p>
       </div>
       <ol class="quick-path" aria-label="Quick start overview">
         <li><span>1</span><strong>Install Familiar</strong></li>
-        <li><span>2</span><strong>Make it yours</strong></li>
-        <li><span>3</span><strong>Start a conversation</strong></li>
+        <li><span>2</span><strong>Add your model key</strong></li>
+        <li><span>3</span><strong>Make it yours</strong></li>
+        <li><span>4</span><strong>Start a conversation</strong></li>
       </ol>
     </section>
 
@@ -482,13 +483,13 @@
         <h2>On this page</h2>
         <ol>
           <li><a href="#requirements">Before you begin</a></li>
-          <li><a href="#discord">Create a Discord bot</a></li>
           <li><a href="#install">Install Familiar</a></li>
-          <li><a href="#configure">Add three values</a></li>
+          <li><a href="#configure">Add a model key</a></li>
           <li><a href="#personalize">Make Familiar yours</a></li>
           <li><a href="#start">Start Familiar</a></li>
           <li><a href="#mobile">Use the WebUI on your phone</a></li>
           <li><a href="#heartbeat">Enable heartbeat</a></li>
+          <li><a href="#platforms">Connect chat platforms</a></li>
           <li><a href="#advanced">Advanced setup</a></li>
           <li><a href="#upgrade">Upgrade Familiar</a></li>
           <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -501,30 +502,13 @@
           <ul>
             <li>A computer running macOS, Linux, or Windows.</li>
             <li><a href="https://nodejs.org/">Node.js 22 or newer</a>. Node.js 24 LTS is recommended.</li>
-            <li>A Discord account and a private server where you can invite a bot.</li>
             <li>A model API key. The generated default configuration uses <a href="https://linkapi.ai/">Link API</a>.</li>
           </ul>
-        </section>
-
-        <section class="step" id="discord">
-          <div class="step-number">1</div>
-          <div>
-            <h2>Create your Discord bot</h2>
-            <ol>
-              <li>Open the <a href="https://discord.com/developers/applications">Discord Developer Portal</a> and select <strong>New Application</strong>.</li>
-              <li>Open <strong>Bot</strong>, create the bot, then select <strong>Reset Token</strong> and copy the token. Treat it like a password.</li>
-              <li>On the same page, enable <strong>Message Content Intent</strong>.</li>
-              <li>Open <strong>OAuth2 &gt; URL Generator</strong>. Select the <strong>bot</strong> scope, then allow <strong>Send Messages</strong>, <strong>Read Message History</strong>, and <strong>Attach Files</strong>.</li>
-              <li>Open the generated URL and invite the bot to your private server.</li>
-              <li>In Discord, open <strong>User Settings &gt; Advanced</strong> and enable <strong>Developer Mode</strong>.</li>
-              <li>Right-click your own profile and select <strong>Copy User ID</strong>.</li>
-            </ol>
-            <p class="note">You should now have two Discord values: the bot token and your numeric user ID.</p>
-          </div>
+          <p class="note">The WebUI is Familiar's home and the only interface you need. Chat platforms like Discord and QQ are optional add-ons covered in <a href="#platforms">Connect chat platforms</a>.</p>
         </section>
 
         <section class="step" id="install">
-          <div class="step-number">2</div>
+          <div class="step-number">1</div>
           <div>
             <h2>Install Familiar</h2>
             <h3>macOS or Linux</h3>
@@ -538,33 +522,24 @@
         </section>
 
         <section class="step" id="configure">
-          <div class="step-number">3</div>
+          <div class="step-number">2</div>
           <div>
-            <h2>Add three values</h2>
+            <h2>Add your model key</h2>
             <p>Open the <code>.familiar</code> folder in your home directory:</p>
             <ul>
               <li><strong>macOS:</strong> In Finder, press <code>Command + Shift + G</code>, enter <code>~/.familiar</code>, and press Return.</li>
               <li><strong>Windows:</strong> Paste <code>%USERPROFILE%\.familiar</code> into the File Explorer address bar.</li>
               <li><strong>Linux:</strong> Show hidden files in your file manager, then open <code>.familiar</code> in your home folder.</li>
             </ul>
-            <p>Open <code>.env</code> in a text editor and fill in these two lines:</p>
-            <pre><code>DISCORD_TOKEN=paste-your-bot-token-here
-ANTHROPIC_API_KEY=paste-your-link-api-key-here</code></pre>
+            <p>Open <code>.env</code> in a text editor and fill in the model key line:</p>
+            <pre><code>ANTHROPIC_API_KEY=paste-your-link-api-key-here</code></pre>
             <p class="note">With the generated default configuration, your Link API key goes after <code>ANTHROPIC_API_KEY=</code>. The name comes from the model's Anthropic-compatible credential slot.</p>
-            <p>Next, open <code>config.toml</code> and replace the placeholder near the top with your Discord user ID:</p>
-            <pre><code>[discord]
-owner_id = "paste-your-discord-user-id-here"</code></pre>
-            <h3>Optional: add Familiar to group channels</h3>
-            <p>Familiar ignores Discord server channels unless you allow them. With Developer Mode enabled, right-click a server text channel, select <strong>Copy Channel ID</strong>, and add the ID to <code>allowed_channels</code>:</p>
-            <pre><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
-            <p>Add more IDs inside the brackets, separated by commas. Make sure the bot can view and send messages in each channel, then restart Familiar.</p>
-            <p>The generated configuration uses <code>channel_trigger = "always"</code>, so Familiar can take part without being mentioned. Change it to <code>"mention"</code> if you want Familiar to respond only when someone mentions the bot.</p>
-            <p>Save both files. Keep secrets in <code>.env</code>, and leave the model list and other optional features unchanged for now.</p>
+            <p>Leave the other <code>.env</code> lines and the rest of <code>config.toml</code> unchanged for now. If you want to add Discord or QQ, do that later in <a href="#platforms">Connect chat platforms</a>.</p>
           </div>
         </section>
 
         <section class="step" id="personalize">
-          <div class="step-number">4</div>
+          <div class="step-number">3</div>
           <div>
             <h2>Make Familiar yours</h2>
             <p>Do this before the first launch. <code>SOUL.md</code> and <code>USER.md</code> become part of Familiar's core instructions (the system prompt), so the first reply can already sound like the companion you intended.</p>
@@ -585,7 +560,7 @@ owner_id = "paste-your-discord-user-id-here"</code></pre>
         </section>
 
         <section class="step" id="start">
-          <div class="step-number">5</div>
+          <div class="step-number">4</div>
           <div>
             <h2>Start Familiar</h2>
             <p>Open a fresh Terminal or PowerShell window and run:</p>
@@ -593,14 +568,10 @@ owner_id = "paste-your-discord-user-id-here"</code></pre>
             <p>Keep this window open while you use Familiar. A successful start prints messages similar to:</p>
             <pre><code>Web side-door listening on http://127.0.0.1:8787
 familiar running for workspace ...</code></pre>
-            <p>Now choose either way to talk:</p>
-            <ul>
-              <li><strong>WebUI:</strong> Open <a href="http://127.0.0.1:8787">http://127.0.0.1:8787</a> on the same computer. Tailscale is not required for local access.</li>
-              <li><strong>Discord:</strong> Open your bot's profile and send it a direct message.</li>
-            </ul>
+            <p>Open the WebUI at <a href="http://127.0.0.1:8787">http://127.0.0.1:8787</a> on the same computer. Tailscale is not required for local access.</p>
             <div class="success">
               <strong>Success check</strong>
-              Send a short message such as <code>Hello</code>. A normal reply means the installation, Discord identity, and model access are working.
+              Send a short message such as <code>Hello</code>. A normal reply means the installation, your model key, and model access are all working.
             </div>
             <p>Press <code>Ctrl + C</code> in the terminal to stop Familiar. After changing <code>.env</code>, stop Familiar and run <code>familiar run</code> again.</p>
           </div>
@@ -677,6 +648,41 @@ interval_minutes = 240</code></pre>
           <p>Save the file and restart Familiar if it is already running. With the example above, the first heartbeat becomes eligible after 60 minutes of owner inactivity; later heartbeats can repeat every 240 minutes until the owner sends another message.</p>
         </section>
 
+        <section class="feature" id="platforms">
+          <h2>Connect chat platforms (optional)</h2>
+          <p>Familiar lives in the WebUI by default. If you also want it in Discord or QQ, connect one or both — the same companion, memories, and sessions carry across every platform.</p>
+
+          <h3>Discord</h3>
+          <ol>
+            <li>Open the <a href="https://discord.com/developers/applications">Discord Developer Portal</a> and select <strong>New Application</strong>.</li>
+            <li>Open <strong>Bot</strong>, create the bot, then select <strong>Reset Token</strong> and copy the token. Treat it like a password.</li>
+            <li>On the same page, enable <strong>Message Content Intent</strong>.</li>
+            <li>Open <strong>OAuth2 &gt; URL Generator</strong>. Select the <strong>bot</strong> scope, then allow <strong>Send Messages</strong>, <strong>Read Message History</strong>, and <strong>Attach Files</strong>.</li>
+            <li>Open the generated URL and invite the bot to your private server.</li>
+            <li>In Discord, open <strong>User Settings &gt; Advanced</strong> and enable <strong>Developer Mode</strong>.</li>
+            <li>Right-click your own profile and select <strong>Copy User ID</strong>.</li>
+          </ol>
+          <p>Add the bot token to <code>.env</code>:</p>
+          <pre><code>DISCORD_TOKEN=paste-your-bot-token-here</code></pre>
+          <p>Then set your user ID in the <code>[discord]</code> section of <code>config.toml</code>:</p>
+          <pre><code>[discord]
+owner_id = "paste-your-discord-user-id-here"</code></pre>
+          <p>Familiar ignores Discord server channels unless you allow them. With Developer Mode enabled, right-click a server text channel, select <strong>Copy Channel ID</strong>, and add the ID to <code>allowed_channels</code>:</p>
+          <pre><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
+          <p>Add more IDs inside the brackets, separated by commas. Make sure the bot can view and send messages in each channel, then restart Familiar. The generated configuration uses <code>channel_trigger = "always"</code>; change it to <code>"mention"</code> if you want Familiar to respond only when someone mentions the bot.</p>
+
+          <h3>QQ (OneBot 11)</h3>
+          <p>Familiar connects to any OneBot 11 server's forward WebSocket, so <a href="https://napneko.github.io/">NapCat</a> and <a href="https://lagrangedev.github.io/Lagrange.Doc/">Lagrange.OneBot</a> are interchangeable. Set up the server first (for NapCat: start the Docker container, open the WebUI at port 6099, log in by scanning the QR code, then add a WebSocket server on port 3001 with an access token and <code>messagePostFormat</code> set to <code>array</code>).</p>
+          <p>Add the <code>[qq]</code> section to <code>config.toml</code>:</p>
+          <pre><code>[qq]
+ws_url = "ws://127.0.0.1:3001"
+owner_id = "your QQ number"
+allowed_groups = []</code></pre>
+          <p>If the OneBot server has an access token, put it in <code>.env</code>:</p>
+          <pre><code>QQ_ONEBOT_TOKEN=paste-your-onebot-token-here</code></pre>
+          <p>Non-owner DMs and groups outside the allowlist are ignored. Use a dedicated small account rather than your main QQ, and keep it logged in from one place only.</p>
+        </section>
+
         <section class="feature" id="advanced">
           <h2>Optional: add more capabilities</h2>
           <p>These are not required for your first conversation. Add only the credentials for features you want to use, then restart Familiar.</p>
@@ -735,8 +741,8 @@ enabled = true</code></pre>
             <p>Close and reopen the terminal. If it still fails, check that npm's global bin directory is on your <code>PATH</code>.</p>
           </details>
           <details>
-            <summary>First-time setup needs <code>DISCORD_TOKEN</code></summary>
-            <p>Confirm the file is named exactly <code>.env</code>, is inside <code>~/.familiar</code>, and contains the <code>DISCORD_TOKEN=...</code> line.</p>
+            <summary>Discord doesn't connect</summary>
+            <p>Confirm the file is named exactly <code>.env</code>, is inside <code>~/.familiar</code>, and contains the <code>DISCORD_TOKEN=...</code> line. Discord is optional — without a token, Familiar still runs and the WebUI is the whole interface.</p>
           </details>
           <details>
             <summary>Discord reports disallowed intents</summary>

@@ -11,6 +11,7 @@ import {
 	BROWSER_HARNESS_MODES,
 	BROWSER_WINDOW_MODES,
 	CACHE_RETENTIONS,
+	DEFAULT_PLATFORMS,
 	DISCORD_CHANNEL_TRIGGERS,
 	DISCORD_CHUNK_MODES,
 	DISCORD_DISPATCH_MODES,
@@ -67,6 +68,7 @@ export type {
 	ConfiguredProviderDefinition,
 	CronDeliveryMode,
 	CronFrequency,
+	DefaultPlatform,
 	DiscordChannelTrigger,
 	DiscordChunkMode,
 	DiscordDispatchMode,
@@ -449,7 +451,13 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		"batch_size",
 	]);
 
-	const ownerId = readString(discord.owner_id, "discord.owner_id");
+	const token = readOptionalConfigString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN");
+	const ownerId = readOptionalConfigString(discord.owner_id, "discord.owner_id");
+	if (token && !ownerId) throw new Error("Config value discord.owner_id is required when DISCORD_TOKEN is set");
+	const defaultPlatform =
+		parsed.default_platform === undefined
+			? undefined
+			: readEnum(parsed.default_platform, "default_platform", DEFAULT_PLATFORMS);
 	const agentModel = readString(agent.model, "agent.model").trim();
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
@@ -541,8 +549,9 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 
 	return {
 		workspacePath,
+		defaultPlatform,
 		discord: {
-			token: readOptionalConfigString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN"),
+			token,
 			ownerId,
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
 			replyMode: readEnum(

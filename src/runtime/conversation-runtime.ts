@@ -112,7 +112,7 @@ export class ConversationRuntime {
 	readonly channel: ChatChannelRef;
 	readonly channelKey: string;
 	private readonly log: ChatLog;
-	private readonly ownerId: string;
+	readonly ownerId: string;
 	private readonly botUserId?: string;
 	private records: ChatLogRecord[] = [];
 	private nextRecordId = 1;

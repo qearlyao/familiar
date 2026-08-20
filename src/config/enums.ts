@@ -4,6 +4,7 @@ import type {
 	CacheRetention,
 	CronDeliveryMode,
 	CronFrequency,
+	DefaultPlatform,
 	DiscordChannelTrigger,
 	DiscordChunkMode,
 	DiscordDispatchMode,
@@ -30,6 +31,7 @@ export const DISCORD_REPLY_MODES = ["plain", "reply"] as const satisfies readonl
 export const DISCORD_CHUNK_MODES = ["simple", "paragraph", "newline"] as const satisfies readonly DiscordChunkMode[];
 export const DISCORD_DISPATCH_MODES = ["steer", "queue", "collect"] as const satisfies readonly DiscordDispatchMode[];
 export const DISCORD_CHANNEL_TRIGGERS = ["mention", "always"] as const satisfies readonly DiscordChannelTrigger[];
+export const DEFAULT_PLATFORMS = ["discord", "qq", "web"] as const satisfies readonly DefaultPlatform[];
 export const CRON_FREQUENCIES = [
 	"once",
 	"hourly",

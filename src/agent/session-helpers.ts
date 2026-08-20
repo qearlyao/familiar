@@ -37,7 +37,7 @@ export function getRequestApiKey(config: Config, model: Model<any>): string | un
 
 export function buildAnthropicMetadata(config: Config, model: Model<any>): Record<string, unknown> | undefined {
 	if (model.api !== "anthropic-messages") return undefined;
-	return { user_id: config.discord.ownerId };
+	return { user_id: config.discord.ownerId ?? "owner" };
 }
 
 export function formatModel(model: Model<any>): string {

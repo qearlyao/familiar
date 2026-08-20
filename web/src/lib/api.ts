@@ -21,8 +21,8 @@ function wireToMessage(wire: WireMessage): Message {
 export interface SessionInfo {
   key: string;
   label: string;
-  service: "discord";
-  scope: "dm" | "channel" | "thread";
+  service: "discord" | "qq" | "web";
+  scope: "dm" | "channel" | "thread" | "web";
   channelId: string;
   channelName?: string;
   threadId?: string;

@@ -15,6 +15,7 @@ export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
 export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
+export type DefaultPlatform = "discord" | "qq" | "web";
 
 export type ConfiguredModelInput = "text" | "image";
 export type AnthropicModelCompat = NonNullable<Model<"anthropic-messages">["compat"]>;
@@ -72,9 +73,10 @@ export interface TtsVoiceSettings {
 
 export interface Config {
 	workspacePath: string;
+	defaultPlatform?: DefaultPlatform;
 	discord: {
 		token?: string;
-		ownerId: string;
+		ownerId?: string;
 		allowedChannels: string[];
 		replyMode: DiscordReplyMode;
 		chunkMode: DiscordChunkMode;

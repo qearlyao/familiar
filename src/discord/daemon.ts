@@ -14,7 +14,7 @@ import { chatChannelKey } from "../conversation/chat-log.js";
 import { saveOwnerIdentity } from "../conversation/owner-identity.js";
 import type { RestartHandler } from "../lifecycle/control.js";
 import type { MemoryService } from "../memory/service.js";
-import type { AgentCore, DiscordWebSession } from "../runtime/agent-core.js";
+import type { AgentCore, ChatSession } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
 import { applyControlCommand } from "../runtime/control-actions.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
@@ -69,6 +69,8 @@ export function startDiscordDaemon(
 	core: AgentCore,
 	options: { restart?: RestartHandler } = {},
 ): DiscordDaemon {
+	const ownerId = config.discord.ownerId;
+	if (!ownerId) throw new Error("Discord owner identity is required");
 	let client: Client<true> | undefined;
 	let session: ConnectedSession | undefined;
 	let stopped = false;
@@ -91,7 +93,7 @@ export function startDiscordDaemon(
 		onMessageCreate: (message: Message) => Promise<void>;
 		onInteractionCreate: (interaction: Interaction) => Promise<void>;
 		getOwnerDmSession: () => Promise<{ runtime: ConversationRuntime }>;
-		getWebSessions: () => Promise<DiscordWebSession[]>;
+		getWebSessions: () => Promise<ChatSession[]>;
 		liveSink: SchedulerDeliverySink;
 	}
 
@@ -101,7 +103,7 @@ export function startDiscordDaemon(
 		const getOwnerDmChannel = (): Promise<DMChannel> => {
 			if (!ownerDmChannelPromise) {
 				ownerDmChannelPromise = client.users
-					.createDM(config.discord.ownerId)
+					.createDM(ownerId)
 					.then(async (dm) => {
 						try {
 							await saveOwnerIdentity(config.workspace.dataDir, {
@@ -121,10 +123,10 @@ export function startDiscordDaemon(
 			return ownerDmChannelPromise;
 		};
 
-		const getWebSessions = async (): Promise<DiscordWebSession[]> => {
+		const getWebSessions = async (): Promise<ChatSession[]> => {
 			const dmChannel = await getOwnerDmChannel();
 			const dmRef = buildChannelRef(dmChannel, dmChannel.id);
-			const sessions: DiscordWebSession[] = [
+			const sessions: ChatSession[] = [
 				{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
 			];
 			const fetched = await Promise.all(
@@ -359,7 +361,9 @@ export function startDiscordDaemon(
 			client.on(Events.Error, onClientError);
 			client.on(Events.Warn, onClientWarn);
 			client.ws.on("close" as any, onWsClose);
-			core.attachDiscord({
+			void core.attachPlatform({
+				service: "discord",
+				ownerId,
 				botUserId: client.user.id,
 				resolveDefaultSession: session.getOwnerDmSession,
 				getWebSessions: session.getWebSessions,

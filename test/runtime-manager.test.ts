@@ -36,7 +36,11 @@ describe("runtime manager lifecycle", () => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);
 		const { memory, subscribeCalls, unsubscribeCalls } = spyMemoryService();
-		const manager = createRuntimeManager({ config, memoryService: memory, botUserId: () => "bot-1" });
+		const manager = createRuntimeManager({
+			config,
+			memoryService: memory,
+			identityFor: () => ({ ownerId: "owner", botUserId: "bot-1" }),
+		});
 		t.after(() => manager.disconnectAll());
 
 		const dmRef: ChatChannelRef = { service: "discord", scope: "dm", channelId: "dm-123" };

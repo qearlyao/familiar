@@ -59,6 +59,7 @@ describe("web conversation routes", () => {
 		const runtime = {
 			channel: { service: "discord", scope: "dm", channelId: "dm-1" },
 			channelKey: "discord:dm:dm-1",
+			ownerId: "runtime-owner",
 			hasActiveJob: () => true,
 			getRecords: () => records,
 			subscribe: (listener: typeof recordListener) => {
@@ -140,6 +141,7 @@ describe("web conversation routes", () => {
 
 		assert.equal(response.statusCode, 200);
 		assert.equal(inputs[0]?.bookId, "aaaaaaaaaa");
+		assert.equal(inputs[0]?.authorId, "runtime-owner");
 		const events = decodeFrames(Buffer.concat(frames)).messages.map((message) => JSON.parse(message) as Record<string, unknown>);
 		assert.equal(events.find((event) => event.type === "message_started")?.bookId, "aaaaaaaaaa");
 		records.push({
@@ -177,8 +179,7 @@ describe("web conversation routes", () => {
 			{ type: "agent_event", event: { type: "message_end", role: "assistant", usage: { input: 200, output: 50, cacheRead: 1600, cacheWrite: 150, cost: 0 } } },
 			{ type: "checkpoint" },
 		];
-		const agentCore = {
-			hasSessionSource: () => true,
+	const agentCore = {
 			getWebSessions: async () => [
 				{ key: "discord:dm:dm-1", label: "Main Chat", channel: { service: "discord", scope: "dm", channelId: "dm-1" }, isDefault: true },
 				{ key: "discord:channel:c-2", label: "side", channel: { service: "discord", scope: "channel", channelId: "c-2" } },

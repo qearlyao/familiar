@@ -6,7 +6,7 @@ import { ConversationRuntime } from "./conversation-runtime.js";
 export interface RuntimeManagerDeps {
 	config: Config;
 	memoryService?: MemoryService;
-	botUserId: () => string;
+	identityFor: (channel: ChatChannelRef) => { ownerId: string; botUserId?: string };
 }
 
 // A runtime owns two external resources: the chat-log `.lock` (released by
@@ -25,8 +25,7 @@ export function createRuntimeManager(deps: RuntimeManagerDeps) {
 		const runtime = await ConversationRuntime.connect({
 			channelKey,
 			log: createChatLog(deps.config, channel),
-			ownerId: deps.config.discord.ownerId,
-			botUserId: deps.botUserId(),
+			...deps.identityFor(channel),
 		});
 		const unsubscribe = deps.memoryService?.subscribeRuntime(runtime, runtime.channelKey);
 		const release = async (): Promise<void> => {

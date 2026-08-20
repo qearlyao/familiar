@@ -44,10 +44,6 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 	const { route, config, auth, authMode, agentCore, getRuntime, personaName, actions, familiarAgent } = options;
 
 	route("GET", "/api/web/sessions", async (_request, response) => {
-		if (!agentCore.hasSessionSource()) {
-			sendJson(response, 200, { sessions: [] });
-			return;
-		}
 		const sessions = await agentCore.getWebSessions();
 		const payload = await Promise.all(
 			sessions.map(async (session) => {
@@ -115,7 +111,7 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 		const ts = Date.now();
 		const input: InboundMessageInput = {
 			messageId: id,
-			authorId: config.discord.ownerId,
+			authorId: runtime.ownerId,
 			authorName: getContactNickname(WEB_USER_NAME),
 			text: body.text,
 			bookId,
@@ -189,7 +185,7 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 		const args = commandArgs(body.command, body.args);
 		const input: InboundMessageInput = {
 			messageId: messageId("control"),
-			authorId: config.discord.ownerId,
+			authorId: runtime.ownerId,
 			authorName: getContactNickname(WEB_USER_NAME),
 			text: `/${body.command}${args ? ` ${args}` : ""}`,
 			isBot: false,

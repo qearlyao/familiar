@@ -190,14 +190,8 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	};
 	const identity = await loadOwnerIdentity(config.workspace.dataDir);
 	const token = config.discord.token;
-	if (!identity && !token) {
-		throw new Error(
-			"First-time setup needs a DISCORD_TOKEN to establish owner identity. Set DISCORD_TOKEN and run again.",
-		);
-	}
-	// The scheduler starts with the first session source to arrive: the cached identity
-	// here, or the live Discord connection below when there is no cache yet.
-	if (identity) await agentCore.useCachedIdentity(identity);
+	if (identity && config.discord.ownerId) await agentCore.useCachedIdentity(identity);
+	await agentCore.start();
 	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart });
 	if (token) {
 		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {

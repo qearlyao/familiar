@@ -1,7 +1,7 @@
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { ChatLogRecord } from "../conversation/chat-log.js";
 import { supportedThinkingLevels } from "../models/index.js";
-import type { DiscordWebSession } from "../runtime/agent-core.js";
+import type { ChatSession } from "../runtime/agent-core.js";
 import { isRecord } from "../util/guards.js";
 
 export function commandArgs(command: string, args: unknown): string {
@@ -37,10 +37,7 @@ export function lastContextTokens(records: readonly ChatLogRecord[]): number | u
 	return undefined;
 }
 
-export function sessionDto(
-	session: DiscordWebSession,
-	context?: { tokens: number; limit: number },
-): Record<string, unknown> {
+export function sessionDto(session: ChatSession, context?: { tokens: number; limit: number }): Record<string, unknown> {
 	return {
 		key: session.key,
 		label: session.label,

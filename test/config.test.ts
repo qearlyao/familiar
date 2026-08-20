@@ -6,7 +6,63 @@ import { resolve } from "node:path";
 import { loadConfig } from "../src/config/index.js";
 import { createConfiguredModel } from "../src/models/index.js";
 import { resolveOpenRouterRouting } from "../src/models/openrouter-routing.js";
-import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
+import { createWorkspace, minimalConfigToml, withDiscordToken, withoutEnv } from "./helpers.js";
+
+describe("loadConfig platform setup", () => {
+	it("loads without a Discord section or token", async (t) => {
+		await withoutEnv("DISCORD_TOKEN", async () => {
+			const workspacePath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+`,
+			);
+			const config = await loadConfig(workspacePath);
+
+			assert.equal(config.discord.token, undefined);
+			assert.equal(config.discord.ownerId, undefined);
+			assert.equal(config.defaultPlatform, undefined);
+		});
+	});
+
+	it("requires Discord owner_id when a token is configured", async (t) => {
+		await withDiscordToken(async () => {
+			const workspacePath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+`,
+			);
+
+			await assert.rejects(() => loadConfig(workspacePath), /discord\.owner_id/);
+		});
+	});
+
+	it("validates default_platform", async (t) => {
+		const workspacePath = await createWorkspace(
+			t,
+			`default_platform = "qq"
+
+[agent]
+model = "anthropic/claude-sonnet-4-5"
+`,
+		);
+		const config = await withoutEnv("DISCORD_TOKEN", () => loadConfig(workspacePath));
+		assert.equal(config.defaultPlatform, "qq");
+
+		const invalidWorkspacePath = await createWorkspace(
+			t,
+			`default_platform = "matrix"
+
+[agent]
+model = "anthropic/claude-sonnet-4-5"
+`,
+		);
+		await withoutEnv("DISCORD_TOKEN", async () => {
+			await assert.rejects(() => loadConfig(invalidWorkspacePath), /default_platform/);
+		});
+	});
+});
 
 describe("loadConfig tts", () => {
 	const envKeys = ["DISCORD_TOKEN", "ELEVENLABS_VOICE_ID"] as const;

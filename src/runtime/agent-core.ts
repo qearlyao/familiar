@@ -2,7 +2,12 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
-import { type ChatChannelRef, chatChannelKey, type StoredAttachment } from "../conversation/chat-log.js";
+import {
+	type ChatChannelRef,
+	type ChatService,
+	chatChannelKey,
+	type StoredAttachment,
+} from "../conversation/chat-log.js";
 import type { OwnerIdentity } from "../conversation/owner-identity.js";
 import type { MemoryService } from "../memory/service.js";
 import { createAgentWorkQueue } from "./agent-work-queue.js";
@@ -10,24 +15,25 @@ import type { ConversationRuntime } from "./conversation-runtime.js";
 import { createRuntimeManager } from "./runtime-manager.js";
 import { createSchedulerRunner, type SchedulerDeliverySink } from "./scheduler-runner.js";
 
-export interface DiscordWebSession {
+export const WEB_OWNER_ID = "owner";
+
+export interface ChatSession {
 	key: string;
 	label: string;
 	channel: ChatChannelRef;
 	isDefault?: boolean;
 }
 
-// A session source supplies both how to resolve the default runtime and how to push
-// outbound to it. The web-only source (no live Discord) pushes nowhere: outbound is
-// still recorded via runtime.noteOutbound and rendered by the WebUI, so the sink just
-// returns no message ids.
-interface AgentCoreSessionSource {
-	botUserId: string;
+export interface PlatformSource {
+	service: ChatService;
+	ownerId: string;
+	botUserId?: string;
 	resolveDefaultSession: () => Promise<{ runtime: ConversationRuntime }>;
-	getWebSessions(): Promise<DiscordWebSession[]>;
+	getWebSessions(): Promise<ChatSession[]>;
 	delivery: SchedulerDeliverySink;
 }
 
+const webRef: ChatChannelRef = { service: "web", scope: "web", channelId: "main" };
 const webPersistenceOnlyDelivery: SchedulerDeliverySink = {
 	async deliver() {
 		return [];
@@ -35,12 +41,12 @@ const webPersistenceOnlyDelivery: SchedulerDeliverySink = {
 };
 
 export interface AgentCore {
-	attachDiscord(source: AgentCoreSessionSource): Promise<void>;
+	attachPlatform(source: PlatformSource): Promise<void>;
 	useCachedIdentity(identity: OwnerIdentity): Promise<void>;
-	hasSessionSource(): boolean;
+	start(): Promise<void>;
 	getRuntimeForChannel(channel: ChatChannelRef): Promise<ConversationRuntime>;
 	peekRuntime(channelKey: string): Promise<ConversationRuntime | undefined>;
-	getWebSessions(): Promise<DiscordWebSession[]>;
+	getWebSessions(): Promise<ChatSession[]>;
 	getRuntimeForWebChannel(channelKey?: string): Promise<ConversationRuntime>;
 	promptForRuntime(
 		runtime: ConversationRuntime,
@@ -60,44 +66,51 @@ export function createAgentCore(deps: {
 	familiarAgent: FamiliarAgent;
 	memoryService?: MemoryService;
 }): AgentCore {
-	let sessionSource: AgentCoreSessionSource | undefined;
-	const requireSessionSource = (): AgentCoreSessionSource => {
-		if (!sessionSource) throw new Error("Owner identity is not established");
-		return sessionSource;
+	const sources = new Map<ChatService, PlatformSource>();
+	const webSource: PlatformSource = {
+		service: "web",
+		ownerId: WEB_OWNER_ID,
+		resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(webRef) }),
+		getWebSessions: async () => [
+			{ key: chatChannelKey(webRef), label: "Main Chat", channel: webRef, isDefault: true },
+		],
+		delivery: webPersistenceOnlyDelivery,
 	};
-	let schedulerStarted = false;
+	sources.set("web", webSource);
+	const priority: ChatService[] = ["discord", "qq", "web"];
+	const primary = (): PlatformSource =>
+		(deps.config.defaultPlatform && sources.get(deps.config.defaultPlatform)) ||
+		priority.map((service) => sources.get(service)).find((source): source is PlatformSource => source !== undefined)!;
 	const runtimeManager = createRuntimeManager({
 		config: deps.config,
 		memoryService: deps.memoryService,
-		botUserId: () => requireSessionSource().botUserId,
+		identityFor: (channel) => {
+			const source = sources.get(channel.service);
+			if (!source) throw new Error(`No platform source attached for service: ${channel.service}`);
+			return { ownerId: source.ownerId, botUserId: source.botUserId };
+		},
 	});
 	const agentWork = createAgentWorkQueue({ familiarAgent: deps.familiarAgent });
 	const scheduler = createSchedulerRunner({
 		config: deps.config,
 		agentWork,
 		familiarAgent: deps.familiarAgent,
-		resolveDefaultSession: () => requireSessionSource().resolveDefaultSession(),
-		delivery: {
-			deliver: (options) => requireSessionSource().delivery.deliver(options),
-		},
+		resolveDefaultSession: () => primary().resolveDefaultSession(),
+		delivery: { deliver: (options) => primary().delivery.deliver(options) },
 	});
-	// The scheduler can only run once a session source exists; start it with the first
-	// source to arrive (cached identity at boot, or the live Discord connection).
-	const setSessionSource = async (source: AgentCoreSessionSource): Promise<void> => {
-		sessionSource = source;
-		if (!schedulerStarted) {
-			await scheduler.start();
-			schedulerStarted = true;
-		}
-	};
+	let schedulerStarted = false;
 
 	return {
-		attachDiscord(source: AgentCoreSessionSource): Promise<void> {
-			return setSessionSource(source);
+		async attachPlatform(source): Promise<void> {
+			sources.set(source.service, source);
 		},
-		useCachedIdentity(identity: OwnerIdentity): Promise<void> {
+		async useCachedIdentity(identity): Promise<void> {
+			const ownerId = deps.config.discord.ownerId;
+			if (!ownerId) throw new Error("Cached Discord identity requires discord.owner_id");
 			const dmRef: ChatChannelRef = { service: "discord", scope: "dm", channelId: identity.dmChannelId };
-			return setSessionSource({
+			await this.attachPlatform({
+				service: "discord",
+				ownerId,
 				botUserId: identity.botUserId,
 				resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(dmRef) }),
 				getWebSessions: async () => [
@@ -106,16 +119,32 @@ export function createAgentCore(deps: {
 				delivery: webPersistenceOnlyDelivery,
 			});
 		},
-		hasSessionSource(): boolean {
-			return sessionSource !== undefined;
+		async start(): Promise<void> {
+			if (schedulerStarted) return;
+			schedulerStarted = true;
+			await scheduler.start();
 		},
 		getRuntimeForChannel: runtimeManager.getRuntimeForChannel,
 		peekRuntime: runtimeManager.peekRuntime,
-		getWebSessions(): Promise<DiscordWebSession[]> {
-			return requireSessionSource().getWebSessions();
+		async getWebSessions(): Promise<ChatSession[]> {
+			const primaryService = primary().service;
+			const sessions: ChatSession[] = [];
+			for (const service of priority) {
+				if (service === "web" && primaryService !== "web") continue;
+				const source = sources.get(service);
+				if (!source) continue;
+				for (const session of await source.getWebSessions()) {
+					if (primaryService === service) sessions.push(session);
+					else {
+						const { isDefault: _isDefault, ...withoutDefault } = session;
+						sessions.push(withoutDefault);
+					}
+				}
+			}
+			return sessions;
 		},
 		async getRuntimeForWebChannel(channelKey?: string): Promise<ConversationRuntime> {
-			const sessions = await requireSessionSource().getWebSessions();
+			const sessions = await this.getWebSessions();
 			const session = channelKey ? sessions.find((candidate) => candidate.key === channelKey) : sessions[0];
 			if (!session) throw new Error(channelKey ? `Unknown web session: ${channelKey}` : "No sessions available");
 			return runtimeManager.getRuntimeForChannel(session.channel);

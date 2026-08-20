@@ -18,7 +18,7 @@ import { registerWebDiaryRoutes } from "./diary-routes.js";
 import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
-import { HttpError, sendText } from "./http.js";
+import { sendText } from "./http.js";
 import { createWebRouteRegistry } from "./routes.js";
 import { createWebRuntimeActions } from "./runtime-actions.js";
 import { registerWebSkillRoutes } from "./skill-routes.js";
@@ -42,14 +42,12 @@ export async function startWebDaemon(
 	const eventHub = createWebEventHub(config, personaName);
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
-		if (!agentCore.hasSessionSource()) throw new HttpError(503, "Owner identity is not established yet.");
 		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
 		eventHub.subscribeRuntime(runtime);
 		return runtime;
 	};
 
 	const subscribeKnownRuntimes = async (): Promise<void> => {
-		if (!agentCore.hasSessionSource()) return;
 		const sessions = await agentCore.getWebSessions();
 		await Promise.all(
 			sessions.map(async (session) => {

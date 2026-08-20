@@ -739,14 +739,6 @@ allowed_groups = []</code></pre>
           <p>If the OneBot server has an access token, put it in <code>.env</code>:</p>
           <pre><code>QQ_ONEBOT_TOKEN=paste-your-onebot-token-here</code></pre>
           <p>Non-owner DMs and groups outside the allowlist are ignored. Use a dedicated small account rather than your main QQ, keep it logged in from one place only, and let it idle a few days before adding it to groups.</p>
-
-          <h4>Troubleshooting (from the Windows smoke test)</h4>
-          <ul>
-            <li><strong>One-key installer returns a 404.</strong> <code>NapCatInstaller.exe</code> pins a QQ download URL (<code>QQ9.9.19.34231</code>) that Tencent has removed, so the one-key package fails on download. Use <code>NapCat.Shell.zip</code> instead, which needs you to install QQ yourself.</li>
-            <li><strong>NapCat asks you to log in every launch.</strong> Quick login only happens when you pass the account number with <code>-q</code>; without it NapCat defaults to QR login even if a session exists. Start with <code>launcher.bat -q 123456789</code>.</li>
-            <li><strong>Sent messages never arrive.</strong> A freshly logged-in account is throttled by QQ anti-spam — the send reports success but the other side sees nothing. Wait a day or two and test with a real person, not just the bot account.</li>
-            <li><strong>Everything looks right but nothing connects.</strong> Check <code>messagePostFormat</code> is <code>array</code>, and confirm the <code>ws_url</code> port matches the WebSocket server you added in the WebUI (not the 6099 WebUI port).</li>
-          </ul>
         </section>
 
         <section class="feature" id="advanced">
@@ -821,6 +813,22 @@ enabled = true</code></pre>
           <details>
             <summary>The bot starts but cannot answer</summary>
             <p>Recheck the Link API key after <code>ANTHROPIC_API_KEY=</code> in <code>.env</code>.</p>
+          </details>
+          <details>
+            <summary>QQ: the NapCat one-key installer returns a 404</summary>
+            <p><code>NapCatInstaller.exe</code> pins a QQ download URL (<code>QQ9.9.19.34231</code>) that Tencent has removed, so the one-key package fails on download. Use <code>NapCat.Shell.zip</code> instead, which needs you to install QQ yourself.</p>
+          </details>
+          <details>
+            <summary>QQ: NapCat asks you to log in every launch</summary>
+            <p>Quick login only happens when you pass the account number with <code>-q</code>; without it NapCat defaults to QR login even if a session exists. Start with <code>launcher.bat -q 123456789</code>.</p>
+          </details>
+          <details>
+            <summary>QQ: sent messages never arrive</summary>
+            <p>A freshly logged-in account is throttled by QQ anti-spam — the send reports success but the other side sees nothing. Wait a day or two and test with a real person, not just the bot account.</p>
+          </details>
+          <details>
+            <summary>QQ: everything looks right but nothing connects</summary>
+            <p>Check <code>messagePostFormat</code> is <code>array</code>, and confirm the <code>ws_url</code> port matches the WebSocket server you added in the WebUI (not the 6099 WebUI port).</p>
           </details>
         </section>
 

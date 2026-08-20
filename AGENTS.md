@@ -2,12 +2,11 @@
 
 ## Upstream Check
 
-Before implementing features in subsequent development, first verify the latest status of the upstream projects (`earendil-works/pi` and relevant `pi-chat` refs) to avoid reinventing capabilities that upstream already added or is about to publish.
+Before implementing features in subsequent development, first verify the latest status of the upstream projects (`earendil-works/pi`) to avoid reinventing capabilities that upstream already added or is about to publish.
 
 Use existing local reference clones when available; do not create fresh clones for routine research.
 
 - `earendil-works/pi`: `/Users/qearl/pi`. Remote is `upstream`.
-- `earendil-works/pi-chat`: `/Users/qearl/pi-chat`. Remote is `origin`.
 
 These directories are reference clones, not Familiar worktrees. It is fine to overwrite them with upstream state. Avoid cloning duplicate copies into `/tmp`; clean up any accidental duplicate upstream clones when noticed.
 

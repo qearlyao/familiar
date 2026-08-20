@@ -328,16 +328,23 @@ describe("service management", () => {
 	it("refreshes missing workspace defaults after global upgrade", async () => {
 		const calls: Array<{ command: string; args: string[] }> = [];
 
-		await upgradeFamiliar("/tmp/familiar workspace", {
+		const result = await upgradeFamiliar("/tmp/familiar workspace", {
 			platform: "linux",
 			runCommand: async (command, args) => {
 				calls.push({ command, args });
 			},
+			readJsonFile: async () => ({ version: "0.9.0" }),
 		});
 
 		assert.deepEqual(calls, [
 			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
 			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
+		]);
+		assert.match(result.title, /Familiar upgraded/);
+		assert.deepEqual(result.details, [
+			"from: 0.9.0",
+			"to: 0.9.0",
+			"restart: run `familiar restart` to apply the new version.",
 		]);
 	});
 
@@ -350,6 +357,7 @@ describe("service management", () => {
 			runCommand: async (command, args) => {
 				calls.push({ command, args });
 			},
+			readJsonFile: async () => ({ version: "0.9.0" }),
 		});
 
 		assert.deepEqual(calls, [

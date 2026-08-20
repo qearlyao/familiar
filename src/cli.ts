@@ -297,7 +297,9 @@ async function main(): Promise<void> {
 			return;
 		}
 		console.log(`Upgrading @qearlyao/familiar${upgradeOpenCli ? " and OpenCLI" : ""} globally...`);
-		await upgradeFamiliar(resolveWorkspaceInput(workspaceArgs[0]), { upgradeOpenCli });
+		console.log(
+			formatServiceResult(await upgradeFamiliar(resolveWorkspaceInput(workspaceArgs[0]), { upgradeOpenCli })),
+		);
 		return;
 	}
 	console.error(usage());

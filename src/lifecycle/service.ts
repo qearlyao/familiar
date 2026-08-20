@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -53,6 +53,7 @@ interface ServiceOptions {
 	commandExists?: (command: string) => Promise<boolean>;
 	runCommand?: (command: string, args: string[]) => Promise<void>;
 	captureCommand?: (command: string, args: string[]) => Promise<string>;
+	readJsonFile?: (path: string) => Promise<unknown>;
 }
 
 function servicePaths(
@@ -378,6 +379,22 @@ function serviceDetails(spec: ServiceSpec): string[] {
 	];
 }
 
+function resolveGlobalPackageVersion(packageName: string, options: ServiceOptions = {}): Promise<string | undefined> {
+	const cliPath = options.cliPath ?? currentCliPath();
+	// npm globals nest as node_modules/<name>/package.json under the bin dir.
+	const packageJsonPath = resolve(dirname(cliPath), "node_modules", packageName, "package.json");
+	return readJsonFile(packageJsonPath, options)
+		.then((raw) => {
+			const version = (raw as { version?: unknown } | null)?.version;
+			return typeof version === "string" ? version : undefined;
+		})
+		.catch(() => undefined);
+}
+
+function readJsonFile(path: string, options: ServiceOptions = {}): Promise<unknown> {
+	return options.readJsonFile ? options.readJsonFile(path) : readFile(path, "utf8").then((text) => JSON.parse(text));
+}
+
 async function prepareLogRotation(
 	spec: ServiceSpec,
 	options: ServiceOptions,
@@ -605,15 +622,29 @@ async function supervisorState(spec: ServiceSpec, options: ServiceOptions): Prom
 	}
 }
 
-export async function upgradeFamiliar(workspacePath: string, options: ServiceOptions = {}): Promise<void> {
+export async function upgradeFamiliar(
+	workspacePath: string,
+	options: ServiceOptions = {},
+): Promise<ServiceCommandResult> {
 	const currentPlatform = options.platform ?? platform();
 	const npmCommand = currentPlatform === "win32" ? "npm.cmd" : "npm";
 	const familiarCommand = currentPlatform === "win32" ? "familiar.cmd" : "familiar";
-	await runInteractive(npmCommand, ["install", "-g", "@qearlyao/familiar@latest"], options, "npm upgrade");
+	const packageName = "@qearlyao/familiar";
+	const fromVersion = await resolveGlobalPackageVersion(packageName, options);
+	await runInteractive(npmCommand, ["install", "-g", `${packageName}@latest`], options, "npm upgrade");
+	const toVersion = await resolveGlobalPackageVersion(packageName, options);
 	if (options.upgradeOpenCli) {
 		await runInteractive(npmCommand, ["install", "-g", "@jackwener/opencli"], options, "OpenCLI upgrade");
 	}
 	await runInteractive(familiarCommand, ["init", workspacePath], options, "workspace default refresh");
+	return {
+		title: "Familiar upgraded.",
+		details: [
+			`from: ${fromVersion ?? "unknown"}`,
+			`to: ${toVersion ?? "unknown"}`,
+			"restart: run `familiar restart` to apply the new version.",
+		],
+	};
 }
 
 export function formatServiceResult(result: ServiceCommandResult): string {

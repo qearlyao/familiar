@@ -2,6 +2,7 @@
 # default_platform = "discord" # discord | qq | web (heartbeat/cron delivery target; defaults to first configured)
 
 [discord]
+enabled = true # set false to skip connecting even when DISCORD_TOKEN is set
 owner_id = "YOUR_DISCORD_USER_ID"
 allowed_channels = []
 reply_mode = "plain" # plain | reply
@@ -15,6 +16,7 @@ allow_bot_messages = true
 # QQ via OneBot 11 (NapCat / Lagrange.OneBot). Setting ws_url enables the QQ daemon.
 # Token (if the OneBot server has one) goes in env: QQ_ONEBOT_TOKEN.
 # [qq]
+# enabled = true               # set false to skip connecting even when ws_url is set
 # ws_url = "ws://127.0.0.1:3001" # OneBot forward WebSocket
 # owner_id = "YOUR_QQ_NUMBER"    # required when ws_url is set
 # allowed_groups = []            # group-number allowlist; empty = DMs only

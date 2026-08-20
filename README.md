@@ -407,10 +407,15 @@ interchangeable. Configure:
 
 ```toml
 [qq]
+enabled = true # optional, default true; false skips connecting
 ws_url = "ws://127.0.0.1:3001"
 owner_id = "your QQ number"
 allowed_groups = [] # group-number allowlist; empty = DMs only
 ```
+
+`enabled = false` (also available under `[discord]`) skips connecting to that
+platform entirely even when the rest of its config is present. The WebUI is
+always on and cannot be disabled.
 
 If the OneBot server has an access token, put it in `.env` as
 `QQ_ONEBOT_TOKEN`. Non-owner DMs and groups outside the allowlist are ignored.

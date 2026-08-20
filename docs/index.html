@@ -650,7 +650,7 @@ interval_minutes = 240</code></pre>
 
         <section class="feature" id="platforms">
           <h2>Connect chat platforms (optional)</h2>
-          <p>Familiar lives in the WebUI by default. If you also want it in Discord or QQ, connect one or both — the same companion, memories, and sessions carry across every platform.</p>
+          <p>Familiar lives in the WebUI by default. If you also want it in Discord or QQ, connect one or both — the same companion, memories, and sessions carry across every platform. Each platform has an <code>enabled</code> switch; set it to <code>false</code> to stop that platform connecting without deleting its config. The WebUI is always on and cannot be disabled.</p>
 
           <h3>Discord</h3>
           <ol>
@@ -666,6 +666,7 @@ interval_minutes = 240</code></pre>
           <pre><code>DISCORD_TOKEN=paste-your-bot-token-here</code></pre>
           <p>Then set your user ID in the <code>[discord]</code> section of <code>config.toml</code>:</p>
           <pre><code>[discord]
+enabled = true
 owner_id = "paste-your-discord-user-id-here"</code></pre>
           <p>Familiar ignores Discord server channels unless you allow them. With Developer Mode enabled, right-click a server text channel, select <strong>Copy Channel ID</strong>, and add the ID to <code>allowed_channels</code>:</p>
           <pre><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
@@ -718,6 +719,7 @@ loginctl enable-linger $USER</code></pre>
           <h4>3. Point Familiar at it</h4>
           <p>Add the <code>[qq]</code> section to <code>config.toml</code>:</p>
           <pre><code>[qq]
+enabled = true
 ws_url = "ws://127.0.0.1:3001"
 owner_id = "your QQ number"
 allowed_groups = []</code></pre>

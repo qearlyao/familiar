@@ -195,12 +195,12 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	if (identity && config.discord.ownerId) await agentCore.useCachedIdentity(identity);
 	await agentCore.start();
 	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart });
-	if (token) {
+	if (config.discord.enabled && token) {
 		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {
 			restart: requestRestart,
 		});
 	}
-	if (config.qq.wsUrl) {
+	if (config.qq.enabled && config.qq.wsUrl) {
 		qqDaemon = startQqDaemon(config, familiarAgent, settings, agentCore, { restart: requestRestart });
 	}
 	console.log(`familiar running for workspace ${config.workspacePath}`);

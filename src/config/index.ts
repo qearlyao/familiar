@@ -455,7 +455,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const token = readOptionalConfigString(process.env.DISCORD_TOKEN, "DISCORD_TOKEN");
 	const ownerId = readOptionalConfigString(discord.owner_id, "discord.owner_id");
 	if (token && !ownerId) throw new Error("Config value discord.owner_id is required when DISCORD_TOKEN is set");
-	assertKnownKeys(qq, "qq", ["ws_url", "owner_id", "allowed_groups"]);
+	assertKnownKeys(qq, "qq", ["enabled", "ws_url", "owner_id", "allowed_groups"]);
 	const qqWsUrl = readOptionalConfigString(qq.ws_url, "qq.ws_url");
 	const qqOwnerId = readOptionalConfigString(qq.owner_id, "qq.owner_id");
 	if (qqWsUrl && !qqOwnerId) throw new Error("Config value qq.owner_id is required when qq.ws_url is set");
@@ -556,6 +556,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		workspacePath,
 		defaultPlatform,
 		discord: {
+			enabled: readBoolean(discord.enabled, true, "discord.enabled"),
 			token,
 			ownerId,
 			allowedChannels: readStringArray(discord.allowed_channels, "discord.allowed_channels"),
@@ -584,6 +585,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			allowBotMessages: readBoolean(discord.allow_bot_messages, false, "discord.allow_bot_messages"),
 		},
 		qq: {
+			enabled: readBoolean(qq.enabled, true, "qq.enabled"),
 			wsUrl: qqWsUrl,
 			token: readOptionalConfigString(process.env.QQ_ONEBOT_TOKEN, "QQ_ONEBOT_TOKEN"),
 			ownerId: qqOwnerId,

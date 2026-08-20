@@ -66,6 +66,21 @@ allowed_groups = ["30003"]
 			assert.equal(config.qq.wsUrl, "ws://127.0.0.1:3001");
 			assert.equal(config.qq.ownerId, "10001");
 			assert.deepEqual(config.qq.allowedGroups, ["30003"]);
+			assert.equal(config.qq.enabled, true);
+
+			const disabledPath = await createWorkspace(
+				t,
+				`[agent]
+model = "anthropic/claude-sonnet-4-5"
+
+[qq]
+enabled = false
+ws_url = "ws://127.0.0.1:3001"
+owner_id = "10001"
+`,
+			);
+			const disabledConfig = await loadConfig(disabledPath);
+			assert.equal(disabledConfig.qq.enabled, false);
 
 			const emptyConfigPath = await createWorkspace(
 				t,
@@ -76,6 +91,8 @@ model = "anthropic/claude-sonnet-4-5"
 			const emptyConfig = await loadConfig(emptyConfigPath);
 			assert.equal(emptyConfig.qq.wsUrl, undefined);
 			assert.deepEqual(emptyConfig.qq.allowedGroups, []);
+			assert.equal(emptyConfig.qq.enabled, true);
+			assert.equal(emptyConfig.discord.enabled, true);
 		});
 	});
 

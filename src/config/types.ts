@@ -75,6 +75,7 @@ export interface Config {
 	workspacePath: string;
 	defaultPlatform?: DefaultPlatform;
 	discord: {
+		enabled: boolean;
 		token?: string;
 		ownerId?: string;
 		allowedChannels: string[];
@@ -87,6 +88,7 @@ export interface Config {
 		allowBotMessages: boolean;
 	};
 	qq: {
+		enabled: boolean;
 		wsUrl?: string;
 		token?: string;
 		ownerId?: string;

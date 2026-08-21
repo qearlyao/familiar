@@ -50,10 +50,18 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 				// ponytail: peek only — sessions with no live runtime just omit the context ring
 				const runtime = await agentCore.peekRuntime(session.key);
 				const tokens = runtime ? lastContextTokens(runtime.getRecords()) : undefined;
-				const context =
-					tokens === undefined
-						? undefined
-						: { tokens, limit: familiarAgent.resolveChannelModel(session.key).model.contextWindow ?? 200_000 };
+				// A stale channel override (model since removed from models.allow)
+				// makes resolveChannelModel throw. That is right when the model is
+				// about to be used, but here it only sizes the context ring — so
+				// drop the ring for that one session instead of failing the list.
+				const contextWindow = (() => {
+					try {
+						return familiarAgent.resolveChannelModel(session.key).model.contextWindow;
+					} catch {
+						return undefined;
+					}
+				})();
+				const context = tokens === undefined ? undefined : { tokens, limit: contextWindow ?? 200_000 };
 				return sessionDto(session, context);
 			}),
 		);

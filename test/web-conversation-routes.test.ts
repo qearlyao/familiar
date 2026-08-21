@@ -219,4 +219,55 @@ describe("web conversation routes", () => {
 		assert.deepEqual(sessions[0].context, { tokens: 2000, limit: 100_000 });
 		assert.equal(sessions[1].context, undefined);
 	});
+
+	it("still lists sessions when a channel override names a model that is no longer allowlisted", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const routes = new Map<string, WebRoute>();
+		const route: RegisterWebRoute = (method, pathname, handler) => routes.set(`${method} ${pathname}`, handler);
+		const records = [
+			{ type: "agent_event", event: { type: "message_end", role: "assistant", usage: { input: 100, output: 20, cacheRead: 800, cacheWrite: 80, cost: 0 } } },
+			{ type: "checkpoint" },
+		];
+		const agentCore = {
+			getWebSessions: async () => [
+				{ key: "discord:dm:dm-1", label: "Main Chat", channel: { service: "discord", scope: "dm", channelId: "dm-1" }, isDefault: true },
+			],
+			peekRuntime: async () => ({ getRecords: () => records }) as unknown as ConversationRuntime,
+		} as unknown as AgentCore;
+		const familiarAgent = {
+			resolveChannelModel: () => {
+				throw new Error("Model is not allowlisted: xai/grok-4.5");
+			},
+		} as unknown as FamiliarAgent;
+
+		registerWebConversationRoutes({
+			route,
+			config,
+			auth: {} as WebAuth,
+			authMode: "tailscale-only",
+			agentCore,
+			getRuntime: async () => {
+				throw new Error("unused");
+			},
+			personaName: "familiar",
+			actions: {} as import("../src/web/runtime-actions.js").WebRuntimeActions,
+			familiarAgent,
+		});
+		const handler = routes.get("GET /api/web/sessions");
+		assert.ok(handler);
+		const response = new FakeResponse();
+
+		await handler(
+			jsonRequest({}),
+			response as unknown as ServerResponse,
+			new URL("http://localhost/api/web/sessions"),
+		);
+
+		// The stale override must not blank the session list — the WebUI needs a
+		// session key to open its stream, so a 500 here strands it at "connecting".
+		assert.equal(response.statusCode, 200);
+		const { sessions } = JSON.parse(response.body) as { sessions: Array<{ key: string; context?: unknown }> };
+		assert.equal(sessions.length, 1);
+		assert.deepEqual(sessions[0].context, { tokens: 1000, limit: 200_000 });
+	});
 });

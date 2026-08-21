@@ -171,8 +171,9 @@ export interface Config {
 	};
 	mediaUnderstanding: {
 		audio: {
-			provider: MediaUnderstandingProvider;
+			provider: string;
 			model: string;
+			baseUrl: string;
 			apiKeyEnv: string;
 		};
 		video: {

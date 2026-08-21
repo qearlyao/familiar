@@ -142,7 +142,7 @@ async function transcribeAudioAttachment(
 	const form = new FormData();
 	form.set("model", config.mediaUnderstanding.audio.model);
 	form.set("file", new Blob([await readFile(attachment.localPath)], { type: attachment.mimeType }), attachment.name);
-	const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+	const response = await fetch(`${config.mediaUnderstanding.audio.baseUrl.replace(/\/+$/, "")}/audio/transcriptions`, {
 		method: "POST",
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
@@ -150,12 +150,14 @@ async function transcribeAudioAttachment(
 		body: form,
 		signal: AbortSignal.timeout(AUDIO_UNDERSTANDING_TIMEOUT_MS),
 	});
-	if (!response.ok) throw new Error(`Groq transcription failed: HTTP ${response.status}`);
+	if (!response.ok) {
+		throw new Error(`${config.mediaUnderstanding.audio.provider} transcription failed: HTTP ${response.status}`);
+	}
 	const parsed = (await response.json()) as { text?: string };
 	const text = parsed.text?.trim();
 	if (!text) return undefined;
 	return {
-		provider: "groq",
+		provider: config.mediaUnderstanding.audio.provider,
 		model: config.mediaUnderstanding.audio.model,
 		text: normalizeDerivedText(text),
 		label: labelForAttachment(attachment.kind),

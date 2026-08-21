@@ -341,17 +341,27 @@ describe("inbound attachments", () => {
 		assert.doesNotMatch(result.promptSuffix, /Image omitted/);
 	});
 
-	it("preserves derived attachment text during materialization", async (t) => {
+	it("transcribes audio through the configured endpoint and preserves derived text", async (t) => {
 		const dataDir = await createTempDataDir(t);
-		const config = await configWithDataDir(t, dataDir);
+		const config = await configWithDataDir(t, dataDir, {
+			mediaUnderstanding: {
+				audio: {
+					provider: "openrouter",
+					model: "openai/whisper-large-v3",
+					baseUrl: "https://openrouter.ai/api/v1/",
+					apiKeyEnv: "OPENROUTER_API_KEY",
+				},
+			},
+		});
 		const previousFetch = globalThis.fetch;
-		const previousGroq = process.env.GROQ_API_KEY;
-		process.env.GROQ_API_KEY = "groq-test";
-		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({ text: "transcribed words" }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			})) as typeof fetch;
+		const previousKey = process.env.OPENROUTER_API_KEY;
+		process.env.OPENROUTER_API_KEY = "openrouter-test";
+		globalThis.fetch = (async (input, init) => {
+			assert.equal(requestUrl(input), "https://openrouter.ai/api/v1/audio/transcriptions");
+			assert.equal(new Headers(init?.headers).get("authorization"), "Bearer openrouter-test");
+			assert.equal((init?.body as FormData).get("model"), "openai/whisper-large-v3");
+			return jsonResponse({ text: "transcribed words" });
+		}) as typeof fetch;
 		try {
 			const attachments = await materializeInboundAttachments(config, [
 				{
@@ -363,11 +373,12 @@ describe("inbound attachments", () => {
 			]);
 
 			assert.equal(attachments[0]?.derived?.text?.label, "transcription");
+			assert.equal(attachments[0]?.derived?.text?.provider, "openrouter");
 			assert.equal(attachments[0]?.derived?.text?.text, "transcribed words");
 		} finally {
 			globalThis.fetch = previousFetch;
-			if (previousGroq === undefined) delete process.env.GROQ_API_KEY;
-			else process.env.GROQ_API_KEY = previousGroq;
+			if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+			else process.env.OPENROUTER_API_KEY = previousKey;
 		}
 	});
 

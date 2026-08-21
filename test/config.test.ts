@@ -548,6 +548,7 @@ api = "native-gemini"
 		assert.deepEqual(config.mediaUnderstanding.audio, {
 			provider: "groq",
 			model: "whisper-large-v3",
+			baseUrl: "https://api.groq.com/openai/v1",
 			apiKeyEnv: "GROQ_API_KEY",
 		});
 		assert.deepEqual(config.mediaUnderstanding.video, {
@@ -555,6 +556,29 @@ api = "native-gemini"
 			model: "gemini-3-flash-preview",
 			baseUrl: undefined,
 			apiKeyEnv: "GEMINI_API_KEY",
+		});
+	});
+
+	it("loads a custom OpenAI-compatible audio transcription provider", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[media.understanding.audio]
+provider = "openrouter"
+model = "openai/whisper-large-v3"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.deepEqual(config.mediaUnderstanding.audio, {
+			provider: "openrouter",
+			model: "openai/whisper-large-v3",
+			baseUrl: "https://openrouter.ai/api/v1",
+			apiKeyEnv: "OPENROUTER_API_KEY",
 		});
 	});
 

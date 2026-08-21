@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
-import { isBuiltInOrDefaultProvider, resolveProviderSetting } from "../models/index.js";
+import { isBuiltInOrDefaultProvider, PROVIDER_DEFAULTS, resolveProviderSetting } from "../models/index.js";
 import { isOpenRouterAnthropicBaseUrl } from "../models/openrouter-routing.js";
 import { readEnum } from "../util/guards.js";
 import {
@@ -90,6 +90,8 @@ const DEFAULT_MEMORY_EMBEDDING_BASE_URLS: Record<string, string> = {
 const DEFAULT_MEMORY_EMBEDDING_API_KEY_ENVS: Record<string, string> = {
 	google: "GEMINI_API_KEY",
 };
+
+const DEFAULT_AUDIO_TRANSCRIPTION_API_KEY_ENVS: Record<string, string> = { groq: "GROQ_API_KEY" };
 
 type BrowserHarnessFlatConfig = {
 	mode: BrowserHarnessMode;
@@ -472,6 +474,24 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
 	const openRouterRouting = readOpenRouterRouting(models.openrouter_routing, modelBaseUrls);
 	const configuredProviders = readConfiguredProviders(models.providers);
+	const audioProvider = readConfigString(
+		mediaUnderstandingAudio.provider,
+		"groq",
+		"media.understanding.audio.provider",
+	);
+	const audioModel = readConfigString(
+		mediaUnderstandingAudio.model,
+		"whisper-large-v3",
+		"media.understanding.audio.model",
+	);
+	const audioBaseUrl =
+		readOptionalConfigString(mediaUnderstandingAudio.base_url, "media.understanding.audio.base_url") ??
+		PROVIDER_DEFAULTS[audioProvider]?.baseUrl;
+	if (!audioBaseUrl) throw new Error("Missing required config value: media.understanding.audio.base_url");
+	const audioApiKeyEnv =
+		readOptionalConfigString(mediaUnderstandingAudio.api_key_env, "media.understanding.audio.api_key_env") ??
+		DEFAULT_AUDIO_TRANSCRIPTION_API_KEY_ENVS[audioProvider];
+	if (!audioApiKeyEnv) throw new Error("Missing required config value: media.understanding.audio.api_key_env");
 	const memoryEmbeddingFormat = readEnum(
 		readOptionalString(memoryEmbedding.format, "gemini"),
 		"memory.embedding.format",
@@ -682,13 +702,10 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		mediaUnderstanding: {
 			audio: {
-				provider: readEnum(
-					readOptionalString(mediaUnderstandingAudio.provider, "groq"),
-					"media.understanding.audio.provider",
-					MEDIA_UNDERSTANDING_PROVIDERS,
-				),
-				model: readOptionalString(mediaUnderstandingAudio.model, "whisper-large-v3"),
-				apiKeyEnv: readOptionalString(mediaUnderstandingAudio.api_key_env, "GROQ_API_KEY"),
+				provider: audioProvider,
+				model: audioModel,
+				baseUrl: audioBaseUrl,
+				apiKeyEnv: audioApiKeyEnv,
 			},
 			video: {
 				provider: readEnum(

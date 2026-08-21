@@ -191,6 +191,11 @@ retention_days = 7
 provider = "groq"
 model = "whisper-large-v3"
 api_key_env = "GROQ_API_KEY"
+# Any OpenAI-compatible transcription endpoint works; name it and point base_url at it, e.g. OpenRouter:
+# provider = "openrouter"
+# model = "openai/whisper-large-v3"
+# base_url = "https://openrouter.ai/api/v1"
+# api_key_env = "OPENROUTER_API_KEY"
 
 [media.understanding.video]
 provider = "google"

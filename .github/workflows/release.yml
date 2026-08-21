@@ -12,7 +12,21 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Extract changelog notes
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            $0 ~ "^## " version "([[:space:]]|$)" { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+
       - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file release-notes.md --title "$GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ github.token }}

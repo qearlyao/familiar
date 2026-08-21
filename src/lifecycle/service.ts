@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -379,16 +379,13 @@ function serviceDetails(spec: ServiceSpec): string[] {
 	];
 }
 
-function resolveGlobalPackageVersion(packageName: string, options: ServiceOptions = {}): Promise<string | undefined> {
-	const cliPath = options.cliPath ?? currentCliPath();
-	// npm globals nest as node_modules/<name>/package.json under the bin dir.
-	const packageJsonPath = resolve(dirname(cliPath), "node_modules", packageName, "package.json");
-	return readJsonFile(packageJsonPath, options)
-		.then((raw) => {
-			const version = (raw as { version?: unknown } | null)?.version;
-			return typeof version === "string" ? version : undefined;
-		})
-		.catch(() => undefined);
+async function installedPackageVersion(options: ServiceOptions = {}): Promise<string> {
+	const cliPath = await realpath(options.cliPath ?? currentCliPath());
+	const packageJsonPath = resolve(dirname(cliPath), "..", "package.json");
+	const raw = await readJsonFile(packageJsonPath, options);
+	const version = (raw as { version?: unknown } | null)?.version;
+	if (typeof version !== "string") throw new Error(`Installed Familiar manifest has no version: ${packageJsonPath}`);
+	return version;
 }
 
 function readJsonFile(path: string, options: ServiceOptions = {}): Promise<unknown> {
@@ -630,9 +627,9 @@ export async function upgradeFamiliar(
 	const npmCommand = currentPlatform === "win32" ? "npm.cmd" : "npm";
 	const familiarCommand = currentPlatform === "win32" ? "familiar.cmd" : "familiar";
 	const packageName = "@qearlyao/familiar";
-	const fromVersion = await resolveGlobalPackageVersion(packageName, options);
+	const fromVersion = await installedPackageVersion(options);
 	await runInteractive(npmCommand, ["install", "-g", `${packageName}@latest`], options, "npm upgrade");
-	const toVersion = await resolveGlobalPackageVersion(packageName, options);
+	const toVersion = await installedPackageVersion(options);
 	if (options.upgradeOpenCli) {
 		await runInteractive(npmCommand, ["install", "-g", "@jackwener/opencli"], options, "OpenCLI upgrade");
 	}
@@ -640,8 +637,8 @@ export async function upgradeFamiliar(
 	return {
 		title: "Familiar upgraded.",
 		details: [
-			`from: ${fromVersion ?? "unknown"}`,
-			`to: ${toVersion ?? "unknown"}`,
+			`from: ${fromVersion}`,
+			`to: ${toVersion}`,
 			"restart: run `familiar restart` to apply the new version.",
 		],
 	};

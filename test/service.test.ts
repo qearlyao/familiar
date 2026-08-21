@@ -327,13 +327,17 @@ describe("service management", () => {
 
 	it("refreshes missing workspace defaults after global upgrade", async () => {
 		const calls: Array<{ command: string; args: string[] }> = [];
+		const manifests: string[] = [];
 
 		const result = await upgradeFamiliar("/tmp/familiar workspace", {
 			platform: "linux",
 			runCommand: async (command, args) => {
 				calls.push({ command, args });
 			},
-			readJsonFile: async () => ({ version: "0.9.0" }),
+			readJsonFile: async (path) => {
+				manifests.push(path);
+				return { version: "0.9.0" };
+			},
 		});
 
 		assert.deepEqual(calls, [
@@ -346,6 +350,9 @@ describe("service management", () => {
 			"to: 0.9.0",
 			"restart: run `familiar restart` to apply the new version.",
 		]);
+		assert.equal(manifests.length, 2);
+		assert.ok(manifests.every((path) => path.endsWith("/package.json")));
+		assert.ok(manifests.every((path) => !path.includes("/node_modules/@qearlyao/familiar/")));
 	});
 
 	it("upgrades OpenCLI only when requested", async () => {

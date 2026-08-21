@@ -4,6 +4,8 @@ import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./o
 import type { Config, TtsProvider } from "./types.js";
 
 export type ConfigKey =
+	| "discord.enabled"
+	| "qq.enabled"
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
@@ -98,6 +100,20 @@ function requireNonNegativeNumber(value: unknown, key: string): number {
 }
 
 export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
+	"discord.enabled": {
+		read: (config) => config.discord.enabled,
+		validate: (value) => requireBoolean(value, "discord.enabled"),
+		write: (config, value) => {
+			config.discord.enabled = value as boolean;
+		},
+	},
+	"qq.enabled": {
+		read: (config) => config.qq.enabled,
+		validate: (value) => requireBoolean(value, "qq.enabled"),
+		write: (config, value) => {
+			config.qq.enabled = value as boolean;
+		},
+	},
 	"heartbeat.enabled": {
 		read: (config) => config.heartbeat.enabled,
 		validate: (value) => requireBoolean(value, "heartbeat.enabled"),

@@ -92,7 +92,7 @@ export async function startWebDaemon(
 		personaName,
 		publish: eventHub.publish,
 	});
-	registerWebConfigRoutes(route, config, agentCore);
+	registerWebConfigRoutes(route, config, agentCore, options.restart);
 	registerWebPushRoutes(route, push);
 	registerWebBookRoutes(route, config);
 	registerWebDiaryRoutes(route, config);

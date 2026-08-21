@@ -552,6 +552,8 @@ export async function deleteMarginalia(id: string, entryId: string): Promise<voi
 }
 
 export type ConfigKey =
+  | "discord.enabled"
+  | "qq.enabled"
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
   | "heartbeat.intervalMs"
@@ -590,6 +592,8 @@ export type TtsProvider = "elevenlabs" | "cartesia";
 
 export interface ConfigPayload {
   values: {
+    "discord.enabled": ConfigValue<boolean>;
+    "qq.enabled": ConfigValue<boolean>;
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;
     "heartbeat.intervalMs": ConfigValue<number>;

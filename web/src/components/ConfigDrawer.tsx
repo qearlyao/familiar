@@ -7,6 +7,7 @@ import {
   Database,
   HeartPulse,
   Image,
+  MessageCircle,
   MonitorSmartphone,
   Palette,
   Volume2,
@@ -28,6 +29,7 @@ import { MemorySection } from "./config/MemorySection";
 import { NotificationsSection } from "./config/NotificationsSection";
 import { TtsSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
+import { ChannelsSection } from "./config/ChannelsSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { useConfig } from "@/lib/useConfig";
 import type { WebAuthDevice } from "@/lib/api";
@@ -192,6 +194,17 @@ export function ConfigDrawer({
             icon={Image}
           >
             <ImageGenSection
+              values={configData?.values}
+              disabled={!ready || busy}
+              onChange={setConfig}
+            />
+          </Section>
+          <Section
+            title="channels"
+            description="which discord and qq connections are running."
+            icon={MessageCircle}
+          >
+            <ChannelsSection
               values={configData?.values}
               disabled={!ready || busy}
               onChange={setConfig}

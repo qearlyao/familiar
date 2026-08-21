@@ -59,6 +59,7 @@ describe("web conversation routes", () => {
 		const runtime = {
 			channel: { service: "discord", scope: "dm", channelId: "dm-1" },
 			channelKey: "discord:dm:dm-1",
+			isDirect: true,
 			ownerId: "runtime-owner",
 			hasActiveJob: () => true,
 			getRecords: () => records,
@@ -167,6 +168,67 @@ describe("web conversation routes", () => {
 		assert.deepEqual(messages.map((message) => message.text), ["use the shorter path", "book reply"]);
 		assert.deepEqual(modes, ["collect"]);
 		assert.deepEqual(steered, ["steer:use the shorter path"]);
+		assert.equal(drained, false);
+	});
+
+	it("steers the shared owner DM, whose scope is web rather than dm", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t), {
+			discord: { dmMode: "steer" },
+		});
+		const routes = new Map<string, WebRoute>();
+		const route: RegisterWebRoute = (method, pathname, handler) => routes.set(`${method} ${pathname}`, handler);
+		const modes: Array<InboundDispatchOptions["mode"]> = [];
+		const steered: string[] = [];
+		let drained = false;
+		// Shaped like the real shared owner DM: scope "web", isDirect true.
+		const runtime = {
+			channel: { service: "web", scope: "web", channelId: "main" },
+			channelKey: "web-web-main",
+			isDirect: true,
+			ownerId: "owner",
+			hasActiveJob: () => true,
+			getRecords: () => [],
+			subscribe: () => () => undefined,
+			subscribeAgentEvents: () => () => undefined,
+			ingestInbound: async (input: InboundMessageInput, options: InboundDispatchOptions) => {
+				modes.push(options.mode);
+				return {
+					jobQueued: false,
+					record: { type: "inbound", recordId: 1, text: input.text.trim() },
+				};
+			},
+			buildSteerPromptForRecord: (record: { text: string }) => `steer:${record.text}`,
+			queueLatestTrigger: async () => undefined,
+		} as unknown as ConversationRuntime;
+		registerWebConversationRoutes({
+			route,
+			config,
+			auth: {} as WebAuth,
+			authMode: "tailscale-only",
+			agentCore: { activeOwner: runtime.channelKey } as AgentCore,
+			getRuntime: async () => runtime,
+			personaName: "familiar",
+			actions: {
+				drainJobs: async () => {
+					drained = true;
+				},
+			} as unknown as import("../src/web/runtime-actions.js").WebRuntimeActions,
+			familiarAgent: {
+				steer: (_sessionKey: string, prompt: string) => steered.push(prompt),
+			} as unknown as FamiliarAgent,
+		});
+		const handler = routes.get("POST /api/web/send");
+		assert.ok(handler);
+		const response = new FakeResponse();
+		await handler(
+			multipartRequest({ text: "actually, use the other one" }),
+			response as unknown as ServerResponse,
+			new URL("http://localhost/api/web/send"),
+		);
+
+		assert.equal(response.statusCode, 200);
+		assert.deepEqual(modes, ["collect"]);
+		assert.deepEqual(steered, ["steer:actually, use the other one"]);
 		assert.equal(drained, false);
 	});
 

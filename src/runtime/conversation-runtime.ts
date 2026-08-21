@@ -111,6 +111,9 @@ function escapeRegExp(value: string): string {
 export class ConversationRuntime {
 	readonly channel: ChatChannelRef;
 	readonly channelKey: string;
+	// A one-to-one conversation with the owner. The shared owner DM carries scope "web",
+	// while a platform-specific DM carries "dm"; both behave the same way.
+	readonly isDirect: boolean;
 	private readonly log: ChatLog;
 	readonly ownerId: string;
 	private readonly botUserId?: string;
@@ -134,6 +137,7 @@ export class ConversationRuntime {
 	}) {
 		this.channel = options.log.channel;
 		this.channelKey = options.channelKey;
+		this.isDirect = this.channel.scope === "dm" || this.channel.scope === "web";
 		this.log = options.log;
 		this.ownerId = options.ownerId;
 		this.botUserId = options.botUserId;
@@ -299,7 +303,7 @@ export class ConversationRuntime {
 		if (this.armedAfterRecordId === undefined) return undefined;
 		if (record.recordId <= this.armedAfterRecordId) return undefined;
 		if (record.recordId <= this.lastQueuedTriggerRecordId) return undefined;
-		if (this.channel.scope === "dm" || this.channel.scope === "web") {
+		if (this.isDirect) {
 			if (!this.isOwnerMessage(record)) return undefined;
 			return options.mode === "collect" ? undefined : "dm";
 		}
@@ -368,12 +372,7 @@ export class ConversationRuntime {
 	async queueLatestTrigger(options: CollectDispatchOptions = {}): Promise<QueuedJob | undefined> {
 		const record = this.getLatestQueueableInbound(options);
 		if (!record) return undefined;
-		const trigger =
-			this.channel.scope === "dm" || this.channel.scope === "web"
-				? "dm"
-				: options.channelTrigger === "always"
-					? "message"
-					: "mention";
+		const trigger = this.isDirect ? "dm" : options.channelTrigger === "always" ? "message" : "mention";
 		return this.queueTrigger(record, trigger);
 	}
 
@@ -390,7 +389,7 @@ export class ConversationRuntime {
 			if (record?.type !== "inbound") continue;
 			if (this.armedAfterRecordId === undefined) return undefined;
 			if (record.recordId <= this.armedAfterRecordId || record.recordId <= lastQueuedTriggerRecordId) break;
-			if (this.channel.scope === "dm" || this.channel.scope === "web") {
+			if (this.isDirect) {
 				if (!this.isOwnerMessage(record)) continue;
 				return record;
 			}

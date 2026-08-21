@@ -37,4 +37,23 @@ describe("owner DM sharing", () => {
 		const chatDirs = await readdir(`${dataDir}/chat`);
 		assert.deepEqual(chatDirs, [chatChannelKey(ownerDmRef)]);
 	});
+
+	it("treats the shared owner DM as a direct conversation", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		t.after(() => core.stop());
+
+		// isDirect gates steer dispatch and DM triggers. The shared ref carries scope "web",
+		// so anything comparing scope to "dm" alone silently drops owner DMs out of steer mode.
+		const runtime = await core.getRuntimeForChannel(ownerDmRef);
+		assert.equal(runtime.channel.scope, "web");
+		assert.equal(runtime.isDirect, true);
+
+		// An owner message in a direct conversation queues a job without needing a mention.
+		const { jobQueued } = await runtime.ingestInbound(
+			{ authorId: WEB_OWNER_ID, isBot: false, mentionedBot: false, messageId: "m-1", text: "hello" },
+			{ mode: "queue" },
+		);
+		assert.equal(jobQueued, true);
+	});
 });

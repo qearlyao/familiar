@@ -131,7 +131,7 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 		};
 		const shouldTrySteer =
 			config.discord.dmMode === "steer" &&
-			runtime.channel.scope === "dm" &&
+			runtime.isDirect &&
 			runtime.hasActiveJob() &&
 			agentCore.activeOwner === runtime.channelKey;
 		const { record } = await runtime.ingestInbound(input, { mode: shouldTrySteer ? "collect" : "queue" });

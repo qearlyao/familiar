@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "web/src/index.css"
+        ],
+        "createdAt": "2026-08-21T08:56:57.023Z",
+        "reason": "User confirmed: 2px absolutely-positioned margin tick, out-of-flow height transition causes no sibling reflow"
+      }
+    ]
+  }
+}

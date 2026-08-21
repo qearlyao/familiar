@@ -14,7 +14,7 @@ import { chatChannelKey } from "../conversation/chat-log.js";
 import { saveOwnerIdentity } from "../conversation/owner-identity.js";
 import type { RestartHandler } from "../lifecycle/control.js";
 import type { MemoryService } from "../memory/service.js";
-import type { AgentCore, ChatSession } from "../runtime/agent-core.js";
+import { type AgentCore, type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
 import { applyControlCommand, getChannelTriggerSetting } from "../runtime/control-actions.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
@@ -78,7 +78,8 @@ export function startDiscordDaemon(
 	const collectTimers = new Map<string, NodeJS.Timeout>();
 
 	const getRuntime = async (message: Message): Promise<ConversationRuntime> => {
-		return core.getRuntimeForChannel(getChannelRef(message));
+		const ref = getChannelRef(message);
+		return core.getRuntimeForChannel(ref.scope === "dm" ? ownerDmRef : ref);
 	};
 
 	const getInteractionRuntime = async (
@@ -106,10 +107,7 @@ export function startDiscordDaemon(
 					.createDM(ownerId)
 					.then(async (dm) => {
 						try {
-							await saveOwnerIdentity(config.workspace.dataDir, {
-								botUserId: client.user.id,
-								dmChannelId: dm.id,
-							});
+							await saveOwnerIdentity(config.workspace.dataDir, { botUserId: client.user.id });
 						} catch (error) {
 							console.error("failed to persist owner identity", error);
 						}
@@ -124,11 +122,7 @@ export function startDiscordDaemon(
 		};
 
 		const getWebSessions = async (): Promise<ChatSession[]> => {
-			const dmChannel = await getOwnerDmChannel();
-			const dmRef = buildChannelRef(dmChannel, dmChannel.id);
-			const sessions: ChatSession[] = [
-				{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
-			];
+			const sessions: ChatSession[] = [];
 			const fetched = await Promise.all(
 				config.discord.allowedChannels.map((channelId) => client.channels.fetch(channelId).catch(() => undefined)),
 			);
@@ -145,9 +139,7 @@ export function startDiscordDaemon(
 		};
 
 		const getOwnerDmSession = async (): Promise<{ runtime: ConversationRuntime }> => {
-			const dmChannel = await getOwnerDmChannel();
-			const runtime = await core.getRuntimeForChannel(buildChannelRef(dmChannel, dmChannel.id));
-			return { runtime };
+			return { runtime: await core.getRuntimeForChannel(ownerDmRef) };
 		};
 
 		const liveSink: SchedulerDeliverySink = {
@@ -244,6 +236,8 @@ export function startDiscordDaemon(
 				const isDm = isDmChannel(message.channel);
 				const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
 				const input = await toInboundInput(config, message, client.user.id);
+				// The shared owner DM runtime identifies its owner by one id across platforms.
+				if (isDm) input.authorId = WEB_OWNER_ID;
 				const control = runtime.parseControlCommand(input);
 				if (control) {
 					await runtime.noteControlCommand(input, control);

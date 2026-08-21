@@ -19,7 +19,7 @@ export function canSteerFromRecord(
 ): boolean {
 	if (getDispatchMode(config, message) !== "steer") return false;
 	if (!runtime.hasActiveJob() || activeAgentOwner !== runtime.channelKey) return false;
-	if (isDmChannel(message.channel)) return record.authorId === config.discord.ownerId && !record.isBot;
+	if (isDmChannel(message.channel)) return record.authorId === runtime.ownerId && !record.isBot;
 	if (channelTrigger === "always") return true;
 	return record.mentionedBot;
 }

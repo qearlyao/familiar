@@ -4,7 +4,7 @@ import type { SettingsStore } from "../config/settings.js";
 import { type ChatChannelRef, chatChannelKey } from "../conversation/chat-log.js";
 import type { RestartHandler } from "../lifecycle/control.js";
 import { materializeInboundAttachments } from "../media/inbound-attachments.js";
-import type { AgentCore, ChatSession } from "../runtime/agent-core.js";
+import { type AgentCore, type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
 import { applyControlCommand, getChannelTriggerSetting } from "../runtime/control-actions.js";
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
@@ -27,6 +27,7 @@ export function startQqDaemon(
 ): QqDaemon {
 	const { wsUrl, ownerId } = config.qq;
 	if (!wsUrl || !ownerId) throw new Error("QQ daemon requires qq.ws_url and qq.owner_id");
+	// Where owner DMs are *sent* on QQ; where they are *logged* is the shared ownerDmRef.
 	const dmRef: ChatChannelRef = { service: "qq", scope: "dm", channelId: ownerId };
 	const collectTimers = new Map<string, NodeJS.Timeout>();
 
@@ -37,9 +38,7 @@ export function startQqDaemon(
 	};
 
 	const getWebSessions = async (): Promise<ChatSession[]> => {
-		const sessions: ChatSession[] = [
-			{ key: chatChannelKey(dmRef), label: "QQ Chat", channel: dmRef, isDefault: true },
-		];
+		const sessions: ChatSession[] = [];
 		for (const groupId of config.qq.allowedGroups) {
 			const name = await client
 				.callAction<{ group_name?: string }>("get_group_info", { group_id: Number(groupId) })
@@ -60,7 +59,7 @@ export function startQqDaemon(
 				service: "qq",
 				ownerId,
 				botUserId,
-				resolveDefaultSession: async () => ({ runtime: await core.getRuntimeForChannel(dmRef) }),
+				resolveDefaultSession: async () => ({ runtime: await core.getRuntimeForChannel(ownerDmRef) }),
 				getWebSessions,
 				delivery: liveSink,
 			});
@@ -151,10 +150,12 @@ export function startQqDaemon(
 			const ref: ChatChannelRef =
 				parsed.messageType === "private" ? dmRef : { service: "qq", scope: "channel", channelId: parsed.channelId };
 			const isDm = ref.scope === "dm";
-			runtime = await core.getRuntimeForChannel(ref);
+			runtime = await core.getRuntimeForChannel(isDm ? ownerDmRef : ref);
 			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
 			const input: InboundMessageInput = {
 				...parsed.input,
+				// The shared owner DM runtime identifies its owner by one id across platforms.
+				authorId: isDm ? WEB_OWNER_ID : parsed.input.authorId,
 				attachments: await materializeInboundAttachments(config, parsed.attachments),
 			};
 			const control = runtime.parseControlCommand(input);
@@ -185,7 +186,7 @@ export function startQqDaemon(
 			const canSteer =
 				shouldTrySteer &&
 				(isDm
-					? record.authorId === ownerId && !record.isBot
+					? record.authorId === runtime.ownerId && !record.isBot
 					: channelTrigger.value === "always" || record.mentionedBot);
 			if (canSteer) {
 				familiarAgent.steer(runtime.channelKey, runtime.buildSteerPromptForRecord(record));

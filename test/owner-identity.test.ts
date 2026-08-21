@@ -7,7 +7,7 @@ import { createTempDataDir } from "./helpers.js";
 
 test("owner identity round-trips through persisted cache", async (t) => {
 	const dataDir = await createTempDataDir(t);
-	const identity = { botUserId: "bot-1", dmChannelId: "dm-1" };
+	const identity = { botUserId: "bot-1" };
 
 	await saveOwnerIdentity(dataDir, identity);
 

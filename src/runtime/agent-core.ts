@@ -33,7 +33,11 @@ export interface PlatformSource {
 	delivery: SchedulerDeliverySink;
 }
 
-const webRef: ChatChannelRef = { service: "web", scope: "web", channelId: "main" };
+// The owner's DM is one conversation regardless of which platform it arrives on:
+// Discord DMs, QQ private messages, and the WebUI all resolve to this single ref,
+// so the companion keeps one continuous thread with its owner across devices.
+// Group channels stay per-platform — those are genuinely separate rooms.
+export const ownerDmRef: ChatChannelRef = { service: "web", scope: "web", channelId: "main" };
 const webPersistenceOnlyDelivery: SchedulerDeliverySink = {
 	async deliver() {
 		return [];
@@ -70,10 +74,8 @@ export function createAgentCore(deps: {
 	const webSource: PlatformSource = {
 		service: "web",
 		ownerId: WEB_OWNER_ID,
-		resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(webRef) }),
-		getWebSessions: async () => [
-			{ key: chatChannelKey(webRef), label: "Main Chat", channel: webRef, isDefault: true },
-		],
+		resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(ownerDmRef) }),
+		getWebSessions: async () => [],
 		delivery: webPersistenceOnlyDelivery,
 	};
 	sources.set("web", webSource);
@@ -108,15 +110,12 @@ export function createAgentCore(deps: {
 		async useCachedIdentity(identity): Promise<void> {
 			const ownerId = deps.config.discord.ownerId;
 			if (!ownerId) throw new Error("Cached Discord identity requires discord.owner_id");
-			const dmRef: ChatChannelRef = { service: "discord", scope: "dm", channelId: identity.dmChannelId };
 			await this.attachPlatform({
 				service: "discord",
 				ownerId,
 				botUserId: identity.botUserId,
-				resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(dmRef) }),
-				getWebSessions: async () => [
-					{ key: chatChannelKey(dmRef), label: "Main Chat", channel: dmRef, isDefault: true },
-				],
+				resolveDefaultSession: async () => ({ runtime: await runtimeManager.getRuntimeForChannel(ownerDmRef) }),
+				getWebSessions: async () => [],
 				delivery: webPersistenceOnlyDelivery,
 			});
 		},
@@ -128,18 +127,16 @@ export function createAgentCore(deps: {
 		getRuntimeForChannel: runtimeManager.getRuntimeForChannel,
 		peekRuntime: runtimeManager.peekRuntime,
 		async getWebSessions(): Promise<ChatSession[]> {
-			const primaryService = primary().service;
-			const sessions: ChatSession[] = [];
+			// Main Chat is the owner DM shared by every platform, so it always leads the list.
+			const sessions: ChatSession[] = [
+				{ key: chatChannelKey(ownerDmRef), label: "Main Chat", channel: ownerDmRef, isDefault: true },
+			];
 			for (const service of priority) {
-				if (service === "web" && primaryService !== "web") continue;
 				const source = sources.get(service);
 				if (!source) continue;
 				for (const session of await source.getWebSessions()) {
-					if (primaryService === service) sessions.push(session);
-					else {
-						const { isDefault: _isDefault, ...withoutDefault } = session;
-						sessions.push(withoutDefault);
-					}
+					const { isDefault: _isDefault, ...withoutDefault } = session;
+					sessions.push(withoutDefault);
 				}
 			}
 			return sessions;

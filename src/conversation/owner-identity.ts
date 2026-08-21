@@ -5,7 +5,6 @@ import { isRecord } from "../util/guards.js";
 
 export interface OwnerIdentity {
 	botUserId: string;
-	dmChannelId: string;
 }
 
 export function ownerIdentityPath(dataDir: string): string {
@@ -24,10 +23,9 @@ export async function loadOwnerIdentity(dataDir: string): Promise<OwnerIdentity 
 	}
 
 	if (!isRecord(parsed)) return null;
-	const { botUserId, dmChannelId } = parsed;
+	const { botUserId } = parsed;
 	if (typeof botUserId !== "string" || botUserId.length === 0) return null;
-	if (typeof dmChannelId !== "string" || dmChannelId.length === 0) return null;
-	return { botUserId, dmChannelId };
+	return { botUserId };
 }
 
 export async function saveOwnerIdentity(dataDir: string, identity: OwnerIdentity): Promise<void> {

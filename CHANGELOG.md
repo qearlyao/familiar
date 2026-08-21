@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0 - 2026-08-21
+
+### Added
+
+- Add an optional QQ platform through OneBot 11, compatible with NapCat and Lagrange, including private messages, group messages, mentions, and image attachments.
+- Add Web Push notifications for completed WebUI replies, with persistent per-device subscriptions and a settings toggle.
+- Generate images through a provider's native image endpoint: `openai-images` (`/images/generations` and `/images/edits`, also used by xAI and OpenAI-compatible gateways) and `google-images` (`models/{id}:generateContent`), alongside the existing OpenRouter shape.
+
+### Changed
+
+- Replace the single `image_gen.api` setting with an `[image_gen.apis]` table keyed by provider or `provider/model`, so the primary and fallback image models can use different endpoints. Endpoints and credentials keep coming from `models.base_urls` and `models.api_key_envs`, and a base URL that already has a path is used as written.
+- Make platforms independent so Familiar can run WebUI-only or combine WebUI, Discord, and QQ sessions while sharing memory and conversation state.
+- Add explicit `enabled` switches for Discord and QQ, plus `default_platform` for heartbeat and scheduled delivery.
+- Accept audio transcription from any OpenAI-compatible endpoint through configurable provider, model, base URL, and API key settings.
+- Make OpenCLI upgrades opt-in with `familiar upgrade --with-opencli`, and report the installed version transition plus restart hint after upgrades.
+- Bump the pi dependency set to `0.84.2`, bringing upstream request retries, provider compatibility fixes, OpenAI Responses namespace preservation, and a native Mistral HTTP transport.
+
+### Fixed
+
+- Clean expired inbound media and derived attachments across the entire attachments directory.
+
 ## 0.8.2 - 2026-08-12
 
 ### Added

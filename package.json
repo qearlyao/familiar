@@ -1,6 +1,6 @@
 {
 	"name": "@qearlyao/familiar",
-	"version": "0.8.2",
+	"version": "0.9.0",
 	"license": "MIT",
 	"type": "module",
 	"repository": {
@@ -42,9 +42,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "0.84.1",
-		"@earendil-works/pi-ai": "0.84.1",
-		"@earendil-works/pi-coding-agent": "0.84.1",
+		"@earendil-works/pi-agent-core": "0.84.2",
+		"@earendil-works/pi-ai": "0.84.2",
+		"@earendil-works/pi-coding-agent": "0.84.2",
 		"better-sqlite3": "^12.10.0",
 		"cross-spawn": "^7.0.6",
 		"discord.js": "^14.27.0",

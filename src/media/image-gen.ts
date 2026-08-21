@@ -16,14 +16,18 @@ import {
 	type ImagesModel,
 } from "@earendil-works/pi-ai/compat";
 import { type Static, Type } from "typebox";
+import { DEFAULT_IMAGE_GEN_API } from "../config/enums.js";
 import type { Config, ImageGenApi } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { type ModelRef, parseModelRef } from "../models/index.js";
 import { imageMimeTypeFromPath, sniffImageMimeType } from "../util/image-mime.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
+import { registerImageApis } from "./image-apis/index.js";
 import { ensureInlineImageDerivative } from "./image-derivatives.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
+
+registerImageApis();
 
 const IMAGE_GEN_NOTICE_PREFIX = "Generated image attachment:";
 const OPENROUTER_IMAGE_BASE_URL = "https://openrouter.ai/api/v1";
@@ -120,18 +124,28 @@ function findBuiltInImageModel(ref: ModelRef): ImagesModel<any> | undefined {
 	return (getImageModels(ref.provider as any) as ImagesModel<any>[]).find((model) => model.id === ref.id);
 }
 
+/**
+ * Wire style for a provider's image endpoint: an explicit `image_gen.apis`
+ * entry, else the provider's known native shape, else the OpenRouter
+ * chat-completions shape that gateways commonly proxy.
+ */
+function resolveImageApi(config: Config, ref: ModelRef): ImageGenApi {
+	return config.imageGen.apis[ref.key] ?? config.imageGen.apis[ref.provider] ?? DEFAULT_IMAGE_GEN_API;
+}
+
 export function resolveImageModel(config: Config, ref: ModelRef): ImagesModel<ImageGenApi> {
 	const builtIn = findBuiltInImageModel(ref);
 	const baseUrl = resolveConfiguredBaseUrl(config, ref, builtIn);
 	if (!baseUrl) {
 		throw new Error(`Missing image model base URL for ${ref.key}. Set models.base_urls.${ref.provider}.`);
 	}
+	const api = resolveImageApi(config, ref);
 	const model: ImagesModel<ImageGenApi> = builtIn
-		? ({ ...builtIn, api: config.imageGen.api, baseUrl } as ImagesModel<ImageGenApi>)
+		? ({ ...builtIn, api, baseUrl } as ImagesModel<ImageGenApi>)
 		: {
 				id: ref.id,
 				name: ref.id,
-				api: config.imageGen.api,
+				api,
 				provider: ref.provider,
 				baseUrl,
 				input: ["text", "image"],

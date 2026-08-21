@@ -11,6 +11,7 @@ import {
 	BROWSER_HARNESS_MODES,
 	BROWSER_WINDOW_MODES,
 	CACHE_RETENTIONS,
+	DEFAULT_IMAGE_GEN_APIS,
 	DEFAULT_PLATFORMS,
 	DISCORD_CHANNEL_TRIGGERS,
 	DISCORD_CHUNK_MODES,
@@ -54,6 +55,7 @@ import type {
 	ConfiguredModelDefinition,
 	ConfiguredModelInput,
 	ConfiguredProviderDefinition,
+	ImageGenApi,
 	OpenRouterRoutingConfig,
 } from "./types.js";
 
@@ -286,6 +288,19 @@ function assertValidConfiguredProviderName(providerName: string, path: string): 
 	}
 }
 
+/**
+ * Wire style per image provider, keyed by bare provider name or by
+ * `provider/model` for a single model that diverges from its provider.
+ */
+function readImageGenApis(value: unknown): Record<string, ImageGenApi> {
+	const table = readStringRecord(value, "image_gen.apis");
+	const apis: Record<string, ImageGenApi> = { ...DEFAULT_IMAGE_GEN_APIS };
+	for (const [key, api] of Object.entries(table)) {
+		apis[key] = readEnum(api, `image_gen.apis.${key}`, IMAGE_GEN_APIS);
+	}
+	return apis;
+}
+
 function readConfiguredProviders(value: unknown): Record<string, ConfiguredProviderDefinition> {
 	const providers = readConfigTable(value, "models.providers");
 	const configured: Record<string, ConfiguredProviderDefinition> = {};
@@ -469,6 +484,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 
 	const memoryRootDir = resolveWorkspacePath(workspacePath, readOptionalString(memory.root_dir, "memories"));
 	assertKnownKeys(models, "models", ["allow", "base_urls", "api_key_envs", "openrouter_routing", "providers"]);
+	assertKnownKeys(imageGen, "image_gen", ["enabled", "model", "fallback_model", "apis", "timeout_ms"]);
 	const modelAllow = readStringArray(models.allow, "models.allow");
 	const modelBaseUrls = readStringRecord(models.base_urls, "models.base_urls");
 	const modelApiKeyEnvs = readStringRecord(models.api_key_envs, "models.api_key_envs");
@@ -697,7 +713,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			enabled: readBoolean(imageGen.enabled, true, "image_gen.enabled"),
 			model: readConfigString(imageGen.model, "openrouter/google/gemini-2.5-flash-image", "image_gen.model"),
 			fallbackModel: readOptionalConfigString(imageGen.fallback_model, "image_gen.fallback_model"),
-			api: readEnum(readOptionalString(imageGen.api, "openrouter-images"), "image_gen.api", IMAGE_GEN_APIS),
+			apis: readImageGenApis(imageGen.apis),
 			timeoutMs: readInteger(imageGen.timeout_ms, 120_000, "image_gen.timeout_ms", 1),
 		},
 		mediaUnderstanding: {

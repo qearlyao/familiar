@@ -99,8 +99,6 @@ allow = [
 	"openai/gpt-5.5",
 	"google-vertex/gemini-3.1-pro-preview",
 	"google-vertex/gemini-3.5-flash",
-	"link/gpt-image-2-c",
-    "link/gemini-3-pro-image-preview",
 ]
 
 [models.base_urls]
@@ -109,6 +107,8 @@ google = "https://api.linkapi.ai/v1beta"
 openai = "https://api.linkapi.ai/v1"
 # google-vertex = "https://{location}-aiplatform.googleapis.com"
 link = "https://api.linkapi.ai/v1"
+linkgpt = "https://api.linkapi.ai/v1"
+linkgemini = "https://api.linkapi.ai/v1beta"
 
 [models.api_key_envs]
 # anthropic = "ANTHROPIC_API_KEY"
@@ -118,6 +118,8 @@ link = "https://api.linkapi.ai/v1"
 # GOOGLE_APPLICATION_CREDENTIALS, plus GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION in .env.
 # google-vertex = "GOOGLE_CLOUD_API_KEY"
 link = "LINK_API_KEY"
+linkgpt = "LINK_API_KEY"
+linkgemini = "LINK_API_KEY"
 
 # Optional OpenRouter provider ordering for built-in Anthropic models whose
 # base URL is exactly https://openrouter.ai/api. A provider/model key overrides
@@ -169,10 +171,14 @@ use_speaker_boost = true
 
 [image_gen]
 enabled = true
-api = "openrouter-images"
-model = "link/gpt-image-2-c"
-fallback_model = "link/gemini-3-pro-image-preview"
+model = "linkgpt/gpt-image-2-c"
+fallback_model = "linkgemini/gemini-3-pro-image-preview"
 timeout_ms = 120000
+
+# Wire style per image provider; see "Image Generation" in the README.
+[image_gen.apis]
+linkgpt = "openai-images"
+linkgemini = "google-images"
 
 [media.generated]
 # Retention applies to every file under data/attachments, including inbound media.

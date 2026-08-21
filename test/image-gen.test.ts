@@ -59,6 +59,87 @@ describe("image_gen helpers", () => {
 		assert.equal(model.baseUrl, "https://images.example.test/v1");
 		assert.deepEqual(model.output, ["image", "text"]);
 	});
+
+	it("resolves the wire style per provider so primary and fallback can differ", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			imageGen: {
+				model: "openai/gpt-image-2",
+				fallbackModel: "gemini-gw/gemini-3-pro-image",
+				apis: { openai: "openai-images", "gemini-gw": "google-images" },
+			},
+			models: {
+				baseUrls: { openai: "https://api.openai.com/v1", "gemini-gw": "https://gw.test/v1beta" },
+				apiKeyEnvs: { openai: "OPENAI_API_KEY", "gemini-gw": "GEMINI_GW_KEY" },
+			},
+		});
+
+		const primary = resolveImageModel(config, { provider: "openai", id: "gpt-image-2", key: "openai/gpt-image-2" });
+		const fallback = resolveImageModel(config, {
+			provider: "gemini-gw",
+			id: "gemini-3-pro-image",
+			key: "gemini-gw/gemini-3-pro-image",
+		});
+
+		assert.equal(primary.api, "openai-images");
+		assert.equal(primary.baseUrl, "https://api.openai.com/v1");
+		assert.equal(fallback.api, "google-images");
+		assert.equal(fallback.baseUrl, "https://gw.test/v1beta");
+	});
+
+	it("prefers a provider/model wire style over the provider-wide one", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			imageGen: {
+				model: "gw/legacy-image",
+				apis: { gw: "google-images", "gw/legacy-image": "openai-images" },
+			},
+			models: { baseUrls: { gw: "https://gw.test" }, apiKeyEnvs: { gw: "GW_KEY" } },
+		});
+
+		const model = resolveImageModel(config, { provider: "gw", id: "legacy-image", key: "gw/legacy-image" });
+
+		assert.equal(model.api, "openai-images");
+	});
+
+	it("routes one gateway's image APIs through separate provider names", async (t) => {
+		// A single host can serve OpenAI images under /v1 and Gemini under
+		// /v1beta. Giving each API its own provider name sets the endpoint and
+		// wire style once, so later models inherit both without new config.
+		const config = await configWithDataDir(t, "/workspace/data", {
+			imageGen: {
+				model: "linkgpt/gpt-image-2-c",
+				fallbackModel: "linkgemini/gemini-3-pro-image-preview",
+				apis: { linkgpt: "openai-images", linkgemini: "google-images" },
+			},
+			models: {
+				baseUrls: { linkgpt: "https://api.linkapi.ai/v1", linkgemini: "https://api.linkapi.ai/v1beta" },
+				apiKeyEnvs: { linkgpt: "LINK_API_KEY", linkgemini: "LINK_API_KEY" },
+			},
+		});
+
+		const primary = resolveImageModel(config, {
+			provider: "linkgpt",
+			id: "gpt-image-2-c",
+			key: "linkgpt/gpt-image-2-c",
+		});
+		const fallback = resolveImageModel(config, {
+			provider: "linkgemini",
+			id: "gemini-3-pro-image-preview",
+			key: "linkgemini/gemini-3-pro-image-preview",
+		});
+		// A model never named in config still inherits its provider's wiring.
+		const future = resolveImageModel(config, {
+			provider: "linkgpt",
+			id: "gpt-image-3",
+			key: "linkgpt/gpt-image-3",
+		});
+
+		assert.equal(primary.api, "openai-images");
+		assert.equal(primary.baseUrl, "https://api.linkapi.ai/v1");
+		assert.equal(fallback.api, "google-images");
+		assert.equal(fallback.baseUrl, "https://api.linkapi.ai/v1beta");
+		assert.equal(future.api, "openai-images");
+		assert.equal(future.baseUrl, "https://api.linkapi.ai/v1");
+	});
 });
 
 describe("image_gen tool", () => {

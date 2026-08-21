@@ -10,7 +10,7 @@ export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type TtsProvider = "elevenlabs" | "cartesia";
-export type ImageGenApi = "openrouter-images";
+export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
@@ -166,7 +166,7 @@ export interface Config {
 		enabled: boolean;
 		model: string;
 		fallbackModel?: string;
-		api: ImageGenApi;
+		apis: Record<string, ImageGenApi>;
 		timeoutMs: number;
 	};
 	mediaUnderstanding: {

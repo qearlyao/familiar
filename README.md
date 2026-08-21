@@ -270,6 +270,66 @@ there for custom Anthropic-compatible aliases that route to adaptive-thinking
 Claude models, or at provider level only when every model behind the provider
 needs it.
 
+## Image Generation
+
+`[image_gen]` picks the model used by the `image_gen` tool, with an optional
+fallback tried when the first one fails:
+
+```toml
+[image_gen]
+model = "openai/gpt-image-2"
+fallback_model = "google/gemini-3-pro-image"
+```
+
+`[image_gen.apis]` says which wire protocol each provider speaks:
+
+| API | Request |
+| --- | --- |
+| `openai-images` | `POST {base}/images/generations`, or `/images/edits` for reference images |
+| `google-images` | `POST {base}/models/{id}:generateContent` |
+| `openrouter-images` | `POST {base}/chat/completions` with image modalities |
+
+`openai`, `xai`, and `google` default to their native shape; every other
+provider defaults to `openrouter-images`. Endpoints and credentials come from
+`[models.base_urls]` and `[models.api_key_envs]`, so any of these can point at
+a self-hosted or proxied deployment. A base URL with no path of its own gains
+`/v1` (or `/v1beta` for `google-images`); one that already has a path is used
+verbatim, which is what non-canonical mount points need.
+
+`openai-images` follows OpenAI's split: `/images/generations` takes no input
+image, so a call with `referenceImages` goes to `/images/edits` instead. xAI
+matches on generations but expects a JSON body for edits rather than multipart,
+so reference images do not work against `api.x.ai` through this api style.
+
+One gateway can serve several image APIs at different paths. Give each its own
+provider name so the endpoint, key, and wire style are set once and every model
+added later inherits them:
+
+```toml
+[models.base_urls]
+linkgpt = "https://api.linkapi.ai/v1"
+linkgemini = "https://api.linkapi.ai/v1beta"
+
+[models.api_key_envs]
+linkgpt = "LINK_API_KEY"
+linkgemini = "LINK_API_KEY"
+
+[image_gen]
+model = "linkgpt/gpt-image-2-c"
+fallback_model = "linkgemini/gemini-3-pro-image-preview"
+
+[image_gen.apis]
+linkgpt = "openai-images"
+linkgemini = "google-images"
+```
+
+A quoted `"provider/model"` key overrides the provider-wide entry in both
+`[models.base_urls]` and `[image_gen.apis]`, but prefer a separate provider
+name so new models need no extra configuration.
+
+Image models are not listed in `models.allow` — that list drives the chat model
+picker, and an image model chosen there would fail on the first message.
+
 ## WebUI Behind A Reverse Proxy
 
 The default `tailscale-only` auth mode currently means "trust the network

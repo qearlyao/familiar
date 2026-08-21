@@ -160,7 +160,11 @@ describe("loadConfig tts", () => {
 			enabled: true,
 			model: "openrouter/google/gemini-2.5-flash-image",
 			fallbackModel: undefined,
-			api: "openrouter-images",
+			apis: {
+				openai: "openai-images",
+				xai: "openai-images",
+				google: "google-images",
+			},
 			timeoutMs: 120000,
 		});
 		assert.equal(config.media.generatedRetentionDays, 30);
@@ -510,20 +514,49 @@ retention_days = 7
 enabled = false
 model = "custom/gemini-image"
 fallback_model = "openrouter/openai/gpt-5-image"
-api = "openrouter-images"
 timeout_ms = 90000
+
+[image_gen.apis]
+custom = "openai-images"
 `),
 		);
 
 		const config = await loadConfig(workspacePath);
 
-		assert.deepEqual(config.imageGen, {
-			enabled: false,
-			model: "custom/gemini-image",
-			fallbackModel: "openrouter/openai/gpt-5-image",
-			api: "openrouter-images",
-			timeoutMs: 90000,
-		});
+		assert.equal(config.imageGen.enabled, false);
+		assert.equal(config.imageGen.model, "custom/gemini-image");
+		assert.equal(config.imageGen.fallbackModel, "openrouter/openai/gpt-5-image");
+		assert.equal(config.imageGen.timeoutMs, 90000);
+		assert.equal(config.imageGen.apis.custom, "openai-images");
+	});
+
+	it("defaults image API shapes for providers with a known native endpoint", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(t, minimalConfigToml());
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.imageGen.apis.openai, "openai-images");
+		assert.equal(config.imageGen.apis.google, "google-images");
+		assert.equal(config.imageGen.apis.xai, "openai-images");
+		// Providers without a native shape fall through to openrouter-images
+		// at resolution time rather than being listed here.
+		assert.equal(config.imageGen.apis.openrouter, undefined);
+	});
+
+	it("lets an explicit image API shape override a built-in default", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[image_gen.apis]
+openai = "openrouter-images"
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+
+		assert.equal(config.imageGen.apis.openai, "openrouter-images");
 	});
 
 	it("rejects unsupported image generation API shapes", async (t) => {
@@ -531,8 +564,21 @@ timeout_ms = 90000
 		const workspacePath = await createWorkspace(
 			t,
 			minimalConfigToml(`
+[image_gen.apis]
+custom = "native-gemini"
+`),
+		);
+
+		await assert.rejects(() => loadConfig(workspacePath), /image_gen\.apis\.custom/);
+	});
+
+	it("rejects the removed image_gen.api key", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
 [image_gen]
-api = "native-gemini"
+api = "openrouter-images"
 `),
 		);
 
@@ -684,14 +730,25 @@ api_key_env = "ALT_GEMINI_KEY"
 		assert.deepEqual(config.models.providers, {});
 		assert.deepEqual(config.imageGen, {
 			enabled: true,
-			model: "link/gpt-image-2-c",
-			fallbackModel: "link/gemini-3-pro-image-preview",
-			api: "openrouter-images",
+			model: "linkgpt/gpt-image-2-c",
+			fallbackModel: "linkgemini/gemini-3-pro-image-preview",
+			apis: {
+				openai: "openai-images",
+				xai: "openai-images",
+				google: "google-images",
+				linkgpt: "openai-images",
+				linkgemini: "google-images",
+			},
 			timeoutMs: 120000,
 		});
 		assert.equal(config.memory.lcm.model, "anthropic/claude-fable-5");
-		for (const model of [config.agent.model, config.memory.lcm.model, config.imageGen.model, config.imageGen.fallbackModel]) {
-			assert.ok(model === undefined || config.models.allow.includes(model));
+		// models.allow drives the chat model picker, so only chat models belong
+		// in it; image models are wired through [image_gen] alone.
+		for (const model of [config.agent.model, config.memory.lcm.model]) {
+			assert.ok(config.models.allow.includes(model));
+		}
+		for (const model of [config.imageGen.model, config.imageGen.fallbackModel]) {
+			assert.ok(model !== undefined && !config.models.allow.includes(model));
 		}
 	});
 

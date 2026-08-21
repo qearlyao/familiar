@@ -42,7 +42,25 @@ export const CRON_FREQUENCIES = [
 export const CRON_DELIVERY_MODES = ["queue", "follow_up"] as const satisfies readonly CronDeliveryMode[];
 export const WEB_AUTH_MODES = ["tailscale-only", "bearer", "public-2fa"] as const satisfies readonly WebAuthMode[];
 export const TTS_PROVIDERS = ["elevenlabs", "cartesia"] as const satisfies readonly TtsProvider[];
-export const IMAGE_GEN_APIS = ["openrouter-images"] as const satisfies readonly ImageGenApi[];
+export const IMAGE_GEN_APIS = [
+	"openrouter-images",
+	"openai-images",
+	"google-images",
+] as const satisfies readonly ImageGenApi[];
+
+/**
+ * Wire style used when `image_gen.apis` does not name a provider. Providers
+ * with a known native image endpoint default to it; everything else keeps the
+ * OpenRouter chat-completions shape, which is what gateways proxying an
+ * OpenRouter-style route expect.
+ */
+export const DEFAULT_IMAGE_GEN_API: ImageGenApi = "openrouter-images";
+
+export const DEFAULT_IMAGE_GEN_APIS: Record<string, ImageGenApi> = {
+	openai: "openai-images",
+	xai: "openai-images",
+	google: "google-images",
+};
 export const MEDIA_UNDERSTANDING_PROVIDERS = [
 	"groq",
 	"google",

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
 import {
+	attachmentsDir,
 	browserScreenshotsDir,
 	cleanupGeneratedAttachments,
 	createGeneratedMediaSink,
@@ -41,7 +42,7 @@ describe("generated media", () => {
 		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/screenshot/screen%20one.png");
 	});
 
-	it("removes generated attachments older than the retention window", async (t) => {
+	it("removes attachments older than the retention window", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, {
 			media: { generatedRetentionDays: 30 },
@@ -50,16 +51,21 @@ describe("generated media", () => {
 		await mkdir(dir, { recursive: true });
 		const oldPath = join(dir, "old.mp3");
 		const freshPath = join(dir, "fresh.mp3");
+		const inboundPath = join(attachmentsDir(config), "inbound", "web", "old.png");
 		await writeFile(oldPath, "old", "utf8");
 		await writeFile(freshPath, "fresh", "utf8");
+		await mkdir(resolve(inboundPath, ".."), { recursive: true });
+		await writeFile(inboundPath, "old", "utf8");
 		const now = Date.parse("2026-05-07T00:00:00Z");
 		await utimes(oldPath, new Date(now - 31 * 24 * 60 * 60 * 1000), new Date(now - 31 * 24 * 60 * 60 * 1000));
 		await utimes(freshPath, new Date(now - 1 * 24 * 60 * 60 * 1000), new Date(now - 1 * 24 * 60 * 60 * 1000));
+		await utimes(inboundPath, new Date(now - 31 * 24 * 60 * 60 * 1000), new Date(now - 31 * 24 * 60 * 60 * 1000));
 
 		const removed = await cleanupGeneratedAttachments(config, now);
 
-		assert.equal(removed, 1);
+		assert.equal(removed, 2);
 		await assert.rejects(() => stat(oldPath), /ENOENT/);
+		await assert.rejects(() => stat(inboundPath), /ENOENT/);
 		assert.equal((await stat(freshPath)).isFile(), true);
 	});
 

@@ -157,7 +157,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
 	const removedAttachments = await cleanupGeneratedAttachments(config);
 	if (removedAttachments > 0) {
-		console.log(`Removed ${removedAttachments} expired generated attachment(s)`);
+		console.log(`Removed ${removedAttachments} expired attachment(s)`);
 	}
 	const retention = await runDataRetention(config);
 	const removedData = retention.chat + retention.transcripts + retention.payloads;

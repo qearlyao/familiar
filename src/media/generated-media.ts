@@ -1,8 +1,8 @@
-import { lstat, mkdir, readdir, rm } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
-import { isEnoent } from "../util/fs.js";
+import { removeOldFiles } from "../lifecycle/data-retention.js";
 
 export interface GeneratedAttachment extends StoredAttachment {
 	provider?: string;
@@ -50,29 +50,8 @@ export async function ensureBrowserScreenshotsDir(config: Config): Promise<strin
 	return dir;
 }
 
-export async function cleanupGeneratedAttachments(config: Config, now = Date.now()): Promise<number> {
-	const retentionDays = config.media.generatedRetentionDays;
-	if (retentionDays <= 0) return 0;
-	const dir = generatedAttachmentsDir(config);
-	const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-	let entries: string[];
-	try {
-		entries = await readdir(dir);
-	} catch (error) {
-		if (isEnoent(error)) return 0;
-		throw error;
-	}
-	let removed = 0;
-	for (const entry of entries) {
-		const path = join(dir, entry);
-		const fileStat = await lstat(path).catch(() => undefined);
-		if (!fileStat?.isFile() || fileStat.mtimeMs > cutoff) continue;
-		await rm(path).catch((error) => {
-			if (!isEnoent(error)) throw error;
-		});
-		removed++;
-	}
-	return removed;
+export function cleanupGeneratedAttachments(config: Config, now = Date.now()): Promise<number> {
+	return removeOldFiles(attachmentsDir(config), config.media.generatedRetentionDays, now);
 }
 
 export function publicAttachmentPath(config: Config, localPath: string): string {

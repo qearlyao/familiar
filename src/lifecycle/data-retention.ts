@@ -32,7 +32,7 @@ export async function runDataRetention(config: Config, now = Date.now()): Promis
 	};
 }
 
-async function removeOldFiles(root: string, retentionDays: number, now: number): Promise<number> {
+export async function removeOldFiles(root: string, retentionDays: number, now: number): Promise<number> {
 	if (retentionDays <= 0) return 0;
 	const cutoff = now - retentionDays * 86_400_000;
 	let removed = 0;

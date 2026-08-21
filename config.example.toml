@@ -175,6 +175,7 @@ fallback_model = "link/gemini-3-pro-image-preview"
 timeout_ms = 120000
 
 [media.generated]
+# Retention applies to every file under data/attachments, including inbound media.
 retention_days = 30
 
 [data.chat]

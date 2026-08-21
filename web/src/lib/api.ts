@@ -350,6 +350,18 @@ async function jsonRequest<T>(
   return (await res.json().catch(() => undefined)) as T;
 }
 
+export async function fetchPushKey(): Promise<{ key: string }> {
+  return getJson<{ key: string }>("/api/web/push/key", "push/key");
+}
+
+export async function savePushSubscription(subscription: unknown): Promise<void> {
+  await jsonRequest("/api/web/push/subscriptions", "POST", subscription, "push/subscriptions");
+}
+
+export async function removePushSubscription(endpoint: string): Promise<void> {
+  await jsonRequest("/api/web/push/subscriptions", "DELETE", { endpoint }, "push/subscriptions");
+}
+
 export async function addModel(model: string): Promise<AvailableModels> {
   const body = await jsonRequest<AvailableModels>("/api/web/agent/models", "POST", { model }, "agent/models");
   return { models: body.models, added: body.added ?? [] };

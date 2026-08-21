@@ -19,6 +19,8 @@ import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
 import { sendText } from "./http.js";
+import { createWebPushService } from "./push.js";
+import { registerWebPushRoutes } from "./push-routes.js";
 import { createWebRouteRegistry } from "./routes.js";
 import { createWebRuntimeActions } from "./runtime-actions.js";
 import { registerWebSkillRoutes } from "./skill-routes.js";
@@ -39,7 +41,10 @@ export async function startWebDaemon(
 	const personaName = parsePersonaName(persona.soul);
 	const webSessions = await loadWebSessionStore(config);
 	const auth = createAuth(config, webSessions);
-	const eventHub = createWebEventHub(config, personaName);
+	const push = await createWebPushService(config);
+	const eventHub = createWebEventHub(config, personaName, (messageId, text) =>
+		push.notify({ title: personaName, body: text.slice(0, 160), tag: messageId }),
+	);
 
 	const getRuntime = async (channelKey?: string): Promise<ConversationRuntime> => {
 		const runtime = await agentCore.getRuntimeForWebChannel(channelKey);
@@ -88,6 +93,7 @@ export async function startWebDaemon(
 		publish: eventHub.publish,
 	});
 	registerWebConfigRoutes(route, config, agentCore);
+	registerWebPushRoutes(route, push);
 	registerWebBookRoutes(route, config);
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);

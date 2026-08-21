@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  Bell,
   Bot,
   Brain,
   ChevronRight,
@@ -24,6 +25,7 @@ import { ThemeSection } from "./config/ThemeSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
+import { NotificationsSection } from "./config/NotificationsSection";
 import { TtsSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
@@ -211,6 +213,13 @@ export function ConfigDrawer({
           <GroupLabel>room</GroupLabel>
           <Section title="theme" description="light, dark, or follow your system." icon={Palette}>
             <ThemeSection />
+          </Section>
+          <Section
+            title="notifications"
+            description="a word from this device when you're away."
+            icon={Bell}
+          >
+            <NotificationsSection />
           </Section>
           {authMode === "bearer" && onSignedOut ? (
             <Section

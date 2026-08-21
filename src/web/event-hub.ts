@@ -33,7 +33,11 @@ export interface WebEventHub {
 	stop(): void;
 }
 
-export function createWebEventHub(config: Config, personaName: string): WebEventHub {
+export function createWebEventHub(
+	config: Config,
+	personaName: string,
+	onAssistantMessage?: (messageId: string, text: string) => void,
+): WebEventHub {
 	const clients = new Set<WebSocketClient>();
 	const eventsByChannel = new Map<string, WebStreamEvent[]>();
 	const runtimeSubscriptions = new Map<string, () => void>();
@@ -173,6 +177,7 @@ export function createWebEventHub(config: Config, personaName: string): WebEvent
 			}
 			if (record.type === "outbound" && !record.control) {
 				const outboundId = record.webMessageId || record.messageIds[0] || `out_${record.recordId}`;
+				if (!record.silent && record.text) onAssistantMessage?.(outboundId, record.text);
 				const completion = {
 					type: "message_completed" as const,
 					channelKey: runtime.channelKey,

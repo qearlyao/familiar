@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1 - 2026-08-21
+
+### Changed
+
+- Share a single owner conversation across every platform. Discord DMs, QQ private messages, and the WebUI now resolve to one session, so the companion keeps one continuous thread with its owner across devices. Group channels stay per-platform.
+- Keep Main Chat first in the session list and always the default, instead of shifting with `default_platform`.
+
+### Breaking
+
+- The owner conversation moved to a shared session, so **existing Main Chat history no longer appears in Familiar**. Previous per-platform DM logs stay on disk under `data/chat/` and can still be read, but the companion starts the shared session empty. Before upgrading, ask your companion to write down anything from recent conversations it wants to keep — diaries and memories are stored separately and carry over untouched, but the unwritten context of the current conversation does not.
+
 ## 0.9.0 - 2026-08-21
 
 ### Added

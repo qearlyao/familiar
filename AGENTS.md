@@ -18,6 +18,7 @@ For high-value upstream/local file references, check `PLAN.md` section `## 6. Re
 2. Fix the Cause, Not the Symptom / Don't Paper Over Bugs: When a problem occurs, don't cover it up with various small fixes and targeted patches. The true root cause must be located and completely repaired. Placing paper over bugs will only cause the system to accumulate dangerous hidden diseases that you don't know about.
 3. Make It Observable: Even if the problem is difficult to locate, never be lazy to make superficial repairs. Sufficient logs and observability should be added to the project to ensure that you have enough information to locate the problem next time it reoccurs. When the problem cannot be fixed, just tell me honestly that the information is insufficient and new logs need to be added, and don't pretend to fix it.
 4. Design for Debugging / Traceability: Always pay attention to leaving enough troubleshooting logs on the critical path to ensure that every key node is traceable.
+5. Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
 
 ## Project Rules
 

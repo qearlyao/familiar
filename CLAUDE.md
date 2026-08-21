@@ -4,6 +4,7 @@
 - Keep feature logic in the canonical owner. Do not scatter one-off flags, special cases, or feature checks through unrelated shared paths.
 - Make invariants explicit. Treat new ad-hoc conditionals, pass-through abstractions, cast-heavy boundaries, `any`/`unknown`, unnecessary optionality, and silent fallbacks as design smells.
 - Keep files cohesive. Do not push a file from under 1000 lines to over 1000 lines without a strong structural reason; extract focused modules or helpers first.
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
 
 ## Project Rules
 

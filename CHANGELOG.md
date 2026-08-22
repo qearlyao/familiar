@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.3 - 2026-08-22
+
+### Added
+
+- Add WebUI controls for Discord and QQ reply modes, channel triggers, and collect debounce timing.
+
 ## 0.9.2 - 2026-08-22
 
 ### Added

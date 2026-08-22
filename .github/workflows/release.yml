@@ -30,3 +30,40 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --notes-file release-notes.md --title "$GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: |
+            npm-shrinkwrap.json
+            web/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix web --ignore-scripts
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify package version
+        run: test "$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME#v}"
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@11.16.0 --ignore-scripts
+
+      - name: Publish package
+        run: npm publish --access public --provenance --ignore-scripts

@@ -6,20 +6,26 @@ import type { Config } from "../config/index.js";
 import { atomicWriteJson, createWriteQueue, readFileOrNull } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 
+interface StoredSubscription extends PushSubscription {
+	/** The subscribing page's https origin, used as the VAPID subject for this endpoint. */
+	subject?: string;
+}
+
 interface PushFile {
 	vapid: { publicKey: string; privateKey: string };
-	subscriptions: PushSubscription[];
+	subscriptions: StoredSubscription[];
 }
 
 export interface WebPushService {
 	publicKey(): string;
 	subscriptionCount(): number;
-	subscribe(subscription: PushSubscription): Promise<void>;
+	subscribe(subscription: PushSubscription, subject?: string): Promise<void>;
 	unsubscribe(endpoint: string): Promise<void>;
 	notify(payload: { title: string; body: string; tag: string }): void;
 }
 
-// ponytail: VAPID requires a syntactically valid contact, not a reachable one.
+// Fallback for non-https (dev) origins only — APNs rejects reserved-TLD contacts,
+// but Apple endpoints can only ever be subscribed from a real https origin.
 const VAPID_SUBJECT = "mailto:operator@web-push.invalid";
 
 export function toPushSubscription(value: unknown): PushSubscription | null {
@@ -36,11 +42,13 @@ export function toPushSubscription(value: unknown): PushSubscription | null {
 	return { endpoint: value.endpoint, keys: { p256dh: value.keys.p256dh, auth: value.keys.auth } };
 }
 
-function toSubscriptions(value: unknown): PushSubscription[] {
+function toSubscriptions(value: unknown): StoredSubscription[] {
 	if (!Array.isArray(value)) return [];
 	return value.flatMap((entry) => {
 		const subscription = toPushSubscription(entry);
-		return subscription ? [subscription] : [];
+		if (!subscription) return [];
+		const subject = isRecord(entry) && typeof entry.subject === "string" ? entry.subject : undefined;
+		return [{ ...subscription, subject }];
 	});
 }
 
@@ -83,9 +91,9 @@ export async function createWebPushService(config: Config): Promise<WebPushServi
 	return {
 		publicKey: () => state.vapid.publicKey,
 		subscriptionCount: () => state.subscriptions.length,
-		async subscribe(subscription): Promise<void> {
+		async subscribe(subscription, subject): Promise<void> {
 			drop(subscription.endpoint);
-			state.subscriptions.push(subscription);
+			state.subscriptions.push({ ...subscription, subject });
 			await persist();
 		},
 		async unsubscribe(endpoint): Promise<void> {
@@ -94,8 +102,8 @@ export async function createWebPushService(config: Config): Promise<WebPushServi
 		},
 		notify({ title, body, tag }): void {
 			const payload = JSON.stringify({ title, body, tag });
-			const vapidDetails = { subject: VAPID_SUBJECT, ...state.vapid };
 			for (const subscription of state.subscriptions) {
+				const vapidDetails = { subject: subscription.subject ?? VAPID_SUBJECT, ...state.vapid };
 				void webpush.sendNotification(subscription, payload, { vapidDetails }).catch((error: unknown) => {
 					// 404/410 mean the browser dropped the subscription — prune it.
 					if (error instanceof WebPushError && (error.statusCode === 404 || error.statusCode === 410)) {

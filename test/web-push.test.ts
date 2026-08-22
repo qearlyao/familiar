@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -20,9 +20,13 @@ describe("web push service", () => {
 		const key = service.publicKey();
 		assert.ok(key.length > 0);
 
-		await service.subscribe(subscription("https://push.example/a"));
+		await service.subscribe(subscription("https://push.example/a"), "https://familiar.example");
 		await service.subscribe(subscription("https://push.example/b"));
 		assert.equal(service.subscriptionCount(), 2);
+
+		// The subscriber's origin persists as the per-endpoint VAPID subject.
+		const stored = JSON.parse(await readFile(resolve(dataDir, "settings", "web-push.json"), "utf8"));
+		assert.equal(stored.subscriptions[0].subject, "https://familiar.example");
 
 		// Re-subscribing the same endpoint replaces, not duplicates.
 		await service.subscribe(subscription("https://push.example/a"));

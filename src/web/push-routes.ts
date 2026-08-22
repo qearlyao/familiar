@@ -10,7 +10,9 @@ export function registerWebPushRoutes(route: RegisterWebRoute, push: WebPushServ
 	route("POST", "/api/web/push/subscriptions", async (request, response) => {
 		const subscription = toPushSubscription(await readJsonBody(request));
 		if (!subscription) throw new HttpError(400, "invalid push subscription");
-		await push.subscribe(subscription);
+		// APNs rejects placeholder contacts, so the page's own https origin is the VAPID subject.
+		const origin = request.headers.origin;
+		await push.subscribe(subscription, origin?.startsWith("https://") ? origin : undefined);
 		sendJson(response, 200, { ok: true });
 	});
 	route("DELETE", "/api/web/push/subscriptions", async (request, response) => {

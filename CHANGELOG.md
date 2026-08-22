@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2 - 2026-08-22
+
+### Added
+
+- Add WebUI toggles for enabling or disabling Discord and QQ connections, with changes applied after restart.
+
+### Fixed
+
+- Restore steer-mode interruptions for the shared owner conversation across WebUI, Discord, and QQ.
+- Use each subscriber's HTTPS origin as the Web Push VAPID subject so Apple push endpoints accept notifications.
+
 ## 0.9.1 - 2026-08-21
 
 ### Changed

@@ -553,6 +553,10 @@ export async function deleteMarginalia(id: string, entryId: string): Promise<voi
 
 export type ConfigKey =
   | "discord.enabled"
+  | "discord.dm_mode"
+  | "discord.channel_mode"
+  | "discord.channel_trigger"
+  | "discord.collect_debounce_ms"
   | "qq.enabled"
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
@@ -590,9 +594,16 @@ export interface ConfigValue<T = unknown> {
 
 export type TtsProvider = "elevenlabs" | "cartesia";
 
+export type DispatchMode = "steer" | "queue" | "collect";
+export type ChannelTrigger = "mention" | "always";
+
 export interface ConfigPayload {
   values: {
     "discord.enabled": ConfigValue<boolean>;
+    "discord.dm_mode": ConfigValue<DispatchMode>;
+    "discord.channel_mode": ConfigValue<DispatchMode>;
+    "discord.channel_trigger": ConfigValue<ChannelTrigger>;
+    "discord.collect_debounce_ms": ConfigValue<number>;
     "qq.enabled": ConfigValue<boolean>;
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;

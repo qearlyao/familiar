@@ -57,4 +57,29 @@ describe("channel config registry", () => {
 			assert.throws(() => entry.validate("false", config), /must be a boolean/);
 		}
 	});
+
+	it("validates dispatch modes, channel trigger, and debounce", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const dmMode = CONFIG_REGISTRY["discord.dm_mode"];
+		const channelMode = CONFIG_REGISTRY["discord.channel_mode"];
+		const trigger = CONFIG_REGISTRY["discord.channel_trigger"];
+		const debounce = CONFIG_REGISTRY["discord.collect_debounce_ms"];
+
+		dmMode.write(config, dmMode.validate("collect", config));
+		channelMode.write(config, channelMode.validate("queue", config));
+		trigger.write(config, trigger.validate("always", config));
+		debounce.write(config, debounce.validate(8000, config));
+
+		assert.equal(dmMode.read(config), "collect");
+		assert.equal(channelMode.read(config), "queue");
+		assert.equal(trigger.read(config), "always");
+		assert.equal(debounce.read(config), 8000);
+
+		assert.throws(() => dmMode.validate("batches", config), /discord\.dm_mode must be one of/);
+		assert.throws(() => trigger.validate("daily", config), /discord\.channel_trigger must be one of/);
+		assert.throws(() => debounce.validate(0, config), /discord\.collect_debounce_ms must be a positive integer/);
+		assert.throws(() => debounce.validate(-1, config), /discord\.collect_debounce_ms must be a positive integer/);
+		// numeric strings are normalized like the toml reader does
+		assert.equal(debounce.validate("4000", config), 4000);
+	});
 });

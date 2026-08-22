@@ -1,10 +1,15 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
-import { TTS_PROVIDERS } from "./enums.js";
+import { readEnum } from "../util/guards.js";
+import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS } from "./enums.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
 import type { Config, TtsProvider } from "./types.js";
 
 export type ConfigKey =
 	| "discord.enabled"
+	| "discord.dm_mode"
+	| "discord.channel_mode"
+	| "discord.channel_trigger"
+	| "discord.collect_debounce_ms"
 	| "qq.enabled"
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
@@ -105,6 +110,34 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		validate: (value) => requireBoolean(value, "discord.enabled"),
 		write: (config, value) => {
 			config.discord.enabled = value as boolean;
+		},
+	},
+	"discord.dm_mode": {
+		read: (config) => config.discord.dmMode,
+		validate: (value) => readEnum(value, "discord.dm_mode", DISCORD_DISPATCH_MODES),
+		write: (config, value) => {
+			config.discord.dmMode = value as Config["discord"]["dmMode"];
+		},
+	},
+	"discord.channel_mode": {
+		read: (config) => config.discord.channelMode,
+		validate: (value) => readEnum(value, "discord.channel_mode", DISCORD_DISPATCH_MODES),
+		write: (config, value) => {
+			config.discord.channelMode = value as Config["discord"]["channelMode"];
+		},
+	},
+	"discord.channel_trigger": {
+		read: (config) => config.discord.channelTrigger,
+		validate: (value) => readEnum(value, "discord.channel_trigger", DISCORD_CHANNEL_TRIGGERS),
+		write: (config, value) => {
+			config.discord.channelTrigger = value as Config["discord"]["channelTrigger"];
+		},
+	},
+	"discord.collect_debounce_ms": {
+		read: (config) => config.discord.collectDebounceMs,
+		validate: (value) => requirePositiveInt(value, "discord.collect_debounce_ms"),
+		write: (config, value) => {
+			config.discord.collectDebounceMs = value as number;
 		},
 	},
 	"qq.enabled": {

@@ -4,6 +4,45 @@ import { useCommittedInput } from "./useCommittedInput";
 export const toggleClass =
   "h-9 rounded-md px-3.5 text-sm lowercase text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary";
 
+export function EnumToggle<T extends string>({
+  value,
+  options,
+  ariaPrefix,
+  disabled,
+  onChange,
+}: {
+  value: T | undefined;
+  options: readonly { value: T; label: string }[];
+  ariaPrefix: string;
+  disabled: boolean;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <ToggleGroup
+      type="single"
+      value={value ?? ""}
+      onValueChange={(next) => {
+        const option = next ? options.find((option) => option.value === next) : undefined;
+        if (option) onChange(option.value);
+      }}
+      disabled={disabled}
+      spacing={1}
+      className="w-fit rounded-lg bg-muted/40 p-1"
+    >
+      {options.map((option) => (
+        <ToggleGroupItem
+          key={option.value}
+          value={option.value}
+          aria-label={`${ariaPrefix} ${option.value}`}
+          className={toggleClass}
+        >
+          {option.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}
+
 export function OnOffToggle({
   enabled,
   disabled,

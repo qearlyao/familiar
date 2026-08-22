@@ -201,7 +201,7 @@ export function ConfigDrawer({
           </Section>
           <Section
             title="channels"
-            description="which discord and qq connections are running."
+            description="which discord and qq connections are running, and how the companion replies on them."
             icon={MessageCircle}
           >
             <ChannelsSection

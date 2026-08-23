@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.5 - 2026-08-23
+
+### Fixed
+
+- Route QQ voice records through `get_record`, prefer returned base64 audio, and use a stable MP3 attachment name.
+- Remove the animated sheen from active WebUI event titles.
+
 ## 0.9.4 - 2026-08-23
 
 ### Added

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import type { OneBotClient } from "../src/qq/onebot.js";
 import { isQqRecordRef, parseQqMessageEvent, resolveQqRecord } from "../src/qq/inbound.js";
+import { createTempDataDir } from "./helpers.js";
 
 const SELF_ID = "10001";
 
@@ -146,10 +149,26 @@ describe("resolveQqRecord", () => {
 		assert.equal(attachment.buffer, undefined);
 	});
 
-	it("rejects get_record responses with only a server-local path", async () => {
+	it("reads the file when get_record returns a local path on this host", async (t) => {
+		const dir = await createTempDataDir(t);
+		const path = resolve(dir, "voice.mp3");
+		await writeFile(path, "mp3-bytes");
 		const client: OneBotClient = {
 			async callAction<T>(): Promise<T> {
-				return { file: "/srv/data/voice.mp3" } as T;
+				return { file: path } as T;
+			},
+			stop() {},
+		};
+		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr" });
+		assert.equal(attachment.source, "qq");
+		assert.equal(attachment.mimeType, "audio/mpeg");
+		assert.equal(attachment.buffer?.toString(), "mp3-bytes");
+	});
+
+	it("rejects get_record responses with no URL, base64, or local path", async () => {
+		const client: OneBotClient = {
+			async callAction<T>(): Promise<T> {
+				return { file: "file:///srv/data/voice.mp3" } as T;
 			},
 			stop() {},
 		};

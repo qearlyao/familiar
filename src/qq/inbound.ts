@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { IncomingAttachment } from "../media/inbound-attachments.js";
 import type { InboundMessageInput } from "../runtime/conversation-runtime.js";
 import type { OneBotClient } from "./onebot.js";
@@ -10,6 +11,11 @@ interface QqMessageSegment {
 /** OneBot segment URLs are only safe to hand to fetch when they use the web schemes. */
 function webUrl(value: unknown): string | undefined {
 	return typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined;
+}
+
+/** A filesystem path on the same host as the daemon (OneBot servers often return these verbatim). */
+function localFilePath(value: unknown): string | undefined {
+	return typeof value === "string" && (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) ? value : undefined;
 }
 
 /** A `record` segment whose audio bytes still need fetching via the OneBot `get_record` action. */
@@ -122,6 +128,18 @@ export async function resolveQqRecord(client: OneBotClient, ref: QqRecordRef): P
 			: undefined;
 	const buffer = encoded ? Buffer.from(encoded, "base64") : undefined;
 	if (!url && !buffer) {
+		// Some OneBot servers hand back a path on their own disk instead of downloadable bytes.
+		// That only works when the daemon runs on the same host as the server; try it and let a
+		// read failure surface as the raw error.
+		const localPath = localFilePath(data.file);
+		if (localPath) {
+			return {
+				name: ref.name,
+				mimeType: "audio/mpeg",
+				source: "qq",
+				buffer: await readFile(localPath),
+			};
+		}
 		const file = typeof data.file === "string" ? data.file : undefined;
 		throw new Error(
 			`OneBot get_record returned no downloadable audio${file ? ` (${file})` : ""}; ` +

@@ -83,7 +83,7 @@ describe("parseQqMessageEvent", () => {
 		assert.throws(() => parseQqMessageEvent(groupEvent({ message_type: "guild" }), SELF_ID), /message_type/);
 	});
 
-	it("parses record segments with a URL as plain attachments", () => {
+	it("routes record segments through get_record whenever a file identifier is present, even with a URL", () => {
 		const parsed = parseQqMessageEvent(
 			groupEvent({
 				message: [{ type: "record", data: { file: "voice.amr", url: "https://example.com/voice.amr" } }],
@@ -91,7 +91,20 @@ describe("parseQqMessageEvent", () => {
 			SELF_ID,
 		);
 		assert.equal(parsed.input.text, "");
-		assert.deepEqual(parsed.attachments, [{ url: "https://example.com/voice.amr", name: "voice.amr", source: "qq" }]);
+		const [attachment] = parsed.attachments;
+		assert.ok(attachment && isQqRecordRef(attachment));
+		assert.equal(attachment.file, "voice.amr");
+	});
+
+	it("uses a record segment's URL directly only when there is no file identifier", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({
+				message: [{ type: "record", data: { url: "https://example.com/voice.amr" } }],
+			}),
+			SELF_ID,
+		);
+		assert.equal(parsed.input.text, "");
+		assert.deepEqual(parsed.attachments, [{ url: "https://example.com/voice.amr", name: undefined, source: "qq" }]);
 	});
 
 	it("falls back to get_record when a record URL isn't fetchable over http(s)", () => {
@@ -146,10 +159,40 @@ describe("resolveQqRecord", () => {
 		};
 		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr", name: "voice.amr" });
 		assert.deepEqual(calls, [{ action: "get_record", params: { file: "voice.amr", out_format: "mp3" } }]);
-		assert.equal(attachment.name, "voice.amr");
+		assert.equal(attachment.name, "qq-record.mp3");
 		assert.equal(attachment.mimeType, "audio/mpeg");
 		assert.equal(attachment.source, "qq");
 		assert.equal(attachment.buffer?.toString(), "mp3-bytes");
+	});
+
+	it("prefers the plain base64 field NapCat returns for converted records", async () => {
+		const client: OneBotClient = {
+			async callAction<T>(): Promise<T> {
+				return { base64: Buffer.from("mp3-bytes").toString("base64"), file: "/.../record.amr.mp3" } as T;
+			},
+			stop() {},
+		};
+		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr", name: "voice.amr" });
+		assert.equal(attachment.name, "qq-record.mp3");
+		assert.equal(attachment.mimeType, "audio/mpeg");
+		assert.equal(attachment.source, "qq");
+		assert.equal(attachment.buffer?.toString(), "mp3-bytes");
+		assert.equal(attachment.url, undefined);
+	});
+
+	it("prefers base64 bytes over a url when get_record returns both", async () => {
+		const client: OneBotClient = {
+			async callAction<T>(): Promise<T> {
+				return {
+					base64: Buffer.from("mp3-bytes").toString("base64"),
+					url: "https://example.com/voice.mp3",
+				} as T;
+			},
+			stop() {},
+		};
+		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr" });
+		assert.equal(attachment.buffer?.toString(), "mp3-bytes");
+		assert.equal(attachment.url, undefined);
 	});
 
 	it("prefers the url field when get_record returns one", async () => {
@@ -175,6 +218,7 @@ describe("resolveQqRecord", () => {
 			stop() {},
 		};
 		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr" });
+		assert.equal(attachment.name, "qq-record.mp3");
 		assert.equal(attachment.source, "qq");
 		assert.equal(attachment.mimeType, "audio/mpeg");
 		assert.equal(attachment.buffer?.toString(), "mp3-bytes");

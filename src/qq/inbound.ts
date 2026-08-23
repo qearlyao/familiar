@@ -81,21 +81,22 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 				parts.push("[image]");
 			}
 		} else if (segment.type === "record") {
-			// Voice bytes are fetched with the OneBot get_record action in the daemon, then
-			// transcribed like any other audio attachment. Some servers also put a URL on the
-			// segment itself; prefer that and skip the get_record round-trip — but only for web
-			// schemes, since file:// and friends would make fetch throw instead.
-			const url = webUrl(data.url);
-			if (url) {
-				attachments.push({
-					url,
-					name: typeof data.file === "string" ? data.file : undefined,
-					source: "qq",
-				});
-			} else if (typeof data.file === "string" && data.file) {
+			// Voice bytes should always go through get_record when a file identifier exists,
+			// even if the segment also carries a url. Some implementations put a non-http url
+			// or a path-like url there that looks usable but isn't fetchable.
+			if (typeof data.file === "string" && data.file) {
 				attachments.push({ kind: "record", file: data.file, name: data.file });
 			} else {
-				parts.push("[record]");
+				const url = webUrl(data.url);
+				if (url) {
+					attachments.push({
+						url,
+						name: typeof data.file === "string" ? data.file : undefined,
+						source: "qq",
+					});
+				} else {
+					parts.push("[record]");
+				}
 			}
 		} else {
 			parts.push(`[${segment.type ?? "unknown"}]`);
@@ -133,37 +134,34 @@ export async function resolveQqRecord(client: OneBotClient, ref: QqRecordRef): P
 		out_format: "mp3",
 	})) as Record<string, unknown>;
 
-	const url = webUrl(data.url);
+	// Prefer the server-converted bytes over a URL: some servers return both a base64 field and
+	// a url that is not actually fetchable over http(s), so the bytes win when present.
 	const encoded =
-		typeof data.file === "string" && data.file.startsWith("base64://")
-			? data.file.slice("base64://".length)
-			: undefined;
+		typeof data.base64 === "string"
+			? data.base64
+			: typeof data.file === "string" && data.file.startsWith("base64://")
+				? data.file.slice("base64://".length)
+				: undefined;
 	const buffer = encoded ? Buffer.from(encoded, "base64") : undefined;
-	if (!url && !buffer) {
-		// Some OneBot servers hand back a path on their own disk instead of downloadable bytes.
-		// That only works when the daemon runs on the same host as the server; try it and let a
-		// read failure surface as the raw error.
-		const localPath = localFilePath(data.file);
-		if (localPath) {
-			return {
-				name: ref.name,
-				mimeType: "audio/mpeg",
-				source: "qq",
-				buffer: await readFile(localPath),
-			};
-		}
-		const file = typeof data.file === "string" ? data.file : undefined;
-		throw new Error(
-			`OneBot get_record returned no downloadable audio${file ? ` (${file})` : ""}; ` +
-				"record transcripts need a server that returns base64 or a URL",
-		);
+	if (buffer) {
+		return { name: "qq-record.mp3", mimeType: "audio/mpeg", source: "qq", buffer };
 	}
-	return {
-		name: ref.name,
-		mimeType: url ? undefined : "audio/mpeg",
-		source: "qq",
-		...(url ? { url } : { buffer }),
-	};
+	const url = webUrl(data.url);
+	if (url) {
+		return { name: "qq-record.mp3", mimeType: "audio/mpeg", source: "qq", url };
+	}
+	// Some OneBot servers hand back a path on their own disk instead of downloadable bytes.
+	// That only works when the daemon runs on the same host as the server; try it and let a
+	// read failure surface as the raw error.
+	const localPath = localFilePath(data.file);
+	if (localPath) {
+		return { name: "qq-record.mp3", mimeType: "audio/mpeg", source: "qq", buffer: await readFile(localPath) };
+	}
+	const file = typeof data.file === "string" ? data.file : undefined;
+	throw new Error(
+		`OneBot get_record returned no downloadable audio${file ? ` (${file})` : ""}; ` +
+			"record transcripts need a server that returns base64 or a URL",
+	);
 }
 
 function elideQuote(text: string): string | undefined {

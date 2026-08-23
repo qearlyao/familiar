@@ -1,12 +1,12 @@
 {
 	"name": "@qearlyao/familiar",
-	"version": "0.9.3",
+	"version": "0.9.4",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@qearlyao/familiar",
-			"version": "0.9.3",
+			"version": "0.9.4",
 			"license": "MIT",
 			"dependencies": {
 				"@earendil-works/pi-agent-core": "0.84.2",

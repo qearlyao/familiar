@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.4 - 2026-08-23
+
+### Added
+
+- Transcribe inbound QQ voice messages and send generated audio replies back as QQ voice messages.
+- Surface quoted QQ reply text to the agent while keeping quoted attachments out of the prompt.
+
+### Fixed
+
+- Accept QQ record audio returned as a local file path and reject unsupported non-HTTP record URLs clearly.
+- Keep WebUI event-stream status and active-step indicators coherent while replies are running or complete.
+
 ## 0.9.3 - 2026-08-22
 
 ### Added

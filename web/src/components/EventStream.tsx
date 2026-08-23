@@ -89,6 +89,11 @@ function stepHasError(step: GutterStep): boolean {
   return step.kind === "tool" && step.tool.status === "error";
 }
 
+function resolveStepIcon(step: GutterStep | "done") {
+  if (step === "done") return Check;
+  return step.kind === "thinking" ? ThinkingIcon : iconForTool(step.tool.name);
+}
+
 function IconCell({
   step,
   active,
@@ -100,12 +105,7 @@ function IconCell({
   hideThreadAbove?: boolean;
   hideThreadBelow?: boolean;
 }) {
-  const Icon =
-    step === "done"
-      ? Check
-      : step.kind === "thinking"
-        ? ThinkingIcon
-        : iconForTool(step.tool.name);
+  const Icon = resolveStepIcon(step);
   return (
     <div className="relative flex h-7 w-7 shrink-0 items-center justify-center" aria-hidden>
       <span
@@ -128,7 +128,7 @@ function IconCell({
   );
 }
 
-function StepTitle({ step }: { step: GutterStep }) {
+function StepTitle({ step, active }: { step: GutterStep; active: boolean }) {
   if (step.kind === "thinking") {
     return (
       <span className="truncate font-serif italic text-sm tracking-wide text-foreground/75">
@@ -143,7 +143,14 @@ function StepTitle({ step }: { step: GutterStep }) {
   const count = !failed && tool.status === "completed" ? resultCount(output) : "";
   return (
     <span className="flex min-w-0 items-baseline gap-2">
-      <span className="shrink-0 font-mono text-sm text-foreground/85">
+      <span
+        className={cn(
+          "shrink-0 font-mono text-sm",
+          active
+            ? "shiny-text animate-[title-sheen_1.8s_linear_infinite] motion-reduce:animate-none"
+            : "text-foreground/85",
+        )}
+      >
         {tool.name}
       </span>
       {summary && (
@@ -276,47 +283,29 @@ function StepBodyRow({
   );
 }
 
-export function EventStream({
-  steps,
-  autoCollapse = false,
-}: {
-  steps: GutterStep[];
-  autoCollapse?: boolean;
-}) {
+export function EventStream({ steps }: { steps: GutterStep[] }) {
   const active = steps.some(isStepActive);
   const allComplete = !active && steps.length > 0;
   const showDone = allComplete && steps.length >= 2 && !steps.some(stepHasError);
 
-  const [open, setOpen] = useState(active);
-  const userTouched = useRef(false);
-  useEffect(() => {
-    if (userTouched.current) return;
-    if (active) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(true);
-    } else if (autoCollapse) {
-      setOpen(false);
-    }
-  }, [active, autoCollapse]);
+  const [open, setOpen] = useState(false);
 
-  const toggle = () => {
-    userTouched.current = true;
-    setOpen((prev) => !prev);
-  };
+  const toggle = () => setOpen((prev) => !prev);
 
   const collapseFromBody = (event: MouseEvent<HTMLDivElement>) => {
     if (isInteractiveElement(event.target)) return;
     if (window.getSelection()?.toString()) return;
-    userTouched.current = true;
     setOpen(false);
   };
 
   if (steps.length === 0) return null;
 
   const first = steps[0];
+  const current = open ? first : steps[steps.length - 1];
+  const headerActive = open ? isStepActive(first) : active;
+  const CurrentIcon = resolveStepIcon(current);
   const firstHasBody = hasStepBody(first);
   const more = steps.length - 1;
-  const firstThreadBelow = open && (firstHasBody || more > 0 || showDone);
 
   return (
     <div className="flex flex-col rounded-lg bg-muted px-3 py-2">
@@ -326,14 +315,27 @@ export function EventStream({
         aria-expanded={open}
         className="flex w-full cursor-pointer items-center gap-2 text-left"
       >
-        <IconCell
-          step={first}
-          active={isStepActive(first)}
-          hideThreadAbove
-          hideThreadBelow={!firstThreadBelow}
-        />
+        <span
+          key={`icon-${current.id}`}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center animate-in fade-in-0 zoom-in-95 duration-200 ease-out motion-reduce:animate-none"
+        >
+          {/* eslint-disable-next-line react-hooks/static-components */}
+          <CurrentIcon
+            className={cn(
+              "size-4",
+              headerActive ? "text-primary" : "text-muted-foreground/85",
+              headerActive &&
+                "animate-[step-breathe_1.8s_ease-in-out_infinite] motion-reduce:animate-none",
+            )}
+          />
+        </span>
         <div className="flex min-w-0 items-center gap-2">
-          <StepTitle step={first} />
+          <span
+            key={`title-${current.id}`}
+            className="flex min-w-0 items-center gap-2 overflow-hidden animate-in fade-in-0 slide-in-from-bottom-[0.25rem] duration-200 ease-out motion-reduce:animate-none"
+          >
+            <StepTitle step={current} active={headerActive} />
+          </span>
           {!open && more > 0 && (
             <span className="shrink-0 font-serif italic text-sm tracking-wide text-muted-foreground/60">
               · {more} more
@@ -370,7 +372,7 @@ export function EventStream({
                     active={isStepActive(step)}
                     hideThreadBelow={!iconThreadBelow}
                   />
-                  <StepTitle step={step} />
+                  <StepTitle step={step} active={isStepActive(step)} />
                 </div>
                 {hasBody && (
                   <StepBodyRow step={step} threadContinues={bodyThreadContinues} />

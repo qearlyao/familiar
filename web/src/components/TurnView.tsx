@@ -1,16 +1,9 @@
-import type { Message, Step } from "../types";
+import type { Message } from "../types";
 import { chunkSteps } from "@/lib/chunkSteps";
 import { EventStream } from "./EventStream";
 import { ErrorNotice } from "./steps/ErrorNotice";
 import { withoutSilentMarker } from "@/lib/silentMarker";
 import { TextStep } from "./steps/TextStep";
-
-function isStepFinished(step: Step): boolean {
-  if (step.kind === "thinking") return step.complete === true;
-  if (step.kind === "text") return step.complete === true;
-  if (step.kind === "error") return true;
-  return step.tool.status === "completed" || step.tool.status === "error";
-}
 
 export function TurnView({ message }: { message: Message }) {
   const { steps, silent, who } = message;
@@ -19,8 +12,6 @@ export function TurnView({ message }: { message: Message }) {
     (c) => c.kind === "text" && withoutSilentMarker(c.step.text),
   );
   const showTopLabel = silent === true && !hasText && Boolean(who);
-  const messageSettled =
-    steps.length > 0 && steps.every(isStepFinished) && (silent === true || hasText);
 
   return (
     <div className="flex w-full flex-col gap-1">
@@ -32,11 +23,7 @@ export function TurnView({ message }: { message: Message }) {
       {chunks.map((chunk, i) => {
         if (chunk.kind === "stream") {
           return (
-            <EventStream
-              key={`stream-${i}`}
-              steps={chunk.steps}
-              autoCollapse={messageSettled}
-            />
+            <EventStream key={`stream-${i}`} steps={chunk.steps} />
           );
         }
         if (chunk.kind === "error") {

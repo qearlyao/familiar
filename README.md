@@ -481,7 +481,10 @@ If the OneBot server has an access token, put it in `.env` as
 `QQ_ONEBOT_TOKEN`. Non-owner DMs and groups outside the allowlist are ignored.
 Dispatch, channel trigger, and collect debounce reuse the `discord.*` settings,
 and owner control commands (`/status`, `/model`, …) work in DMs and allowed
-groups.
+groups. When a user replies to a message (the OneBot `reply` segment), familiar
+surfaces the quoted text to the agent — replies to the bot's own messages are
+looked up locally, others via `get_msg`, and only the text is shown (never
+re-sent attachments), truncated at 300 chars.
 
 NapCat setup (same machine as familiar):
 

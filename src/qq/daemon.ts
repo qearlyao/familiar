@@ -11,9 +11,17 @@ import { applyControlCommand, getChannelTriggerSetting } from "../runtime/contro
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
 import { isCanceledJob, runAgentTurn } from "../runtime/turn.js";
-import { isQqRecordRef, parseQqMessageEvent, resolveQqRecord } from "./inbound.js";
+import { isQqRecordRef, parseQqMessageEvent, resolveQqQuote, resolveQqRecord } from "./inbound.js";
 import { createOneBotClient } from "./onebot.js";
 import { sendQqMessage } from "./send.js";
+
+/** Renders a quoted message as a Markdown blockquote so the WebUI reuses its blockquote style. */
+function quoteBlock(text: string): string {
+	return text
+		.split("\n")
+		.map((line) => `> ${line}`)
+		.join("\n");
+}
 
 export interface QqDaemon {
 	stop(): Promise<void>;
@@ -166,6 +174,12 @@ export function startQqDaemon(
 					console.error("QQ record fetch failed", error);
 					parsed.input.text = `${parsed.input.text} [record]`.trim();
 				}
+			}
+			// Resolve the quoted message (when the inbound event has a reply segment) to plain text so
+			// the agent sees what is being replied to. Attachments are never carried over — only text.
+			if (parsed.replyToMessageId) {
+				const quoted = await resolveQqQuote(client, parsed.replyToMessageId, runtime.getRecords());
+				if (quoted) parsed.input.text = `${quoteBlock(quoted)}\n${parsed.input.text}`.trim();
 			}
 			const input: InboundMessageInput = {
 				...parsed.input,

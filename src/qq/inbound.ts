@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
+import type { ChatLogRecord } from "../conversation/chat-log.js";
 import type { IncomingAttachment } from "../media/inbound-attachments.js";
 import type { InboundMessageInput } from "../runtime/conversation-runtime.js";
 import type { OneBotClient } from "./onebot.js";
+
+/** Max chars of quoted text surfaced to the agent; longer quotes are elided. */
+const QUOTE_MAX_CHARS = 300;
 
 interface QqMessageSegment {
 	type?: string;
@@ -36,6 +40,8 @@ export interface ParsedQqMessage {
 	messageType: "private" | "group";
 	/** Owner QQ号 for private chats, 群号 for groups. */
 	channelId: string;
+	/** The `message_id` quoted by the inbound `reply` segment, when present. */
+	replyToMessageId?: string;
 	input: Omit<InboundMessageInput, "attachments">;
 	attachments: ResolvableQqAttachment[];
 }
@@ -52,10 +58,15 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 	const parts: string[] = [];
 	const attachments: ResolvableQqAttachment[] = [];
 	let mentionedBot = false;
+	let replyToMessageId: string | undefined;
 	for (const segment of segments as QqMessageSegment[]) {
 		const data = segment.data ?? {};
 		if (segment.type === "text") {
 			if (typeof data.text === "string") parts.push(data.text);
+		} else if (segment.type === "reply") {
+			// The reply segment only points at the quoted message; the adapter resolves its text
+			// separately and never renders the segment itself into the visible message.
+			if (typeof data.id === "string" && data.id) replyToMessageId = data.id;
 		} else if (segment.type === "at") {
 			if (String(data.qq) === selfId) mentionedBot = true;
 			else parts.push(`@${String(data.qq ?? "")}`);
@@ -98,6 +109,7 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 	return {
 		messageType,
 		channelId: messageType === "group" ? String(event.group_id) : String(event.user_id),
+		replyToMessageId,
 		attachments,
 		input: {
 			messageId,
@@ -152,4 +164,40 @@ export async function resolveQqRecord(client: OneBotClient, ref: QqRecordRef): P
 		source: "qq",
 		...(url ? { url } : { buffer }),
 	};
+}
+
+function elideQuote(text: string): string | undefined {
+	const trimmed = text.trim();
+	if (!trimmed) return undefined;
+	return trimmed.length > QUOTE_MAX_CHARS ? `${trimmed.slice(0, QUOTE_MAX_CHARS)}…` : trimmed;
+}
+
+/**
+ * Resolves an inbound `reply` segment's quoted message to plain text for the agent.
+ *
+ * Quotes of the bot's own messages are found in the local chat log (no network round-trip, and
+ * attachments are already stripped). Quotes of other users' messages fall back to OneBot's
+ * `get_msg` action; its response segments yield only their `text` parts, never attachments.
+ * Returns `undefined` when the quote can't be resolved (unknown id, unsupported server, or an
+ * attachment-only message) so the caller can leave the message unchanged.
+ */
+export async function resolveQqQuote(
+	client: OneBotClient,
+	replyToMessageId: string,
+	records: readonly ChatLogRecord[],
+): Promise<string | undefined> {
+	const local = records.find((record) => record.type === "outbound" && record.messageIds.includes(replyToMessageId));
+	if (local?.type === "outbound") return elideQuote(local.text);
+
+	try {
+		const data = await client.callAction<{ message?: unknown }>("get_msg", { message_id: Number(replyToMessageId) });
+		if (!Array.isArray(data.message)) return undefined;
+		const parts: string[] = [];
+		for (const segment of data.message as QqMessageSegment[]) {
+			if (segment.type === "text" && typeof segment.data?.text === "string") parts.push(segment.data.text);
+		}
+		return elideQuote(parts.join(""));
+	} catch {
+		return undefined;
+	}
 }

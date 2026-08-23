@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import type { OneBotClient } from "../src/qq/onebot.js";
-import { isQqRecordRef, parseQqMessageEvent, resolveQqRecord } from "../src/qq/inbound.js";
+import { isQqRecordRef, parseQqMessageEvent, resolveQqQuote, resolveQqRecord } from "../src/qq/inbound.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import { createTempDataDir } from "./helpers.js";
 
 const SELF_ID = "10001";
@@ -117,6 +118,20 @@ describe("parseQqMessageEvent", () => {
 		assert.ok(attachment && isQqRecordRef(attachment));
 		assert.equal(attachment.file, "voice.amr");
 	});
+
+	it("captures the quoted message id from a reply segment without rendering it into the text", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({
+				message: [
+					{ type: "reply", data: { id: "4999" } },
+					{ type: "text", data: { text: " 同意 " } },
+				],
+			}),
+			SELF_ID,
+		);
+		assert.equal(parsed.replyToMessageId, "4999");
+		assert.equal(parsed.input.text, "同意");
+	});
 });
 
 describe("resolveQqRecord", () => {
@@ -173,5 +188,57 @@ describe("resolveQqRecord", () => {
 			stop() {},
 		};
 		await assert.rejects(resolveQqRecord(client, { kind: "record", file: "voice.amr" }), /no downloadable audio/);
+	});
+});
+
+describe("resolveQqQuote", () => {
+	const records: ChatLogRecord[] = [
+		{
+			recordId: 1,
+			ts: "2026-01-01T00:00:00.000Z",
+			service: "qq",
+			scope: "channel",
+			channelId: "30003",
+			type: "outbound",
+			messageIds: ["9001"],
+			text: "  你之前问过的那张表我已经做好了  ",
+		},
+	];
+
+	function fakeClient(response: unknown): OneBotClient {
+		return {
+			async callAction<T>(): Promise<T> {
+				return response as T;
+			},
+			stop() {},
+		};
+	}
+
+	it("resolves quotes of the bot's own messages from the local chat log without get_msg", async () => {
+		const client = fakeClient({ message: [] });
+		assert.equal(await resolveQqQuote(client, "9001", records), "你之前问过的那张表我已经做好了");
+	});
+
+	it("falls back to get_msg for messages not in the local log and keeps only text segments", async () => {
+		const client = fakeClient({
+			message: [
+				{ type: "text", data: { text: "前置上下文" } },
+				{ type: "image", data: { file: "a.png", url: "https://example.com/a.png" } },
+				{ type: "text", data: { text: "后半句" } },
+			],
+		});
+		assert.equal(await resolveQqQuote(client, "7777", records), "前置上下文后半句");
+	});
+
+	it("truncates long quotes at the configured cap with an ellipsis", async () => {
+		const long = "x".repeat(400);
+		const client = fakeClient({ message: [{ type: "text", data: { text: long } }] });
+		const resolved = await resolveQqQuote(client, "7777", records);
+		assert.equal(resolved, `${"x".repeat(300)}…`);
+	});
+
+	it("returns undefined for attachment-only quotes and get_msg failures", async () => {
+		assert.equal(await resolveQqQuote(fakeClient({ message: [{ type: "image", data: { file: "a.png" } }] }), "7777", records), undefined);
+		assert.equal(await resolveQqQuote(fakeClient(new Error("get_msg unsupported")), "7777", records), undefined);
 	});
 });

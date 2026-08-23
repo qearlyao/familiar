@@ -5,7 +5,10 @@ import type { OneBotClient } from "./onebot.js";
 
 const MAX_CHUNK_CHARS = 3000;
 
-type QqSegment = { type: "text"; data: { text: string } } | { type: "image"; data: { file: string } };
+type QqSegment =
+	| { type: "text"; data: { text: string } }
+	| { type: "image"; data: { file: string } }
+	| { type: "record"; data: { file: string } };
 
 export function chunkQqText(text: string): string[] {
 	const chunks: string[] = [];
@@ -20,13 +23,17 @@ export function chunkQqText(text: string): string[] {
 	return chunks;
 }
 
-// ponytail: v0 sends image attachments only; audio/video/files stay visible in the WebUI.
-async function imageSegments(attachments: StoredAttachment[]): Promise<QqSegment[]> {
+// Image and audio attachments are sent as OneBot segments; video and files stay visible in the WebUI only.
+async function mediaSegments(attachments: StoredAttachment[]): Promise<QqSegment[]> {
 	const segments: QqSegment[] = [];
 	for (const attachment of attachments) {
-		if (attachment.kind !== "image" || !attachment.localPath) continue;
+		if (!attachment.localPath) continue;
+		if (attachment.kind !== "image" && attachment.kind !== "audio") continue;
 		const data = await readFile(attachment.localPath);
-		segments.push({ type: "image", data: { file: `base64://${data.toString("base64")}` } });
+		const file = `base64://${data.toString("base64")}`;
+		segments.push(
+			attachment.kind === "image" ? { type: "image", data: { file } } : { type: "record", data: { file } },
+		);
 	}
 	return segments;
 }
@@ -39,12 +46,12 @@ export async function sendQqMessage(
 ): Promise<string[]> {
 	// silent replies pass empty text; non-silent text is already normalized upstream by parseOutboundReply
 	const chunks = chunkQqText(text.trim());
-	const images = await imageSegments(attachments);
+	const media = await mediaSegments(attachments);
 	const payloads: QqSegment[][] = chunks.map((chunk) => [{ type: "text", data: { text: chunk } }]);
-	if (images.length > 0) {
+	if (media.length > 0) {
 		const last = payloads[payloads.length - 1];
-		if (last) last.push(...images);
-		else payloads.push(images);
+		if (last) last.push(...media);
+		else payloads.push(media);
 	}
 	const messageIds: string[] = [];
 	for (const message of payloads) {

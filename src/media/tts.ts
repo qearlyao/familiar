@@ -183,6 +183,7 @@ export function createTtsTool(
 			const attachment = {
 				id,
 				name,
+				kind: "audio",
 				mimeType,
 				size: buffer.length,
 				localPath,

@@ -3,6 +3,7 @@ import type { Config } from "../config/index.js";
 import type { SettingsStore } from "../config/settings.js";
 import { type ChatChannelRef, chatChannelKey } from "../conversation/chat-log.js";
 import type { RestartHandler } from "../lifecycle/control.js";
+import type { IncomingAttachment } from "../media/inbound-attachments.js";
 import { materializeInboundAttachments } from "../media/inbound-attachments.js";
 import { type AgentCore, type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
@@ -10,7 +11,7 @@ import { applyControlCommand, getChannelTriggerSetting } from "../runtime/contro
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
 import { isCanceledJob, runAgentTurn } from "../runtime/turn.js";
-import { parseQqMessageEvent } from "./inbound.js";
+import { isQqRecordRef, parseQqMessageEvent, resolveQqRecord } from "./inbound.js";
 import { createOneBotClient } from "./onebot.js";
 import { sendQqMessage } from "./send.js";
 
@@ -152,11 +153,25 @@ export function startQqDaemon(
 			const isDm = ref.scope === "dm";
 			runtime = await core.getRuntimeForChannel(isDm ? ownerDmRef : ref);
 			const channelTrigger = getChannelTriggerSetting(config, settings, runtime.channelKey, isDm);
+			// Resolve voice segments to audio, keeping the message (and its text) alive when one record can't be fetched.
+			const resolvedAttachments: IncomingAttachment[] = [];
+			for (const attachment of parsed.attachments) {
+				if (!isQqRecordRef(attachment)) {
+					resolvedAttachments.push(attachment);
+					continue;
+				}
+				try {
+					resolvedAttachments.push(await resolveQqRecord(client, attachment));
+				} catch (error) {
+					console.error("QQ record fetch failed", error);
+					parsed.input.text = `${parsed.input.text} [record]`.trim();
+				}
+			}
 			const input: InboundMessageInput = {
 				...parsed.input,
 				// The shared owner DM runtime identifies its owner by one id across platforms.
 				authorId: isDm ? WEB_OWNER_ID : parsed.input.authorId,
-				attachments: await materializeInboundAttachments(config, parsed.attachments),
+				attachments: await materializeInboundAttachments(config, resolvedAttachments),
 			};
 			const control = runtime.parseControlCommand(input);
 			if (control) {

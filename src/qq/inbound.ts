@@ -1,9 +1,24 @@
 import type { IncomingAttachment } from "../media/inbound-attachments.js";
 import type { InboundMessageInput } from "../runtime/conversation-runtime.js";
+import type { OneBotClient } from "./onebot.js";
 
 interface QqMessageSegment {
 	type?: string;
 	data?: Record<string, unknown>;
+}
+
+/** A `record` segment whose audio bytes still need fetching via the OneBot `get_record` action. */
+export interface QqRecordRef {
+	kind: "record";
+	/** The OneBot `file` identifier (a filename or path on the server) to fetch the audio with. */
+	file: string;
+	name?: string;
+}
+
+export type ResolvableQqAttachment = IncomingAttachment | QqRecordRef;
+
+export function isQqRecordRef(attachment: ResolvableQqAttachment): attachment is QqRecordRef {
+	return (attachment as QqRecordRef).kind === "record";
 }
 
 export interface ParsedQqMessage {
@@ -11,7 +26,7 @@ export interface ParsedQqMessage {
 	/** Owner QQ号 for private chats, 群号 for groups. */
 	channelId: string;
 	input: Omit<InboundMessageInput, "attachments">;
-	attachments: IncomingAttachment[];
+	attachments: ResolvableQqAttachment[];
 }
 
 export function parseQqMessageEvent(event: Record<string, unknown>, selfId: string): ParsedQqMessage {
@@ -24,7 +39,7 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 		throw new Error('QQ message is not a segment array; set messagePostFormat to "array" on the OneBot server');
 	}
 	const parts: string[] = [];
-	const attachments: IncomingAttachment[] = [];
+	const attachments: ResolvableQqAttachment[] = [];
 	let mentionedBot = false;
 	for (const segment of segments as QqMessageSegment[]) {
 		const data = segment.data ?? {};
@@ -42,6 +57,21 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 				});
 			} else {
 				parts.push("[image]");
+			}
+		} else if (segment.type === "record") {
+			// Voice bytes are fetched with the OneBot get_record action in the daemon, then
+			// transcribed like any other audio attachment. Some servers also put a URL on the
+			// segment itself; prefer that and skip the get_record round-trip.
+			if (typeof data.url === "string" && data.url) {
+				attachments.push({
+					url: data.url,
+					name: typeof data.file === "string" ? data.file : undefined,
+					source: "qq",
+				});
+			} else if (typeof data.file === "string" && data.file) {
+				attachments.push({ kind: "record", file: data.file, name: data.file });
+			} else {
+				parts.push("[record]");
 			}
 		} else {
 			parts.push(`[${segment.type ?? "unknown"}]`);
@@ -68,5 +98,33 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 				Number.isFinite(timeSeconds) && timeSeconds > 0 ? new Date(timeSeconds * 1000).toISOString() : undefined,
 			checkpoint: { messageId },
 		},
+	};
+}
+
+/** Fetches a `record` segment's audio via OneBot's get_record action. */
+export async function resolveQqRecord(client: OneBotClient, ref: QqRecordRef): Promise<IncomingAttachment> {
+	const data = (await client.callAction<Record<string, unknown>>("get_record", {
+		file: ref.file,
+		out_format: "mp3",
+	})) as Record<string, unknown>;
+
+	const url = typeof data.url === "string" && data.url ? data.url : undefined;
+	const encoded =
+		typeof data.file === "string" && data.file.startsWith("base64://")
+			? data.file.slice("base64://".length)
+			: undefined;
+	const buffer = encoded ? Buffer.from(encoded, "base64") : undefined;
+	if (!url && !buffer) {
+		const file = typeof data.file === "string" ? data.file : undefined;
+		throw new Error(
+			`OneBot get_record returned no downloadable audio${file ? ` (${file})` : ""}; ` +
+				"record transcripts need a server that returns base64 or a URL",
+		);
+	}
+	return {
+		name: ref.name,
+		mimeType: url ? undefined : "audio/mpeg",
+		source: "qq",
+		...(url ? { url } : { buffer }),
 	};
 }

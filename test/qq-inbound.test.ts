@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseQqMessageEvent } from "../src/qq/inbound.js";
+import type { OneBotClient } from "../src/qq/onebot.js";
+import { isQqRecordRef, parseQqMessageEvent, resolveQqRecord } from "../src/qq/inbound.js";
 
 const SELF_ID = "10001";
 
@@ -76,5 +77,69 @@ describe("parseQqMessageEvent", () => {
 
 	it("rejects unsupported message types", () => {
 		assert.throws(() => parseQqMessageEvent(groupEvent({ message_type: "guild" }), SELF_ID), /message_type/);
+	});
+
+	it("parses record segments with a URL as plain attachments", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({
+				message: [{ type: "record", data: { file: "voice.amr", url: "https://example.com/voice.amr" } }],
+			}),
+			SELF_ID,
+		);
+		assert.equal(parsed.input.text, "");
+		assert.deepEqual(parsed.attachments, [{ url: "https://example.com/voice.amr", name: "voice.amr", source: "qq" }]);
+	});
+
+	it("parses record segments without a URL as record refs for the daemon to resolve", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({ message: [{ type: "record", data: { file: "voice.amr" } }] }),
+			SELF_ID,
+		);
+		assert.equal(parsed.input.text, "");
+		assert.equal(parsed.attachments.length, 1);
+		const [attachment] = parsed.attachments;
+		assert.ok(attachment && isQqRecordRef(attachment));
+		assert.equal(attachment.file, "voice.amr");
+	});
+});
+
+describe("resolveQqRecord", () => {
+	it("decodes base64 get_record responses into an mp3 attachment", async () => {
+		const calls: Array<{ action: string; params: Record<string, unknown> }> = [];
+		const client: OneBotClient = {
+			async callAction<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+				calls.push({ action, params });
+				return { file: `base64://${Buffer.from("mp3-bytes").toString("base64")}` } as T;
+			},
+			stop() {},
+		};
+		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr", name: "voice.amr" });
+		assert.deepEqual(calls, [{ action: "get_record", params: { file: "voice.amr", out_format: "mp3" } }]);
+		assert.equal(attachment.name, "voice.amr");
+		assert.equal(attachment.mimeType, "audio/mpeg");
+		assert.equal(attachment.source, "qq");
+		assert.equal(attachment.buffer?.toString(), "mp3-bytes");
+	});
+
+	it("prefers the url field when get_record returns one", async () => {
+		const client: OneBotClient = {
+			async callAction<T>(): Promise<T> {
+				return { url: "https://example.com/voice.mp3" } as T;
+			},
+			stop() {},
+		};
+		const attachment = await resolveQqRecord(client, { kind: "record", file: "voice.amr" });
+		assert.equal(attachment.url, "https://example.com/voice.mp3");
+		assert.equal(attachment.buffer, undefined);
+	});
+
+	it("rejects get_record responses with only a server-local path", async () => {
+		const client: OneBotClient = {
+			async callAction<T>(): Promise<T> {
+				return { file: "/srv/data/voice.mp3" } as T;
+			},
+			stop() {},
+		};
+		await assert.rejects(resolveQqRecord(client, { kind: "record", file: "voice.amr" }), /no downloadable audio/);
 	});
 });

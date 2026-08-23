@@ -58,7 +58,7 @@ describe("sendQqMessage", () => {
 		assert.equal(group.sent[0]?.params.group_id, 30003);
 	});
 
-	it("attaches images as base64 segments on the last chunk", async (t) => {
+	it("attaches image and audio attachments as segments on the last chunk", async (t) => {
 		const dir = await createTempDataDir(t);
 		const imagePath = resolve(dir, "pic.png");
 		await writeFile(imagePath, Buffer.from("png-bytes"));
@@ -71,9 +71,10 @@ describe("sendQqMessage", () => {
 		const message = sent[0]?.params.message as Array<{ type: string; data: Record<string, string> }>;
 		assert.deepEqual(
 			message.map((segment) => segment.type),
-			["text", "image"],
+			["text", "image", "record"],
 		);
 		assert.equal(message[1]?.data.file, `base64://${Buffer.from("png-bytes").toString("base64")}`);
+		assert.equal(message[2]?.data.file, `base64://${Buffer.from("png-bytes").toString("base64")}`);
 	});
 
 	it("sends an image-only message for silent replies and nothing when there is nothing to send", async (t) => {

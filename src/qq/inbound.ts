@@ -7,6 +7,11 @@ interface QqMessageSegment {
 	data?: Record<string, unknown>;
 }
 
+/** OneBot segment URLs are only safe to hand to fetch when they use the web schemes. */
+function webUrl(value: unknown): string | undefined {
+	return typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined;
+}
+
 /** A `record` segment whose audio bytes still need fetching via the OneBot `get_record` action. */
 export interface QqRecordRef {
 	kind: "record";
@@ -61,10 +66,12 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 		} else if (segment.type === "record") {
 			// Voice bytes are fetched with the OneBot get_record action in the daemon, then
 			// transcribed like any other audio attachment. Some servers also put a URL on the
-			// segment itself; prefer that and skip the get_record round-trip.
-			if (typeof data.url === "string" && data.url) {
+			// segment itself; prefer that and skip the get_record round-trip — but only for web
+			// schemes, since file:// and friends would make fetch throw instead.
+			const url = webUrl(data.url);
+			if (url) {
 				attachments.push({
-					url: data.url,
+					url,
 					name: typeof data.file === "string" ? data.file : undefined,
 					source: "qq",
 				});
@@ -108,7 +115,7 @@ export async function resolveQqRecord(client: OneBotClient, ref: QqRecordRef): P
 		out_format: "mp3",
 	})) as Record<string, unknown>;
 
-	const url = typeof data.url === "string" && data.url ? data.url : undefined;
+	const url = webUrl(data.url);
 	const encoded =
 		typeof data.file === "string" && data.file.startsWith("base64://")
 			? data.file.slice("base64://".length)

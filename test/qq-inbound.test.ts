@@ -90,6 +90,19 @@ describe("parseQqMessageEvent", () => {
 		assert.deepEqual(parsed.attachments, [{ url: "https://example.com/voice.amr", name: "voice.amr", source: "qq" }]);
 	});
 
+	it("falls back to get_record when a record URL isn't fetchable over http(s)", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({
+				message: [{ type: "record", data: { file: "voice.amr", url: "file:///srv/data/voice.amr" } }],
+			}),
+			SELF_ID,
+		);
+		assert.equal(parsed.input.text, "");
+		const [attachment] = parsed.attachments;
+		assert.ok(attachment && isQqRecordRef(attachment));
+		assert.equal(attachment.file, "voice.amr");
+	});
+
 	it("parses record segments without a URL as record refs for the daemon to resolve", () => {
 		const parsed = parseQqMessageEvent(
 			groupEvent({ message: [{ type: "record", data: { file: "voice.amr" } }] }),

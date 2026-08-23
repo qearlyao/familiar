@@ -238,26 +238,6 @@
 }
 
 @layer components {
-  /* Shiny-text sheen for a running step's tool name: a gradient clipped to the
-     glyphs, swept by the `title-sheen` keyframe (background-position walks a
-     200%-wide gradient so the loop is seamless). Static color comes back via
-     the class being dropped when the step is no longer active. */
-  .shiny-text {
-    background-image: linear-gradient(
-      110deg,
-      var(--foreground) 0%,
-      var(--foreground) 35%,
-      color-mix(in oklch, var(--primary) 42%, white) 50%,
-      var(--foreground) 65%,
-      var(--foreground) 100%
-    );
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-  }
-
   .warm-prose {
     @apply max-w-[70ch] leading-relaxed text-foreground;
   }
@@ -722,18 +702,6 @@
   35% {
     opacity: 0.9;
     transform: translateY(-1px);
-  }
-}
-
-/* Event-stream step header: light sweep across a running step's title, as a
-   clipped gradient sheen on the text. background-position walks -200% of a
-   200%-wide gradient, so the loop seam is invisible. */
-@keyframes title-sheen {
-  from {
-    background-position: 0% center;
-  }
-  to {
-    background-position: -200% center;
   }
 }
 

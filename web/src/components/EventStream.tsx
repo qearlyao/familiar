@@ -128,7 +128,7 @@ function IconCell({
   );
 }
 
-function StepTitle({ step, active }: { step: GutterStep; active: boolean }) {
+function StepTitle({ step }: { step: GutterStep }) {
   if (step.kind === "thinking") {
     return (
       <span className="truncate font-serif italic text-sm tracking-wide text-foreground/75">
@@ -144,12 +144,7 @@ function StepTitle({ step, active }: { step: GutterStep; active: boolean }) {
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span
-        className={cn(
-          "shrink-0 font-mono text-sm",
-          active
-            ? "shiny-text animate-[title-sheen_1.8s_linear_infinite] motion-reduce:animate-none"
-            : "text-foreground/85",
-        )}
+        className="shrink-0 font-mono text-sm text-foreground/85"
       >
         {tool.name}
       </span>
@@ -334,7 +329,7 @@ export function EventStream({ steps }: { steps: GutterStep[] }) {
             key={`title-${current.id}`}
             className="flex min-w-0 items-center gap-2 overflow-hidden animate-in fade-in-0 slide-in-from-bottom-[0.25rem] duration-200 ease-out motion-reduce:animate-none"
           >
-            <StepTitle step={current} active={headerActive} />
+            <StepTitle step={current} />
           </span>
           {!open && more > 0 && (
             <span className="shrink-0 font-serif italic text-sm tracking-wide text-muted-foreground/60">
@@ -372,7 +367,7 @@ export function EventStream({ steps }: { steps: GutterStep[] }) {
                     active={isStepActive(step)}
                     hideThreadBelow={!iconThreadBelow}
                   />
-                  <StepTitle step={step} active={isStepActive(step)} />
+                  <StepTitle step={step} />
                 </div>
                 {hasBody && (
                   <StepBodyRow step={step} threadContinues={bodyThreadContinues} />

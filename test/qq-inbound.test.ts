@@ -145,6 +145,26 @@ describe("parseQqMessageEvent", () => {
 		assert.equal(parsed.replyToMessageId, "4999");
 		assert.equal(parsed.input.text, "同意");
 	});
+
+	it("renders a JSON share card as readable text", () => {
+		const parsed = parseQqMessageEvent(
+			groupEvent({
+				message: [
+					{
+						type: "json",
+						data: {
+							data: JSON.stringify({
+								prompt: "[分享]",
+								meta: { news: { title: "Familiar", desc: "A useful assistant", jump_url: "https://example.com" } },
+							}),
+						},
+					},
+				],
+			}),
+			SELF_ID,
+		);
+		assert.equal(parsed.input.text, "Familiar\nA useful assistant\nhttps://example.com");
+	});
 });
 
 describe("resolveQqRecord", () => {

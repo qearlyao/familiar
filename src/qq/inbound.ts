@@ -22,6 +22,42 @@ function localFilePath(value: unknown): string | undefined {
 	return typeof value === "string" && (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) ? value : undefined;
 }
 
+function cardField(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const text = value.trim().replace(/\s+/g, " ");
+	return text || undefined;
+}
+
+/** Extracts the readable parts of OneBot's JSON-form QQ share-card payload. */
+function jsonCardText(value: unknown): string | undefined {
+	let parsed: unknown = value;
+	if (typeof value === "string") {
+		try {
+			parsed = JSON.parse(value);
+		} catch {
+			return undefined;
+		}
+	}
+	if (!parsed || typeof parsed !== "object") return undefined;
+	const root = parsed as Record<string, unknown>;
+	const news = root.meta && typeof root.meta === "object" ? (root.meta as Record<string, unknown>).news : undefined;
+	const card = news && typeof news === "object" ? (news as Record<string, unknown>) : {};
+	const fields = [
+		cardField(card.title) ?? cardField(root.title),
+		cardField(card.desc) ?? cardField(root.desc),
+		cardField(card.jump_url) ?? cardField(card.url) ?? cardField(root.url),
+	];
+	const readable = [...new Set(fields.filter((field): field is string => Boolean(field)))];
+	return readable.length ? readable.join("\n") : cardField(root.prompt);
+}
+
+function segmentText(segment: QqMessageSegment): string | undefined {
+	const data = segment.data ?? {};
+	if (segment.type === "text") return typeof data.text === "string" ? data.text : undefined;
+	if (segment.type === "json") return jsonCardText(data.data) ?? "[json]";
+	return undefined;
+}
+
 /** A `record` segment whose audio bytes still need fetching via the OneBot `get_record` action. */
 export interface QqRecordRef {
 	kind: "record";
@@ -98,6 +134,8 @@ export function parseQqMessageEvent(event: Record<string, unknown>, selfId: stri
 					parts.push("[record]");
 				}
 			}
+		} else if (segment.type === "json") {
+			parts.push(segmentText(segment)!);
 		} else {
 			parts.push(`[${segment.type ?? "unknown"}]`);
 		}
@@ -192,7 +230,8 @@ export async function resolveQqQuote(
 		if (!Array.isArray(data.message)) return undefined;
 		const parts: string[] = [];
 		for (const segment of data.message as QqMessageSegment[]) {
-			if (segment.type === "text" && typeof segment.data?.text === "string") parts.push(segment.data.text);
+			const text = segmentText(segment);
+			if (text) parts.push(text);
 		}
 		return elideQuote(parts.join(""));
 	} catch {

@@ -9,6 +9,12 @@ export interface AgentEventSummary {
 	thinkingEnd?: number;
 }
 
+export function modelErrorFromAgentEvent(event: AgentEvent): string | undefined {
+	if (event.type !== "message_end" || event.message.role !== "assistant") return undefined;
+	const errorMessage = event.message.errorMessage;
+	return typeof errorMessage === "string" && errorMessage.trim() ? errorMessage : undefined;
+}
+
 type AgentEventWriter = (event: StoredAgentEvent) => Promise<void>;
 
 export interface AgentEventRecorder {

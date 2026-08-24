@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAgentEventRecorder } from "../src/runtime/agent-events.js";
+import { createAgentEventRecorder, modelErrorFromAgentEvent } from "../src/runtime/agent-events.js";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { StoredAgentEvent } from "../src/conversation/chat-log.js";
 
 function textDelta(delta: string): StoredAgentEvent {
@@ -13,6 +14,15 @@ function thinkingDelta(delta: string): StoredAgentEvent {
 }
 
 describe("createAgentEventRecorder", () => {
+	it("matches the WebUI model-error event criterion", () => {
+		const event = {
+			type: "message_end",
+			message: { role: "assistant", errorMessage: "503 Service Unavailable" },
+		} as AgentEvent;
+		assert.equal(modelErrorFromAgentEvent(event), "503 Service Unavailable");
+		assert.equal(modelErrorFromAgentEvent({ type: "message_end", message: { role: "user" } } as AgentEvent), undefined);
+	});
+
 	it("coalesces adjacent deltas of the same kind", async () => {
 		const written: StoredAgentEvent[] = [];
 		const recorder = createAgentEventRecorder(async (event) => {

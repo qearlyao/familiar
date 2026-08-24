@@ -161,18 +161,23 @@ export function startDiscordDaemon(
 						core.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
 					);
 					if (!turn) return;
-					const { reply, parsedReply, summary, assistantMessageId } = turn;
-					const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
-					const messageIds = parsedReply.silent
-						? await sendDiscordAttachments(token, replyAnchor.channelId, reply.attachments)
-						: await sendReply(
-								config,
-								token,
-								replyAnchor,
-								parsedReply.text,
-								dispatch.triggerMessageId,
-								reply.attachments,
-							);
+					const { reply, parsedReply, modelError, summary, assistantMessageId } = turn;
+					let messageIds: string[] = [];
+					if (modelError) {
+						console.warn("Discord model error withheld from Discord; visible in WebUI", modelError);
+					} else {
+						const replyAnchor = await fetchMessageAnchor(message, dispatch.triggerMessageId);
+						messageIds = parsedReply.silent
+							? await sendDiscordAttachments(token, replyAnchor.channelId, reply.attachments)
+							: await sendReply(
+									config,
+									token,
+									replyAnchor,
+									parsedReply.text,
+									dispatch.triggerMessageId,
+									reply.attachments,
+								);
+					}
 					await runtime.completeActiveJob({
 						text: parsedReply.text,
 						messageIds,

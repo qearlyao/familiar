@@ -6,6 +6,7 @@ import { messageId } from "../conversation/ids.js";
 import {
 	type AgentEventSummary,
 	createAgentEventRecorder,
+	modelErrorFromAgentEvent,
 	storedAgentEventFromAgentEvent,
 	updateAgentEventSummary,
 } from "./agent-events.js";
@@ -55,17 +56,20 @@ export async function runAgentTurn<R extends FamiliarAgentReply>(
 ): Promise<{
 	reply: R;
 	parsedReply: ReturnType<typeof parseOutboundReply>;
+	modelError: string | undefined;
 	summary: AgentEventSummary;
 	assistantMessageId: string;
 } | null> {
 	const assistantMessageId = messageId();
 	const summary: AgentEventSummary = { thinking: "" };
+	let modelError: string | undefined;
 	const recorder = createAgentEventRecorder((storedEvent) =>
 		runtime.noteAgentEvent(jobKey, assistantMessageId, storedEvent, { notify: false }),
 	);
 	let reply: R | typeof HEARTBEAT_SKIPPED | typeof CRON_SKIPPED;
 	try {
 		reply = await prompt(async (event) => {
+			modelError ??= modelErrorFromAgentEvent(event);
 			updateAgentEventSummary(summary, event);
 			const storedEvent = storedAgentEventFromAgentEvent(event);
 			if (storedEvent) {
@@ -80,6 +84,7 @@ export async function runAgentTurn<R extends FamiliarAgentReply>(
 	return {
 		reply,
 		parsedReply: parseOutboundReply(reply.text),
+		modelError,
 		summary,
 		assistantMessageId,
 	};

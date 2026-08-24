@@ -61,6 +61,18 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		await saveSchedulerState(config.workspace.dataDir, schedulerState);
 	};
 
+	const deliverToPlatform = async (
+		reply: FamiliarAgentReply,
+		parsedReply: { text: string; silent: boolean },
+		modelError: string | undefined,
+	): Promise<string[]> => {
+		if (modelError) {
+			console.warn("Scheduler model error withheld from chat platform; visible in WebUI", modelError);
+			return [];
+		}
+		return delivery.deliver({ reply, parsedReply });
+	};
+
 	const initializeHeartbeatState = async (runtime: ConversationRuntime): Promise<void> => {
 		if (!config.heartbeat.enabled || schedulerState.heartbeat) return;
 		const now = Date.now();
@@ -120,8 +132,8 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 				),
 			);
 			if (!turn) return;
-			const { reply, parsedReply, summary, assistantMessageId } = turn;
-			const messageIds = await delivery.deliver({ reply, parsedReply });
+			const { reply, parsedReply, modelError, summary, assistantMessageId } = turn;
+			const messageIds = await deliverToPlatform(reply, parsedReply, modelError);
 			await heartbeatRuntime.noteOutbound({
 				text: parsedReply.text,
 				messageIds,
@@ -223,8 +235,8 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			});
 			return;
 		}
-		const { reply, parsedReply, summary, assistantMessageId } = turn;
-		const messageIds = await delivery.deliver({ reply, parsedReply });
+		const { reply, parsedReply, modelError, summary, assistantMessageId } = turn;
+		const messageIds = await deliverToPlatform(reply, parsedReply, modelError);
 		await runtime.noteOutbound({
 			text: parsedReply.text,
 			messageIds,

@@ -86,18 +86,22 @@ export function startQqDaemon(
 					core.promptForRuntime(runtime, dispatch.job.jobId, dispatch.prompt, dispatch.attachments, onEvent),
 				);
 				if (!turn) return;
-				const { reply, parsedReply, summary, assistantMessageId } = turn;
+				const { reply, parsedReply, modelError, summary, assistantMessageId } = turn;
 				let messageIds: string[] = [];
-				try {
-					messageIds = await sendQqMessage(
-						client,
-						ref,
-						parsedReply.silent ? "" : parsedReply.text,
-						reply.attachments,
-					);
-				} catch (error) {
-					// A failed QQ send doesn't fail the job — the reply persists with no messageIds and stays visible in the WebUI.
-					console.error("QQ send failed", error);
+				if (modelError) {
+					console.warn("QQ model error withheld from QQ; visible in WebUI", modelError);
+				} else {
+					try {
+						messageIds = await sendQqMessage(
+							client,
+							ref,
+							parsedReply.silent ? "" : parsedReply.text,
+							reply.attachments,
+						);
+					} catch (error) {
+						// A failed QQ send doesn't fail the job — the reply persists with no messageIds and stays visible in the WebUI.
+						console.error("QQ send failed", error);
+					}
 				}
 				await runtime.completeActiveJob({
 					text: parsedReply.text,

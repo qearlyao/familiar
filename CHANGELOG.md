@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.6 - 2026-08-24
+
+### Added
+
+- Render QQ JSON share cards as readable title, description, and URL text for the agent.
+
+### Fixed
+
+- Keep model errors visible in the WebUI without sending them as replies to Discord, QQ, or scheduled destinations.
+- Separate quoted QQ message text from the user's reply with clear spacing.
+
 ## 0.9.5 - 2026-08-23
 
 ### Fixed

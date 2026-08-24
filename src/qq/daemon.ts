@@ -179,7 +179,7 @@ export function startQqDaemon(
 			// the agent sees what is being replied to. Attachments are never carried over — only text.
 			if (parsed.replyToMessageId) {
 				const quoted = await resolveQqQuote(client, parsed.replyToMessageId, runtime.getRecords());
-				if (quoted) parsed.input.text = `${quoteBlock(quoted)}\n${parsed.input.text}`.trim();
+				if (quoted) parsed.input.text = `${quoteBlock(quoted)}\n\n${parsed.input.text}`.trim();
 			}
 			const input: InboundMessageInput = {
 				...parsed.input,

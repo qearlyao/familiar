@@ -212,6 +212,16 @@ model = "anthropic/claude-opus-4-7"
 Provider-specific base URLs and API-key env var names live under
 `[models.base_urls]` and `[models.api_key_envs]`.
 
+Built-in providers that support OAuth can be authenticated interactively. Run
+`familiar login` to choose a provider and authentication method, or pass a
+provider such as `anthropic` directly:
+
+```sh
+familiar login anthropic
+```
+
+Credentials are stored in the default workspace at `~/.familiar/auth.json`.
+
 Built-in Anthropic models can use OpenRouter's native Messages endpoint while
 prioritizing specific OpenRouter providers:
 

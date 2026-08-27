@@ -300,6 +300,21 @@ export function streamUrl(channelKey?: string): string {
   return `${proto}//${window.location.host}/api/web/stream${params}`;
 }
 
+export function voiceUrl(languageCode?: string): string {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const params = languageCode ? `?language_code=${encodeURIComponent(languageCode)}` : "";
+  return `${proto}//${window.location.host}/api/web/voice${params}`;
+}
+
+export interface VoiceConfig {
+  enabled: boolean;
+  voiceCallMode: "continuous" | "push_to_talk";
+}
+
+export function fetchVoiceConfig(): Promise<VoiceConfig> {
+  return getJson<VoiceConfig>("/api/web/voice/config", "voice config");
+}
+
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type SettingSource = "config" | "override";
@@ -561,6 +576,7 @@ export type ConfigKey =
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
   | "heartbeat.intervalMs"
+  | "web.voice_call_mode"
   | "tts.provider"
   | "tts.voice_id"
   | "tts.model_id"
@@ -608,6 +624,7 @@ export interface ConfigPayload {
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;
     "heartbeat.intervalMs": ConfigValue<number>;
+    "web.voice_call_mode": ConfigValue<"continuous" | "push_to_talk">;
     "tts.provider": ConfigValue<TtsProvider>;
     "tts.voice_id": ConfigValue<string>;
     "tts.model_id": ConfigValue<string>;

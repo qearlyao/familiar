@@ -11,6 +11,11 @@
         ],
         "createdAt": "2026-08-21T08:56:57.023Z",
         "reason": "User confirmed: 2px absolutely-positioned margin tick, out-of-flow height transition causes no sibling reflow"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "0.8rem",
+        "createdAt": "2026-08-25T13:04:49.141Z"
       }
     ]
   }

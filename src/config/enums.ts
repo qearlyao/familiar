@@ -14,6 +14,7 @@ import type {
 	MemoryEmbeddingFormat,
 	ThinkingLevel,
 	TtsProvider,
+	VoiceCallMode,
 	WebAuthMode,
 } from "./types.js";
 
@@ -42,6 +43,7 @@ export const CRON_FREQUENCIES = [
 export const CRON_DELIVERY_MODES = ["queue", "follow_up"] as const satisfies readonly CronDeliveryMode[];
 export const WEB_AUTH_MODES = ["tailscale-only", "bearer", "public-2fa"] as const satisfies readonly WebAuthMode[];
 export const TTS_PROVIDERS = ["elevenlabs", "cartesia"] as const satisfies readonly TtsProvider[];
+export const VOICE_CALL_MODES = ["continuous", "push_to_talk"] as const satisfies readonly VoiceCallMode[];
 export const IMAGE_GEN_APIS = [
 	"openrouter-images",
 	"openai-images",

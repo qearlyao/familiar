@@ -9,6 +9,7 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
+export type VoiceCallMode = "continuous" | "push_to_talk";
 export type TtsProvider = "elevenlabs" | "cartesia";
 export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
 export type MediaUnderstandingProvider = "groq" | "google";
@@ -97,6 +98,7 @@ export interface Config {
 	web: {
 		port: number;
 		authMode: WebAuthMode;
+		voiceCallMode: VoiceCallMode;
 		bearerToken?: string;
 		totpSecret?: string;
 		bindAddress: string;

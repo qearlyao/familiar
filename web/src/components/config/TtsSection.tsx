@@ -1,6 +1,6 @@
 import type { ConfigKey, ConfigValues } from "@/lib/api";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { TextInput, toggleClass } from "./inputs";
+import { EnumToggle, TextInput, toggleClass } from "./inputs";
 
 interface TtsSectionProps {
   values: ConfigValues | undefined;
@@ -13,8 +13,27 @@ export function TtsSection({ values, disabled, onChange }: TtsSectionProps) {
   const cartesia = provider === "cartesia";
   const voiceKey = cartesia ? "tts.cartesia.voice_id" : "tts.voice_id";
   const modelKey = cartesia ? "tts.cartesia.model_id" : "tts.model_id";
+  const voiceCallMode = values?.["web.voice_call_mode"].value;
   return (
     <div className="grid gap-4">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex-1 font-serif text-sm text-foreground">voice call input</span>
+          <EnumToggle
+            value={voiceCallMode}
+            options={[
+              { value: "continuous", label: "continuous" },
+              { value: "push_to_talk", label: "push to talk" },
+            ]}
+            ariaPrefix="voice call input"
+            disabled={disabled}
+            onChange={(next) => void onChange("web.voice_call_mode", next)}
+          />
+        </div>
+        <p className="font-serif text-xs italic text-muted-foreground/70">
+          continuous listens throughout the call. push to talk only listens while you hold the voice button.
+        </p>
+      </div>
       <label className="flex flex-col gap-2 font-serif text-sm text-foreground">
         provider
         <ToggleGroup

@@ -6,6 +6,15 @@ import type { Config } from "../src/config/types.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("TTS config registry", () => {
+	it("validates and writes the voice call input mode", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const mode = CONFIG_REGISTRY["web.voice_call_mode"];
+
+		mode.write(config, mode.validate("push_to_talk", config));
+		assert.equal(mode.read(config), "push_to_talk");
+		assert.throws(() => mode.validate("hold_to_speak", config), /web\.voice_call_mode must be one of/);
+	});
+
 	it("validates and updates voice and model ids", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const voice = CONFIG_REGISTRY["tts.voice_id"];

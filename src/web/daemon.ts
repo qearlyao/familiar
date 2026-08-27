@@ -27,6 +27,7 @@ import { registerWebSkillRoutes } from "./skill-routes.js";
 import { serveStatic } from "./static.js";
 import { attachWebSocketStream } from "./stream.js";
 import type { WebDaemon } from "./types.js";
+import { attachWebSocketVoice, registerWebVoiceRoutes } from "./voice.js";
 
 export async function startWebDaemon(
 	config: Config,
@@ -99,6 +100,7 @@ export async function startWebDaemon(
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);
 	registerWebSkillRoutes(route, config);
+	registerWebVoiceRoutes(route, config);
 
 	await subscribeKnownRuntimes();
 
@@ -111,6 +113,10 @@ export async function startWebDaemon(
 		});
 	});
 
+	attachWebSocketVoice(server, {
+		authorize: (request, pathname) => auth.authorize(request, pathname),
+		config,
+	});
 	attachWebSocketStream(server, {
 		authorize: (request, pathname) => auth.authorize(request, pathname),
 		eventHub,

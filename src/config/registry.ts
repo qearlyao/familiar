@@ -1,8 +1,8 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
 import { readEnum } from "../util/guards.js";
-import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS } from "./enums.js";
+import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS, VOICE_CALL_MODES } from "./enums.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
-import type { Config, TtsProvider } from "./types.js";
+import type { Config, TtsProvider, VoiceCallMode } from "./types.js";
 
 export type ConfigKey =
 	| "discord.enabled"
@@ -14,6 +14,7 @@ export type ConfigKey =
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
+	| "web.voice_call_mode"
 	| "tts.provider"
 	| "tts.voice_id"
 	| "tts.model_id"
@@ -175,6 +176,18 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		},
 		apply: ({ scheduler }) => {
 			scheduler.rearmHeartbeat();
+		},
+	},
+	"web.voice_call_mode": {
+		read: (config) => config.web.voiceCallMode,
+		validate: (value) => {
+			if (typeof value !== "string" || !(VOICE_CALL_MODES as readonly string[]).includes(value)) {
+				throw new Error(`web.voice_call_mode must be one of: ${VOICE_CALL_MODES.join(", ")}`);
+			}
+			return value;
+		},
+		write: (config, value) => {
+			config.web.voiceCallMode = value as VoiceCallMode;
 		},
 	},
 	"tts.provider": {

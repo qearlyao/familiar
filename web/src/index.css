@@ -823,3 +823,287 @@
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
+
+/* ---- voice call ---- */
+
+.ink-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--background);
+}
+.ink-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(76px);
+  mix-blend-mode: multiply;
+  opacity: 0.38;
+  will-change: transform;
+  transition:
+    opacity 900ms var(--ease-out-quart),
+    transform 900ms var(--ease-out-quart);
+}
+.dark .ink-blob {
+  mix-blend-mode: screen;
+  opacity: 0.3;
+}
+.ink-blob-a {
+  inset: -22% 20% 34% -18%;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--primary) 82%, black), color-mix(in oklch, var(--primary) 42%, white), transparent);
+  animation: ink-drift-a 30s ease-in-out infinite;
+}
+.ink-blob-b {
+  inset: 28% -22% -28% 28%;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--accent) 74%, var(--primary)), color-mix(in oklch, var(--accent) 38%, white), transparent);
+  animation: ink-drift-b 36s ease-in-out infinite;
+}
+.ink-blob-c {
+  inset: 20% 24% 18% 24%;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--primary) 58%, var(--accent)), color-mix(in oklch, var(--primary) 26%, white), transparent);
+  animation: ink-drift-c 42s ease-in-out infinite;
+}
+.ink-field-speaking .ink-blob {
+  opacity: 0.54;
+}
+.dark .ink-field-speaking .ink-blob {
+  opacity: 0.44;
+}
+.ink-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  backdrop-filter: blur(16px) saturate(108%);
+  background: radial-gradient(90% 72% at 50% 43%, transparent 8%, color-mix(in oklch, var(--background) 72%, transparent) 74%);
+}
+
+.voice-stage {
+  isolation: isolate;
+}
+.voice-header {
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-serif);
+  font-size: 0.75rem;
+  font-style: italic;
+  white-space: nowrap;
+}
+.voice-status-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: var(--muted-foreground);
+  opacity: 0.45;
+}
+.voice-status-live .voice-status-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 0.25rem color-mix(in oklch, var(--primary) 18%, transparent);
+  opacity: 1;
+}
+.voice-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(1.5rem, 5vh, 4rem);
+  min-width: 0;
+  padding-top: clamp(2rem, 8vh, 6rem);
+  padding-bottom: 1rem;
+}
+.voice-focus {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 18rem;
+  justify-content: center;
+}
+.voice-pulse {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: min(28rem, 80vw);
+  height: min(28rem, 80vw);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(var(--voice-scale, 1));
+  background: radial-gradient(circle at center, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--accent) 22%, transparent) 34%, transparent 70%);
+  filter: blur(22px);
+  opacity: 0.72;
+  transition: transform 900ms var(--ease-out-quart), opacity 900ms var(--ease-out-quart);
+  animation: voice-breathe 8s ease-in-out infinite;
+}
+.voice-pulse-active {
+  opacity: 0.95;
+}
+.voice-kicker {
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+.voice-current-line {
+  width: 100%;
+  min-width: 0;
+  max-width: 34rem;
+  max-height: min(34vh, 20rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-top: 0.75rem;
+  padding-inline: 0.25rem;
+  color: var(--foreground);
+  font-size: 2rem;
+  line-height: 1.25;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.voice-current-line-empty {
+  color: var(--muted-foreground);
+  font-size: clamp(1.25rem, 2.6vw, 1.7rem);
+  font-style: italic;
+}
+.voice-transcript {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 9rem;
+  overflow-y: auto;
+  padding: 0.25rem 0.5rem;
+  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+  scrollbar-width: thin;
+}
+.voice-line {
+  min-width: 0;
+  font-family: var(--font-serif);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  text-wrap: pretty;
+  opacity: 0.56;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.voice-line + .voice-line {
+  margin-top: 0.45rem;
+}
+.voice-line-you {
+  color: var(--foreground);
+}
+.voice-line-them {
+  color: var(--primary);
+}
+.voice-footer {
+  padding-top: 1rem;
+}
+.voice-call-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border: 1px solid color-mix(in oklch, var(--primary) 58%, transparent);
+  border-radius: 50%;
+  color: var(--primary);
+  background: color-mix(in oklch, var(--background) 70%, transparent);
+  box-shadow: 0 0 0 0.55rem color-mix(in oklch, var(--primary) 8%, transparent);
+  backdrop-filter: blur(10px);
+  transition: transform 250ms var(--ease-out-quart), background-color 250ms var(--ease-out-quart), color 250ms var(--ease-out-quart);
+}
+.voice-call-control:hover {
+  transform: scale(1.04);
+  background: color-mix(in oklch, var(--card) 88%, transparent);
+}
+.voice-call-control:active {
+  transform: scale(0.96);
+}
+.voice-call-control:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--ring) 46%, transparent);
+  outline-offset: 4px;
+}
+.voice-call-control-live {
+  border-color: color-mix(in oklch, var(--destructive) 58%, transparent);
+  color: var(--destructive);
+  box-shadow: 0 0 0 0.55rem color-mix(in oklch, var(--destructive) 8%, transparent);
+}
+
+@keyframes ink-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(var(--ink-scale, 1));
+  }
+  50% {
+    transform: translate(12%, 8%) scale(var(--ink-scale, 1));
+  }
+}
+@keyframes ink-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(var(--ink-scale, 1));
+  }
+  50% {
+    transform: translate(-11%, -9%) scale(var(--ink-scale, 1));
+  }
+}
+@keyframes ink-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(var(--ink-scale, 1));
+  }
+  50% {
+    transform: translate(8%, -12%) scale(var(--ink-scale, 1));
+  }
+}
+
+@keyframes voice-breathe {
+  0%,
+  100% {
+    opacity: 0.58;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ink-blob,
+  .voice-pulse {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .ink-blob-c {
+    inset: 12% 10% 10%;
+  }
+  .ink-veil {
+    background: radial-gradient(110% 82% at 50% 43%, transparent 8%, color-mix(in oklch, var(--background) 68%, transparent) 74%);
+  }
+  .ink-field-speaking .ink-blob {
+    opacity: 0.62;
+  }
+  .voice-main {
+    gap: 1.5rem;
+    padding-top: 1rem;
+  }
+  .voice-focus {
+    min-height: 15rem;
+  }
+  .voice-pulse {
+    width: min(34rem, 112vw);
+    height: min(34rem, 112vw);
+  }
+  .voice-current-line {
+    font-size: 1.5rem;
+    max-height: 32vh;
+  }
+  .voice-call-control {
+    width: 4.75rem;
+    height: 4.75rem;
+  }
+}

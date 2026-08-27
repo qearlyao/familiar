@@ -3,6 +3,7 @@ import { basename, resolve } from "node:path";
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai/compat";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../config/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
@@ -50,6 +51,7 @@ export interface MemoryTransformOptions {
 
 export interface MemoryServiceOptions {
 	summarizer?: LcmSummarizer;
+	modelRuntime?: ModelRuntime;
 	now?: () => number;
 	diaryWatchDebounceMs?: number;
 }
@@ -96,7 +98,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 			settings: config.memory.lcm,
 			lcmStore: this.lcmStore,
 			indexer: this.indexer,
-			summarizer: options.summarizer ?? new DefaultLcmSummarizer(config),
+			summarizer: options.summarizer ?? new DefaultLcmSummarizer(config, undefined, options.modelRuntime),
 			segmentManager: this.segmentManager,
 			now: options.now,
 		});

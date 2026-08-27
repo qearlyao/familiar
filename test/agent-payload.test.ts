@@ -5,6 +5,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 
 import { __agentTest } from "../src/agent/factory.js";
 import { buildAnthropicMetadata } from "../src/agent/session-helpers.js";
+import { modelRuntimeEnv } from "../src/models/runtime.js";
 import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 import { loadConfig } from "../src/config/index.js";
 
@@ -77,7 +78,7 @@ describe("provider payload normalization", () => {
 		}
 	});
 
-	it("adds Anthropic user metadata from the configured owner id", async (t) => {
+	it("adds Anthropic user metadata from the configured owner id regardless of auth mode", async (t) => {
 		const workspacePath = await createWorkspace(
 			{
 				after(fn) {
@@ -91,5 +92,25 @@ describe("provider payload normalization", () => {
 			assert.deepEqual(buildAnthropicMetadata(config, anthropicModel), { user_id: "owner" });
 			assert.equal(buildAnthropicMetadata(config, { ...anthropicModel, api: "openai-responses" }), undefined);
 		});
+	});
+
+	it("maps Familiar model-specific API key env names into runtime env", async (t) => {
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[models.api_key_envs]
+"openai/gpt-6" = "FAMILIAR_OPENAI_KEY"
+`),
+		);
+		const config = await loadConfig(workspacePath);
+		const model = { id: "gpt-6", api: "openai-responses", provider: "openai" } as Model<any>;
+		const previous = process.env.FAMILIAR_OPENAI_KEY;
+		process.env.FAMILIAR_OPENAI_KEY = "secret";
+		try {
+			assert.deepEqual(modelRuntimeEnv(config, model), { FAMILIAR_OPENAI_KEY: "secret" });
+		} finally {
+			if (previous === undefined) delete process.env.FAMILIAR_OPENAI_KEY;
+			else process.env.FAMILIAR_OPENAI_KEY = previous;
+		}
 	});
 });

@@ -3,8 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { copyFile, cp, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+
+import type { AuthEvent, AuthPrompt, AuthType } from "@earendil-works/pi-ai";
 
 import { createFamiliarAgent } from "./agent/factory.js";
 import { loadConfig } from "./config/index.js";
@@ -26,6 +30,7 @@ import {
 import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
+import { createModelRuntime } from "./models/runtime.js";
 import { startQqDaemon } from "./qq/daemon.js";
 import { createAgentCore } from "./runtime/agent-core.js";
 import { startWebDaemon } from "./web/daemon.js";
@@ -130,6 +135,154 @@ async function packageVersion(): Promise<string> {
 	return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 }
 
+type AuthChoice = {
+	providerId: string;
+	providerName: string;
+	type: AuthType;
+	methodName: string;
+};
+
+async function choose<T>(
+	rl: ReturnType<typeof createInterface>,
+	message: string,
+	choices: readonly { label: string; value: T }[],
+): Promise<T> {
+	if (choices.length === 0) throw new Error("No choices available");
+	if (choices.length === 1) return choices[0].value;
+	console.log(`\n${message}`);
+	for (const [index, choice] of choices.entries()) console.log(`  ${index + 1}. ${choice.label}`);
+	const index = Number.parseInt(await rl.question(`Enter number (1-${choices.length}): `), 10) - 1;
+	const choice = choices[index];
+	if (!choice) throw new Error("Invalid selection");
+	return choice.value;
+}
+
+async function answerAuthPrompt(
+	rl: ReturnType<typeof createInterface>,
+	prompt: AuthPrompt,
+	setMuted: (muted: boolean) => void,
+): Promise<string> {
+	if (prompt.type === "select") {
+		return choose(
+			rl,
+			prompt.message,
+			prompt.options.map((option) => ({
+				label: option.description ? `${option.label} - ${option.description}` : option.label,
+				value: option.id,
+			})),
+		);
+	}
+	const question = `${prompt.message}${prompt.placeholder ? ` (${prompt.placeholder})` : ""}: `;
+	const ask = () =>
+		prompt.signal
+			? rl.question(prompt.type === "secret" ? "" : question, { signal: prompt.signal })
+			: rl.question(prompt.type === "secret" ? "" : question);
+	if (prompt.type !== "secret") return ask();
+	process.stdout.write(question);
+	setMuted(true);
+	try {
+		return await ask();
+	} finally {
+		setMuted(false);
+		process.stdout.write("\n");
+	}
+}
+
+function notifyAuth(event: AuthEvent): void {
+	if (event.type === "auth_url") {
+		console.log(`\nOpen this URL in your browser:\n${event.url}`);
+		if (event.instructions) console.log(event.instructions);
+	} else if (event.type === "device_code") {
+		console.log(`\nOpen this URL in your browser:\n${event.verificationUri}`);
+		console.log(`Enter code: ${event.userCode}`);
+	} else {
+		console.log(event.message);
+		if (event.type === "info") {
+			for (const link of event.links ?? []) console.log(`${link.label ? `${link.label}: ` : ""}${link.url}`);
+		}
+	}
+}
+
+async function runAuthCommand(command: "login" | "logout", providerRef?: string): Promise<void> {
+	const workspacePath = DEFAULT_WORKSPACE_PATH;
+	loadWorkspaceEnv(resolve(workspacePath, ".env"), false);
+	const runtime = await createModelRuntime(await loadConfig(workspacePath));
+	let muted = false;
+	const output = new Writable({
+		write(chunk, _encoding, callback) {
+			if (!muted) process.stdout.write(chunk);
+			callback();
+		},
+	});
+	const rl = createInterface({ input: process.stdin, output, terminal: Boolean(process.stdin.isTTY) });
+	try {
+		if (command === "logout") {
+			const stored = await runtime.listCredentials();
+			const choices = stored.map(({ providerId, type }) => {
+				const providerName = runtime.getProvider(providerId)?.name ?? providerId;
+				return { label: `${providerName} (${type})`, value: { providerId, providerName } };
+			});
+			const matches = providerRef
+				? choices.filter(({ value }) =>
+						[value.providerId, value.providerName].some(
+							(value) => value.toLowerCase() === providerRef.toLowerCase(),
+						),
+					)
+				: choices;
+			if (matches.length === 0)
+				throw new Error(providerRef ? `No stored credential for: ${providerRef}` : "No stored credentials");
+			const selected = await choose(rl, "Select a provider to log out:", matches);
+			await runtime.logout(selected.providerId);
+			console.log(`Removed stored credential for ${selected.providerName}`);
+			return;
+		}
+
+		const choices: AuthChoice[] = runtime.getProviders().flatMap((provider) => [
+			...(provider.auth.oauth
+				? [
+						{
+							providerId: provider.id,
+							providerName: provider.name,
+							type: "oauth" as const,
+							methodName: provider.auth.oauth.name,
+						},
+					]
+				: []),
+			...(provider.auth.apiKey?.login
+				? [
+						{
+							providerId: provider.id,
+							providerName: provider.name,
+							type: "api_key" as const,
+							methodName: provider.auth.apiKey.name,
+						},
+					]
+				: []),
+		]);
+		const matches = providerRef
+			? choices.filter(({ providerId, providerName }) =>
+					[providerId, providerName].some((value) => value.toLowerCase() === providerRef.toLowerCase()),
+				)
+			: choices;
+		if (matches.length === 0)
+			throw new Error(
+				providerRef ? `Provider does not support login: ${providerRef}` : "No login providers available",
+			);
+		const selected = await choose(
+			rl,
+			providerRef ? `Select an authentication method for ${matches[0].providerName}:` : "Select a provider:",
+			matches.map((choice) => ({ label: `${choice.providerName} - ${choice.methodName}`, value: choice })),
+		);
+		await runtime.login(selected.providerId, selected.type, {
+			prompt: (prompt) => answerAuthPrompt(rl, prompt, (value) => (muted = value)),
+			notify: notifyAuth,
+		});
+		console.log(`Logged in to ${selected.providerName} with ${selected.methodName}`);
+	} finally {
+		rl.close();
+	}
+}
+
 async function initWorkspace(workspaceInput?: string): Promise<void> {
 	const workspacePath = resolveWorkspaceInput(workspaceInput);
 	await mkdir(workspacePath, { recursive: true });
@@ -165,10 +318,11 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		console.log(`Removed ${removedData} expired data file(s)`);
 	}
 	const settings = await loadSettingsStore(config);
-	const memoryService = createMemoryService(config);
+	const modelRuntime = await createModelRuntime(config);
+	const memoryService = createMemoryService(config, { modelRuntime });
 	await memoryService.indexDiaries().catch((error) => console.error("initial diary indexing failed", error));
 	memoryService.watchDiaries();
-	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig });
+	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig, modelRuntime });
 	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
 	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
 	let stopping = false;
@@ -219,6 +373,8 @@ function usage(): string {
 		"  familiar --version",
 		"  familiar init [workspace]",
 		"  familiar run [workspace]",
+		"  familiar login [provider]",
+		"  familiar logout [provider]",
 		"  familiar memory [workspace] <subcommand>",
 		"  familiar install-service [workspace]",
 		"  familiar uninstall-service [workspace]",
@@ -248,6 +404,11 @@ async function main(): Promise<void> {
 	}
 	if (command === "run") {
 		await runDaemon(workspace);
+		return;
+	}
+	if (command === "login" || command === "logout") {
+		if (rest.length > 0) throw new Error(`Usage: familiar ${command} [provider]`);
+		await runAuthCommand(command, workspace);
 		return;
 	}
 	if (command === "memory") {

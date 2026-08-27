@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { type AssistantMessage, type ImageContent, type Model, streamSimple } from "@earendil-works/pi-ai/compat";
+import type { AssistantMessage, ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import { setConfigOverridesPath } from "../config/overrides.js";
@@ -18,6 +18,7 @@ import {
 	supportedThinkingLevels,
 } from "../models/index.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
+import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
@@ -27,7 +28,6 @@ import {
 	deriveSessionId,
 	formatModel,
 	getLastAssistantText,
-	getRequestApiKey,
 	installProviderDebugFilter,
 	isNoisyProviderDebug,
 	logUsage,
@@ -67,6 +67,7 @@ export async function createFamiliarAgent(
 	setAddedModelsPath(config.workspace.dataDir);
 	setConfigOverridesPath(config.workspace.dataDir);
 	applyConfigOverridesToConfig(config);
+	const modelRuntime = options.modelRuntime ?? (await createModelRuntime(config));
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);
@@ -79,8 +80,7 @@ export async function createFamiliarAgent(
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
 	let defaultModel = createConfiguredModel(config);
-	// Fail fast during startup if the configured default model cannot authenticate.
-	getRequestApiKey(config, defaultModel);
+	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
 	// activePromptOptions covers each prompt window; skipAmbientMessages tags message
 	// identities so followUpMessage's fire-and-forget path also opts out.
@@ -103,7 +103,6 @@ export async function createFamiliarAgent(
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
 		if (override.value) assertModelAllowed(config, ref);
 		const model = override.value ? resolveModel(ref, config) : defaultModel;
-		getRequestApiKey(config, model);
 		return { model, source: override.source };
 	};
 
@@ -126,7 +125,6 @@ export async function createFamiliarAgent(
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
 		if (override.value) assertModelAllowed(nextConfig, ref);
 		const model = override.value ? resolveModel(ref, nextConfig) : nextDefaultModel;
-		getRequestApiKey(nextConfig, model);
 		return { model, source: override.source };
 	};
 
@@ -146,6 +144,7 @@ export async function createFamiliarAgent(
 		const sessionId = deriveSessionId(config.workspacePath, sessionKey);
 		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
 		const { model } = resolveChannelModel(sessionKey);
+		await assertModelCanAuthenticateWithRuntime(config, modelRuntime, model);
 		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
 		const mediaSink = createGeneratedMediaSink();
 		const referenceAttachments: StoredAttachment[] = [];
@@ -161,9 +160,9 @@ export async function createFamiliarAgent(
 			},
 			sessionId,
 			streamFn: (streamModel, context, options) => {
-				const stream = streamSimple(streamModel, context, {
+				const stream = modelRuntime.streamSimple(streamModel, context, {
 					...options,
-					apiKey: getRequestApiKey(config, streamModel),
+					env: modelRuntimeEnv(config, streamModel),
 					metadata: buildAnthropicMetadata(config, streamModel),
 					cacheRetention: config.agent.cacheRetention,
 					maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
@@ -280,7 +279,7 @@ export async function createFamiliarAgent(
 			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
 		);
 		const nextDefaultModel = createConfiguredModel(nextConfig);
-		getRequestApiKey(nextConfig, nextDefaultModel);
+		await assertModelCanAuthenticateWithRuntime(nextConfig, modelRuntime, nextDefaultModel);
 		return {
 			config: nextConfig,
 			persona: nextPersona,
@@ -295,6 +294,7 @@ export async function createFamiliarAgent(
 			[...sessions.entries()].map(async ([sessionKey, sessionPromise]) => {
 				const session = await sessionPromise;
 				const { model } = resolveChannelModelForConfig(next.config, next.defaultModel, sessionKey);
+				await assertModelCanAuthenticateWithRuntime(next.config, modelRuntime, model);
 				const thinkingLevel = resolveChannelThinkingLevelForConfig(next.config, sessionKey, model).value;
 				return {
 					session,
@@ -506,7 +506,7 @@ export async function createFamiliarAgent(
 			if (!ref) throw new Error("Usage: /model provider/model-id");
 			assertModelAllowed(config, ref);
 			const nextModel = resolveModel(ref, config);
-			getRequestApiKey(config, nextModel);
+			await assertModelCanAuthenticateWithRuntime(config, modelRuntime, nextModel);
 			const previousThinking = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel).value;
 			const nextThinking = clampConfiguredThinkingLevel(nextModel, previousThinking);
 			await settings.setChannelModel(sessionKey, formatModel(nextModel));

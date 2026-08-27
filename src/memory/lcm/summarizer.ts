@@ -7,10 +7,12 @@ import {
 	type Message,
 	type Model,
 } from "@earendil-works/pi-ai/compat";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../../config/index.js";
-import { assertModelCanAuthenticate, parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
+import { parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
 import { addOpenRouterRouting, resolveOpenRouterRouting } from "../../models/openrouter-routing.js";
+import { assertModelCanAuthenticateWithRuntime, modelRuntimeEnv } from "../../models/runtime.js";
 
 export type LcmSummaryMode = "normal" | "aggressive";
 
@@ -38,6 +40,7 @@ export type LcmCompleteFn = (
 	context: { systemPrompt?: string; messages: Message[] },
 	options: {
 		apiKey?: string;
+		env?: Record<string, string>;
 		maxTokens?: number;
 		timeoutMs?: number;
 		signal?: AbortSignal;
@@ -56,9 +59,10 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 
 	constructor(
 		private readonly config: Config,
-		complete: LcmCompleteFn = completeSimple,
+		complete?: LcmCompleteFn,
+		private readonly modelRuntime?: ModelRuntime,
 	) {
-		this.complete = complete;
+		this.complete = complete ?? modelRuntime?.completeSimple.bind(modelRuntime) ?? completeSimple;
 	}
 
 	async summarizeLeaf(input: LcmLeafSummaryInput, signal?: AbortSignal): Promise<string> {
@@ -85,7 +89,6 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 			...base,
 			...(settings.baseUrl ? { baseUrl: settings.baseUrl } : {}),
 		};
-		assertModelCanAuthenticate(this.config, model);
 		return model;
 	}
 
@@ -113,6 +116,7 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		const settings = this.config.memory.lcm;
 		if (!settings.enabled) throw new Error("LCM is disabled");
 		const model = this.resolveModel();
+		if (this.modelRuntime) await assertModelCanAuthenticateWithRuntime(this.config, this.modelRuntime, model);
 		const routing = resolveOpenRouterRouting(this.config, model);
 		const systemPrompt = (await this.readSystemPromptOverride()) ?? LCM_SUMMARIZER_SYSTEM_PROMPT;
 		const response = await this.complete(
@@ -122,7 +126,9 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 				messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
 			},
 			{
-				apiKey: this.resolveApiKey(model),
+				...(this.modelRuntime
+					? { env: modelRuntimeEnv(this.config, model, settings.apiKeyEnv) }
+					: { apiKey: this.resolveApiKey(model) }),
 				maxTokens: Math.max(targetTokens + 256, Math.ceil(targetTokens * 1.25)),
 				timeoutMs: settings.timeoutMs,
 				signal,

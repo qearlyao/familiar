@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 - 2026-08-29
+
+### Changed
+
+- Allow voice calls to use a separate ElevenLabs realtime TTS model configured independently from attachment TTS.
+
 ## 0.10.0 - 2026-08-28
 
 ### Added

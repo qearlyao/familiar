@@ -6,12 +6,10 @@
 
 - Add real-time WebUI voice calls with continuous and push-to-talk input modes, using ElevenLabs speech-to-text and text-to-speech.
 - Add interactive `familiar login` and `familiar logout` commands with workspace-stored provider credentials.
-- Render QQ JSON share cards as readable text and keep quoted messages separate from replies.
 
 ### Changed
 
 - Route agent and memory requests through the shared model runtime and bump the pi dependency set to `0.84.3`.
-- Keep model errors visible in the WebUI instead of sending them to chat platforms or scheduled destinations.
 
 ### Fixed
 

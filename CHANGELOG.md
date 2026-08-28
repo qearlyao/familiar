@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 - 2026-08-28
+
+### Added
+
+- Add real-time WebUI voice calls with continuous and push-to-talk input modes, using ElevenLabs speech-to-text and text-to-speech.
+- Add interactive `familiar login` and `familiar logout` commands with workspace-stored provider credentials.
+- Render QQ JSON share cards as readable text and keep quoted messages separate from replies.
+
+### Changed
+
+- Route agent and memory requests through the shared model runtime and bump the pi dependency set to `0.84.3`.
+- Keep model errors visible in the WebUI instead of sending them to chat platforms or scheduled destinations.
+
+### Fixed
+
+- Recover browser push subscriptions after endpoint rotation or foreground restoration.
+- Keep WebUI settings from overflowing horizontally.
+
 ## 0.9.6 - 2026-08-24
 
 ### Added

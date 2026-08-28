@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  NOTIFICATIONS_CHANGED_EVENT,
   notificationState,
   setNotificationsEnabled,
   type NotificationState,
@@ -19,7 +20,12 @@ export function NotificationsSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   useEffect(() => {
-    void notificationState().then(setState);
+    const refresh = () => {
+      void notificationState().then(setState);
+    };
+    refresh();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh);
   }, []);
   if (!state) return null;
   return (

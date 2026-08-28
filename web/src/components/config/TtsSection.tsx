@@ -73,6 +73,17 @@ export function TtsSection({ values, disabled, onChange }: TtsSectionProps) {
           onCommit={(next) => onChange(modelKey, next)}
         />
       </label>
+      {!cartesia ? (
+        <label className="flex flex-col gap-2 font-serif text-sm text-foreground">
+          voice call model id
+          <TextInput
+            value={values?.["tts.voice_call_model_id"].value}
+            placeholder="eleven_v3_conversational"
+            disabled={disabled}
+            onCommit={(next) => onChange("tts.voice_call_model_id", next)}
+          />
+        </label>
+      ) : null}
     </div>
   );
 }

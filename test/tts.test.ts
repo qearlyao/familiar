@@ -63,6 +63,25 @@ describe("ElevenLabs voice settings", () => {
 			stability: 0.45,
 		});
 	});
+
+	it("uses the selected model when building voice settings", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			tts: {
+				modelId: "eleven_multilingual_v2",
+				voiceSettings: {
+					stability: 0.45,
+					similarityBoost: 0.8,
+					style: 0.2,
+					speed: 1.05,
+					useSpeakerBoost: false,
+				},
+			},
+		});
+
+		assert.deepEqual(buildElevenLabsVoiceSettings(config, "eleven_v3_conversational"), {
+			stability: 0.45,
+		});
+	});
 });
 
 describe("Cartesia request body", () => {

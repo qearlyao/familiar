@@ -19,14 +19,18 @@ describe("TTS config registry", () => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const voice = CONFIG_REGISTRY["tts.voice_id"];
 		const model = CONFIG_REGISTRY["tts.model_id"];
+		const voiceCallModel = CONFIG_REGISTRY["tts.voice_call_model_id"];
 
 		voice.write(config, voice.validate("  voice-123  ", config));
 		model.write(config, model.validate("  eleven_v3  ", config));
+		voiceCallModel.write(config, voiceCallModel.validate("  eleven_v3_conversational  ", config));
 
 		assert.equal(voice.read(config), "voice-123");
 		assert.equal(model.read(config), "eleven_v3");
+		assert.equal(voiceCallModel.read(config), "eleven_v3_conversational");
 		assert.equal(voice.validate("  ", config), "");
 		assert.throws(() => model.validate("  ", config), /tts\.model_id must not be empty/);
+		assert.throws(() => voiceCallModel.validate("  ", config), /tts\.voice_call_model_id must not be empty/);
 		assert.throws(() => voice.validate(123, config), /tts\.voice_id must be a string/);
 	});
 

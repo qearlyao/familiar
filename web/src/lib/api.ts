@@ -580,6 +580,7 @@ export type ConfigKey =
   | "tts.provider"
   | "tts.voice_id"
   | "tts.model_id"
+  | "tts.voice_call_model_id"
   | "tts.cartesia.voice_id"
   | "tts.cartesia.model_id"
   | "memory.lcm.enabled"
@@ -628,6 +629,7 @@ export interface ConfigPayload {
     "tts.provider": ConfigValue<TtsProvider>;
     "tts.voice_id": ConfigValue<string>;
     "tts.model_id": ConfigValue<string>;
+    "tts.voice_call_model_id": ConfigValue<string>;
     "tts.cartesia.voice_id": ConfigValue<string>;
     "tts.cartesia.model_id": ConfigValue<string>;
     "memory.lcm.enabled": ConfigValue<boolean>;

@@ -13,7 +13,12 @@ import { configWithDataDir } from "./helpers.js";
 describe("web voice protocol", () => {
 	it("builds authenticated ElevenLabs realtime URLs from TTS config", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data", {
-			tts: { voiceId: "voice-1", modelId: "eleven_v3", outputFormat: "mp3_44100_128" },
+			tts: {
+				voiceId: "voice-1",
+				modelId: "eleven_v3",
+				voiceCallModelId: "eleven_v3_conversational",
+				outputFormat: "mp3_44100_128",
+			},
 		});
 
 		const stt = new URL(buildElevenLabsRealtimeSttUrl("secret", "zho"));
@@ -31,7 +36,7 @@ describe("web voice protocol", () => {
 
 		const tts = new URL(buildElevenLabsRealtimeTtsUrl(config));
 		assert.equal(tts.pathname, "/v1/text-to-dialogue/stream-input");
-		assert.equal(tts.searchParams.get("model_id"), "eleven_v3");
+		assert.equal(tts.searchParams.get("model_id"), "eleven_v3_conversational");
 		// realtime playback always asks for raw PCM, regardless of the attachment format in config
 		assert.equal(tts.searchParams.get("output_format"), "pcm_24000");
 		assert.deepEqual(buildElevenLabsRealtimeTtsInit(config, "secret"), {

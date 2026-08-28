@@ -155,6 +155,7 @@ export interface Config {
 		apiKeyEnv: string;
 		voiceId: string;
 		modelId: string;
+		voiceCallModelId: string;
 		outputFormat: string;
 		maxInputChars: number;
 		voiceSettings: TtsVoiceSettings;

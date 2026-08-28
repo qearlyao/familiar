@@ -63,9 +63,12 @@ export function isElevenLabsV3Model(modelId: string): boolean {
 	return modelId === "eleven_v3" || modelId.startsWith("eleven_v3_");
 }
 
-export function buildElevenLabsVoiceSettings(config: Config): ElevenLabsVoiceSettingsPayload {
+export function buildElevenLabsVoiceSettings(
+	config: Config,
+	modelId: string = config.tts.modelId,
+): ElevenLabsVoiceSettingsPayload {
 	const settings = config.tts.voiceSettings;
-	if (isElevenLabsV3Model(config.tts.modelId)) {
+	if (isElevenLabsV3Model(modelId)) {
 		return {
 			stability: settings.stability,
 		};

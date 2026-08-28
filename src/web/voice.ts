@@ -62,7 +62,7 @@ export function normalizeElevenLabsLanguageCode(languageCode?: string | null): s
 
 export function buildElevenLabsRealtimeTtsUrl(config: Config): string {
 	const url = new URL(ELEVENLABS_TTD_URL);
-	url.searchParams.set("model_id", config.tts.modelId);
+	url.searchParams.set("model_id", config.tts.voiceCallModelId);
 	url.searchParams.set("output_format", TTS_OUTPUT_FORMAT);
 	return url.toString();
 }
@@ -71,7 +71,7 @@ export function buildElevenLabsRealtimeTtsInit(config: Config, key: string): Rec
 	return {
 		voices: [config.tts.voiceId],
 		xi_api_key: key,
-		voice_settings: buildElevenLabsVoiceSettings(config),
+		voice_settings: buildElevenLabsVoiceSettings(config, config.tts.voiceCallModelId),
 	};
 }
 

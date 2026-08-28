@@ -18,6 +18,7 @@ export type ConfigKey =
 	| "tts.provider"
 	| "tts.voice_id"
 	| "tts.model_id"
+	| "tts.voice_call_model_id"
 	| "tts.cartesia.voice_id"
 	| "tts.cartesia.model_id"
 	| "image_gen.enabled"
@@ -214,6 +215,13 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		validate: (value) => requireString(value, "tts.model_id"),
 		write: (config, value) => {
 			config.tts.modelId = value as string;
+		},
+	},
+	"tts.voice_call_model_id": {
+		read: (config) => config.tts.voiceCallModelId,
+		validate: (value) => requireString(value, "tts.voice_call_model_id"),
+		write: (config, value) => {
+			config.tts.voiceCallModelId = value as string;
 		},
 	},
 	"tts.cartesia.voice_id": {

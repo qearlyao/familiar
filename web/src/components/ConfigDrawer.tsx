@@ -134,7 +134,7 @@ export function ConfigDrawer({
             settings
           </SheetTitle>
         </SheetHeader>
-        <div className="flex flex-col overflow-y-auto px-5 pt-1 pb-8">
+        <div className="flex flex-col overflow-x-hidden overflow-y-auto px-5 pt-1 pb-8">
           <GroupLabel className="pt-1">conversation</GroupLabel>
           <Section
             title="model"

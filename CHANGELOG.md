@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.2 - 2026-08-31
+
+### Fixed
+
+- Persist `/new` conversation resets across restarts while keeping `/stop` as a history-preserving interruption.
+- Show WebUI context usage for single-session workspaces and expose token details from the context indicator.
+
 ## 0.10.1 - 2026-08-29
 
 ### Changed

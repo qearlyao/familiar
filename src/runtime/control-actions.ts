@@ -44,7 +44,7 @@ export async function applyControlCommand(options: {
 	const { control, runtime, familiarAgent, settings, channelTrigger, isDm, activeAgentOwner, restart } = options;
 	if (control.command === "stop") {
 		if (runtime.hasActiveJob() && activeAgentOwner === runtime.channelKey) familiarAgent.abort(runtime.channelKey);
-		await runtime.resetConversation("stop requested");
+		runtime.interruptWork();
 		return "Stopped current work and cleared the chat queue.";
 	}
 	if (control.command === "new") {

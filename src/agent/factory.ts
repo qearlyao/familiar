@@ -36,7 +36,7 @@ import {
 } from "./session-helpers.js";
 import { normalizeToolNameStream } from "./tool-name-compat.js";
 import { createFamiliarTools, setReferenceAttachments } from "./tools.js";
-import { loadStoredMessages, writePayloadLog, writeTranscriptLog } from "./transcript-log.js";
+import { loadStoredMessages, writePayloadLog, writeTranscriptLog, writeTranscriptReset } from "./transcript-log.js";
 import type {
 	FamiliarAgent,
 	FamiliarAgentOptions,
@@ -245,14 +245,10 @@ export async function createFamiliarAgent(
 		}
 	};
 
-	const resetSession = (session: FamiliarAgentSession): void => {
+	const resetSession = async (session: FamiliarAgentSession): Promise<void> => {
 		session.agent.abort();
 		session.agent.reset();
-		writeTranscriptLog(config, {
-			ts: new Date().toISOString(),
-			sessionId: session.sessionId,
-			type: "reset",
-		});
+		await writeTranscriptReset(config, session.sessionId);
 		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
 		session.mediaSink.drain();
@@ -446,9 +442,9 @@ export async function createFamiliarAgent(
 		},
 		async reset(sessionKey: string): Promise<void> {
 			const existing = sessions.get(sessionKey);
-			if (!existing) return;
+			if (!existing) return writeTranscriptReset(config, deriveSessionId(config.workspacePath, sessionKey));
 			const session = await existing;
-			resetSession(session);
+			await resetSession(session);
 		},
 		async reload(): Promise<string> {
 			while (reloadInProgress) await reloadInProgress;

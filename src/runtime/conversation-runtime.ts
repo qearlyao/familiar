@@ -675,15 +675,25 @@ export class ConversationRuntime {
 	}
 
 	async resetConversation(detail = "new conversation requested"): Promise<void> {
-		this.pendingJobs = [];
-		this.activeJob = undefined;
-		this.armedAfterRecordId = this.records.at(-1)?.recordId ?? 0;
+		this.clearWork();
 		await this.appendRecord({
 			type: "runtime",
 			...buildRecordBase(this.channel, this.nextRecordId),
 			event: "reset",
 			detail,
 		});
+	}
+
+	// Interrupt the current turn without starting a new conversation: clear the
+	// queue so nothing auto-resumes, but keep history so the user can continue.
+	interruptWork(): void {
+		this.clearWork();
+	}
+
+	private clearWork(): void {
+		this.pendingJobs = [];
+		this.activeJob = undefined;
+		this.armedAfterRecordId = this.records.at(-1)?.recordId ?? 0;
 	}
 
 	async appendError(message: string): Promise<void> {

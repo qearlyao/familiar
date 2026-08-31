@@ -490,4 +490,46 @@ describe("ConversationRuntime", () => {
 			await runtime.disconnect();
 		}
 	});
+
+	it("interruptWork drops queued work without a reset marker; resetConversation writes one", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound({ messageId: "m1", authorId: "owner", text: "hello" });
+			assert.equal(runtime.hasLiveWork(), true);
+
+			const recordsBeforeStop = runtime.getRecords().length;
+			runtime.interruptWork();
+			assert.equal(runtime.hasLiveWork(), false);
+			// History is preserved — the conversation can continue later.
+			assert.equal(runtime.getRecords().length, recordsBeforeStop);
+			assert.equal(
+				runtime
+					.getRecords()
+					.filter((record) => record.type === "runtime" && record.event === "reset").length,
+				0,
+				"stop must not write a reset marker",
+			);
+
+			await runtime.resetConversation("new conversation requested");
+			// reset writes a boundary marker but leaves the runtime history intact for
+			// the web UI; only the agent transcript is actually clipped.
+			assert.equal(
+				runtime
+					.getRecords()
+					.filter((record) => record.type === "runtime" && record.event === "reset").length,
+				1,
+			);
+			assert.equal(runtime.getRecords().length, recordsBeforeStop + 1);
+		} finally {
+			await runtime.disconnect();
+		}
+	});
 });

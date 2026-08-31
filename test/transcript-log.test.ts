@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { loadStoredMessages } from "../src/agent/transcript-log.js";
-import { createTempDataDir } from "./helpers.js";
+import { loadStoredMessages, writeTranscriptReset } from "../src/agent/transcript-log.js";
+import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 const usage = {
 	input: 0,
@@ -53,5 +53,21 @@ describe("transcript log", () => {
 		const messages = await loadStoredMessages(dataDir, "s1");
 
 		assert.deepEqual(messages.map((message) => message.timestamp), [1, 3]);
+	});
+
+	it("persists a reset marker for a cold session", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const transcriptsDir = resolve(dataDir, "transcripts");
+		await mkdir(transcriptsDir, { recursive: true });
+		const oldMessage: AgentMessage = { role: "user", content: "old", timestamp: 1 };
+		await writeFile(
+			resolve(transcriptsDir, "2026-06-01.jsonl"),
+			`${JSON.stringify({ ts: "2026-06-01T00:00:00.000Z", sessionId: "s1", message: oldMessage })}\n`,
+		);
+
+		await writeTranscriptReset(config, "s1");
+
+		assert.deepEqual(await loadStoredMessages(dataDir, "s1"), []);
 	});
 });

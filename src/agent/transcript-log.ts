@@ -27,6 +27,14 @@ export function writeTranscriptLog(config: Config, record: Record<string, unknow
 	);
 }
 
+export async function writeTranscriptReset(config: Config, sessionId: string): Promise<void> {
+	await appendJsonl(dailyLogPath(config.workspace.dataDir, "transcripts"), {
+		ts: new Date().toISOString(),
+		sessionId,
+		type: "reset",
+	});
+}
+
 type StoredMessageRecord = {
 	ts: string;
 	sessionId: string;

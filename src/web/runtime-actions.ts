@@ -276,6 +276,7 @@ export function createWebRuntimeActions(options: WebRuntimeActionsOptions): WebR
 	const applyControlCommand = async (runtime: ConversationRuntime, control: ParsedControlCommand): Promise<string> => {
 		if (control.command === "stop") {
 			await familiarAgent.abort(runtime.channelKey);
+			runtime.interruptWork();
 			return "Stopped current work.";
 		}
 		if (control.command === "new") {

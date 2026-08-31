@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { Popover as PopoverPrimitive } from "radix-ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,29 +19,49 @@ function sessionLabel(s: SessionInfo): string {
 const RING_RADIUS = 5;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-function ContextRing({ tokens, limit }: { tokens: number; limit: number }) {
+function ContextRing({ tokens, limit, large = false }: { tokens: number; limit: number; large?: boolean }) {
   const fraction = Math.min(tokens / limit, 1);
   const percent = Math.round(fraction * 100);
+  const details = `${percent}% of the context window - ${tokens.toLocaleString()} / ${limit.toLocaleString()} tokens`;
   return (
-    <span
-      className="inline-flex shrink-0"
-      title={`${percent}% of the context window — ${tokens.toLocaleString()} / ${limit.toLocaleString()} tokens`}
-    >
-      <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" role="img" aria-label={`context ${percent}% full`}>
-        <circle cx="7" cy="7" r={RING_RADIUS} fill="none" strokeWidth="2" className="stroke-border" />
-        <circle
-          cx="7"
-          cy="7"
-          r={RING_RADIUS}
-          fill="none"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray={RING_CIRCUMFERENCE}
-          strokeDashoffset={RING_CIRCUMFERENCE * (1 - fraction)}
-          className={fraction >= 0.8 ? "stroke-destructive" : "stroke-primary"}
-        />
-      </svg>
-    </span>
+    <PopoverPrimitive.Root>
+      <PopoverPrimitive.Trigger
+        type="button"
+        aria-label={`context ${percent}% full`}
+        className={cn(
+          "inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30",
+          large ? "size-8 items-center justify-center" : "",
+        )}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <svg viewBox="0 0 14 14" className={cn(large ? "size-5" : "size-3.5", "-rotate-90")} aria-hidden="true">
+          <circle cx="7" cy="7" r={RING_RADIUS} fill="none" strokeWidth="2" className="stroke-border" />
+          <circle
+            cx="7"
+            cy="7"
+            r={RING_RADIUS}
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={RING_CIRCUMFERENCE}
+            strokeDashoffset={RING_CIRCUMFERENCE * (1 - fraction)}
+            className={fraction >= 0.8 ? "stroke-destructive" : "stroke-primary"}
+          />
+        </svg>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          side="bottom"
+          align="center"
+          sideOffset={6}
+          collisionPadding={12}
+          className="z-50 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-card-foreground shadow-md"
+        >
+          {details}
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }
 
@@ -55,7 +76,10 @@ export function SessionPicker({
 }) {
   // ponytail: refetch on open so the rings are fresh; stale prop data shows until it lands
   const [fresh, setFresh] = useState<SessionInfo[] | null>(null);
-  if (sessions.length <= 1) return null;
+  if (sessions.length <= 1) {
+    const context = sessions[0]?.context;
+    return context ? <ContextRing tokens={context.tokens} limit={context.limit} large /> : null;
+  }
   const list = fresh ?? sessions;
   const active = sessions.find((s) => s.key === activeKey);
   const label = active ? sessionLabel(active) : "select session";

@@ -33,6 +33,7 @@ function ContextRing({ tokens, limit, large = false }: { tokens: number; limit: 
           large ? "size-8 items-center justify-center" : "",
         )}
         onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <svg viewBox="0 0 14 14" className={cn(large ? "size-5" : "size-3.5", "-rotate-90")} aria-hidden="true">

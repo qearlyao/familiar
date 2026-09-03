@@ -119,6 +119,8 @@ function synthesizeConfiguredModel(
 }
 
 function createFallbackModel(ref: ModelRef): Model<any> {
+	const builtInModel = isBuiltInProvider(ref.provider) ? (getModels(ref.provider) as Model<any>[])[0] : undefined;
+	if (builtInModel) return { ...builtInModel, id: ref.id, name: ref.id };
 	const defaults = PROVIDER_DEFAULTS[ref.provider];
 	if (!defaults) {
 		throw new Error(`Unsupported model provider: ${ref.provider}`);

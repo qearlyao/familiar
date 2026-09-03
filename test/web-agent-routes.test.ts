@@ -80,6 +80,27 @@ describe("web agent model routes", () => {
 		assert.deepEqual(payload.added, ["gua/claude-opus-4-8"]);
 	});
 
+	it("lets built-in providers add models outside the static catalog", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		t.after(() => setAddedModelsPath(resolve(process.cwd(), "data")));
+		setAddedModelsPath(dataDir);
+		const config = await configWithDataDir(t, dataDir);
+		const handler = registerAgentModelRoutes(config).get("POST /api/web/agent/models");
+		assert.ok(handler);
+		const response = new FakeResponse();
+
+		await handler(
+			jsonRequest({ model: "openrouter/familiar/model-outside-catalog" }),
+			response as unknown as ServerResponse,
+			new URL("http://localhost/api/web/agent/models"),
+		);
+
+		const payload = JSON.parse(response.body) as { models: string[]; added: string[] };
+		assert.equal(response.statusCode, 200);
+		assert.ok(payload.models.includes("openrouter/familiar/model-outside-catalog"));
+		assert.deepEqual(payload.added, ["openrouter/familiar/model-outside-catalog"]);
+	});
+
 	it("rejects configured custom providers that the model layer cannot resolve", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		t.after(() => setAddedModelsPath(resolve(process.cwd(), "data")));

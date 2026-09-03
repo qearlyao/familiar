@@ -222,28 +222,25 @@ familiar login anthropic
 
 Credentials are stored in the default workspace at `~/.familiar/auth.json`.
 
-Built-in Anthropic models can use OpenRouter's native Messages endpoint while
-prioritizing specific OpenRouter providers:
+Models sent through OpenRouter can prioritize specific upstream providers. This
+works for built-in `openrouter/...` models and for any model whose configured
+base URL is an OpenRouter endpoint:
 
 ```toml
 [agent]
-model = "anthropic/claude-fable-5"
-
-[models.base_urls]
-anthropic = "https://openrouter.ai/api"
-
-[models.api_key_envs]
-anthropic = "OPENROUTER_API_KEY"
+model = "openrouter/anthropic/claude-fable-5"
 
 [models.openrouter_routing]
-anthropic = { order = ["anthropic"], allow_fallbacks = true }
+openrouter = { order = ["anthropic"], allow_fallbacks = true }
+"openrouter/anthropic/claude-fable-5" = { order = ["deepinfra"], allow_fallbacks = false }
 ```
 
-Routing is sent only for `anthropic-messages` requests using exactly
-`https://openrouter.ai/api` (an optional trailing slash is accepted). A quoted
-provider/model key such as `"anthropic/claude-fable-5"` overrides the
-provider-wide entry. With `allow_fallbacks = true`, OpenRouter tries the listed
-providers first and then its normal fallback pool.
+Provider/model keys override provider-wide entries. Anthropic Messages requests
+must use `https://openrouter.ai/api`; OpenAI-compatible requests use
+`https://openrouter.ai/api/v1` (trailing slashes are accepted). With
+`allow_fallbacks = true`, OpenRouter tries the listed providers first and then
+its normal fallback pool. Direct provider endpoints do not receive this
+OpenRouter-specific routing field.
 
 Custom providers can be declared under `models.providers.<name>`. Use a bare
 provider name there, not a `provider/model` string. This is only for provider

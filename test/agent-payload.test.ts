@@ -51,7 +51,7 @@ describe("provider payload normalization", () => {
 		assert.equal(content?.[1] && "cache_control" in content[1], false);
 	});
 
-	it("adds OpenRouter routing only to its Anthropic Messages endpoint", () => {
+	it("adds OpenRouter routing to Anthropic Messages and OpenAI Completions", () => {
 		const routing = { order: ["anthropic"], allowFallbacks: true };
 		const openRouterModel = { ...anthropicModel, baseUrl: "https://openrouter.ai/api/" };
 		const payload = { messages: [] };
@@ -76,6 +76,38 @@ describe("provider payload normalization", () => {
 				/OpenRouter routing requires https:\/\/openrouter\.ai\/api/,
 			);
 		}
+
+		assert.deepEqual(
+			__agentTest.normalizeProviderPayload(
+				{ model: "anthropic/claude-sonnet-4", messages: [] },
+				{
+					id: "anthropic/claude-sonnet-4",
+					api: "openai-completions",
+					provider: "openrouter",
+					baseUrl: "https://openrouter.ai/api/v1",
+				} as Model<any>,
+				routing,
+			),
+			{
+				model: "anthropic/claude-sonnet-4",
+				messages: [],
+				provider: { order: ["anthropic"], allow_fallbacks: true },
+			},
+		);
+		assert.throws(
+			() =>
+				__agentTest.normalizeProviderPayload(
+					{ input: [] },
+					{
+						id: "gpt-5",
+						api: "openai-responses",
+						provider: "openrouter",
+						baseUrl: "https://openrouter.ai/api/v1",
+					} as Model<any>,
+					routing,
+				),
+			/requires anthropic-messages or openai-completions/,
+		);
 	});
 
 	it("adds Anthropic user metadata from the configured owner id regardless of auth mode", async (t) => {

@@ -121,12 +121,15 @@ link = "LINK_API_KEY"
 linkgpt = "LINK_API_KEY"
 linkgemini = "LINK_API_KEY"
 
-# Optional OpenRouter provider ordering for built-in Anthropic models whose
-# base URL is exactly https://openrouter.ai/api. A provider/model key overrides
-# the provider-wide entry.
+# Optional OpenRouter provider ordering. Built-in openrouter/... models use
+# https://openrouter.ai/api/v1 automatically. Other models must point their
+# models.base_urls entry at https://openrouter.ai/api (Anthropic Messages) or
+# https://openrouter.ai/api/v1 (OpenAI-compatible). A provider/model key
+# overrides the provider-wide entry.
 # [models.openrouter_routing]
 # anthropic = { order = ["anthropic"], allow_fallbacks = true }
-# "anthropic/claude-fable-5" = { order = ["anthropic"], allow_fallbacks = false }
+# openrouter = { order = ["anthropic", "google-vertex", "amazon-bedrock"], allow_fallbacks = true }
+# "openrouter/anthropic/claude-fable-5" = { order = ["anthropic"], allow_fallbacks = false }
 
 # Optional custom provider metadata for non-built-in providers. Use a bare
 # provider name here, not a provider/model string. Keep endpoint/auth wiring in

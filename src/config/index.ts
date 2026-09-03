@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 import { parse } from "smol-toml";
 import { isBuiltInOrDefaultProvider, PROVIDER_DEFAULTS, resolveProviderSetting } from "../models/index.js";
-import { isOpenRouterAnthropicBaseUrl } from "../models/openrouter-routing.js";
+import { isOpenRouterBaseUrl, OPENROUTER_BASE_URL } from "../models/openrouter-routing.js";
 import { readEnum } from "../util/guards.js";
 import {
 	BROWSER_BACKENDS,
@@ -368,31 +368,40 @@ function readOpenRouterRouting(
 	const routing: Record<string, OpenRouterRoutingConfig> = {};
 	for (const [target, rawEntry] of Object.entries(entries)) {
 		const path = `models.openrouter_routing.${target}`;
-		const ref = target === "anthropic" ? undefined : maybeParseProviderModelRef(target);
-		if (target !== "anthropic" && ref?.provider !== "anthropic") {
-			throw new Error(`Config value ${path} must target anthropic or anthropic/<model>`);
+		const ref = maybeParseProviderModelRef(target);
+		if (target.includes("/") && !ref) {
+			throw new Error(`Config value ${path} must target a provider or provider/<model>`);
 		}
+		const provider = ref?.provider ?? target;
 		const entry = readConfigTable(rawEntry, path);
 		assertKnownKeys(entry, path, ["order", "allow_fallbacks"]);
 		const order = readStringArray(entry.order, `${path}.order`).map((provider) => provider.trim());
 		if (order.length === 0 || order.some((provider) => provider === "")) {
 			throw new Error(`Config value ${path}.order must be a non-empty string array`);
 		}
-		const baseUrl = ref ? resolveProviderSetting(baseUrls, ref.provider, ref.modelId) : baseUrls.anthropic;
-		if (!baseUrl || !isOpenRouterAnthropicBaseUrl(baseUrl)) {
-			throw new Error(`Config value ${path} requires its models.base_urls target to be https://openrouter.ai/api`);
+		const baseUrl =
+			(ref ? resolveProviderSetting(baseUrls, ref.provider, ref.modelId) : baseUrls[provider]) ??
+			(ref?.provider === "openrouter" || provider === "openrouter"
+				? OPENROUTER_BASE_URL
+				: PROVIDER_DEFAULTS[provider]?.baseUrl);
+		if (!baseUrl || !isOpenRouterBaseUrl(baseUrl)) {
+			throw new Error(
+				`Config value ${path} requires its models.base_urls target to be https://openrouter.ai/api (or https://openrouter.ai/api/v1)`,
+			);
 		}
 		routing[target] = {
 			order,
 			allowFallbacks: readBoolean(entry.allow_fallbacks, true, `${path}.allow_fallbacks`),
 		};
 	}
-	if (routing.anthropic) {
-		for (const [target, baseUrl] of Object.entries(baseUrls)) {
-			const ref = maybeParseProviderModelRef(target);
-			if (ref?.provider === "anthropic" && !isOpenRouterAnthropicBaseUrl(baseUrl)) {
+	for (const routingTarget of Object.keys(routing)) {
+		if (routingTarget.includes("/")) continue;
+		for (const [baseTarget, baseUrl] of Object.entries(baseUrls)) {
+			const ref = maybeParseProviderModelRef(baseTarget);
+			const baseProvider = ref?.provider ?? baseTarget;
+			if (baseProvider === routingTarget && !isOpenRouterBaseUrl(baseUrl)) {
 				throw new Error(
-					`Config value models.openrouter_routing.anthropic applies to ${target}, whose models.base_urls override must be https://openrouter.ai/api`,
+					`Config value models.openrouter_routing.${routingTarget} applies to ${baseTarget}, whose models.base_urls override must be https://openrouter.ai/api (or https://openrouter.ai/api/v1)`,
 				);
 			}
 		}

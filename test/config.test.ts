@@ -1038,6 +1038,30 @@ anthropic = { order = ["anthropic"], allow_fallbacks = true }
 		assert.equal((model.compat as { forceAdaptiveThinking?: boolean } | undefined)?.forceAdaptiveThinking, true);
 	});
 
+	it("configures routing for the built-in OpenRouter provider", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			`
+[discord]
+owner_id = "owner"
+
+[agent]
+model = "openrouter/anthropic/claude-sonnet-4"
+
+[models.openrouter_routing]
+openrouter = { order = ["anthropic"], allow_fallbacks = false }
+"openrouter/anthropic/claude-sonnet-4" = { order = ["deepinfra"], allow_fallbacks = true }
+`,
+		);
+
+		const config = await loadConfig(workspacePath);
+		assert.deepEqual(resolveOpenRouterRouting(config, createConfiguredModel(config)), {
+			order: ["deepinfra"],
+			allowFallbacks: true,
+		});
+	});
+
 	it("rejects OpenRouter routing for non-OpenRouter base URLs", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(

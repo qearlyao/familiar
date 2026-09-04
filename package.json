@@ -42,9 +42,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "0.84.3",
-		"@earendil-works/pi-ai": "0.84.3",
-		"@earendil-works/pi-coding-agent": "0.84.3",
+		"@earendil-works/pi-agent-core": "0.84.4",
+		"@earendil-works/pi-ai": "0.84.4",
+		"@earendil-works/pi-coding-agent": "0.84.4",
 		"better-sqlite3": "^12.10.0",
 		"cross-spawn": "^7.0.6",
 		"discord.js": "^14.27.0",
@@ -69,6 +69,6 @@
 		"typescript": "^7.0.2"
 	},
 	"engines": {
-		"node": ">=22"
+		"node": ">=22.19.0"
 	}
 }

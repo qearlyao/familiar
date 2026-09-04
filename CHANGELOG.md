@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.3 - 2026-09-04
+
+### Added
+
+- Configure OpenRouter provider ordering and fallback behavior for built-in and custom models across Anthropic Messages and OpenAI-compatible requests, with provider/model overrides.
+- Add WebUI support for custom model IDs from built-in providers.
+
+### Fixed
+
+- Keep WebUI context details open during pointer interactions and refresh token usage after completed replies.
+
+### Changed
+
+- Bump the pi dependency set to `0.85.0` and require Node.js `22.19.0` or newer.
+
 ## 0.10.2 - 2026-08-31
 
 ### Fixed

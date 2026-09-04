@@ -342,6 +342,16 @@ export function useChat(): ChatHook {
           if (activeAssistantMessageIdsRef.current.delete(event.messageId)) {
             setStreaming(activeAssistantMessageIdsRef.current.size > 0);
           }
+          if (event.usage) {
+            const tokens = event.usage.input + event.usage.cacheRead + event.usage.cacheWrite + event.usage.output;
+            setSessions((prev) =>
+              prev.map((session) =>
+                session.key === activeSessionKey
+                  ? { ...session, context: { tokens, limit: session.context?.limit ?? 200_000 } }
+                  : session,
+              ),
+            );
+          }
           setMessages((prev) => {
             const existing = prev.find((m) => m.id === event.messageId);
             if (!existing) {

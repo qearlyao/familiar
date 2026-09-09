@@ -90,8 +90,8 @@ const fixtures: Message[] = [
         id: "demo-image",
         name: "cat-loaf.png",
         kind: "image",
-        mimeType: "image/svg+xml",
-        url: "/familiar.svg",
+        mimeType: "image/png",
+        url: "/familiar.png",
       },
     ],
     steps: [

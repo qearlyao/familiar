@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/familiar.svg" width="120" alt="Familiar logo" />
+  <img src="docs/familiar.png" width="120" alt="Familiar logo" />
   <h1>Familiar</h1>
   <p><b>A companion, not an assistant.</b></p>
   <p>

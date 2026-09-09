@@ -132,7 +132,16 @@ export function WebShell({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
+  const [shelfOpen, setShelfOpen] = useState(false);
   const [mounted, setMounted] = useState<Set<ShellPage>>(() => new Set(["chat"]));
+
+  const open = (page: ShellPage) => {
+    setMounted((prev) => (prev.has(page) ? prev : new Set(prev).add(page)));
+    setSelectedPage(page);
+    setSettingsOpen(false);
+  };
+
+  const showing = shelfOpen && selectedPage === "chat" && !settingsOpen;
 
   const navigate = (target: NavTarget) => {
     if (target === "settings") {
@@ -140,15 +149,34 @@ export function WebShell({
       setSettingsOpen(true);
       return;
     }
-    setMounted((prev) => (prev.has(target) ? prev : new Set(prev).add(target)));
-    setSelectedPage(target);
-    setSettingsOpen(false);
+    // diaries arrive as a shelf over the talk (Chat 1a); the archive is a room you go into from there.
+    // the rail pill is the shelf's own toggle — press it again and the shelf goes away.
+    if (target === "diaries") {
+      setShelfOpen(!showing);
+      setSelectedPage("chat");
+      setSettingsOpen(false);
+      return;
+    }
+    setShelfOpen(false);
+    open(target);
   };
 
   return (
-    <ShellChrome current={settingsOpen ? "settings" : selectedPage} onNavigate={navigate}>
+    <ShellChrome current={settingsOpen ? "settings" : showing ? "diaries" : selectedPage} onNavigate={navigate}>
       <section className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>
-        <Chat settingsOpen={settingsOpen} onSettingsOpenChange={setSettingsOpen} authMode={authMode} authDevice={authDevice} onSignedOut={onSignedOut} />
+        <Chat
+          settingsOpen={settingsOpen}
+          onSettingsOpenChange={setSettingsOpen}
+          shelfOpen={shelfOpen}
+          onShelfOpenChange={setShelfOpen}
+          onOpenArchive={() => {
+            setShelfOpen(false);
+            open("diaries");
+          }}
+          authMode={authMode}
+          authDevice={authDevice}
+          onSignedOut={onSignedOut}
+        />
       </section>
       {ROOMS.map(({ id, Page }) =>
         Page && mounted.has(id) ? (

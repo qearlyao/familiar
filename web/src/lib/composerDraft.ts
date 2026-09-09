@@ -79,6 +79,14 @@ export function composerSendDisabled({
   return showAbort ? false : sending || voiceBusy || (!hasText && !hasAttachments);
 }
 
+/** Drop text from another surface at the end of the draft, on its own line. */
+export function appendDraftText(blocks: DraftBlock[], text: string): DraftBlock[] {
+  const index = fallbackTextIndex(blocks);
+  const target = blocks[index];
+  if (!target || target.type !== "text") return [...blocks, textBlock(text)];
+  return blocks.with(index, textBlock(joinTextBlocks(target.value, text)));
+}
+
 export function insertMemeDraftBlock(
   blocks: DraftBlock[],
   selection: DraftSelection | undefined,

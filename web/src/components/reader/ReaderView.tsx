@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ALargeSmall, Feather, LibraryBig, TableOfContents, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
   fetchBook,
   fetchBookChapter,
@@ -37,17 +38,6 @@ interface NoteTarget {
   entry: MarginaliaEntry;
   at: { top: number; left: number };
   layoutId: string;
-}
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = () => setMatches(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [query]);
-  return matches;
 }
 
 function ChromeAction({

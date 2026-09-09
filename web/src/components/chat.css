@@ -166,8 +166,8 @@
 }
 .thread-held { display: flex; align-items: center; gap: 9px; font-size: 12px; color: #4c3e2c; }
 
-/* On a phone it rises as a sheet over the dimmed chat; on desktop nothing behind it moves or dims. */
-.threads-dim { position: fixed; inset: 0; z-index: 59; background: rgba(43, 25, 1, 0.42); }
+/* On a phone a panel rises as a sheet over the dimmed chat; on desktop nothing behind it moves or dims. */
+.sheet-dim { position: fixed; inset: 0; z-index: 59; background: rgba(43, 25, 1, 0.42); }
 .threads.is-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-height: 78vh;
   border: 0; border-radius: 32px 32px 0 0; box-shadow: 0 -26px 56px -22px rgba(43, 25, 1, 0.5);
@@ -187,6 +187,38 @@
 .is-sheet .thread-line b { font-size: 17px; }
 .is-sheet .thread-row p { font-size: 14px; }
 
+/* A panel that ran out of room becomes a sheet: it rises from the bottom edge over a dimmed
+   room and falls back the same way. Which panels take this shape, and at what width, is each
+   component's own call (useMediaQuery) — these styles just follow the is-sheet class. */
+@keyframes sheet-rise { from { transform: translateY(100%); } }
+@keyframes sheet-fall { to { transform: translateY(100%); } }
+@keyframes sheet-dim-in { from { opacity: 0; } }
+@keyframes sheet-dim-out { to { opacity: 0; } }
+.diary-shelf.is-sheet[data-state="open"], .quick-settings.is-sheet[data-state="open"], .threads.is-sheet[data-state="open"] {
+  animation: sheet-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.diary-shelf.is-sheet[data-state="closed"], .quick-settings.is-sheet[data-state="closed"], .threads.is-sheet[data-state="closed"] {
+  animation: sheet-fall 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+}
+.sheet-dim[data-state="open"] { animation: sheet-dim-in 0.24s ease both; }
+.sheet-dim[data-state="closed"] { animation: sheet-dim-out 0.2s ease both; }
+.quick-settings.is-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-height: 85dvh; overflow: hidden;
+  border-radius: 30px 30px 0 0; padding: 12px 20px max(26px, env(safe-area-inset-bottom)); gap: 18px;
+  box-shadow: 0 -20px 44px -22px rgba(43, 25, 1, 0.6);
+}
+.is-sheet .qs-handle { display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 999px; background: rgba(76, 62, 44, 0.3); }
+.diary-shelf.is-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; width: auto; margin: 0;
+  max-height: 82dvh; border-radius: 30px 30px 0 0; padding: 12px 18px max(20px, env(safe-area-inset-bottom)); gap: 14px;
+  box-shadow: 0 -24px 50px -22px rgba(43, 25, 1, 0.6);
+}
+.is-sheet .shelf-grab { display: block; flex: none; align-self: center; width: 44px; height: 4px; border-radius: 999px; background: rgba(211, 201, 186, 0.35); }
+.is-sheet .shelf-head b { font-size: 21px; }
+.is-sheet .shelf-days { gap: 7px; }
+.is-sheet .shelf-day { padding: 11px 14px; }
+.is-sheet .shelf-bring { height: 48px; font-size: 14.5px; }
+
 .switch-model-button {
   height: 40px; padding: 0 18px; border-radius: 999px; border: 0; background: #525833; color: #d3c9ba;
   font: 14px Caprasimo, Georgia, serif; display: inline-flex; align-items: center; gap: 9px; transition: background 0.15s;
@@ -194,6 +226,67 @@
 .switch-model-button:hover { background: #4c3e2c; }
 
 .chat-divider { flex: none; height: 1px; margin: 0 44px; background: linear-gradient(to right, rgba(76, 62, 44, 0.32), rgba(76, 62, 44, 0)); }
+
+/* ---------- diaries shelf (Diaries 1c, Chat 1a) ---------- */
+/* Desktop: an inline column beside the talk. Phone: the same panel raised as a sheet. */
+.diary-shelf {
+  flex: none; width: 330px; margin: 12px 12px 12px 0; padding: 24px 22px; border-radius: 22px;
+  background: #4c3e2c; color: #d3c9ba; display: flex; flex-direction: column; gap: 18px; overflow: hidden;
+  animation: roomin 0.2s ease both;
+}
+.shelf-grab { display: none; }
+.shelf-head { flex: none; display: flex; align-items: flex-start; gap: 12px; }
+.shelf-head > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.shelf-head b { font: 22px/1 Caprasimo, Georgia, serif; font-weight: 400; color: #d6bd8a; }
+.shelf-head span { font-size: 12.5px; opacity: 0.7; }
+.shelf-close {
+  margin-left: auto; flex: none; width: 34px; height: 34px; border: 0; border-radius: 999px;
+  background: rgba(211, 201, 186, 0.14); color: #d3c9ba; display: grid; place-items: center; cursor: pointer;
+}
+.shelf-close:hover { background: rgba(211, 201, 186, 0.26); }
+.shelf-label { flex: none; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #d6bd8a; }
+.shelf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: #e0b48c; }
+.shelf-days { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+.shelf-day {
+  flex: none; width: 100%; padding: 13px 15px; border: 0; border-radius: 16px; font: inherit; text-align: left;
+  background: rgba(211, 201, 186, 0.1); color: #d3c9ba; display: flex; align-items: flex-start; gap: 11px;
+  cursor: pointer; transition: background 0.15s;
+}
+.shelf-day:hover { background: rgba(211, 201, 186, 0.18); }
+.shelf-day.is-picked, .shelf-day.is-picked:hover { background: rgba(214, 189, 138, 0.22); }
+.shelf-day.is-blank { cursor: default; background: rgba(211, 201, 186, 0.1); }
+.shelf-day.is-blank b { color: rgba(211, 201, 186, 0.45); }
+.shelf-day.is-blank em { opacity: 0.5; }
+.shelf-tick {
+  flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 6px;
+  border: 1.5px solid rgba(211, 201, 186, 0.45); display: grid; place-items: center;
+}
+.is-blank .shelf-tick { border-color: rgba(211, 201, 186, 0.22); }
+.is-picked .shelf-tick { border-color: transparent; background: #d6bd8a; color: #2b1901; }
+.shelf-day-lines { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.shelf-day-lines em { font-style: normal; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #d6bd8a; }
+.shelf-day-lines b {
+  font: 15.5px/1.2 Caprasimo, Georgia, serif; font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.shelf-day-lines p {
+  margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(211, 201, 186, 0.72); text-wrap: pretty;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+
+.shelf-foot { flex: none; margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+.shelf-bring {
+  height: 44px; border: 0; border-radius: 999px; background: #d6bd8a; color: #2b1901;
+  font: 14px Caprasimo, Georgia, serif; cursor: pointer; transition: background 0.15s;
+}
+.shelf-bring:hover:not(:disabled) { background: #d3c9ba; }
+.shelf-bring:disabled { background: rgba(211, 201, 186, 0.14); color: rgba(211, 201, 186, 0.5); cursor: default; }
+.shelf-archive {
+  align-self: center; border: 0; background: transparent; font: inherit; font-size: 12.5px;
+  color: #d6bd8a; cursor: pointer;
+}
+.shelf-archive:hover { text-decoration: underline; }
 
 /* ---------- quick settings (3a) ---------- */
 .quick-settings {
@@ -692,15 +785,7 @@
   .switch-model-button svg { width: 18px; height: 18px; }
   .chat-divider { display: none; } /* mock 1b: on a phone the header runs straight into the thread */
 
-  [data-radix-popper-content-wrapper]:has(> .quick-settings) {
-    position: fixed !important; inset: auto 0 0 0 !important; transform: none !important; min-width: 0 !important; z-index: 60 !important;
-  }
-  .quick-settings {
-    width: auto; max-height: 85dvh; overflow: hidden; border-radius: 30px 30px 0 0; padding: 12px 20px max(26px, env(safe-area-inset-bottom)); gap: 18px;
-    box-shadow: 0 -20px 44px -22px rgba(43, 25, 1, 0.6);
-  }
   .qs-models { max-height: 38dvh; }
-  .qs-handle { display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 999px; background: rgba(76, 62, 44, 0.3); }
   .qs-pill { height: 36px; padding: 0 15px; }
   .qs-all { height: 46px; font-size: 14px; }
 
@@ -760,6 +845,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .room-view, .chat-presence, .tool-dot, .tool-pill svg, .composer-rec-dot, .composer-rec-bars i { animation: none; }
+  .diary-shelf, .diary-shelf.is-sheet[data-state],
+  .quick-settings.is-sheet[data-state], .threads.is-sheet[data-state], .sheet-dim[data-state] { animation: none; }
 }
 
 /* Settings: prose-first controls */

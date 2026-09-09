@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { DraftEditor } from "@/components/DraftEditor";
 import { SlashCommandMenu } from "@/components/SlashCommandMenu";
 import { VoiceRecordingBar } from "@/components/VoiceRecordingStatus";
 import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import type { DraftBlock } from "@/lib/composerDraft";
-import { composerSendDisabled, emptyDraftBlocks, hasDraftBlocksContent, serializeDraftBlocks } from "@/lib/composerDraft";
+import { appendDraftText, composerSendDisabled, emptyDraftBlocks, hasDraftBlocksContent, serializeDraftBlocks } from "@/lib/composerDraft";
 import {
   controlCommandCompletionQuery,
   matchingControlCommands,
@@ -43,14 +43,21 @@ function slashCommandText(command: ControlCommandDefinition): string {
 }
 
 
+export interface ComposerHandle {
+  append: (text: string) => void;
+}
+
 export function Composer({
   onSend,
   onAbort,
   streaming,
+  handle,
 }: {
   onSend: (text: string, attachments: File[]) => Promise<void>;
   onAbort: () => void;
   streaming: boolean;
+  /** lets another surface (the diaries shelf) drop text into the draft */
+  handle?: RefObject<ComposerHandle | null>;
 }) {
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
   const [dragging, setDragging] = useState(false);
@@ -105,6 +112,8 @@ export function Composer({
       return next === prev.blocks ? prev : { ...prev, blocks: next, revision: prev.revision + 1 };
     });
   };
+
+  useImperativeHandle(handle, () => ({ append: (text: string) => updateBlocks((blocks) => appendDraftText(blocks, text)) }));
 
   const applyCommandSuggestion = (command: ControlCommandDefinition) => {
     const nextText = slashCommandText(command);

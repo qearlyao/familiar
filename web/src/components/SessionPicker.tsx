@@ -3,6 +3,7 @@ import { Dialog, Popover } from "radix-ui";
 import { fetchSessions, type SessionInfo } from "@/lib/api";
 import { contextSegments, type ContextBreakdown } from "@/lib/contextBreakdown";
 import { focusPanel } from "@/lib/focusPanel";
+import { Sheet } from "./Sheet";
 import { cn } from "@/lib/utils";
 import { IconChevronDown, IconCheck, IconList, IconX } from "./organicIcons";
 
@@ -190,23 +191,15 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Trigger className="session-trigger" aria-label="switch session">
-        <span>{label}</span>
-        <IconChevronDown size={12} />
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="threads-dim" />
-        <Dialog.Content className="chat-theme threads is-sheet" aria-describedby={undefined} onOpenAutoFocus={focusPanel}>
-          <span className="threads-grab" aria-hidden="true" />
-          <header className="threads-head">
-            <Dialog.Title asChild><b>your threads</b></Dialog.Title>
-            <span>{list.length} with them · one at a time</span>
-            <Dialog.Close className="threads-close" aria-label="close"><IconX size={16} /></Dialog.Close>
-          </header>
-          <ThreadRows sessions={list} activeKey={activeKey} onSelect={pick} />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Sheet open={open} onOpenChange={onOpenChange} className="threads"
+      trigger={<Dialog.Trigger className="session-trigger" aria-label="switch session"><span>{label}</span><IconChevronDown size={12} /></Dialog.Trigger>}>
+      <span className="threads-grab" aria-hidden="true" />
+      <header className="threads-head">
+        <Dialog.Title asChild><b>your threads</b></Dialog.Title>
+        <span>{list.length} with them · one at a time</span>
+        <Dialog.Close className="threads-close" aria-label="close"><IconX size={16} /></Dialog.Close>
+      </header>
+      <ThreadRows sessions={list} activeKey={activeKey} onSelect={pick} />
+    </Sheet>
   );
 }

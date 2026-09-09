@@ -71,7 +71,6 @@
 .room-rail .room-brand:hover { background: #d6bd8a; }
 .room-rail-items { display: flex; flex-direction: column; gap: 8px; }
 .room-rail-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.room-rail-you { width: 38px; height: 38px; border-radius: 999px; background: #525833; border: 2px solid #d6bd8a; }
 .room-mobile-nav { display: none; }
 
 /* ---------- header (1a) ---------- */

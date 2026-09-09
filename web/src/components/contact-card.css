@@ -1,0 +1,49 @@
+.room-rail .room-rail-you {
+  width: 38px;
+  height: 38px;
+  background: #525833;
+  border: 2px solid #d6bd8a;
+  color: #d6bd8a;
+  font: 18px/1 Caprasimo, Georgia, serif;
+}
+.room-rail .room-rail-you:hover,
+.room-rail .room-rail-you[data-state="open"] { background: #646b40; }
+.contact-card {
+  z-index: 60;
+  width: 300px;
+  max-height: calc(100dvh - 96px);
+  padding: 22px;
+  border-radius: 26px 26px 26px 0;
+  background: #e7e0d5;
+  filter: drop-shadow(0 9px 12px rgb(43 25 1 / 16%));
+}
+/* End the curve on the card edge (x=16, y=52), with a horizontal tangent.
+   Continuing the curve under the card would leave a small step at the join. */
+.contact-card::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  bottom: 0;
+  width: 38px;
+  height: 52px;
+  background: #e7e0d5;
+  clip-path: path("M 16 0 C 16 23 12 33 3 42 C -5 50 6 52 16 52 H 38 V 0 Z");
+}
+.contact-card form { position: relative; padding: 3px; margin: -3px; overflow-y: auto; max-height: calc(100dvh - 140px); }
+.contact-card h2 { margin: 0; font: 22px/1.2 Caprasimo, Georgia, serif; }
+.contact-description { margin: 5px 0 19px; font-size: 14px; line-height: 1.5; color: #4c3e2c; }
+.contact-card label { display: block; margin-bottom: 5px; font-size: 15px; font-weight: 600; }
+.contact-card input {
+  display: block; width: 100%; height: 44px; box-sizing: border-box;
+  padding: 0 13px; border: 1px solid rgb(76 62 44 / 35%); border-radius: 14px;
+  background: #f0ebe2; color: #2b1901; font: 16px/1.4 Figtree, sans-serif;
+}
+.contact-card input:focus { outline: 2px solid #525833; outline-offset: 1px; }
+.contact-hint { margin: 8px 0 0; color: #4c3e2c; font-size: 14px; line-height: 1.4; }
+.contact-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 23px; }
+.contact-actions button { min-height: 44px; padding: 0 14px; border: 0; background: transparent; border-radius: 999px; color: #68502f; font-size: 15px; font-weight: 650; }
+.contact-actions button:hover { background: rgb(76 62 44 / 8%); }
+.contact-actions .contact-save { min-width: 80px; color: #e7e0d5; background: #525833; font-family: Caprasimo, Georgia, serif; font-weight: 400; }
+.contact-actions .contact-save:hover { background: #646b40; }
+.contact-card button:disabled { opacity: .55; cursor: wait; }
+.contact-error { margin: 12px 0 0; color: #8b3d1d; font-size: 14px; overflow-wrap: anywhere; }

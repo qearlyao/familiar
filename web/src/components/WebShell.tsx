@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
+import { ContactCard } from "./ContactCard";
 import { Chat } from "./Chat";
 import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
@@ -98,7 +99,7 @@ export function ShellChrome({
           <button type="button" title="settings" aria-label="settings" aria-current={current === "settings" ? "page" : undefined} onClick={() => go("settings")}>
             <RailSettings />
           </button>
-          <div className="room-rail-you" aria-hidden="true" />
+          <ContactCard />
         </div>
       </nav>
       {children}

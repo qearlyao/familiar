@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
+import { parseContactNickname } from "../src/conversation/contact-nickname.js";
 import { getContactNickname } from "../src/conversation/contact-note.js";
 import { HttpError } from "../src/web/http.js";
 import { listWebFiles, readWebFile, writeWebFile } from "../src/web/file-routes.js";
@@ -49,6 +50,21 @@ describe("web file routes", () => {
 		assert.equal(file.content, "darling\n");
 		assert.equal(await readFile(resolve(config.workspacePath, "CONTACT.md"), "utf8"), "darling\n");
 		assert.equal(getContactNickname("you"), "darling");
+	});
+
+	it("clearing the nickname restores you after saving", async (t) => {
+		const config = await configWithWorkspace(t);
+		await writeWebFile(config, "contact", "sunshine\n");
+		await writeWebFile(config, "contact", "");
+		assert.equal((await readWebFile(config, "contact")).content, "");
+		assert.equal(getContactNickname("you"), "you");
+	});
+
+	it("shares nickname parsing for comment-prefixed and blank notes", () => {
+		assert.equal(parseContactNickname("<!-- private contact book\nentry -->\n<!-- note -->\n sunshine \n", ""), "sunshine");
+		assert.equal(parseContactNickname("<!-- blank means you -->", ""), "");
+		assert.equal(parseContactNickname("<!-- unfinished", "you"), "you");
+		assert.equal(parseContactNickname(null, "you"), "you");
 	});
 
 	it("rejects unknown file ids", async (t) => {

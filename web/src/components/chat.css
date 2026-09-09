@@ -88,8 +88,7 @@
 .chat-persona p { margin: 0; font-size: 13px; color: #4c3e2c; }
 /* Under 768 the session picker moves under her name (mock 1b) and takes the status line's place —
    keep this in step with DESKTOP in SessionPicker.tsx or the two stack in the gap between them. */
-@media (max-width: 767.98px) { .chat-persona p, .session-pill-trigger { display: none; } }
-@media (min-width: 768px) { .session-trigger { display: none; } }
+@media (max-width: 767.98px) { .chat-persona p { display: none; } }
 .chat-header-actions { flex: none; display: flex; align-items: center; gap: 10px; }
 
 .ring-button {
@@ -133,6 +132,9 @@
 .session-pill-trigger > svg { flex: none; }
 .session-pill-trigger > svg:last-child { transition: transform 0.16s; }
 .session-pill-trigger[data-state="open"] > svg:last-child { transform: rotate(180deg); }
+/* after both trigger rules so the media queries win on display */
+@media (max-width: 767.98px) { .session-pill-trigger { display: none; } }
+@media (min-width: 768px) { .session-trigger { display: none; } }
 
 .threads {
   z-index: 60; width: 344px; max-height: min(78vh, 560px); border-radius: 24px; background: #e6dfd3;
@@ -526,10 +528,12 @@
   font: 12.5px Figtree, sans-serif; color: #2b1901; outline: none; width: 150px;
 }
 .sticker-search::placeholder { color: #525833; }
-.sticker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-height: 300px; overflow-y: auto; }
-.sticker-tile { aspect-ratio: 1; border: 0; border-radius: 16px; overflow: hidden; background: rgba(82, 88, 51, 0.14); padding: 0; transition: transform 0.15s; }
+.sticker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-content: start; max-height: 300px; overflow-y: auto; }
+/* square via padding, not aspect-ratio: with the grid clamped to 300px Safari saw no content height in an
+   aspect-ratio button holding a percentage-height img, stretched the auto rows to fill, and tiles stacked. */
+.sticker-tile { position: relative; border: 0; border-radius: 16px; overflow: hidden; background: rgba(82, 88, 51, 0.14); padding: 0 0 100%; transition: transform 0.15s; }
 .sticker-tile:hover { transform: translateY(-2px); }
-.sticker-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sticker-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .sticker-empty { padding: 18px 0; text-align: center; font-size: 13px; color: #4c3e2c; }
 
 /* ---------- settings surface (2a) ---------- */

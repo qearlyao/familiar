@@ -135,6 +135,7 @@ export function useChat(): ChatHook {
     LatestAssistantAction | undefined
   >(undefined);
 
+  const contextRefreshRef = useRef(0);
   const lastEventIdRef = useRef<string | null>(null);
   const lastEventAtRef = useRef<number>(0);
   const messagesRef = useRef<Message[]>([]);
@@ -269,6 +270,20 @@ export function useChat(): ChatHook {
     setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, steps: fn(m.steps) } : m)));
   }, []);
 
+  const refreshContext = useCallback(() => {
+    const request = ++contextRefreshRef.current;
+    void fetchSessions().then((list) => {
+      if (request !== contextRefreshRef.current) return;
+      const updated = list.find((session) => session.key === activeSessionKey);
+      if (!updated) return;
+      setSessions((previous) => previous.map((session) =>
+        session.key === activeSessionKey ? { ...session, context: updated.context } : session,
+      ));
+    }).catch((error: unknown) => {
+      console.error("Could not refresh context breakdown", { sessionKey: activeSessionKey, error });
+    });
+  }, [activeSessionKey]);
+
   const handleEvent = useCallback(
     (event: StreamEvent) => {
       lastEventAtRef.current = Date.now();
@@ -307,6 +322,7 @@ export function useChat(): ChatHook {
         }
 
         case "message_deleted": {
+          refreshContext();
           activeAssistantMessageIdsRef.current.delete(event.messageId);
           if (activeAssistantMessageIdsRef.current.size === 0) setStreaming(false);
           setMessages((prev) => prev.filter((m) => m.id !== event.messageId));
@@ -352,6 +368,7 @@ export function useChat(): ChatHook {
               ),
             );
           }
+          if (event.usage) refreshContext();
           setMessages((prev) => {
             const existing = prev.find((m) => m.id === event.messageId);
             if (!existing) {
@@ -453,7 +470,7 @@ export function useChat(): ChatHook {
         }
       }
     },
-    [activeSessionKey, personaName, patchSteps, reconcilePendingLatestAssistantAction, resolvePendingLatestAssistantAction],
+    [activeSessionKey, personaName, patchSteps, reconcilePendingLatestAssistantAction, resolvePendingLatestAssistantAction, refreshContext],
   );
 
   const handleEventRef = useRef(handleEvent);
@@ -644,6 +661,7 @@ export function useChat(): ChatHook {
     };
 
     connect();
+    refreshContext();
 
     const onVisibilityChange = (): void => {
       recoverIfStale();
@@ -665,6 +683,7 @@ export function useChat(): ChatHook {
       if (control) {
         const result = await sendControlCommandApi(control.command, control.args, activeSessionKey);
         appendSystemMessage(result.message);
+        refreshContext();
         return;
       }
       const messageId = uid();
@@ -687,6 +706,7 @@ export function useChat(): ChatHook {
 
     return () => {
       cancelled = true;
+      contextRefreshRef.current += 1;
       clearTimeout(resetTimer);
       if (resyncTimer) clearTimeout(resyncTimer);
       stopLatestAssistantActionResync();
@@ -705,6 +725,7 @@ export function useChat(): ChatHook {
     reconcilePendingLatestAssistantAction,
     resetPendingLatestAssistantAction,
     sendControlFrame,
+    refreshContext,
     stopLatestAssistantActionResync,
   ]);
 

@@ -94,8 +94,7 @@ export function PagesNav<PageId extends string>({
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-            "motion-reduce:animate-none dark:bg-card dark:text-card-foreground",
-            "dark:shadow-[2px_3px_12px_0_oklch(0.14_0.01_58_/_0.34)]",
+            "motion-reduce:animate-none",
           )}
         >
           <div className="px-3 pb-5">

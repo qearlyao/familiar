@@ -20,7 +20,7 @@ import {
 	readMultipartBody,
 	type WebUploadAttachment,
 } from "./multipart.js";
-import { commandArgs, lastContextTokens, sessionDto } from "./payloads.js";
+import { commandArgs, lastContextTokens, lastSaid, sessionDto } from "./payloads.js";
 import { getChannelKeyFromRequest } from "./route-helpers.js";
 import type { RegisterWebRoute } from "./routes.js";
 import type { WebRuntimeActions } from "./runtime-actions.js";
@@ -37,7 +37,7 @@ interface RegisterWebConversationRoutesOptions {
 	getRuntime: RuntimeResolver;
 	personaName: string;
 	actions: WebRuntimeActions;
-	familiarAgent: Pick<FamiliarAgent, "steer" | "resolveChannelModel">;
+	familiarAgent: Pick<FamiliarAgent, "steer" | "resolveChannelModel" | "getContextBreakdown">;
 }
 
 export function registerWebConversationRoutes(options: RegisterWebConversationRoutesOptions): void {
@@ -49,7 +49,8 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 			sessions.map(async (session) => {
 				// ponytail: peek only — sessions with no live runtime just omit the context ring
 				const runtime = await agentCore.peekRuntime(session.key);
-				const tokens = runtime ? lastContextTokens(runtime.getRecords()) : undefined;
+				const records = runtime?.getRecords();
+				const tokens = records ? lastContextTokens(records) : undefined;
 				// A stale channel override (model since removed from models.allow)
 				// makes resolveChannelModel throw. That is right when the model is
 				// about to be used, but here it only sizes the context ring — so
@@ -61,8 +62,15 @@ export function registerWebConversationRoutes(options: RegisterWebConversationRo
 						return undefined;
 					}
 				})();
-				const context = tokens === undefined ? undefined : { tokens, limit: contextWindow ?? 200_000 };
-				return sessionDto(session, context);
+				const context =
+					tokens === undefined
+						? undefined
+						: {
+								tokens,
+								limit: contextWindow ?? 200_000,
+								breakdown: familiarAgent.getContextBreakdown(session.key, tokens),
+							};
+				return sessionDto(session, context, records ? lastSaid(records) : undefined);
 			}),
 		);
 		sendJson(response, 200, { sessions: payload });

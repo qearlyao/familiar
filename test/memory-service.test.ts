@@ -529,6 +529,10 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 1);
 				assert.equal(first.length, 2);
+				const breakdown = service.getContextBreakdown("room-a");
+				assert.ok(breakdown && breakdown.summaries > 0);
+				assert.equal(breakdown.pending, 0);
+				assert.ok(breakdown.fresh > 0);
 				assert.equal(first[0]?.role, "assistant");
 				assert.match(contentText(first[0]), /<from_earlier\b/);
 				assert.match(contentText(first[0]), /old alpha and beta/);
@@ -671,6 +675,10 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 0);
 
+				const before = service.getContextBreakdown("room-cold-service");
+				assert.ok(before && before.pending > 0);
+				assert.equal(before.summaries, 0);
+
 				now = 105_000 + config.memory.lcm.cacheTtlMs - config.memory.lcm.cacheTouchSlackMs;
 				await service.transformContext(debtMessages(), undefined, {
 					sessionKey: "room-cold-service",
@@ -681,6 +689,10 @@ describe("MemoryService", () => {
 
 				assert.equal(service.lcmStore.listSummaries().length, 1);
 				assert.equal(service.lcmStore.getSessionState("room-cold-service")?.compactionDebt, 0);
+				const after = service.getContextBreakdown("room-cold-service");
+				assert.ok(after && after.summaries > 0);
+				assert.ok(after.pending < before.pending);
+				assert.equal(after.fresh, before.fresh);
 			});
 		});
 	});

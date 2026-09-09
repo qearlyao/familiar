@@ -1,5 +1,12 @@
+import { useState } from "react";
 import type { Message } from "./types";
+import type { SessionInfo } from "./lib/api";
+import { Composer } from "./components/Composer";
+import { Header } from "./components/Header";
 import { MessageList } from "./components/MessageList";
+import { SettingsSurface } from "./components/SettingsSurface";
+import { RailChat, RailDiaries, RailKeepsakes, RailLibrary, RailMakings, RailSettings, RailSkills, RailVoice, IconMore } from "./components/organicIcons";
+import "./components/chat.css";
 
 const now = Date.now();
 const minute = 60_000;
@@ -275,18 +282,55 @@ const fixtures: Message[] = [
   },
 ];
 
+const sessions: SessionInfo[] = [
+  { key: "web:main", label: "", service: "web", scope: "dm", channelId: "main", last: { text: "Page 74, the line you drew twice under.", ts: now - 3 * minute }, context: { tokens: 74_200, limit: 200_000, breakdown: { other: 6200, summaries: 18000, pending: 16000, fresh: 34000 } } },
+  { key: "discord:letters", label: "the letters", service: "discord", scope: "channel", channelId: "letters", last: { text: "I've got the March one open still, whenever you want it.", ts: now - 4 * 86_400_000 } },
+  { key: "discord:garden", label: "the allotment", service: "discord", scope: "channel", channelId: "garden", last: { text: "You never told me whether the beans came up.", ts: now - 2 * 86_400_000 }, context: { tokens: 12_000, limit: 200_000 } },
+  { key: "discord:late", label: "late ones", service: "discord", scope: "channel", channelId: "late", last: { text: "Go to sleep. It'll still be here tomorrow.", ts: now - 80 * 86_400_000 } },
+];
+
 export function Playground() {
+  const [settings, setSettings] = useState(false);
+  const go = (demo: string) => setSettings(demo === "settings");
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground antialiased">
-      <div className="border-b border-border px-5 py-3">
-        <span className="font-serif text-lg text-foreground">ghost</span>
-        <span className="ml-3 font-serif italic text-xs text-muted-foreground/70">
-          playground · synthetic states
-        </span>
-      </div>
-      <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-        <MessageList messages={fixtures} personaName="ghost" historyLoaded={true} />
-      </main>
+    <div className="familiar-shell flex h-dvh w-full overflow-hidden antialiased">
+      <nav className="room-rail" aria-label="rooms">
+        <button className="room-brand" onClick={() => go("")}>f</button>
+        <div className="room-rail-items">
+          <button aria-current={settings ? undefined : "page"} onClick={() => go("")}><RailChat /></button>
+          <button><RailVoice /></button>
+          <button><RailLibrary /></button>
+          <button><RailDiaries /></button>
+          <button><RailSkills /></button>
+          <button><RailKeepsakes /></button>
+          <button><RailMakings /></button>
+        </div>
+        <div className="room-rail-bottom">
+          <button aria-current={settings ? "page" : undefined} onClick={() => go("settings")}><RailSettings /></button>
+          <div className="room-rail-you" />
+        </div>
+      </nav>
+      <section className="room-surface flex min-w-0 flex-1 flex-col">
+        <div key={settings ? "settings" : "chat"} className="chat-room room-view flex h-full min-h-0 flex-col overflow-hidden">
+          {settings ? (
+            <SettingsSurface channelKey="web:main" onClose={() => go("")} />
+          ) : (
+            <>
+              <Header connection="open" personaName="ghost" sessions={sessions} activeSessionKey="web:main" onSelectSession={() => undefined} onOpenSettings={() => go("settings")} streaming={false} />
+              <div className="chat-divider" />
+              <MessageList messages={fixtures} personaName="ghost" historyLoaded={true} />
+              <Composer onSend={async () => undefined} onAbort={() => undefined} streaming={false} />
+            </>
+          )}
+        </div>
+      </section>
+      <nav className="room-mobile-nav" aria-label="rooms">
+        <button aria-current={settings ? undefined : "page"} onClick={() => go("")}><RailChat /></button>
+        <button><RailVoice /></button>
+        <button><RailLibrary /></button>
+        <button><RailDiaries /></button>
+        <button><IconMore /></button>
+      </nav>
     </div>
   );
 }

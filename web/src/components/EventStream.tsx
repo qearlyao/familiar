@@ -1,16 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { iconForTool, ThinkingIcon } from "@/lib/toolIcon";
 import type { GutterStep } from "@/lib/chunkSteps";
 import type { ThinkingStep, ToolEvent } from "../types";
-
-function isInteractiveElement(target: EventTarget | null): boolean {
-  return (
-    target instanceof Element &&
-    Boolean(target.closest("button, a, input, textarea, select, [role='button']"))
-  );
-}
+import { IconChevronDown, IconChevronUp } from "./organicIcons";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -26,16 +19,7 @@ function formatValue(value: unknown): string {
   }
 }
 
-const SUMMARY_KEYS = [
-  "query",
-  "url",
-  "command",
-  "prompt",
-  "file_path",
-  "path",
-  "pattern",
-  "description",
-] as const;
+const SUMMARY_KEYS = ["query", "url", "command", "prompt", "file_path", "path", "pattern", "description"] as const;
 
 function argSummary(args: unknown): string {
   if (!isRecord(args)) return "";
@@ -50,8 +34,7 @@ function resultCount(result: unknown): string {
   if (result == null) return "";
   if (Array.isArray(result)) return result.length === 1 ? "1 item" : `${result.length} items`;
   if (isRecord(result)) {
-    const candidates = ["results", "items", "matches", "files", "lines"] as const;
-    for (const key of candidates) {
+    for (const key of ["results", "items", "matches", "files", "lines"] as const) {
       const v = result[key];
       if (Array.isArray(v)) {
         const noun = key === "files" ? "file" : key === "lines" ? "line" : key === "matches" ? "match" : key === "items" ? "item" : "result";
@@ -66,12 +49,18 @@ function resultCount(result: unknown): string {
   return "";
 }
 
-function formatThinkingTitle(step: ThinkingStep): string {
-  if (!step.complete) return "thinking…";
-  if (step.endedAt == null) return "thought";
-  const ms = Math.max(0, step.endedAt - step.startedAt);
-  if (ms < 1000) return "thought for <1s";
-  return `thought for ${Math.round(ms / 100) / 10}s`;
+function seconds(ms: number): string {
+  return ms < 1000 ? "<1s" : `${Math.round(ms / 100) / 10}s`;
+}
+
+function stepSpan(step: GutterStep): { start?: number; end?: number } {
+  if (step.kind === "thinking") return { start: step.startedAt, end: step.endedAt };
+  return { start: step.tool.startedAt, end: step.tool.completedAt };
+}
+
+function stepTiming(step: GutterStep): string {
+  const { start, end } = stepSpan(step);
+  return start != null && end != null ? seconds(Math.max(0, end - start)) : "";
 }
 
 function isStepActive(step: GutterStep): boolean {
@@ -85,306 +74,125 @@ function hasStepBody(step: GutterStep): boolean {
   return Boolean(tool.args || tool.result || tool.partialResult || tool.error);
 }
 
-function stepHasError(step: GutterStep): boolean {
-  return step.kind === "tool" && step.tool.status === "error";
-}
-
-function resolveStepIcon(step: GutterStep | "done") {
-  if (step === "done") return Check;
+function stepIcon(step: GutterStep) {
   return step.kind === "thinking" ? ThinkingIcon : iconForTool(step.tool.name);
 }
 
-function IconCell({
-  step,
-  active,
-  hideThreadAbove,
-  hideThreadBelow,
-}: {
-  step: GutterStep | "done";
-  active?: boolean;
-  hideThreadAbove?: boolean;
-  hideThreadBelow?: boolean;
-}) {
-  const Icon = resolveStepIcon(step);
-  return (
-    <div className="relative flex h-7 w-7 shrink-0 items-center justify-center" aria-hidden>
-      <span
-        className={cn(
-          "absolute left-1/2 w-px -translate-x-1/2 bg-border",
-          hideThreadAbove ? "top-1/2" : "top-0",
-          hideThreadBelow ? "bottom-1/2" : "bottom-0",
-        )}
-      />
-      <span className="relative z-10 inline-flex size-4 items-center justify-center bg-muted">
-        {/* eslint-disable-next-line react-hooks/static-components */}
-        <Icon
-          className={cn(
-            "size-4 transition-colors",
-            active ? "text-primary" : "text-muted-foreground/85",
-          )}
-        />
-      </span>
-    </div>
-  );
+function stepName(step: GutterStep): string {
+  return step.kind === "thinking" ? (step.complete ? "thought" : "thinking…") : step.tool.name;
 }
 
 function StepTitle({ step }: { step: GutterStep }) {
-  if (step.kind === "thinking") {
-    return (
-      <span className="truncate font-serif italic text-sm tracking-wide text-foreground/75">
-        {formatThinkingTitle(step)}
-      </span>
-    );
-  }
+  if (step.kind === "thinking") return <span className="tool-step-title">{stepName(step)}</span>;
   const tool = step.tool;
   const summary = argSummary(tool.args);
   const failed = tool.status === "error";
-  const output = tool.status === "running" ? tool.partialResult : tool.result;
-  const count = !failed && tool.status === "completed" ? resultCount(output) : "";
+  const count = !failed && tool.status === "completed" ? resultCount(tool.result) : "";
   return (
-    <span className="flex min-w-0 items-baseline gap-2">
-      <span
-        className="shrink-0 font-mono text-sm text-foreground/85"
-      >
-        {tool.name}
-      </span>
-      {summary && (
-        <span className="min-w-0 truncate font-mono text-sm text-muted-foreground/70">
-          {summary}
-        </span>
-      )}
-      {failed && (
-        <span className="shrink-0 font-serif italic text-sm text-destructive/80">
-          · failed
-        </span>
-      )}
-      {count && !failed && (
-        <span className="shrink-0 font-serif italic text-sm tracking-wide text-muted-foreground/65">
-          · {count}
-        </span>
-      )}
+    <span className="tool-step-title">
+      {tool.name}
+      {summary && <code>{summary}</code>}
+      {failed && <span className="is-failed">· failed</span>}
+      {count && <span>· {count}</span>}
     </span>
   );
 }
 
-function ThinkingContent({ step, active }: { step: ThinkingStep; active: boolean }) {
+function ThinkingDetail({ step }: { step: ThinkingStep }) {
   return (
-    <div className="font-serif italic text-sm leading-relaxed text-muted-foreground/85 whitespace-pre-wrap">
-      {step.text}
-      {active && <span className="ml-0.5 inline-block animate-pulse">▎</span>}
-    </div>
-  );
-}
-
-function ToolContent({ tool }: { tool: ToolEvent }) {
-  const formattedArgs = useMemo(() => formatValue(tool.args), [tool.args]);
-  const output = tool.status === "running" ? tool.partialResult : tool.result;
-  const formattedOutput = useMemo(() => formatValue(output), [output]);
-  return (
-    <div className="space-y-2">
-      {formattedArgs && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground/80">
-          {formattedArgs}
-        </pre>
-      )}
-      {formattedOutput && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground/80">
-          {formattedOutput}
-        </pre>
-      )}
-      {tool.error && (
-        <div className="font-mono text-xs whitespace-pre-wrap text-destructive/85">
-          {tool.error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const COLLAPSED_HEIGHT_PX = 132;
-
-function CollapsibleBody({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const [overflows, setOverflows] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setOverflows(el.scrollHeight > COLLAPSED_HEIGHT_PX + 4);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const truncated = overflows && !open;
-
-  return (
-    <>
-      <div
-        className="relative overflow-hidden"
-        style={{
-          maxHeight: truncated ? `${COLLAPSED_HEIGHT_PX}px` : "9999px",
-          WebkitMaskImage: truncated
-            ? "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)"
-            : undefined,
-          maskImage: truncated
-            ? "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)"
-            : undefined,
-        }}
-      >
-        <div ref={ref}>{children}</div>
+    <div className="tool-detail">
+      <div className="is-thinking">
+        {step.text}
+        {!step.complete && <span className="ml-0.5 inline-block animate-pulse">▎</span>}
       </div>
-      {overflows && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="mt-1.5 cursor-pointer font-serif italic text-xs tracking-wide text-foreground/75 underline-offset-4 transition-colors hover:text-foreground hover:underline"
-        >
-          {open ? "show less" : "show more"}
-        </button>
-      )}
-    </>
+    </div>
   );
 }
 
-function StepBodyRow({
-  step,
-  threadContinues,
-}: {
-  step: GutterStep;
-  threadContinues: boolean;
-}) {
-  const stepActive = isStepActive(step);
+function ToolDetail({ tool }: { tool: ToolEvent }) {
+  const args = useMemo(() => formatValue(tool.args), [tool.args]);
+  const output = tool.status === "running" ? tool.partialResult : tool.result;
+  const result = useMemo(() => formatValue(output), [output]);
   return (
-    <div className="relative py-1">
-      {threadContinues && (
-        <span
-          className="absolute left-3.5 inset-y-0 w-px -translate-x-1/2 bg-border"
-          aria-hidden
-        />
-      )}
-      <div className="ml-9 mt-1 mb-2">
-        <CollapsibleBody>
-          {step.kind === "thinking" ? (
-            <ThinkingContent step={step} active={stepActive} />
-          ) : (
-            <ToolContent tool={step.tool} />
-          )}
-        </CollapsibleBody>
+    <div className="tool-detail">
+      {args && <pre>{args}</pre>}
+      {result && <pre>{result}</pre>}
+      {tool.error && <pre className="is-error">{tool.error}</pre>}
+    </div>
+  );
+}
+
+function Step({ step, last }: { step: GutterStep; last: boolean }) {
+  const [open, setOpen] = useState(false);
+  const active = isStepActive(step);
+  const failed = step.kind === "tool" && step.tool.status === "error";
+  const body = hasStepBody(step);
+  const timing = stepTiming(step);
+  return (
+    <div className="tool-step">
+      {!last && <span className="tool-step-thread" aria-hidden="true" />}
+      <span className={cn("tool-dot", active && "is-running", failed && "is-error")} aria-hidden="true" />
+      <div className="tool-step-body">
+        <div className="tool-step-row">
+          <StepTitle step={step} />
+          {timing && <span className="tool-step-timing">{timing}</span>}
+        </div>
+        {step.kind === "thinking" && !open && step.text && <span className="tool-step-sub">{step.text.length > 160 ? `${step.text.slice(0, 160).trimEnd()}…` : step.text}</span>}
+        {body && (
+          <button type="button" className="tool-step-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {open ? "hide" : "show"}
+            {open ? <IconChevronUp /> : <IconChevronDown />}
+          </button>
+        )}
+        {open && (step.kind === "thinking" ? <ThinkingDetail step={step} /> : <ToolDetail tool={step.tool} />)}
       </div>
     </div>
   );
 }
 
 export function EventStream({ steps }: { steps: GutterStep[] }) {
-  const active = steps.some(isStepActive);
-  const allComplete = !active && steps.length > 0;
-  const showDone = allComplete && steps.length >= 2 && !steps.some(stepHasError);
-
   const [open, setOpen] = useState(false);
-
-  const toggle = () => setOpen((prev) => !prev);
-
-  const collapseFromBody = (event: MouseEvent<HTMLDivElement>) => {
-    if (isInteractiveElement(event.target)) return;
-    if (window.getSelection()?.toString()) return;
-    setOpen(false);
-  };
-
   if (steps.length === 0) return null;
 
+  const active = steps.some(isStepActive);
   const first = steps[0];
-  const current = open ? first : steps[steps.length - 1];
-  const headerActive = open ? isStepActive(first) : active;
-  const CurrentIcon = resolveStepIcon(current);
-  const firstHasBody = hasStepBody(first);
-  const more = steps.length - 1;
+  const current = steps[steps.length - 1];
+  const head = active ? current : first;
+  const Icon = stepIcon(head);
+  const summary = stepName(head);
+  const count = `${steps.length} ${steps.length === 1 ? "step" : "steps"}`;
+  const start = stepSpan(first).start;
+  const end = stepSpan(current).end;
+  const total = !active && start != null && end != null ? seconds(Math.max(0, end - start)) : "";
+
+  if (!open) {
+    return (
+      <button type="button" className={cn("tool-pill", active && "is-active")} aria-expanded={false} onClick={() => setOpen(true)}>
+        {/* eslint-disable-next-line react-hooks/static-components */}
+        <Icon strokeWidth={2.75} />
+        <span className="tool-pill-name">{summary}</span>
+        <span className="tool-pill-count">· {count}</span>
+        <IconChevronDown />
+      </button>
+    );
+  }
 
   return (
-    <div className="flex flex-col rounded-lg bg-muted px-3 py-2">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-2 text-left"
-      >
-        <span
-          key={`icon-${current.id}`}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center animate-in fade-in-0 zoom-in-95 duration-200 ease-out motion-reduce:animate-none"
-        >
-          {/* eslint-disable-next-line react-hooks/static-components */}
-          <CurrentIcon
-            className={cn(
-              "size-4",
-              headerActive ? "text-primary" : "text-muted-foreground/85",
-              headerActive &&
-                "animate-[step-breathe_1.8s_ease-in-out_infinite] motion-reduce:animate-none",
-            )}
-          />
-        </span>
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            key={`title-${current.id}`}
-            className="flex min-w-0 items-center gap-2 overflow-hidden animate-in fade-in-0 slide-in-from-bottom-[0.25rem] duration-200 ease-out motion-reduce:animate-none"
-          >
-            <StepTitle step={current} />
-          </span>
-          {!open && more > 0 && (
-            <span className="shrink-0 font-serif italic text-sm tracking-wide text-muted-foreground/60">
-              · {more} more
-            </span>
-          )}
-          <ChevronRight
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/65 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              open && "rotate-90",
-            )}
-          />
-        </div>
-      </button>
-
-      {open && (
-        <div
-          onClick={collapseFromBody}
-          className="cursor-pointer"
-        >
-          {firstHasBody && (
-            <StepBodyRow step={first} threadContinues={more > 0 || showDone} />
-          )}
-          {steps.slice(1).map((step, i) => {
-            const realIdx = i + 1;
-            const isLast = realIdx === steps.length - 1;
-            const hasBody = hasStepBody(step);
-            const iconThreadBelow = !isLast || showDone || hasBody;
-            const bodyThreadContinues = !isLast || showDone;
-            return (
-              <div key={step.id} className="flex flex-col">
-                <div className="flex w-full items-center gap-2">
-                  <IconCell
-                    step={step}
-                    active={isStepActive(step)}
-                    hideThreadBelow={!iconThreadBelow}
-                  />
-                  <StepTitle step={step} />
-                </div>
-                {hasBody && (
-                  <StepBodyRow step={step} threadContinues={bodyThreadContinues} />
-                )}
-              </div>
-            );
-          })}
-          {showDone && (
-            <div className="flex w-full items-center gap-2">
-              <IconCell step="done" hideThreadBelow />
-              <span className="font-mono text-sm text-foreground/85">
-                done
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+    <div className="tool-patch">
+      <div className="tool-patch-head">
+        {/* eslint-disable-next-line react-hooks/static-components */}
+        <Icon strokeWidth={2.75} />
+        <span>{summary}</span>
+        <span className="tool-patch-meta">{total ? `${count} · ${total}` : count}</span>
+        <button type="button" className="tool-fold" aria-label="fold" onClick={() => setOpen(false)}>
+          <IconChevronUp />
+        </button>
+      </div>
+      <div className="tool-steps">
+        {steps.map((step, i) => (
+          <Step key={step.id} step={step} last={i === steps.length - 1} />
+        ))}
+      </div>
     </div>
   );
 }

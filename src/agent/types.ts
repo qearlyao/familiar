@@ -7,6 +7,7 @@ import type { StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedAttachment, GeneratedMediaSink } from "../media/generated-media.js";
 import type { loadPersona } from "../prompting/persona.js";
 import type { loadFamiliarSkills } from "../prompting/skills.js";
+import type { ContextBreakdown } from "../web/types.js";
 
 export interface FamiliarAgentReply {
 	text: string;
@@ -21,6 +22,7 @@ export interface FamiliarPromptOptions {
 }
 
 export interface FamiliarAgent {
+	getContextBreakdown(sessionKey: string, tokens: number): ContextBreakdown | undefined;
 	prompt(
 		sessionKey: string,
 		input: string,

@@ -7,6 +7,7 @@ import { applyConfigOverridesToConfig } from "../config/registry.js";
 import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { createGeneratedMediaSink } from "../media/generated-media.js";
+import { estimateTextTokens } from "../memory/lcm/context.js";
 import type { MemoryService } from "../memory/service.js";
 import { setAddedModelsPath } from "../models/added-models.js";
 import {
@@ -21,6 +22,7 @@ import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
+import type { ContextBreakdown } from "../web/types.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
 	assertModelAllowed,
@@ -84,6 +86,7 @@ export async function createFamiliarAgent(
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
 	// activePromptOptions covers each prompt window; skipAmbientMessages tags message
 	// identities so followUpMessage's fire-and-forget path also opts out.
+	const completedContexts = new Map<string, { tokens: number; breakdown: ContextBreakdown }>();
 	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
 	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
 	const enterPromptOptions = (sessionKey: string, options: FamiliarPromptOptions): (() => void) => {
@@ -202,6 +205,10 @@ export async function createFamiliarAgent(
 							sessionKey,
 							sessionId,
 							model: agent.state.model,
+							// JSON.stringify drops each tool's execute function on its own.
+							otherContextTokens:
+								estimateTextTokens(agent.state.systemPrompt) +
+								estimateTextTokens(JSON.stringify(agent.state.tools)),
 							...(skipAmbient ? { skipAmbient: true } : {}),
 							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
 						});
@@ -210,6 +217,16 @@ export async function createFamiliarAgent(
 		});
 		agent.subscribe((event) => {
 			logUsage(event);
+			if (event.type === "message_end" && event.message.role === "assistant") {
+				const breakdown = memoryService?.getContextBreakdown(sessionKey);
+				const usage = event.message.usage;
+				if (breakdown) {
+					completedContexts.set(sessionKey, {
+						tokens: usage.input + usage.cacheRead + usage.cacheWrite + usage.output,
+						breakdown,
+					});
+				} else completedContexts.delete(sessionKey);
+			}
 			if (event.type === "message_end") {
 				writeTranscriptLog(config, {
 					ts: new Date().toISOString(),
@@ -408,6 +425,10 @@ export async function createFamiliarAgent(
 	};
 
 	return {
+		getContextBreakdown: (sessionKey, tokens) => {
+			const completed = completedContexts.get(sessionKey);
+			return completed?.tokens === tokens ? completed.breakdown : undefined;
+		},
 		async abort(sessionKey: string): Promise<void> {
 			const session = sessions.get(sessionKey);
 			if (!session) return;
@@ -441,6 +462,7 @@ export async function createFamiliarAgent(
 			editLastAssistantMessage(session, text);
 		},
 		async reset(sessionKey: string): Promise<void> {
+			completedContexts.delete(sessionKey);
 			const existing = sessions.get(sessionKey);
 			if (!existing) return writeTranscriptReset(config, deriveSessionId(config.workspacePath, sessionKey));
 			const session = await existing;

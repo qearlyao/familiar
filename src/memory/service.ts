@@ -8,11 +8,13 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Config } from "../config/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
+import type { ContextBreakdown } from "../web/types.js";
 import { __ambientDiaryInjectorTest, AmbientDiaryInjector } from "./diary/ambient-injector.js";
 import { DIARY_INDEX_FILE_RE, indexAllDiaryFiles, indexDiaryFile, removeDiaryFileIndex } from "./diary/indexer.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
 import { createEmbeddingProvider } from "./index/embedding-provider.js";
 import { MemoryIndexStore } from "./index/store.js";
+import { estimateAgentMessageTokens } from "./lcm/context.js";
 import { LcmContextTransformer } from "./lcm/context-transformer.js";
 import { LcmSegmentManager } from "./lcm/segment-manager.js";
 import { LcmStore } from "./lcm/store.js";
@@ -29,6 +31,7 @@ export interface MemoryService {
 		signal?: AbortSignal,
 		options?: MemoryTransformOptions,
 	): Promise<AgentMessage[]>;
+	getContextBreakdown(sessionKey: string): ContextBreakdown | undefined;
 	serviceCompactionDebt(sessionKey: string): Promise<void>;
 	flush(): Promise<void>;
 	close(): void;
@@ -47,6 +50,8 @@ export interface MemoryTransformOptions {
 	model?: Model<any>;
 	skipAmbient?: boolean;
 	ambientQuery?: string;
+	/** System prompt and tool definitions, estimated by the caller. */
+	otherContextTokens?: number;
 }
 
 export interface MemoryServiceOptions {
@@ -150,13 +155,23 @@ class DefaultMemoryService implements MemoryOperatorService {
 		options: MemoryTransformOptions = {},
 	): Promise<AgentMessage[]> {
 		const compacted = await this.contextTransformer.transformLcmContext(messages, signal, options);
-		if (options.skipAmbient) return compacted;
-		return this.ambientInjector.inject(
-			compacted,
-			signal,
-			options.sessionKey ?? options.sessionId ?? "default",
-			options.ambientQuery,
+		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
+		if (options.skipAmbient) {
+			this.contextTransformer.recordAdditionalContextTokens(sessionKey, options.otherContextTokens ?? 0);
+			return compacted;
+		}
+		const selected = await this.ambientInjector.inject(compacted, signal, sessionKey, options.ambientQuery);
+		const tokensOf = (list: AgentMessage[]) =>
+			list.reduce((total, message) => total + estimateAgentMessageTokens(message), 0);
+		this.contextTransformer.recordAdditionalContextTokens(
+			sessionKey,
+			(options.otherContextTokens ?? 0) + Math.max(0, tokensOf(selected) - tokensOf(compacted)),
 		);
+		return selected;
+	}
+
+	getContextBreakdown(sessionKey: string): ContextBreakdown | undefined {
+		return this.contextTransformer.getContextBreakdown(sessionKey);
 	}
 
 	async serviceCompactionDebt(sessionKey: string): Promise<void> {

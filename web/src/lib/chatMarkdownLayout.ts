@@ -56,3 +56,18 @@ export function remarkImageParagraphs() {
     }
   };
 }
+
+export const CHAT_MARKDOWN_LINK_CARD_CLASS = "chat-link-card";
+
+/** A link alone in its own paragraph is a door out of the room, not a word in a sentence. */
+export function remarkLinkCards() {
+  return (tree: Root) => {
+    for (const child of tree.children) {
+      if (child.type !== "paragraph") continue;
+      const visible = child.children.filter((c) => c.type !== "text" || c.value.trim().length > 0);
+      const link = visible.length === 1 ? visible[0] : undefined;
+      if (link?.type !== "link" || !/^https?:\/\//i.test(link.url)) continue;
+      link.data = { ...link.data, hProperties: { className: CHAT_MARKDOWN_LINK_CARD_CLASS } };
+    }
+  };
+}

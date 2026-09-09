@@ -183,3 +183,11 @@ export type WebPublishEvent = WebStreamEvent extends infer Event
 		? Omit<Event, "eventId" | "ts"> & { ts?: number }
 		: never
 	: never;
+
+/** Relative token estimates for the context selected for the latest model request. */
+export interface ContextBreakdown {
+	summaries: number;
+	pending: number;
+	fresh: number;
+	other: number;
+}

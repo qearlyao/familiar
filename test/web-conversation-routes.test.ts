@@ -8,6 +8,7 @@ import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import type { AgentCore } from "../src/runtime/agent-core.js";
 import type { ConversationRuntime, InboundDispatchOptions, InboundMessageInput } from "../src/runtime/conversation-runtime.js";
 import { registerWebConversationRoutes } from "../src/web/conversation-routes.js";
+import { lastSaid } from "../src/web/payloads.js";
 import { createWebEventHub } from "../src/web/event-hub.js";
 import { decodeFrames, type WebSocketClient } from "../src/web/events.js";
 import type { RegisterWebRoute, WebRoute } from "../src/web/routes.js";
@@ -251,6 +252,10 @@ describe("web conversation routes", () => {
 		} as unknown as AgentCore;
 		const familiarAgent = {
 			resolveChannelModel: () => ({ model: { contextWindow: 100_000 } }),
+			getContextBreakdown: (_key: string, tokens: number) => {
+				assert.equal(tokens, 2000);
+				return { summaries: 100, pending: 200, fresh: 50, other: 20 };
+			},
 		} as unknown as FamiliarAgent;
 
 		registerWebConversationRoutes({
@@ -278,7 +283,7 @@ describe("web conversation routes", () => {
 
 		assert.equal(response.statusCode, 200);
 		const { sessions } = JSON.parse(response.body) as { sessions: Array<{ key: string; context?: unknown }> };
-		assert.deepEqual(sessions[0].context, { tokens: 2000, limit: 100_000 });
+		assert.deepEqual(sessions[0].context, { tokens: 2000, limit: 100_000, breakdown: { summaries: 100, pending: 200, fresh: 50, other: 20 } });
 		assert.equal(sessions[1].context, undefined);
 	});
 
@@ -297,6 +302,7 @@ describe("web conversation routes", () => {
 			peekRuntime: async () => ({ getRecords: () => records }) as unknown as ConversationRuntime,
 		} as unknown as AgentCore;
 		const familiarAgent = {
+			getContextBreakdown: () => undefined,
 			resolveChannelModel: () => {
 				throw new Error("Model is not allowlisted: xai/grok-4.5");
 			},
@@ -331,5 +337,20 @@ describe("web conversation routes", () => {
 		const { sessions } = JSON.parse(response.body) as { sessions: Array<{ key: string; context?: unknown }> };
 		assert.equal(sessions.length, 1);
 		assert.deepEqual(sessions[0].context, { tokens: 1000, limit: 200_000 });
+	});
+
+	it("takes the last thing actually said, skipping silent replies and empty text", () => {
+		const at = (n: number) => new Date(Date.UTC(2026, 0, n)).toISOString();
+		const base = { service: "web", scope: "web", channelId: "main" } as const;
+		const records = [
+			{ ...base, recordId: 1, ts: at(1), type: "inbound", messageId: "m1", authorId: "u", text: "first", isBot: false, mentionedBot: false, attachments: [] },
+			{ ...base, recordId: 2, ts: at(2), type: "outbound", messageIds: ["o1"], text: "the beans came up" },
+			{ ...base, recordId: 3, ts: at(3), type: "outbound", messageIds: ["o2"], text: "noted", silent: true },
+			{ ...base, recordId: 4, ts: at(4), type: "outbound", messageIds: ["o3"], text: "   " },
+			{ ...base, recordId: 5, ts: at(5), type: "checkpoint" },
+		] as unknown as ChatLogRecord[];
+
+		assert.deepEqual(lastSaid(records), { text: "the beans came up", ts: Date.parse(at(2)) });
+		assert.equal(lastSaid([]), undefined);
 	});
 });

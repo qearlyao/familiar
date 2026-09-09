@@ -1,8 +1,10 @@
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { ChatLogRecord } from "../conversation/chat-log.js";
+import { toUnixMs } from "../conversation/ids.js";
 import { supportedThinkingLevels } from "../models/index.js";
 import type { ChatSession } from "../runtime/agent-core.js";
 import { isRecord } from "../util/guards.js";
+import type { ContextBreakdown } from "./types.js";
 
 export function commandArgs(command: string, args: unknown): string {
 	if (typeof args === "string") return args.trim();
@@ -37,8 +39,23 @@ export function lastContextTokens(records: readonly ChatLogRecord[]): number | u
 	return undefined;
 }
 
-export function sessionDto(session: ChatSession, context?: { tokens: number; limit: number }): Record<string, unknown> {
+/** The last thing actually said in a thread, so the picker can show a voice rather than a title. */
+export function lastSaid(records: readonly ChatLogRecord[]): { text: string; ts: number } | undefined {
+	for (let i = records.length - 1; i >= 0; i--) {
+		const record = records[i];
+		const said = record.type === "inbound" || (record.type === "outbound" && !record.silent);
+		if (said && record.text.trim()) return { text: record.text.trim(), ts: toUnixMs(record.ts) };
+	}
+	return undefined;
+}
+
+export function sessionDto(
+	session: ChatSession,
+	context?: { tokens: number; limit: number; breakdown?: ContextBreakdown },
+	last?: { text: string; ts: number },
+): Record<string, unknown> {
 	return {
+		last,
 		key: session.key,
 		label: session.label,
 		service: session.channel.service,

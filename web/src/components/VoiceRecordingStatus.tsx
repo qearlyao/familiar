@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 function formatRecordingDuration(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(total / 60);
-  const remaining = total % 60;
-  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
 }
 
-export function VoiceRecordingStatus() {
+const BARS = Array.from({ length: 28 });
+
+export function VoiceRecordingBar() {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
@@ -19,12 +19,16 @@ export function VoiceRecordingStatus() {
   }, []);
 
   return (
-    <div
-      className="flex items-center gap-2 rounded-sm bg-muted/60 px-2 py-1 text-xs italic text-muted-foreground"
-      aria-live="polite"
-    >
-      <span className="size-2 rounded-full bg-primary" />
-      <span>recording · {formatRecordingDuration(seconds)}</span>
-    </div>
+    <>
+      <span className="composer-rec-dot" aria-hidden="true" />
+      <span className="composer-rec-time" aria-live="polite">
+        {formatRecordingDuration(seconds)}
+      </span>
+      <div className="composer-rec-bars" aria-hidden="true">
+        {BARS.map((_, i) => (
+          <i key={i} style={{ animationDelay: `${(i % 7) * 0.13}s` }} />
+        ))}
+      </div>
+    </>
   );
 }

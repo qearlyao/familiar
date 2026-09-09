@@ -192,6 +192,7 @@ export function createTtsTool(
 				localPath,
 				provider,
 				toolName: "tts",
+				derived: { text: { provider, model: providerConfig.modelId, text, label: "spoken" } },
 			} as const;
 			mediaSink.add(attachment);
 			return {

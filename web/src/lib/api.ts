@@ -27,7 +27,8 @@ export interface SessionInfo {
   channelName?: string;
   threadId?: string;
   isDefault?: boolean;
-  context?: { tokens: number; limit: number };
+  last?: { text: string; ts: number };
+  context?: { tokens: number; limit: number; breakdown?: import("./contextBreakdown").ContextBreakdown };
 }
 
 export type StreamEvent = WebStreamEvent;

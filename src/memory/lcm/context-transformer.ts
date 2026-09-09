@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
 import { formatLocalTimestamp } from "../../util/time.js";
+import type { ContextBreakdown } from "../../web/types.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { condense } from "./condense.js";
 import {
@@ -68,6 +69,7 @@ interface RawLcmItem extends LcmContextRawItem {
 type LcmContextItem = RawLcmItem | CompactedLcmItem;
 
 interface LcmContextState {
+	breakdown?: ContextBreakdown;
 	items: LcmContextItem[];
 	summaryCounter: number;
 	compactionDebt: number;
@@ -389,6 +391,16 @@ export class LcmContextTransformer {
 		return state;
 	}
 
+	getContextBreakdown(sessionKey: string): ContextBreakdown | undefined {
+		const breakdown = this.settings.enabled ? this.contextStates.get(sessionKey)?.breakdown : undefined;
+		return breakdown ? { ...breakdown } : undefined;
+	}
+
+	recordAdditionalContextTokens(sessionKey: string, tokens: number): void {
+		const breakdown = this.contextStates.get(sessionKey)?.breakdown;
+		if (breakdown) breakdown.other = tokens;
+	}
+
 	invalidateSession(sessionKey: string): void {
 		this.contextStates.delete(sessionKey);
 	}
@@ -695,7 +707,7 @@ function assembleWithinBudget(
 	model: Model<any> | undefined,
 ): AgentMessage[] {
 	const budget = Math.max(1, Math.floor((model?.contextWindow ?? 200_000) * settings.contextThreshold));
-	if (sumItemTokens(state.items) <= budget) return state.items.map((item) => item.message);
+	if (sumItemTokens(state.items) <= budget) return recordSelectedContext(state, settings, state.items);
 
 	const freshTail = state.items.slice(resolveFreshTailStartIndexForState(state.items, settings));
 	const selected = new Set<LcmContextItem>(freshTail);
@@ -719,7 +731,26 @@ function assembleWithinBudget(
 		tokens += item.tokens;
 	}
 
-	return state.items.filter((item) => selected.has(item)).map((item) => item.message);
+	return recordSelectedContext(
+		state,
+		settings,
+		state.items.filter((item) => selected.has(item)),
+	);
+}
+
+function recordSelectedContext(
+	state: LcmContextState,
+	settings: LcmContextTransformerOptions["settings"],
+	selected: LcmContextItem[],
+): AgentMessage[] {
+	const freshTail = new Set(state.items.slice(resolveFreshTailStartIndexForState(state.items, settings)));
+	const breakdown: ContextBreakdown = { summaries: 0, pending: 0, fresh: 0, other: 0 };
+	for (const item of selected) {
+		const category = item.type === "summary" ? "summaries" : freshTail.has(item) ? "fresh" : "pending";
+		breakdown[category] += item.tokens;
+	}
+	state.breakdown = breakdown;
+	return selected.map((item) => item.message);
 }
 
 function resolveFreshTailStartIndexForState(

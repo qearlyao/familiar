@@ -10,7 +10,6 @@ import {
   type BookSummary,
   type MarginaliaEntry,
 } from "@/lib/api";
-import { loadMode, saveMode, type ThemeMode } from "@/lib/theme";
 import { buildTextIndex, rangeToOffsets, type TextIndex } from "./anchors";
 import { usePagination } from "./usePagination";
 import { useMarginalia } from "./useMarginalia";
@@ -91,7 +90,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     const stored = Number(localStorage.getItem(FONT_KEY));
     return stored >= 14 && stored <= 22 ? stored : 17;
   });
-  const [themeMode, setThemeMode] = useState<ThemeMode>(loadMode);
   const [textIndex, setTextIndex] = useState<TextIndex>();
   const [selection, setSelection] = useState<SelectionState>();
   const [noteTarget, setNoteTarget] = useState<NoteTarget>();
@@ -497,29 +495,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
                   >
                     A
                   </button>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between">
-                <span className="font-serif text-xs italic text-muted-foreground">the light</span>
-                <div className="flex gap-0.5">
-                  {(["light", "dark", "auto"] as ThemeMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => {
-                        saveMode(mode);
-                        setThemeMode(mode);
-                      }}
-                      className={cn(
-                        "rounded-md px-2 py-1 font-serif text-xs transition-colors focus-visible:bg-accent focus-visible:outline-none",
-                        themeMode === mode
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-                      )}
-                    >
-                      {mode}
-                    </button>
-                  ))}
                 </div>
               </div>
             </div>

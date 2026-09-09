@@ -1,80 +1,50 @@
-import { Settings2 } from "lucide-react";
-import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { NewChatButton } from "./NewChatButton";
-import { SessionPicker } from "./SessionPicker";
+import { ContextRing, SessionPicker } from "./SessionPicker";
+import { QuickSettings } from "./QuickSettings";
 import { cn } from "@/lib/utils";
 import type { ConnectionState, SessionInfo } from "@/lib/api";
 
-const STATUS_LABEL: Record<ConnectionState, string> = {
-  connecting: "connecting",
-  open: "online",
-  closed: "offline",
-  error: "error",
-};
-
-const STATUS_VOICE: Record<Exclude<ConnectionState, "open">, string> = {
+const STATUS: Record<ConnectionState, string> = {
   connecting: "reaching out…",
+  open: "here with you · listening",
   closed: "out of touch · trying again",
   error: "out of touch · trying again",
 };
 
 export function Header({
-  nav,
   connection,
   personaName,
   sessions,
   activeSessionKey,
-  channelKey,
   onSelectSession,
-  onOpenConfig,
-  onNewChatStarted,
+  onOpenSettings,
+  streaming,
 }: {
-  nav?: ReactNode;
   connection: ConnectionState;
   personaName: string;
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
-  channelKey: string | undefined;
   onSelectSession: (key: string) => void;
-  onOpenConfig: () => void;
-  onNewChatStarted: () => void;
+  onOpenSettings: () => void;
+  streaming: boolean;
 }) {
   const live = connection === "open";
+  const context = sessions.find((s) => s.key === activeSessionKey)?.context;
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background px-3 py-3 md:px-5">
-      <div className="mx-auto flex max-w-3xl items-center gap-3 low-dpr-wide:max-w-[clamp(48rem,52vw,72rem)]">
-        {nav}
-        <span
-          aria-label={STATUS_LABEL[connection]}
-          title={STATUS_LABEL[connection]}
-          className={cn(
-            "size-2 rounded-full ring-3 ring-accent/60",
-            live ? "bg-primary" : "bg-muted-foreground/40 ring-transparent",
-          )}
-        />
-        <span className="font-serif text-lg leading-none tracking-tight">{personaName}</span>
-        {!live && (
-          <span className="font-serif text-xs italic leading-none text-muted-foreground/80">
-            {STATUS_VOICE[connection]}
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-1">
-          <SessionPicker sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
-          <NewChatButton channelKey={channelKey} onStarted={onNewChatStarted} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="settings"
-            title="settings"
-            className="size-8 text-muted-foreground hover:text-foreground"
-            onClick={onOpenConfig}
-          >
-            <Settings2 className="size-4" />
-          </Button>
-        </div>
+    <header className="chat-header">
+      <div className="chat-persona-avatar" aria-hidden="true">
+        {personaName.slice(0, 1).toUpperCase()}
+        <span className={cn("chat-presence", !live && "is-away")} />
+      </div>
+      <div className="chat-persona">
+        <h1>{personaName}</h1>
+        <p role="status">{live && streaming ? "here with you · thinking" : STATUS[connection]}</p>
+        <SessionPicker slot="persona" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
+      </div>
+      <div className="chat-header-actions">
+        {context && <ContextRing {...context} />}
+        <SessionPicker slot="actions" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
+        <QuickSettings channelKey={activeSessionKey} onOpenSettings={onOpenSettings} />
       </div>
     </header>
   );

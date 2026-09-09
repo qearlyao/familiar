@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { IconDownload, IconPause, IconPlay, IconX } from "./organicIcons";
+import { focusPanel } from "@/lib/focusPanel";
 
 export type PreviewMedia = { src: string; name: string; kind: "image" | "video" };
 
@@ -145,11 +146,7 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
           className="viewer chat-theme"
           data-bare={bare || undefined}
           aria-describedby={undefined}
-          onOpenAutoFocus={(event) => {
-            // Focus the room, not its first control: Safari rings a programmatically focused button.
-            event.preventDefault();
-            if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
-          }}
+          onOpenAutoFocus={focusPanel}
           onCloseAutoFocus={(event) => {
             if (!closedByKey.current) event.preventDefault();
             closedByKey.current = false;

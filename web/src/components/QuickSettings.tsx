@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Popover } from "radix-ui";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { THINKING_ORDER } from "@/lib/thinkingLevels";
+import { focusPanel } from "@/lib/focusPanel";
 import { byGateway, modelLeaf, modelRoute } from "@/lib/modelRoutes";
 import { IconArrow, IconSwitch } from "./organicIcons";
 
@@ -39,7 +40,7 @@ export function QuickSettings({ channelKey, onOpenSettings }: { channelKey?: str
         <span className="label-desktop">switch model</span>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="chat-theme quick-settings" align="end" sideOffset={12} collisionPadding={12}>
+        <Popover.Content className="chat-theme quick-settings" align="end" sideOffset={12} collisionPadding={12} onOpenAutoFocus={focusPanel}>
           <span className="qs-handle" aria-hidden="true" />
           {settings.error && <p role="alert" className="qs-error">{settings.error}</p>}
           <div className="qs-block">

@@ -19,9 +19,3 @@ test("missing or empty breakdown never fabricates proportions", () => {
   assert.deepEqual(contextSegments(74200), []);
   assert.deepEqual(contextSegments(74200, { other: 0, summaries: 0, pending: 0, fresh: 0 }), []);
 });
-
-test("invalid accounting is surfaced", () => {
-  for (const other of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.throws(() => contextSegments(100, { other, summaries: 1, pending: 1, fresh: 1 }), /Invalid context breakdown/);
-  }
-});

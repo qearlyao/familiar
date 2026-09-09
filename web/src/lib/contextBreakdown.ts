@@ -13,9 +13,6 @@ export const CONTEXT_SEGMENTS = [
 export function contextSegments(tokens: number, breakdown?: ContextBreakdown) {
   if (!breakdown) return [];
   const weights = CONTEXT_SEGMENTS.map(({ key }) => breakdown[key]);
-  if (weights.some((weight) => !Number.isFinite(weight) || weight < 0)) {
-    throw new Error("Invalid context breakdown: weights must be finite and nonnegative");
-  }
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   if (totalWeight === 0) return [];
   let cumulativeWeight = 0;

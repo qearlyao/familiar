@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, Popover } from "radix-ui";
 import { fetchSessions, type SessionInfo } from "@/lib/api";
 import { contextSegments, type ContextBreakdown } from "@/lib/contextBreakdown";
+import { focusPanel } from "@/lib/focusPanel";
 import { cn } from "@/lib/utils";
 import { IconChevronDown, IconCheck, IconList, IconX } from "./organicIcons";
 
@@ -45,7 +46,7 @@ export function ContextRing({ tokens, limit, breakdown }: { tokens: number; limi
         <span>{percent}%</span>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="chat-theme ring-popover" align="end" sideOffset={10} collisionPadding={12}>
+        <Popover.Content className="chat-theme ring-popover" align="end" sideOffset={10} collisionPadding={12} onOpenAutoFocus={focusPanel}>
           <span className="ring-popover-label">context window</span>
           <span className="ring-popover-total">
             {tokens.toLocaleString()} / {limit.toLocaleString()}
@@ -139,12 +140,6 @@ function ThreadRows({ sessions, activeKey, onSelect }: {
 
 /** Two triggers, one at a time: the header-right pill on desktop (6a), the chevron under their name
     on a phone (5a). Header mounts both; chat.css hides whichever doesn't match the width. */
-/** Focus the panel, not its first row: Safari rings a programmatically focused button. */
-function focusPanel(event: Event) {
-  event.preventDefault();
-  if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
-}
-
 export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
   sessions: SessionInfo[];
   activeKey: string | undefined;

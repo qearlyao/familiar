@@ -36,6 +36,8 @@
   outline: 2px solid #525833;
   outline-offset: 2px;
 }
+/* portaled panels take focus on open (focusPanel) so Safari can't ring their first control; they must not ring themselves */
+.chat-theme:focus { outline: none; }
 
 @keyframes roomin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .room-view { animation: roomin 0.24s ease both; }
@@ -140,7 +142,6 @@
   z-index: 60; width: 344px; max-height: min(78vh, 560px); border-radius: 24px; background: #e6dfd3;
   border: 1.5px solid rgba(76, 62, 44, 0.18); box-shadow: 0 26px 52px -20px rgba(43, 25, 1, 0.5);
   display: flex; flex-direction: column; overflow: hidden; text-align: left; color: #2b1901;
-  outline: none; /* the panel takes focus on open so Safari can't ring a row; it must not ring itself either */
 }
 .threads-head { flex: none; padding: 15px 18px 11px; display: flex; align-items: baseline; gap: 10px; }
 .threads-head b { font: 18px/1 Caprasimo, Georgia, serif; font-weight: 400; }
@@ -334,6 +335,7 @@
 .chat-user-bubble .chat-audio { padding: 0; background: transparent; gap: 12px; border-radius: 0; }
 .chat-user-bubble .chat-audio-play { width: 36px; height: 36px; background: #2b1901; }
 .chat-user-bubble .chat-audio-wave span { background: rgba(43, 25, 1, 0.42); }
+.chat-user-bubble .chat-audio-wave span.on { background: #2b1901; }
 .chat-user-bubble .chat-audio-time { font-size: 12px; }
 .chat-transcribed,
 .chat-words-toggle {
@@ -791,7 +793,7 @@
   --viewer-ink: #241503; --viewer-sand: #e7e0d5; --viewer-accent: #525833; --viewer-accent-lift: #626841;
   position: fixed; inset: 0; z-index: 51; display: grid; grid-template-rows: auto 1fr auto auto;
   grid-template-areas: "head" "body" "strip" "actions";
-  color: var(--viewer-sand); outline: none;
+  color: var(--viewer-sand);
   padding: max(22px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom));
 }
 /* Grid items default to min-width:auto — a long filename would widen the whole room. */

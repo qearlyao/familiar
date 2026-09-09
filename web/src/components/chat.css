@@ -88,7 +88,8 @@
 .chat-persona p { margin: 0; font-size: 13px; color: #4c3e2c; }
 /* Under 768 the session picker moves under her name (mock 1b) and takes the status line's place —
    keep this in step with DESKTOP in SessionPicker.tsx or the two stack in the gap between them. */
-@media (max-width: 767.98px) { .chat-persona p { display: none; } }
+@media (max-width: 767.98px) { .chat-persona p, .session-pill-trigger { display: none; } }
+@media (min-width: 768px) { .session-trigger { display: none; } }
 .chat-header-actions { flex: none; display: flex; align-items: center; gap: 10px; }
 
 .ring-button {
@@ -321,8 +322,10 @@
 }
 .chat-audio-play { flex: none; width: 40px; height: 40px; border: 0; border-radius: 999px; background: #525833; color: #d6bd8a; display: grid; place-items: center; }
 .chat-audio-wave {
-  flex: 0 1 auto; min-width: 0; height: 34px; display: flex; align-items: center; gap: 2.8px; cursor: pointer;
+  position: relative; flex: 0 1 auto; min-width: 0; height: 34px; display: flex; align-items: center; gap: 2.8px; cursor: pointer;
 }
+.chat-audio-wave input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.chat-audio-wave:has(input:focus-visible) { outline: 2px solid #525833; outline-offset: 4px; border-radius: 999px; }
 .chat-audio-wave span { flex: 1; min-width: 0; border-radius: 999px; background: rgba(76, 62, 44, 0.42); }
 .chat-audio-wave span.on { background: #2b1901; }
 .chat-audio-time { flex: none; font: 12.5px var(--font-mono); color: #4c3e2c; white-space: nowrap; }
@@ -580,18 +583,21 @@
 .model-group:not(:first-child) { margin-top: 10px; }
 .model-route-head { padding: 0 2px 1px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #525833; }
 .model-row {
+  position: relative; cursor: pointer;
   display: flex; align-items: center; gap: 14px; padding: 13px 18px; border-radius: 18px; border: 1.5px solid rgba(76, 62, 44, 0.2); background: transparent;
   color: #4c3e2c; font: 14px var(--font-mono); text-align: left; width: 100%; transition: background 0.15s;
 }
 .model-row:hover { background: rgba(82, 88, 51, 0.12); }
-.model-row:disabled { opacity: 0.6; pointer-events: none; }
+.model-row:has(input:disabled) { opacity: 0.6; pointer-events: none; }
+.model-row input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; pointer-events: none; }
+.model-row:has(input:focus-visible) { outline: 2px solid #525833; outline-offset: 2px; }
 .model-row .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-radio { flex: none; width: 17px; height: 17px; border-radius: 999px; border: 2.5px solid rgba(76, 62, 44, 0.4); display: grid; place-items: center; }
-.model-row[aria-checked="true"] { background: #2b1901; border-color: #2b1901; color: #d3c9ba; }
-.model-row[aria-checked="true"]:hover { background: #2b1901; }
-.model-row[aria-checked="true"] .model-radio { border-color: #d6bd8a; }
-.model-row[aria-checked="true"] .model-radio::after { content: ""; width: 7px; height: 7px; border-radius: 999px; background: #d6bd8a; }
-.model-row[aria-checked="true"] .model-name b { font-weight: 400; color: #d6bd8a; }
+.model-row:has(input:checked) { background: #2b1901; border-color: #2b1901; color: #d3c9ba; }
+.model-row:has(input:checked):hover { background: #2b1901; }
+.model-row:has(input:checked) .model-radio { border-color: #d6bd8a; }
+.model-row:has(input:checked) .model-radio::after { content: ""; width: 7px; height: 7px; border-radius: 999px; background: #d6bd8a; }
+.model-row:has(input:checked) .model-name b { font-weight: 400; color: #d6bd8a; }
 .model-added { margin-left: auto; flex: none; height: 22px; padding: 0 10px; border-radius: 999px; background: rgba(198, 113, 57, 0.16); color: #8a4a1e; font-size: 11px; font-family: Figtree, sans-serif; display: inline-flex; align-items: center; }
 .model-remove { flex: none; width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: inherit; display: grid; place-items: center; }
 .model-remove:hover { background: rgba(43, 25, 1, 0.1); }

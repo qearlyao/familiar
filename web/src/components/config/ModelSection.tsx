@@ -25,7 +25,8 @@ export function ModelRows({
   const row = (model: string) => {
     const route = modelRoute(model, groups.length > 0);
     return (
-          <div key={model} role="radio" aria-checked={model === current} className="model-row" tabIndex={disabled ? -1 : 0} onClick={() => !disabled && onChange(model)} onKeyDown={(e) => { if (!disabled && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onChange(model); } }}>
+          <label key={model} className="model-row">
+            <input type="radio" name={idPrefix} value={model} checked={model === current} disabled={disabled} onChange={() => onChange(model)} />
             <span className="model-radio" />
             <span className="model-name">
               {route && `${route}/`}
@@ -46,7 +47,7 @@ export function ModelRows({
                 <IconX />
               </button>
             )}
-          </div>
+          </label>
     );
   };
 

@@ -75,25 +75,8 @@ export function AudioPlayer({ src, name }: { src: string; name?: string }) {
       <button type="button" className="chat-audio-play" onClick={toggle} aria-label={playing ? "pause" : "play"}>
         {playing ? <IconPause size={15} /> : <IconPlay size={15} />}
       </button>
-      <div
-        className="chat-audio-wave"
-        style={{ width }}
-        role="slider"
-        tabIndex={0}
-        aria-label="seek"
-        aria-valuemin={0}
-        aria-valuemax={duration || 0}
-        aria-valuenow={currentTime}
-        onKeyDown={(event) => {
-          const step = event.key === "ArrowLeft" ? -5 : event.key === "ArrowRight" ? 5 : 0;
-          if (!step) return;
-          seek(currentTime + step);
-        }}
-        onClick={(event) => {
-          const box = event.currentTarget.getBoundingClientRect();
-          seek(((event.clientX - box.left) / box.width) * duration);
-        }}
-      >
+      <div className="chat-audio-wave" style={{ width }}>
+        <input type="range" aria-label="seek" min={0} max={duration || 0} step={0.1} value={currentTime} onChange={(event) => seek(Number(event.target.value))} />
         {Array.from({ length: Math.round(width / 6) }, (_, i) => (
           <span
             key={i}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Dialog, Popover } from "radix-ui";
 import { fetchSessions, type SessionInfo } from "@/lib/api";
 import { contextSegments, type ContextBreakdown } from "@/lib/contextBreakdown";
@@ -76,8 +76,6 @@ export function ContextRing({ tokens, limit, breakdown }: { tokens: number; limi
     each row carrying the last thing said so you recognise a thread by its voice. Desktop drops it
     from the header; a phone raises it as a sheet over the dimmed chat. */
 
-const DESKTOP = () => window.matchMedia("(min-width: 768px)").matches;
-
 function when(ts: number): string {
   const days = Math.floor((Date.now() - ts) / 86_400_000);
   if (days <= 0) return "today";
@@ -140,7 +138,7 @@ function ThreadRows({ sessions, activeKey, onSelect }: {
 }
 
 /** Two triggers, one at a time: the header-right pill on desktop (6a), the chevron under their name
-    on a phone (5a). Header mounts both slots; the one that doesn't match the width renders nothing. */
+    on a phone (5a). Header mounts both; chat.css hides whichever doesn't match the width. */
 /** Focus the panel, not its first row: Safari rings a programmatically focused button. */
 function focusPanel(event: Event) {
   event.preventDefault();
@@ -154,18 +152,11 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
   slot: "persona" | "actions";
 }) {
   const [open, setOpen] = useState(false);
-  const [desktop, setDesktop] = useState(DESKTOP);
+  const desktop = slot === "actions";
   // ponytail: refetch on open so the last lines and rings are fresh; props show until it lands
   const [fresh, setFresh] = useState<SessionInfo[] | null>(null);
   const list = fresh ?? sessions;
   const active = sessions.find((s) => s.key === activeKey);
-
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 768px)");
-    const sync = () => setDesktop(query.matches);
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
 
   function onOpenChange(next: boolean) {
     setOpen(next);
@@ -173,8 +164,6 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
     setFresh(null);
     fetchSessions().then(setFresh).catch((error: unknown) => console.error("[sessions] refresh failed", error));
   }
-
-  if (desktop !== (slot === "actions")) return null;
 
   const pick = (key: string) => { onSelect(key); setOpen(false); };
   const label = active ? sessionLabel(active) : "main chat";

@@ -5,7 +5,7 @@ import { Composer } from "./components/Composer";
 import { Header } from "./components/Header";
 import { MessageList } from "./components/MessageList";
 import { SettingsSurface } from "./components/SettingsSurface";
-import { RailChat, RailDiaries, RailKeepsakes, RailLibrary, RailMakings, RailSettings, RailSkills, RailVoice, IconMore } from "./components/organicIcons";
+import { ShellChrome } from "./components/WebShell";
 import "./components/chat.css";
 
 const now = Date.now();
@@ -293,23 +293,7 @@ export function Playground() {
   const [settings, setSettings] = useState(false);
   const go = (demo: string) => setSettings(demo === "settings");
   return (
-    <div className="familiar-shell flex h-dvh w-full overflow-hidden antialiased">
-      <nav className="room-rail" aria-label="rooms">
-        <button className="room-brand" onClick={() => go("")}>f</button>
-        <div className="room-rail-items">
-          <button aria-current={settings ? undefined : "page"} onClick={() => go("")}><RailChat /></button>
-          <button><RailVoice /></button>
-          <button><RailLibrary /></button>
-          <button><RailDiaries /></button>
-          <button><RailSkills /></button>
-          <button><RailKeepsakes /></button>
-          <button><RailMakings /></button>
-        </div>
-        <div className="room-rail-bottom">
-          <button aria-current={settings ? "page" : undefined} onClick={() => go("settings")}><RailSettings /></button>
-          <div className="room-rail-you" />
-        </div>
-      </nav>
+    <ShellChrome current={settings ? "settings" : "chat"} onNavigate={(target) => go(target === "settings" ? "settings" : "")}>
       <section className="room-surface flex min-w-0 flex-1 flex-col">
         <div key={settings ? "settings" : "chat"} className="chat-room room-view flex h-full min-h-0 flex-col overflow-hidden">
           {settings ? (
@@ -324,13 +308,6 @@ export function Playground() {
           )}
         </div>
       </section>
-      <nav className="room-mobile-nav" aria-label="rooms">
-        <button aria-current={settings ? undefined : "page"} onClick={() => go("")}><RailChat /></button>
-        <button><RailVoice /></button>
-        <button><RailLibrary /></button>
-        <button><RailDiaries /></button>
-        <button><IconMore /></button>
-      </nav>
-    </div>
+    </ShellChrome>
   );
 }

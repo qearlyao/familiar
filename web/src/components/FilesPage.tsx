@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Save } from "lucide-react";
 import {
   MarkdownEditorShell,
@@ -124,7 +124,7 @@ function FileListButton({
   );
 }
 
-export function FilesPage({ nav }: { nav?: ReactNode }) {
+export function FilesPage() {
   const [fileOrder, setFileOrder] = useState<WebFileId[]>([]);
   const [fileRecords, setFileRecords] = useState<FileRecords>({});
   const [selectedId, setSelectedId] = useState<WebFileId>();
@@ -231,7 +231,6 @@ export function FilesPage({ nav }: { nav?: ReactNode }) {
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
         <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          {nav}
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h1 className="font-serif text-2xl leading-none tracking-tight">keepsakes</h1>
             <p className="font-serif text-[0.8rem] italic text-muted-foreground">the names and notes kept close</p>

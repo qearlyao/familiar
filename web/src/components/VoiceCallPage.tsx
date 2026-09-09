@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { Mic, PhoneOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/lib/useChat";
@@ -27,7 +27,7 @@ function assistantText(message: Message | undefined): string {
     .join("");
 }
 
-export function VoiceCallPage({ nav }: { nav?: ReactNode }) {
+export function VoiceCallPage() {
   const chat = useChat();
   const sendRef = useRef(chat.send);
   const latestRef = useRef<Message | undefined>(undefined);
@@ -125,7 +125,6 @@ export function VoiceCallPage({ nav }: { nav?: ReactNode }) {
       <InkField speaking={speaking} level={level} />
       <header className="voice-header relative z-10 px-3 py-4 md:px-8">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          {nav}
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
             <h1 className="font-serif text-2xl leading-none tracking-tight">voice</h1>
             <p className={cn("voice-status", live && "voice-status-live")}>

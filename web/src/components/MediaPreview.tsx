@@ -167,7 +167,6 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
               <Dialog.Title title={current.name}>{current.name}</Dialog.Title>
               <p>{current.kind === "video" ? "a clip" : "a picture"}{media.length > 1 ? ` · ${index + 1} of ${media.length}` : ""}</p>
             </span>
-            {media.length > 1 && <span className="viewer-count">{index + 1} / {media.length}</span>}
           </header>
 
           <div className="viewer-actions">

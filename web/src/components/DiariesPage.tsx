@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, RefreshCw } from "lucide-react";
 import { DiaryListButton } from "@/components/diaries/DiaryListButton";
 import { DiaryReader } from "@/components/diaries/DiaryReader";
@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { fetchDiaries, fetchDiary, type DiaryEntry, type DiarySummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export function DiariesPage({ nav }: { nav?: ReactNode }) {
+export function DiariesPage() {
   const [diaries, setDiaries] = useState<DiarySummary[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [entry, setEntry] = useState<DiaryEntry | undefined>();
@@ -67,7 +67,6 @@ export function DiariesPage({ nav }: { nav?: ReactNode }) {
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
         <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          {nav}
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h1 className="font-serif text-2xl leading-none tracking-tight">diaries</h1>
             <p className="font-serif text-[0.8rem] italic text-muted-foreground">written days, kept close</p>

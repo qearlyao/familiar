@@ -1,17 +1,21 @@
 import { useRef } from "react";
 import { Composer, type ComposerHandle } from "./Composer";
 import { DiaryShelf } from "./diaries/DiaryShelf";
+import { SkillShelf } from "./SkillShelf";
 import { Header } from "./Header";
 import { MessageList } from "./MessageList";
 import { SettingsSurface } from "./SettingsSurface";
 import { useChat } from "@/lib/useChat";
 import type { WebAuthDevice } from "@/lib/api";
 
+/** the rooms that can be held open beside the talk instead of replacing it */
+export type ShelfName = "diaries" | "skills";
+
 export function Chat({
   settingsOpen,
   onSettingsOpenChange,
-  shelfOpen,
-  onShelfOpenChange,
+  shelf,
+  onShelfChange,
   onOpenArchive,
   authMode,
   authDevice,
@@ -19,9 +23,9 @@ export function Chat({
 }: {
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
-  shelfOpen: boolean;
-  onShelfOpenChange: (open: boolean) => void;
-  onOpenArchive: () => void;
+  shelf: ShelfName | undefined;
+  onShelfChange: (shelf: ShelfName | undefined) => void;
+  onOpenArchive: (page: ShelfName) => void;
   authMode?: string;
   authDevice?: WebAuthDevice;
   onSignedOut?: () => void;
@@ -80,14 +84,21 @@ export function Chat({
           <Composer onSend={send} onAbort={abort} streaming={streaming} handle={composer} />
         </>)}
       </div>
-      {!settingsOpen && (
+      {/* both stay mounted so a closing sheet can run its exit */}
+      {!settingsOpen && (<>
         <DiaryShelf
-          open={shelfOpen}
-          onClose={() => onShelfOpenChange(false)}
+          open={shelf === "diaries"}
+          onClose={() => onShelfChange(undefined)}
           onInsert={(text) => composer.current?.append(text)}
-          onOpenArchive={onOpenArchive}
+          onOpenArchive={() => onOpenArchive("diaries")}
         />
-      )}
+        <SkillShelf
+          open={shelf === "skills"}
+          onClose={() => onShelfChange(undefined)}
+          personaName={personaName}
+          onOpenArchive={() => onOpenArchive("skills")}
+        />
+      </>)}
     </div>
   );
 }

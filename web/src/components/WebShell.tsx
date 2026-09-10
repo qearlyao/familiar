@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
 import { ContactCard } from "./ContactCard";
-import { Chat } from "./Chat";
+import { Chat, type ShelfName } from "./Chat";
 import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
 import { GalleryPage } from "./GalleryPage";
@@ -132,7 +132,7 @@ export function WebShell({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
-  const [shelfOpen, setShelfOpen] = useState(false);
+  const [shelf, setShelf] = useState<ShelfName | undefined>();
   const [mounted, setMounted] = useState<Set<ShellPage>>(() => new Set(["chat"]));
 
   const open = (page: ShellPage) => {
@@ -141,7 +141,7 @@ export function WebShell({
     setSettingsOpen(false);
   };
 
-  const showing = shelfOpen && selectedPage === "chat" && !settingsOpen;
+  const showing = selectedPage === "chat" && !settingsOpen ? shelf : undefined;
 
   const navigate = (target: NavTarget) => {
     if (target === "settings") {
@@ -149,29 +149,29 @@ export function WebShell({
       setSettingsOpen(true);
       return;
     }
-    // diaries arrive as a shelf over the talk (Chat 1a); the archive is a room you go into from there.
-    // the rail pill is the shelf's own toggle — press it again and the shelf goes away.
-    if (target === "diaries") {
-      setShelfOpen(!showing);
+    // diaries and skills arrive as a shelf over the talk (Chat 1a); the full room is somewhere
+    // you go into from there. the rail pill is the shelf's own toggle — press it again and it goes.
+    if (target === "diaries" || target === "skills") {
+      setShelf(showing === target ? undefined : target);
       setSelectedPage("chat");
       setSettingsOpen(false);
       return;
     }
-    setShelfOpen(false);
+    setShelf(undefined);
     open(target);
   };
 
   return (
-    <ShellChrome current={settingsOpen ? "settings" : showing ? "diaries" : selectedPage} onNavigate={navigate}>
+    <ShellChrome current={settingsOpen ? "settings" : (showing ?? selectedPage)} onNavigate={navigate}>
       <section className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>
         <Chat
           settingsOpen={settingsOpen}
           onSettingsOpenChange={setSettingsOpen}
-          shelfOpen={shelfOpen}
-          onShelfOpenChange={setShelfOpen}
-          onOpenArchive={() => {
-            setShelfOpen(false);
-            open("diaries");
+          shelf={shelf}
+          onShelfChange={setShelf}
+          onOpenArchive={(page) => {
+            setShelf(undefined);
+            open(page);
           }}
           authMode={authMode}
           authDevice={authDevice}

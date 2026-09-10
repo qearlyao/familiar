@@ -194,10 +194,10 @@
 @keyframes sheet-fall { to { transform: translateY(100%); } }
 @keyframes sheet-dim-in { from { opacity: 0; } }
 @keyframes sheet-dim-out { to { opacity: 0; } }
-.diary-shelf.is-sheet[data-state="open"], .quick-settings.is-sheet[data-state="open"], .threads.is-sheet[data-state="open"] {
+.shelf.is-sheet[data-state="open"], .quick-settings.is-sheet[data-state="open"], .threads.is-sheet[data-state="open"] {
   animation: sheet-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.diary-shelf.is-sheet[data-state="closed"], .quick-settings.is-sheet[data-state="closed"], .threads.is-sheet[data-state="closed"] {
+.shelf.is-sheet[data-state="closed"], .quick-settings.is-sheet[data-state="closed"], .threads.is-sheet[data-state="closed"] {
   animation: sheet-fall 0.2s cubic-bezier(0.4, 0, 1, 1) both;
 }
 .sheet-dim[data-state="open"] { animation: sheet-dim-in 0.24s ease both; }
@@ -208,7 +208,7 @@
   box-shadow: 0 -20px 44px -22px rgba(43, 25, 1, 0.6);
 }
 .is-sheet .qs-handle { display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 999px; background: rgba(76, 62, 44, 0.3); }
-.diary-shelf.is-sheet {
+.shelf.is-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; width: auto; margin: 0;
   max-height: 82dvh; border-radius: 30px 30px 0 0; padding: 12px 18px max(20px, env(safe-area-inset-bottom)); gap: 14px;
   box-shadow: 0 -24px 50px -22px rgba(43, 25, 1, 0.6);
@@ -217,6 +217,11 @@
 .is-sheet .shelf-head b { font-size: 21px; }
 .is-sheet .shelf-days { gap: 7px; }
 .is-sheet .shelf-day { padding: 11px 14px; }
+.is-sheet .shelf-skills { gap: 8px; }
+.is-sheet .shelf-skill { padding: 12px 14px; }
+.is-sheet .shelf-switch { width: 48px; height: 30px; }
+.is-sheet .shelf-switch::before { width: 24px; height: 24px; }
+.is-sheet .is-listed .shelf-switch::before { transform: translateX(18px); }
 .is-sheet .shelf-bring { height: 48px; font-size: 14.5px; }
 
 .switch-model-button {
@@ -227,9 +232,9 @@
 
 .chat-divider { flex: none; height: 1px; margin: 0 44px; background: linear-gradient(to right, rgba(76, 62, 44, 0.32), rgba(76, 62, 44, 0)); }
 
-/* ---------- diaries shelf (Diaries 1c, Chat 1a) ---------- */
-/* Desktop: an inline column beside the talk. Phone: the same panel raised as a sheet. */
-.diary-shelf {
+/* ---------- the shelf: a room held open beside the talk (Chat 1a) ---------- */
+/* Desktop: an inline column beside the talk. Narrower: the same panel raised as a sheet. */
+.shelf {
   flex: none; width: 330px; margin: 12px 12px 12px 0; padding: 24px 22px; border-radius: 22px;
   background: #4c3e2c; color: #d3c9ba; display: flex; flex-direction: column; gap: 18px; overflow: hidden;
   animation: roomin 0.2s ease both;
@@ -274,6 +279,36 @@
   margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(211, 201, 186, 0.72); text-wrap: pretty;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
 }
+
+/* skills (Skills 1a): the whole row is the switch — listed for them, or kept aside. */
+.shelf-skills { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; }
+.shelf-skills .shelf-label { padding-top: 5px; }
+.shelf-skills .shelf-label:first-child { padding-top: 0; }
+.shelf-skill {
+  flex: none; width: 100%; padding: 13px 14px; border: 0; border-radius: 16px; font: inherit; text-align: left;
+  background: rgba(211, 201, 186, 0.08); color: #d3c9ba; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: background 0.15s;
+}
+.shelf-skill.is-listed { background: rgba(214, 189, 138, 0.16); }
+.shelf-skill:hover { background: rgba(211, 201, 186, 0.16); }
+.shelf-skill.is-listed:hover { background: rgba(214, 189, 138, 0.24); }
+.shelf-skill-lines { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.shelf-skill-lines b { font: 15.5px/1.2 Caprasimo, Georgia, serif; font-weight: 400; }
+.shelf-skill-lines em {
+  font-style: normal; font-size: 12px; line-height: 1.45; color: #c9bfaf; text-wrap: pretty;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.shelf-switch {
+  margin-left: auto; flex: none; width: 42px; height: 25px; padding: 3px; border-radius: 999px;
+  background: rgba(211, 201, 186, 0.22); display: flex; transition: background 0.15s;
+}
+.shelf-switch::before {
+  content: ""; width: 19px; height: 19px; border-radius: 999px; background: rgba(211, 201, 186, 0.6);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s;
+}
+.is-listed .shelf-switch { background: #d6bd8a; }
+.is-listed .shelf-switch::before { background: #2b1901; transform: translateX(17px); }
+.shelf-hint { font-size: 11.5px; line-height: 1.5; color: #c9bfaf; }
 
 .shelf-foot { flex: none; margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
 .shelf-bring {
@@ -845,7 +880,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .room-view, .chat-presence, .tool-dot, .tool-pill svg, .composer-rec-dot, .composer-rec-bars i { animation: none; }
-  .diary-shelf, .diary-shelf.is-sheet[data-state],
+  .shelf, .shelf.is-sheet[data-state],
   .quick-settings.is-sheet[data-state], .threads.is-sheet[data-state], .sheet-dim[data-state] { animation: none; }
 }
 

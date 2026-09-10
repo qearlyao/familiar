@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
-import { Dialog } from "radix-ui";
 import { fetchDiaries, type DiarySummary } from "@/lib/api";
 import { diaryDateParts } from "@/lib/diaries/format";
-import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { Sheet } from "../Sheet";
-import { IconCheck, IconX } from "../organicIcons";
+import { Shelf } from "../Shelf";
+import { IconCheck } from "../organicIcons";
 
 /** Diaries 1c + Chat 1a: the last seven days, held open over the talk. Ticking days
     drops a note in the draft naming them — the agent decides whether to recall them
-    or open the pages in full. Reading a day properly is the archive's job.
-
-    Desktop keeps it inline beside the talk, so it stays a plain aside; a phone raises the
-    same panel as a sheet, which wants a dialog's overlay, focus trap and exit run. */
+    or open the pages in full. Reading a day properly is the archive's job. */
 
 const DAY_COUNT = 7;
 
@@ -51,11 +46,6 @@ export function DiaryShelf({
   onInsert: (text: string) => void;
   onOpenArchive: () => void;
 }) {
-  // The shelf takes 354px off the talk, so it goes to a sheet long before the rail does — the
-  // conversation is what has to stay readable, not the column beside it. Under 1200 the header
-  // starts wrapping its status line, so that is where the shelf stops being a column. (The mock
-  // draws this layout at 1240.)
-  const sheet = useMediaQuery("(max-width: 1199.98px)");
   const [written, setWritten] = useState<Map<string, DiarySummary>>(new Map());
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
@@ -88,19 +78,8 @@ export function DiaryShelf({
     onClose();
   };
 
-  const heading = <b>diaries</b>;
-  const panel = (
-    <>
-      <span className="shelf-grab" aria-hidden />
-      <header className="shelf-head">
-        <div>
-          {sheet ? <Dialog.Title asChild>{heading}</Dialog.Title> : heading}
-          <span>the days they wrote down</span>
-        </div>
-        <button type="button" className="shelf-close" aria-label="close the shelf" title="close the shelf" onClick={onClose}>
-          <IconX size={15} />
-        </button>
-      </header>
+  return (
+    <Shelf open={open} onClose={onClose} title="diaries" sub="the days they wrote down">
       <span className="shelf-label">the last seven days</span>
       {error && <p className="shelf-note" role="alert">the shelf wouldn’t open · {error}</p>}
       <div className="shelf-days">
@@ -138,21 +117,6 @@ export function DiaryShelf({
         </button>
         <button type="button" className="shelf-archive" onClick={onOpenArchive}>open the archive →</button>
       </div>
-    </>
-  );
-
-  if (sheet) {
-    return (
-      <Sheet open={open} onOpenChange={(next) => !next && onClose()} className="diary-shelf">
-        {panel}
-      </Sheet>
-    );
-  }
-
-  if (!open) return null;
-  return (
-    <aside className="diary-shelf" aria-label="diaries">
-      {panel}
-    </aside>
+    </Shelf>
   );
 }

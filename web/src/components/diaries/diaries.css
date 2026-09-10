@@ -157,10 +157,14 @@
 
   .diaries-room { flex-direction: column; gap: 0; padding: 20px 18px 0; overflow: hidden; }
   .diaries-side { width: auto; flex: none; gap: 14px; overflow: visible; }
+  .cal-step { width: 38px; height: 38px; border: 0; background: rgba(82, 88, 51, 0.16); }
+  .cal-step:disabled { border: 0; background: rgba(82, 88, 51, 0.08); }
+  .cal-step svg { width: 15px; height: 15px; }
   .cal-day { height: 40px; border-radius: 12px; }
   .diaries-legend { display: none; }
+  .diaries-chips span { height: 26px; padding: 0 11px; font-size: 11.5px; }
   .diaries-open {
-    flex: 1; min-height: 0; margin: 16px -18px 0;
+    flex: 1; min-height: 0; gap: 13px; margin: 16px -18px 0;
     padding: 20px 18px max(18px, env(safe-area-inset-bottom));
     border-radius: 28px 28px 0 0;
   }

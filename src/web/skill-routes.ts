@@ -1,5 +1,5 @@
-import { lstat, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import {
 	type LoadSkillsResult,
@@ -30,6 +30,12 @@ export interface WebSkillEntry extends WebSkillSummary {
 	content: string;
 }
 
+/** one file out of a folder being brought onto the desk, its path relative to that folder */
+export interface SkillImportFile {
+	path: string;
+	content: string;
+}
+
 interface SkillDraft {
 	name: string;
 	description: string;
@@ -48,6 +54,7 @@ interface DiscoveredWebSkills {
 }
 
 const MAX_WEB_SKILL_BODY_BYTES = 1024 * 1024;
+const MAX_WEB_SKILL_IMPORT_BYTES = 4 * 1024 * 1024;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function registerWebSkillRoutes(route: RegisterWebRoute, config: Config): void {
@@ -64,6 +71,19 @@ export function registerWebSkillRoutes(route: RegisterWebRoute, config: Config):
 		const body = await readJsonBody(request, MAX_WEB_SKILL_BODY_BYTES);
 		const { id, draft } = skillUpdateFromBody(body);
 		sendJson(response, 200, { skill: await writeWebSkill(config, id, draft) });
+	});
+
+	route("POST", "/api/web/skills/import", async (request, response) => {
+		const body = await readJsonBody(request, MAX_WEB_SKILL_IMPORT_BYTES);
+		const { folder, files } = skillImportFromBody(body);
+		sendJson(response, 200, { skill: await importWebSkillFolder(config, folder, files) });
+	});
+
+	route("DELETE", "/api/web/skill", async (request, response) => {
+		const body = await readJsonBody(request, MAX_WEB_SKILL_BODY_BYTES);
+		if (!isRecord(body) || typeof body.id !== "string") throw new HttpError(400, "skill id is required");
+		await deleteWebSkill(config, body.id);
+		sendJson(response, 200, { ok: true });
 	});
 
 	route("PUT", "/api/web/skill/enabled", async (request, response) => {
@@ -93,11 +113,52 @@ export async function readWebSkill(config: Config, id: string): Promise<WebSkill
 export async function writeWebSkill(config: Config, id: string, draft: SkillDraft): Promise<WebSkillEntry> {
 	validateSkillDraft(draft);
 	const root = skillsRoot(config);
-	const path = await editableSkillPath(root, id);
+	// a file that isn't there yet is a file being started, not an error
+	const path = await editableSkillPath(root, id, true);
 	const current = await readSkillFile(path);
 	await mkdir(dirname(path), { recursive: true });
 	await writeFile(path, formatSkillMarkdown(draft, current.frontmatter), "utf8");
 	return readSkillPayload(root, path, discoverWebSkills(root).diagnosticsByPath);
+}
+
+/** A folder off the disk, brought onto the desk whole: SKILL.md and whatever sits beside it. */
+export async function importWebSkillFolder(
+	config: Config,
+	folder: string,
+	files: SkillImportFile[],
+): Promise<WebSkillEntry> {
+	if (!SKILL_NAME_RE.test(folder)) {
+		throw new HttpError(400, "folder name must use lowercase letters, numbers, and single hyphens");
+	}
+	if (!files.some((file) => file.path === "SKILL.md")) throw new HttpError(400, "the folder needs a SKILL.md");
+	const root = skillsRoot(config);
+	const dir = resolve(root, folder);
+	if (await exists(dir)) throw new HttpError(409, `${folder} is already on the desk`);
+	for (const file of files) {
+		const path = resolve(dir, file.path);
+		const inside = relative(dir, path);
+		if (!inside || inside.startsWith("..") || isAbsolute(inside)) throw new HttpError(400, `bad path: ${file.path}`);
+		await mkdir(dirname(path), { recursive: true });
+		await writeFile(path, file.content, "utf8");
+	}
+	return readSkillPayload(root, resolve(dir, "SKILL.md"), discoverWebSkills(root).diagnosticsByPath);
+}
+
+async function exists(path: string): Promise<boolean> {
+	try {
+		await lstat(path);
+		return true;
+	} catch (error) {
+		if (isEnoent(error)) return false;
+		throw error;
+	}
+}
+
+/** A skill is its folder when it lives in one, and the lone file when it doesn't. */
+export async function deleteWebSkill(config: Config, id: string): Promise<void> {
+	const root = skillsRoot(config);
+	const path = await editableSkillPath(root, id);
+	await rm(dirname(path) === root ? path : dirname(path), { recursive: true, force: true });
 }
 
 export async function setWebSkillEnabled(config: Config, id: string, enabled: boolean): Promise<WebSkillEntry> {
@@ -186,8 +247,12 @@ async function readSkillPayload(
 }
 
 async function readSkillFile(path: string): Promise<ParsedSkillMarkdown> {
-	const raw = await readFile(path, "utf8");
-	return parseSkillMarkdown(raw);
+	try {
+		return parseSkillMarkdown(await readFile(path, "utf8"));
+	} catch (error) {
+		if (isEnoent(error)) return { frontmatter: {}, body: "" };
+		throw error;
+	}
 }
 
 function parseSkillMarkdown(raw: string): ParsedSkillMarkdown {
@@ -229,7 +294,7 @@ function isEditableSkillPath(root: string, path: string): boolean {
 	return basename(path) === "SKILL.md" || (dirname(path) === root && extname(path).toLowerCase() === ".md");
 }
 
-async function editableSkillPath(root: string, id: string): Promise<string> {
+async function editableSkillPath(root: string, id: string, allowMissing = false): Promise<string> {
 	if (!id.trim() || id.includes("\0")) throw new HttpError(400, "skill id is required");
 	const path = resolve(root, id);
 	if (!isEditableSkillPath(root, path)) {
@@ -240,6 +305,7 @@ async function editableSkillPath(root: string, id: string): Promise<string> {
 		if (linkStat.isSymbolicLink()) throw new HttpError(403, "skill symlinks cannot be edited from the web");
 		if (!linkStat.isFile()) throw new HttpError(404, "skill not found");
 	} catch (error) {
+		if (isEnoent(error) && allowMissing) return path;
 		if (isEnoent(error)) throw new HttpError(404, "skill not found");
 		throw error;
 	}
@@ -261,6 +327,18 @@ function skillUpdateFromBody(body: unknown): { id: string; draft: SkillDraft } {
 			content: body.content,
 		},
 	};
+}
+
+function skillImportFromBody(body: unknown): { folder: string; files: SkillImportFile[] } {
+	if (!isRecord(body) || typeof body.folder !== "string") throw new HttpError(400, "folder name is required");
+	if (!Array.isArray(body.files) || body.files.length === 0) throw new HttpError(400, "the folder is empty");
+	const files = body.files.map((file) => {
+		if (!isRecord(file) || typeof file.path !== "string" || typeof file.content !== "string") {
+			throw new HttpError(400, "each imported file needs a path and its text");
+		}
+		return { path: file.path, content: file.content };
+	});
+	return { folder: body.folder, files };
 }
 
 function skillEnabledUpdateFromBody(body: unknown): { id: string; enabled: boolean } {

@@ -16,6 +16,7 @@ export function Header({
   sessions,
   activeSessionKey,
   onSelectSession,
+  onNewChat,
   onOpenSettings,
   streaming,
 }: {
@@ -24,6 +25,7 @@ export function Header({
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
   onSelectSession: (key: string) => void;
+  onNewChat: () => void;
   onOpenSettings: () => void;
   streaming: boolean;
 }) {
@@ -39,11 +41,11 @@ export function Header({
       <div className="chat-persona">
         <h1>{personaName}</h1>
         <p role="status">{live && streaming ? "here with you · thinking" : STATUS[connection]}</p>
-        <SessionPicker slot="persona" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
+        <SessionPicker slot="persona" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} onNewChat={onNewChat} />
       </div>
       <div className="chat-header-actions">
         {context && <ContextRing {...context} />}
-        <SessionPicker slot="actions" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} />
+        <SessionPicker slot="actions" sessions={sessions} activeKey={activeSessionKey} onSelect={onSelectSession} onNewChat={onNewChat} />
         <QuickSettings channelKey={activeSessionKey} onOpenSettings={onOpenSettings} />
       </div>
     </header>

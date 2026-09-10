@@ -53,11 +53,14 @@ const MOBILE_SECONDARY: NavTarget[] = ["files", "gallery", "skills", "settings"]
 /** the rail and the mobile bar around whatever surfaces are showing. */
 export function ShellChrome({
   current,
+  held,
   pushed,
   onNavigate,
   children,
 }: {
   current: NavTarget;
+  /** a room whose shelf is held open over the talk — marked apart from the room you're in */
+  held?: NavTarget;
   /** a room entered from a shelf carries its own back arrow, so the phone bar steps aside */
   pushed?: boolean;
   onNavigate: (target: NavTarget) => void;
@@ -102,7 +105,8 @@ export function ShellChrome({
         <button className="room-brand" aria-label="home" onClick={() => go("chat")}>f</button>
         <div className="room-rail-items">
           {ROOMS.map(({ id, label, rail: Icon }) => (
-            <button key={id} type="button" title={label} aria-label={label} aria-current={current === id ? "page" : undefined} onClick={() => go(id)}>
+            <button key={id} type="button" title={label} aria-label={label} aria-current={current === id ? "page" : undefined}
+              data-held={held === id ? "" : undefined} onClick={() => go(id)}>
               <Icon />
             </button>
           ))}
@@ -183,8 +187,9 @@ export function WebShell({
 
   return (
     <ShellChrome
-      current={settingsOpen ? "settings" : (showing ?? selectedPage)}
-      pushed={selectedPage === "diaries" && !settingsOpen}
+      current={settingsOpen ? "settings" : selectedPage}
+      held={showing}
+      pushed={(selectedPage === "diaries" || selectedPage === "skills") && !settingsOpen}
       onNavigate={navigate}
     >
       <section className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>

@@ -83,7 +83,7 @@ export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => vo
     <div className={cn("diaries-room chat-theme", searching && "is-searching", full && "is-full")}>
       <header className="diaries-bar">
         <button type="button" aria-label="back to the talk" title="back to the talk" onClick={onBack}>
-          <IconChevronLeft size={17} />
+          <IconChevronLeft size={16} />
         </button>
         <b>diaries</b>
         <button
@@ -93,7 +93,7 @@ export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => vo
           aria-pressed={searching}
           onClick={() => setSearching((on) => !on)}
         >
-          <IconSearch size={17} />
+          <IconSearch size={16} />
         </button>
       </header>
       <aside className="diaries-side">
@@ -166,7 +166,7 @@ export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => vo
                   aria-pressed={full}
                   onClick={() => setFull((on) => !on)}
                 >
-                  <IconExpand size={17} />
+                  <IconExpand size={18} />
                 </button>
               </div>
             </header>

@@ -240,6 +240,23 @@ export async function saveSkill(
   return body.skill;
 }
 
+export async function importSkillFolder(
+  folder: string,
+  files: { path: string; content: string }[],
+): Promise<WebSkillEntry> {
+  const body = await jsonRequest<{ skill: WebSkillEntry }>(
+    "/api/web/skills/import",
+    "POST",
+    { folder, files },
+    "skills/import",
+  );
+  return body.skill;
+}
+
+export async function deleteSkill(id: string): Promise<void> {
+  await jsonRequest<{ ok: boolean }>("/api/web/skill", "DELETE", { id }, "skill");
+}
+
 export async function setSkillEnabled(id: string, enabled: boolean): Promise<WebSkillEntry> {
   const body = await jsonRequest<{ skill: WebSkillEntry }>(
     "/api/web/skill/enabled",

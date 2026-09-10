@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Dialog, Popover } from "radix-ui";
-import { fetchSessions, type SessionInfo } from "@/lib/api";
+import { fetchSessions, startNewChat, type SessionInfo } from "@/lib/api";
 import { contextSegments, type ContextBreakdown } from "@/lib/contextBreakdown";
 import { focusPanel } from "@/lib/focusPanel";
 import { Sheet } from "./Sheet";
 import { cn } from "@/lib/utils";
-import { IconChevronDown, IconCheck, IconList, IconX } from "./organicIcons";
+import { IconChevronDown, IconCheck, IconList, IconPlus, IconX } from "./organicIcons";
 
 function sessionLabel(s: SessionInfo): string {
   if (s.label) return s.label.toLowerCase();
@@ -91,7 +91,7 @@ function when(ts: number): string {
 function RingArc({ tokens, limit }: { tokens: number; limit: number }) {
   const fraction = Math.min(tokens / Math.max(limit, 1), 1);
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" style={{ transform: "rotate(-90deg)", flex: "none" }} aria-hidden="true">
+    <svg className="thread-ring" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r={RING_R} fill="none" stroke="rgba(76,62,44,.28)" strokeWidth="4" />
       <circle cx="12" cy="12" r={RING_R} fill="none" stroke="#525833" strokeWidth="4" strokeLinecap="round"
         strokeDasharray={`${RING_C * fraction} ${RING_C}`} />
@@ -141,13 +141,17 @@ function ThreadRows({ sessions, activeKey, onSelect }: {
 
 /** Two triggers, one at a time: the header-right pill on desktop (6a), the chevron under their name
     on a phone (5a). Header mounts both; chat.css hides whichever doesn't match the width. */
-export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
+export function SessionPicker({ sessions, activeKey, onSelect, onNewChat, slot }: {
   sessions: SessionInfo[];
   activeKey: string | undefined;
   onSelect: (key: string) => void;
+  /** the thread starts over: `/new` on the session you're already in, not a second one */
+  onNewChat: () => void;
   slot: "persona" | "actions";
 }) {
   const [open, setOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [asking, setAsking] = useState(false);
   const desktop = slot === "actions";
   // ponytail: refetch on open so the last lines and rings are fresh; props show until it lands
   const [fresh, setFresh] = useState<SessionInfo[] | null>(null);
@@ -156,12 +160,50 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
 
   function onOpenChange(next: boolean) {
     setOpen(next);
+    setAsking(false);
     if (!next) return;
     setFresh(null);
     fetchSessions().then(setFresh).catch((error: unknown) => console.error("[sessions] refresh failed", error));
   }
 
   const pick = (key: string) => { onSelect(key); setOpen(false); };
+
+  async function startFresh() {
+    if (!activeKey || starting) return;
+    setStarting(true);
+    try {
+      await startNewChat(activeKey);
+      onNewChat();
+      setOpen(false);
+    } catch (error) {
+      console.error("[sessions] new chat failed", error);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  const foot = (
+    <div className="threads-foot">
+      {asking ? (
+        <>
+          <p className="threads-warn">this clears their context. the talk stays up here — they just won't remember it.</p>
+          <div className="threads-ask">
+            <button type="button" className="threads-new" disabled={starting} onClick={() => void startFresh()}>
+              {starting ? "starting…" : "start fresh"}
+            </button>
+            <button type="button" className="threads-nevermind" disabled={starting} onClick={() => setAsking(false)}>
+              never mind
+            </button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="threads-new" disabled={!activeKey} onClick={() => setAsking(true)}>
+          <IconPlus />
+          start a new chat
+        </button>
+      )}
+    </div>
+  );
   const label = active ? sessionLabel(active) : "main chat";
   if (desktop) {
     return (
@@ -184,6 +226,7 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
               <span>{list.length} with them · one at a time</span>
             </header>
             <ThreadRows sessions={list} activeKey={activeKey} onSelect={pick} />
+            {foot}
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
@@ -200,6 +243,7 @@ export function SessionPicker({ sessions, activeKey, onSelect, slot }: {
         <Dialog.Close className="threads-close" aria-label="close"><IconX size={16} /></Dialog.Close>
       </header>
       <ThreadRows sessions={list} activeKey={activeKey} onSelect={pick} />
+      {foot}
     </Sheet>
   );
 }

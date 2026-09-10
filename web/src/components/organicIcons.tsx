@@ -64,9 +64,9 @@ export const RailSettings = glyph(
 );
 export const IconMore = glyph(
   <>
-    <circle cx="5" cy="12" r="1.2" fill="currentColor" />
-    <circle cx="12" cy="12" r="1.2" fill="currentColor" />
-    <circle cx="19" cy="12" r="1.2" fill="currentColor" />
+    <circle cx="5" cy="12" r="1.6" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+    <circle cx="19" cy="12" r="1.6" fill="currentColor" />
   </>,
 );
 
@@ -85,6 +85,19 @@ export const IconSwitch = glyph(
   </>,
 );
 export const IconArrow = glyph(<path d="M5 12h13M12 5l7 7-7 7" />);
+export const IconInfo = glyph(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v.01M12 11v5" />
+  </>,
+);
+export const IconFolderUp = glyph(
+  <>
+    <path d="M4 19V6a2 2 0 0 1 2-2h3.5l2 2.5H18a2 2 0 0 1 2 2V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z" />
+    <path d="M12 16v-6M9.5 12.5 12 10l2.5 2.5" />
+  </>,
+);
+export const IconPlus = glyph(<path d="M12 5v14M5 12h14" />);
 export const IconX = glyph(<path d="M18 6 6 18M6 6l12 12" />);
 export const IconAgain = glyph(
   <>

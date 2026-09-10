@@ -43,6 +43,11 @@ export function Shelf({ open, onClose, title, sub, children }: {
       </Sheet>
     );
   }
-  if (!open) return null;
-  return <aside className="shelf" aria-label={title}>{panel}</aside>;
+  // both shelves stay mounted in the slot so swapping one for the other is a cross-fade,
+  // not a blink; `inert` keeps the one underneath out of reach of a tab or a screen reader.
+  return (
+    <aside className="shelf" aria-label={title} data-shown={open ? "" : undefined} inert={!open}>
+      {panel}
+    </aside>
+  );
 }

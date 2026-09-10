@@ -300,7 +300,7 @@ export function Playground() {
             <SettingsSurface channelKey="web:main" onClose={() => go("")} />
           ) : (
             <>
-              <Header connection="open" personaName="ghost" sessions={sessions} activeSessionKey="web:main" onSelectSession={() => undefined} onOpenSettings={() => go("settings")} streaming={false} />
+              <Header connection="open" personaName="ghost" sessions={sessions} activeSessionKey="web:main" onSelectSession={() => undefined} onNewChat={() => undefined} onOpenSettings={() => go("settings")} streaming={false} />
               <div className="chat-divider" />
               <MessageList messages={fixtures} personaName="ghost" historyLoaded={true} />
               <Composer onSend={async () => undefined} onAbort={() => undefined} streaming={false} />

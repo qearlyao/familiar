@@ -6,7 +6,14 @@ import { describe, it } from "node:test";
 import { parse as parseYaml } from "yaml";
 
 import { HttpError } from "../src/web/http.js";
-import { listWebSkills, readWebSkill, setWebSkillEnabled, writeWebSkill } from "../src/web/skill-routes.js";
+import {
+	deleteWebSkill,
+	importWebSkillFolder,
+	listWebSkills,
+	readWebSkill,
+	setWebSkillEnabled,
+	writeWebSkill,
+} from "../src/web/skill-routes.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function configWithWorkspace(t: Parameters<typeof configWithDataDir>[0]) {
@@ -257,6 +264,73 @@ ignored body
 		assert.deepEqual(
 			skills.map((skill) => skill.id),
 			["visible.md"],
+		);
+	});
+
+	it("starts a file that isn't there yet, and deletes a skill with its folder", async (t) => {
+		const config = await configWithWorkspace(t);
+		const started = await writeWebSkill(config, "read-aloud.md", {
+			name: "read-aloud",
+			description: "when I ask her to read a passage back to me",
+			enabled: true,
+			content: "# read aloud\n",
+		});
+		assert.equal(started.id, "read-aloud.md");
+		assert.equal(started.content, "# read aloud\n");
+
+		await mkdir(resolve(config.workspacePath, "skills", "diary-keeper"), { recursive: true });
+		await writeFile(
+			resolve(config.workspacePath, "skills", "diary-keeper", "SKILL.md"),
+			"---\nname: diary-keeper\ndescription: Keeps the diary\n---\n\nbody\n",
+			"utf8",
+		);
+		assert.deepEqual((await listWebSkills(config)).map((skill) => skill.id), [
+			"diary-keeper/SKILL.md",
+			"read-aloud.md",
+		]);
+
+		await deleteWebSkill(config, "diary-keeper/SKILL.md");
+		await deleteWebSkill(config, "read-aloud.md");
+		assert.deepEqual(await listWebSkills(config), []);
+		await assert.rejects(() => deleteWebSkill(config, "read-aloud.md"), (error) => {
+			assert.equal((error as HttpError).status, 404);
+			return true;
+		});
+	});
+
+	it("imports a folder whole and refuses a bad one", async (t) => {
+		const config = await configWithWorkspace(t);
+		const imported = await importWebSkillFolder(config, "read-aloud", [
+			{ path: "SKILL.md", content: "---\nname: read-aloud\ndescription: reading back\n---\n\nbody\n" },
+			{ path: "notes/voices.md", content: "slow\n" },
+		]);
+		assert.equal(imported.id, "read-aloud/SKILL.md");
+		assert.equal(imported.description, "reading back");
+		assert.equal(
+			await readFile(resolve(config.workspacePath, "skills", "read-aloud", "notes", "voices.md"), "utf8"),
+			"slow\n",
+		);
+
+		await assert.rejects(
+			() => importWebSkillFolder(config, "read-aloud", [{ path: "SKILL.md", content: "x" }]),
+			(error) => {
+				assert.equal((error as HttpError).status, 409);
+				return true;
+			},
+		);
+		await assert.rejects(
+			() => importWebSkillFolder(config, "elsewhere", [{ path: "../escape.md", content: "x" }]),
+			(error) => {
+				assert.equal((error as HttpError).status, 400);
+				return true;
+			},
+		);
+		await assert.rejects(
+			() => importWebSkillFolder(config, "no-skill", [{ path: "readme.md", content: "x" }]),
+			(error) => {
+				assert.equal((error as HttpError).status, 400);
+				return true;
+			},
 		);
 	});
 

@@ -43,6 +43,7 @@ export function Chat({
     streaming,
     pendingLatestAssistantAction,
     selectSession,
+    notifyNewChat,
     send,
     abort,
     retry,
@@ -70,6 +71,7 @@ export function Chat({
             sessions={sessions}
             activeSessionKey={activeSessionKey}
             onSelectSession={selectSession}
+            onNewChat={notifyNewChat}
             onOpenSettings={() => onSettingsOpenChange(true)}
           />
           <div className="chat-divider" />
@@ -86,8 +88,9 @@ export function Chat({
           <Composer onSend={send} onAbort={abort} streaming={streaming} handle={composer} />
         </>)}
       </div>
-      {/* both stay mounted so a closing sheet can run its exit */}
-      {!settingsOpen && (<>
+      {/* both stay mounted so a closing sheet can run its exit, and so one shelf can fade into the other */}
+      {!settingsOpen && (
+        <div className="shelf-slot" data-open={shelf ? "" : undefined}>
         <DiaryShelf
           open={shelf === "diaries"}
           onClose={() => onShelfChange(undefined)}
@@ -100,7 +103,8 @@ export function Chat({
           personaName={personaName}
           onOpenArchive={() => onOpenArchive("skills")}
         />
-      </>)}
+        </div>
+      )}
     </div>
   );
 }

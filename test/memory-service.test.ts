@@ -508,33 +508,6 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("rejects reset when shared-index cleanup fails", async (t) => {
-		const config = await memoryConfig(t);
-		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = MemoryService.createWithoutRuntime(config);
-			const runtime = await ConversationRuntime.connect({
-				channelKey: "reset-failure",
-				log: memoryLog(),
-				ownerId: "owner",
-			});
-			const unsubscribe = service.subscribeRuntime(runtime);
-			try {
-				await runtime.ingestInbound({ messageId: "old", authorId: "owner", text: "cleanup failure" });
-				await service.flush();
-				service.memoryStore.deleteBySourceUnsafe = () => {
-					throw new Error("index cleanup unavailable");
-				};
-				await assert.rejects(runtime.resetConversation(), /index cleanup unavailable/);
-				assert.equal(service.stats().projectionFailures, 1);
-			} finally {
-				await service.flush();
-				unsubscribe();
-				await runtime.disconnect();
-				service.close();
-			}
-		});
-	});
-
 	it("uses the live new-session retention setting when rotating segments", async (t) => {
 		const config = await memoryConfig(t);
 		await withEmbeddingFetch([1, 0, 0], async () => {
@@ -1851,7 +1824,7 @@ describe("MemoryService", () => {
 			memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, newSessionRetainDepth: 0 } },
 		};
 		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config);
+			const service = MemoryService.createWithoutRuntime(config);
 			const log = memoryLog();
 			const runtime = await ConversationRuntime.connect({
 				channelKey: "web-web-room",
@@ -1874,6 +1847,7 @@ describe("MemoryService", () => {
 				await service.flush();
 
 				await assert.rejects(runtime.resetConversation("new conversation requested"), /simulated index delete failure/);
+				assert.equal(service.stats().projectionFailures, 1);
 				await service.flush();
 			} finally {
 				serviceMemoryStore(service).deleteBySourceUnsafe = originalDelete;

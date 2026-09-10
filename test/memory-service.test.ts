@@ -450,6 +450,91 @@ describe("MemoryService", () => {
 		});
 	});
 
+	it("waits for queued memory cleanup before reset succeeds", async (t) => {
+		const config = await memoryConfig(t);
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = MemoryService.createWithoutRuntime(config);
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "reset-barrier",
+				log: memoryLog(),
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime);
+			let release!: () => void;
+			const released = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			let reset: Promise<void> | undefined;
+			try {
+				await runtime.ingestInbound({ messageId: "old", authorId: "owner", text: "quartz secret" });
+				await service.flush();
+				const recall = service.memoryTools().find((tool) => tool.name === "memory_recall")!;
+				const open = service.memoryTools().find((tool) => tool.name === "memory_open")!;
+				const before = await recall.execute("before", { query: "quartz", mode: "lexical" });
+				assert.equal(before.details.resultCount, 1);
+				const oldId = before.details.ids[0];
+				const indexChunks = service.indexer.indexChunks.bind(service.indexer);
+				let start!: () => void;
+				const started = new Promise<void>((resolve) => {
+					start = resolve;
+				});
+				service.indexer.indexChunks = async (...args) => {
+					start();
+					await released;
+					return indexChunks(...args);
+				};
+				await runtime.ingestInbound({ messageId: "queued", authorId: "owner", text: "quartz pending" });
+				await started;
+				let completed = false;
+				reset = runtime.resetConversation().then(() => {
+					completed = true;
+				});
+				await new Promise<void>((resolve) => setImmediate(resolve));
+				assert.equal(completed, false, "reset must wait for pending projection and retention");
+				release();
+				await reset;
+				assert.equal((await recall.execute("after", { query: "quartz", mode: "lexical" })).details.resultCount, 0);
+				assert.equal((await recall.execute("semantic", { query: "quartz", mode: "semantic" })).details.resultCount, 0);
+				assert.equal((await open.execute("open", { id: oldId })).details.found, false);
+				assert.deepEqual(service.lcmStore.listRecords(), []);
+			} finally {
+				release();
+				await reset;
+				await service.flush();
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
+	it("rejects reset when shared-index cleanup fails", async (t) => {
+		const config = await memoryConfig(t);
+		await withEmbeddingFetch([1, 0, 0], async () => {
+			const service = MemoryService.createWithoutRuntime(config);
+			const runtime = await ConversationRuntime.connect({
+				channelKey: "reset-failure",
+				log: memoryLog(),
+				ownerId: "owner",
+			});
+			const unsubscribe = service.subscribeRuntime(runtime);
+			try {
+				await runtime.ingestInbound({ messageId: "old", authorId: "owner", text: "cleanup failure" });
+				await service.flush();
+				service.memoryStore.deleteBySourceUnsafe = () => {
+					throw new Error("index cleanup unavailable");
+				};
+				await assert.rejects(runtime.resetConversation(), /index cleanup unavailable/);
+				assert.equal(service.stats().projectionFailures, 1);
+			} finally {
+				await service.flush();
+				unsubscribe();
+				await runtime.disconnect();
+				service.close();
+			}
+		});
+	});
+
 	it("uses the live new-session retention setting when rotating segments", async (t) => {
 		const config = await memoryConfig(t);
 		await withEmbeddingFetch([1, 0, 0], async () => {
@@ -1788,7 +1873,7 @@ describe("MemoryService", () => {
 				});
 				await service.flush();
 
-				await runtime.resetConversation("new conversation requested");
+				await assert.rejects(runtime.resetConversation("new conversation requested"), /simulated index delete failure/);
 				await service.flush();
 			} finally {
 				serviceMemoryStore(service).deleteBySourceUnsafe = originalDelete;

@@ -35,15 +35,14 @@ export class LcmSegmentManager {
 
 	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void {
 		const unsubscribe = runtime.subscribe((record) => {
-			// Serialize projections; the prior link is always non-rejecting (see the .catch
-			// below), so each projection runs once after it. Count + log failures in the same
-			// chain and recover, so the stored queue never carries a rejection forward.
-			this.projectionQueue = this.projectionQueue
-				.then(() => this.projectRuntimeRecord(runtime, record, sessionId))
-				.catch((error) => {
-					this.projectionFailures += 1;
-					console.error(`memory projection failed for ${runtime.channelKey}`, error);
-				});
+			const projection = this.projectionQueue.then(() => this.projectRuntimeRecord(runtime, record, sessionId));
+			// Keep the queue usable after an error, but return the rejecting reset
+			// projection so the runtime cannot acknowledge failed retention.
+			this.projectionQueue = projection.catch((error) => {
+				this.projectionFailures += 1;
+				console.error(`memory projection failed for ${runtime.channelKey} record ${record.recordId}`, error);
+			});
+			if (record.type === "runtime" && record.event === "reset") return projection;
 		});
 		return unsubscribe;
 	}
@@ -134,6 +133,15 @@ export class LcmSegmentManager {
 				for (const deleted of deletes) this.memoryStore.deleteBySourceUnsafe(deleted.corpus, deleted.sourceId);
 			})
 			.immediate(indexDeletes);
+		console.info("memory reset completed", {
+			channelKey: runtime.channelKey,
+			recordId: record.recordId,
+			previousSegmentId,
+			nextSegmentId,
+			retainDepth: this.newSessionRetainDepth(),
+			deletedRecords: indexDeletes.filter((source) => source.corpus === "lcm_record").length,
+			deletedSummaries: indexDeletes.filter((source) => source.corpus === "lcm_summary").length,
+		});
 	}
 
 	private nextSegmentId(channelKey: string): string {

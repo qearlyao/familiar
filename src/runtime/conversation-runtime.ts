@@ -254,7 +254,10 @@ export class ConversationRuntime {
 		});
 	}
 
-	private async appendRecord(record: ChatLogRecord, options: { notify?: boolean } = {}): Promise<void> {
+	private async appendRecord(
+		record: ChatLogRecord,
+		options: { notify?: boolean; waitForListeners?: boolean } = {},
+	): Promise<void> {
 		this.records.push(record);
 		this.indexRecordForTriggers(record);
 		this.nextRecordId = Math.max(this.nextRecordId, record.recordId + 1);
@@ -264,11 +267,13 @@ export class ConversationRuntime {
 		}
 		await this.log.append(record);
 		if (options.notify === false) return;
+		const pending: Promise<void>[] = [];
 		for (const listener of this.listeners) {
-			void Promise.resolve(listener(record)).catch((error) =>
-				console.error(`runtime listener failed for ${this.channelKey}`, error),
-			);
+			const result = Promise.resolve(listener(record));
+			if (options.waitForListeners) pending.push(result);
+			else void result.catch((error) => console.error(`runtime listener failed for ${this.channelKey}`, error));
 		}
+		if (options.waitForListeners) await Promise.all(pending);
 	}
 
 	subscribe(listener: RuntimeRecordListener): () => void {
@@ -676,12 +681,16 @@ export class ConversationRuntime {
 
 	async resetConversation(detail = "new conversation requested"): Promise<void> {
 		this.clearWork();
-		await this.appendRecord({
-			type: "runtime",
-			...buildRecordBase(this.channel, this.nextRecordId),
-			event: "reset",
-			detail,
-		});
+		// A reset is complete only after subscribers have applied its memory boundary.
+		await this.appendRecord(
+			{
+				type: "runtime",
+				...buildRecordBase(this.channel, this.nextRecordId),
+				event: "reset",
+				detail,
+			},
+			{ waitForListeners: true },
+		);
 	}
 
 	// Interrupt the current turn without starting a new conversation: clear the

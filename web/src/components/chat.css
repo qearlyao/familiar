@@ -800,6 +800,8 @@
   }
   .room-mobile-nav button { width: 48px; height: 48px; border: 0; border-radius: 999px; background: transparent; color: #d3c9ba; display: grid; place-items: center; }
   .room-mobile-nav button[aria-current="page"] { background: #d6bd8a; color: #2b1901; }
+  /* a room you were pushed into carries its own way back, so the bar gets out of the way */
+  .familiar-shell[data-pushed] .room-mobile-nav { display: none; }
   .room-mobile-nav button[data-swapped] { background: #525833; color: #d6bd8a; }
   .room-mobile-nav button[data-slot="flip"] { animation: nav-flip-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
   .room-mobile-nav[data-swapped] button[data-slot="flip"] { animation-name: nav-flip-in-rtl; }

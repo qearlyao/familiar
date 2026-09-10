@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchDiaries, type DiarySummary } from "@/lib/api";
-import { diaryDateParts } from "@/lib/diaries/format";
+import { dayStamp, diaryNote } from "@/lib/diaries/format";
 import { cn } from "@/lib/utils";
 import { Shelf } from "../Shelf";
 import { IconCheck } from "../organicIcons";
@@ -21,19 +21,7 @@ function recentDays(): string[] {
   });
 }
 
-function dayLabel(date: string, index: number): string {
-  const { weekday, day, month } = diaryDateParts(date);
-  const stamp = `${weekday} ${day} ${month}`;
-  return index === 0 ? `today · ${stamp}` : stamp;
-}
-
-function chipNote(picked: { date: string; index: number; title: string }[]): string {
-  const lines = picked.map(({ date, index, title }) => `· ${dayLabel(date, index)} — ${title}`);
-  return [
-    "diary chips, so you can place where we are — recall them, or open the days in full if you'd rather:",
-    ...lines,
-  ].join("\n");
-}
+const dayLabel = (date: string, index: number) => (index === 0 ? `today · ${dayStamp(date)}` : dayStamp(date));
 
 export function DiaryShelf({
   open,
@@ -71,9 +59,9 @@ export function DiaryShelf({
     const chips = days
       .map((date, index) => ({ date, index, entry: written.get(date) }))
       .filter((row) => picked.has(row.date) && row.entry)
-      .map(({ date, index, entry }) => ({ date, index, title: entry!.title }));
+      .map(({ date, index, entry }) => ({ date, title: entry!.title, today: index === 0 }));
     if (chips.length === 0) return;
-    onInsert(chipNote(chips));
+    onInsert(diaryNote(chips));
     setPicked(new Set());
     onClose();
   };

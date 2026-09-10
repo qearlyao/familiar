@@ -21,13 +21,13 @@ export function MarkdownView({ content, title }: { content: string; title: strin
   if (!markdown) {
     return createElement(
       "p",
-      { className: "font-serif text-sm italic text-muted-foreground" },
+      { className: "diaries-note" },
       "this day is quiet.",
     );
   }
   return createElement(MarkdownRenderer, {
     text: markdown,
-    className: "warm-prose diary-prose",
+    className: "warm-prose chat-markdown",
     components,
     remarkPlugins,
   });

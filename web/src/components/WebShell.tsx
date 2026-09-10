@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ComponentType, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { WebAuthDevice } from "@/lib/api";
 import { ContactCard } from "./ContactCard";
 import { Chat, type ShelfName } from "./Chat";
+import type { ComposerHandle } from "./Composer";
 import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
 import { GalleryPage } from "./GalleryPage";
@@ -25,9 +26,17 @@ import "./chat.css";
 type ShellPage = "chat" | "voice" | "library" | "diaries" | "skills" | "files" | "gallery";
 export type NavTarget = ShellPage | "settings";
 
+interface RoomProps {
+  /** hand something to the talk, and land there */
+  onBring: (text: string) => void;
+  /** the way back out of a pushed page */
+  onBack: () => void;
+}
+
 /** one row per room: what the rail/mobile bar draws and what the surface renders.
-    chat has no `Page` — the shell owns its surface. */
-const ROOMS: { id: ShellPage; label: string; rail: typeof RailChat; Page?: () => ReactNode }[] = [
+    chat has no `Page` — the shell owns its surface. A room that can hand something to the talk
+    takes `onBring`; the rest ignore it. */
+const ROOMS: { id: ShellPage; label: string; rail: typeof RailChat; Page?: ComponentType<RoomProps> }[] = [
   { id: "chat", label: "chat", rail: RailChat },
   { id: "voice", label: "voice", rail: RailVoice, Page: VoiceCallPage },
   { id: "library", label: "library", rail: RailLibrary, Page: LibraryPage },
@@ -44,10 +53,13 @@ const MOBILE_SECONDARY: NavTarget[] = ["files", "gallery", "skills", "settings"]
 /** the rail and the mobile bar around whatever surfaces are showing. */
 export function ShellChrome({
   current,
+  pushed,
   onNavigate,
   children,
 }: {
   current: NavTarget;
+  /** a room entered from a shelf carries its own back arrow, so the phone bar steps aside */
+  pushed?: boolean;
   onNavigate: (target: NavTarget) => void;
   children: ReactNode;
 }) {
@@ -85,7 +97,7 @@ export function ShellChrome({
   };
 
   return (
-    <div className="familiar-shell relative flex h-dvh w-full overflow-hidden antialiased">
+    <div className="familiar-shell relative flex h-dvh w-full overflow-hidden antialiased" data-pushed={pushed ? "" : undefined}>
       <nav className="room-rail" aria-label="rooms">
         <button className="room-brand" aria-label="home" onClick={() => go("chat")}>f</button>
         <div className="room-rail-items">
@@ -134,6 +146,7 @@ export function WebShell({
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
   const [shelf, setShelf] = useState<ShelfName | undefined>();
   const [mounted, setMounted] = useState<Set<ShellPage>>(() => new Set(["chat"]));
+  const composer = useRef<ComposerHandle>(null);
 
   const open = (page: ShellPage) => {
     setMounted((prev) => (prev.has(page) ? prev : new Set(prev).add(page)));
@@ -142,6 +155,13 @@ export function WebShell({
   };
 
   const showing = selectedPage === "chat" && !settingsOpen ? shelf : undefined;
+
+  // a day, a page, a keepsake — whatever a room hands over lands in the draft, and you land there too
+  const bring = (text: string) => {
+    composer.current?.append(text);
+    setShelf(undefined);
+    open("chat");
+  };
 
   const navigate = (target: NavTarget) => {
     if (target === "settings") {
@@ -162,9 +182,14 @@ export function WebShell({
   };
 
   return (
-    <ShellChrome current={settingsOpen ? "settings" : (showing ?? selectedPage)} onNavigate={navigate}>
+    <ShellChrome
+      current={settingsOpen ? "settings" : (showing ?? selectedPage)}
+      pushed={selectedPage === "diaries" && !settingsOpen}
+      onNavigate={navigate}
+    >
       <section className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === "chat" ? "flex" : "hidden")}>
         <Chat
+          composer={composer}
           settingsOpen={settingsOpen}
           onSettingsOpenChange={setSettingsOpen}
           shelf={shelf}
@@ -181,7 +206,7 @@ export function WebShell({
       {ROOMS.map(({ id, Page }) =>
         Page && mounted.has(id) ? (
           <section key={id} className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === id ? "flex" : "hidden")}>
-            <Page />
+            <Page onBring={bring} onBack={() => open("chat")} />
           </section>
         ) : null,
       )}

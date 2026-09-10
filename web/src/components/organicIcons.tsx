@@ -72,6 +72,10 @@ export const IconMore = glyph(
 
 export const IconList = glyph(<path d="M4 7h16M4 13h16M4 19h9" />);
 export const IconChevronDown = glyph(<path d="M6 9l6 6 6-6" />);
+export const IconChevronLeft = glyph(<path d="M15 6l-6 6 6 6" />);
+export const IconChevronRight = glyph(<path d="M9 6l6 6-6 6" />);
+export const IconSearch = glyph(<><path d="M21 21l-4.3-4.3" /><circle cx="10.5" cy="10.5" r="7" /></>);
+export const IconExpand = glyph(<><path d="M7 17 17 7" /><path d="M9 7h8v8" /></>);
 export const IconChevronUp = glyph(<path d="M6 15l6-6 6 6" />);
 export const IconSwitch = glyph(
   <>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import type { RefObject } from "react";
 import { Composer, type ComposerHandle } from "./Composer";
 import { DiaryShelf } from "./diaries/DiaryShelf";
 import { SkillShelf } from "./SkillShelf";
@@ -12,6 +12,7 @@ import type { WebAuthDevice } from "@/lib/api";
 export type ShelfName = "diaries" | "skills";
 
 export function Chat({
+  composer,
   settingsOpen,
   onSettingsOpenChange,
   shelf,
@@ -21,6 +22,8 @@ export function Chat({
   authDevice,
   onSignedOut,
 }: {
+  /** the draft, held by the shell so the archive can drop a day into it too */
+  composer: RefObject<ComposerHandle | null>;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   shelf: ShelfName | undefined;
@@ -30,7 +33,6 @@ export function Chat({
   authDevice?: WebAuthDevice;
   onSignedOut?: () => void;
 }) {
-  const composer = useRef<ComposerHandle>(null);
   const {
     messages,
     connection,

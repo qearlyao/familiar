@@ -334,31 +334,6 @@
     content: "▎";
   }
 
-  .diary-prose {
-    @apply text-[0.95rem];
-  }
-
-  .diary-prose p {
-    @apply whitespace-normal;
-  }
-
-  .diary-prose a {
-    @apply text-primary underline underline-offset-4 transition-colors hover:text-foreground;
-  }
-
-  .diary-prose h2 {
-    @apply mt-8 font-serif text-2xl leading-tight tracking-tight text-foreground first:mt-0;
-  }
-
-  .diary-prose h3 {
-    @apply mt-7 font-serif text-xl leading-tight tracking-tight text-foreground first:mt-0;
-  }
-
-  .diary-prose ul,
-  .diary-prose ol {
-    @apply gap-2;
-  }
-
   .file-prose {
     @apply text-[0.92rem];
   }

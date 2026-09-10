@@ -1,149 +1,192 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, RefreshCw } from "lucide-react";
-import { DiaryListButton } from "@/components/diaries/DiaryListButton";
-import { DiaryReader } from "@/components/diaries/DiaryReader";
-import { EmptyState, InitialDiarySkeleton } from "@/components/diaries/DiaryStates";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEffect, useState } from "react";
+import { DiaryCalendar } from "@/components/diaries/DiaryCalendar";
+import { MarkdownView } from "@/components/diaries/MarkdownView";
 import { fetchDiaries, fetchDiary, type DiaryEntry, type DiarySummary } from "@/lib/api";
+import { dayStamp, diaryNote, formatDiaryDate } from "@/lib/diaries/format";
 import { cn } from "@/lib/utils";
+import { IconChevronLeft, IconExpand, IconSearch, IconX } from "./organicIcons";
+import "./diaries/diaries.css";
 
-export function DiariesPage() {
+/** Diaries 1a/1b: the archive. A month at a glance on the left, tinted by how much was written;
+    the day you pick opens on the right. Search takes a date or a phrase — the written days are
+    all here already, so it reads them where they sit.
+
+    A phone gets it as a pushed page (1b): no room bar at the bottom, a back arrow to the talk,
+    search behind its icon, and the day can take the whole screen when you want to read it. */
+
+const words = (content: string) => content.trim().split(/\s+/).filter(Boolean).length;
+
+export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => void; onBack: () => void }) {
   const [diaries, setDiaries] = useState<DiarySummary[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [date, setDate] = useState<string | undefined>();
+  const [month, setMonth] = useState<string | undefined>();
   const [entry, setEntry] = useState<DiaryEntry | undefined>();
-  const [loadingList, setLoadingList] = useState(true);
-  const [loadingEntry, setLoadingEntry] = useState(false);
+  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | undefined>();
-  const [mobileReader, setMobileReader] = useState(false);
-  const [userSwitched, setUserSwitched] = useState(false);
+  const [loading, setLoading] = useState(true);
+  // phone only: the search field folds behind its icon, and the day can take the whole screen
+  const [searching, setSearching] = useState(false);
+  const [full, setFull] = useState(false);
 
-  const loadList = useCallback(async () => {
-    setLoadingList(true);
-    setError(undefined);
-    try {
-      const next = await fetchDiaries();
-      setDiaries(next);
-      setSelectedDate((current) => {
-        if (current && next.some((diary) => diary.date === current)) return current;
-        return next[0]?.date;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoadingList(false);
-    }
-  }, []);
-
-  const loadEntry = useCallback(async (date: string) => {
-    setLoadingEntry(true);
-    setError(undefined);
-    try {
-      setEntry(await fetchDiary(date));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setEntry(undefined);
-    } finally {
-      setLoadingEntry(false);
-    }
+  useEffect(() => {
+    let live = true;
+    fetchDiaries()
+      .then((all) => {
+        if (!live) return;
+        setDiaries(all);
+        setDate(all[0]?.date);
+        setMonth(all[0]?.date.slice(0, 7));
+      })
+      .catch((err: unknown) => live && setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
-    const id = window.setTimeout(() => void loadList(), 0);
-    return () => window.clearTimeout(id);
-  }, [loadList]);
+    if (!date) return;
+    let live = true;
+    fetchDiary(date)
+      .then((read) => live && setEntry(read))
+      .catch((err: unknown) => live && setError(err instanceof Error ? err.message : String(err)));
+    return () => {
+      live = false;
+    };
+  }, [date]);
 
-  useEffect(() => {
-    if (!selectedDate || entry?.date === selectedDate) return;
-    const id = window.setTimeout(() => void loadEntry(selectedDate), 0);
-    return () => window.clearTimeout(id);
-  }, [entry?.date, loadEntry, selectedDate]);
+  const counts = new Map<string, number>();
+  const weights = new Map<string, number>();
+  for (const diary of diaries) {
+    const key = diary.date.slice(0, 7);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    weights.set(diary.date, diary.sizeBytes);
+  }
 
-  const selectedSummary = diaries.find((diary) => diary.date === selectedDate);
-  const currentContent = entry && entry.date === selectedDate ? entry.content : undefined;
-  const showInitialSkeleton = loadingList && diaries.length === 0;
+  const look = query.trim().toLowerCase();
+  // one haystack: the day as it is spoken, its title, and the lines under it
+  const found = look
+    ? diaries.filter((d) => `${formatDiaryDate(d.date)} ${d.date} ${d.title} ${d.excerpt}`.toLowerCase().includes(look))
+    : undefined;
+
+  const pick = (next: string) => {
+    setDate(next);
+    setMonth(next.slice(0, 7));
+  };
+
+  const at = diaries.findIndex((d) => d.date === date);
+  const older = at >= 0 ? diaries[at + 1] : undefined;
+  const newer = at > 0 ? diaries[at - 1] : undefined;
+  const open = entry?.date === date ? entry : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <h1 className="font-serif text-2xl leading-none tracking-tight">diaries</h1>
-            <p className="font-serif text-[0.8rem] italic text-muted-foreground">written days, kept close</p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="refresh"
-            title="refresh"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => void loadList()}
-            disabled={loadingList}
-          >
-            <RefreshCw className={cn("size-4", loadingList && "animate-spin motion-reduce:animate-none")} />
-          </Button>
-        </div>
+    <div className={cn("diaries-room chat-theme", searching && "is-searching", full && "is-full")}>
+      <header className="diaries-bar">
+        <button type="button" aria-label="back to the talk" title="back to the talk" onClick={onBack}>
+          <IconChevronLeft size={17} />
+        </button>
+        <b>diaries</b>
+        <button
+          type="button"
+          className="diaries-find"
+          aria-label="search the diaries"
+          aria-pressed={searching}
+          onClick={() => setSearching((on) => !on)}
+        >
+          <IconSearch size={17} />
+        </button>
       </header>
-      {error ? (
-        <p className="border-b border-border bg-card px-3 py-2 font-serif text-xs italic text-destructive md:px-8">
-          {error}
-        </p>
-      ) : null}
-      {showInitialSkeleton ? (
-        <InitialDiarySkeleton />
-      ) : diaries.length === 0 ? (
-        <EmptyState onRefresh={() => void loadList()} />
-      ) : (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <aside
-            className={cn(
-              "min-h-0 flex-col rounded-md border border-border bg-card py-2 md:flex md:w-72 md:flex-none",
-              mobileReader ? "hidden md:flex" : "flex flex-1",
-            )}
-          >
-            <ScrollArea className="min-w-0 min-h-0 flex-1">
-              <div className="grid min-w-0 gap-1 px-2">
-                {diaries.map((diary) => (
-                  <DiaryListButton
-                    key={diary.date}
-                    diary={diary}
-                    active={diary.date === selectedDate}
-                    onSelect={() => {
-                      if (diary.date !== selectedDate) setUserSwitched(true);
-                      setSelectedDate(diary.date);
-                      setMobileReader(true);
-                    }}
-                  />
-                ))}
+      <aside className="diaries-side">
+        <label className="diaries-search">
+          <IconSearch size={15} />
+          <input
+            type="search"
+            value={query}
+            placeholder="a date, or something you wrote"
+            aria-label="search the diaries"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query && (
+            <button type="button" aria-label="clear the search" onClick={() => setQuery("")}><IconX size={13} /></button>
+          )}
+        </label>
+
+        {found ? (
+          <div className="diaries-found">
+            {found.length === 0 && <p className="diaries-note">no day reads like that.</p>}
+            {found.map((diary) => (
+              <button
+                key={diary.date}
+                type="button"
+                className={cn("diaries-hit", diary.date === date && "is-on")}
+                onClick={() => pick(diary.date)}
+              >
+                <em>{dayStamp(diary.date)}</em>
+                <b>{diary.title}</b>
+              </button>
+            ))}
+          </div>
+        ) : month ? (
+          <>
+            <DiaryCalendar month={month} onMonth={setMonth} counts={counts} weights={weights} selected={date} onSelect={pick} />
+            <div className="diaries-legend">
+              <span data-weight="1">a few lines</span>
+              <span data-weight="2">a page</span>
+              <span data-weight="3">a long one</span>
+            </div>
+          </>
+        ) : null}
+      </aside>
+
+      <article className="diaries-open">
+        {error && <p className="diaries-note" role="alert">the archive wouldn’t open · {error}</p>}
+        {!open ? (
+          <p className="diaries-note">{loading ? "…" : diaries.length === 0 ? "no days written yet." : "choose a written day."}</p>
+        ) : (
+          <>
+            <header className="diaries-head">
+              <div className="diaries-title">
+                <span>{formatDiaryDate(open.date)}</span>
+                <b>{open.title}</b>
               </div>
-            </ScrollArea>
-          </aside>
-          <main
-            className={cn(
-              "min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card md:flex md:flex-1",
-              mobileReader ? "flex flex-1" : "hidden md:flex",
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => setMobileReader(false)}
-              className="flex items-center gap-1.5 border-b border-border px-4 py-2.5 text-left font-serif text-xs italic text-muted-foreground transition-colors hover:text-foreground md:hidden"
-            >
-              <ChevronLeft className="size-3.5" />
-              all days
-            </button>
-            <ScrollArea className="min-h-0 flex-1">
-              <DiaryReader
-                summary={selectedSummary}
-                content={currentContent}
-                loading={loadingEntry}
-                settle={userSwitched}
-              />
-            </ScrollArea>
-          </main>
-        </div>
-      )}
+              {/* beside the title on a desk; on a phone the head lets go (display: contents) and this drops to the foot */}
+              <div className="diaries-do">
+                <button
+                  type="button"
+                  className="diaries-bring"
+                  onClick={() => onBring(diaryNote([{ date: open.date, title: open.title }]))}
+                >
+                  bring into the talk
+                </button>
+                <button
+                  type="button"
+                  className="diaries-expand"
+                  aria-label={full ? "show the month again" : "read it all"}
+                  title={full ? "show the month again" : "read it all"}
+                  aria-pressed={full}
+                  onClick={() => setFull((on) => !on)}
+                >
+                  <IconExpand size={17} />
+                </button>
+              </div>
+            </header>
+            <div className="diaries-chips">
+              <span>{words(open.content).toLocaleString()} words</span>
+            </div>
+            <div className="diaries-body">
+              <MarkdownView content={open.content} title={open.title} />
+            </div>
+            <footer className="diaries-turn">
+              {older && (
+                <button type="button" onClick={() => pick(older.date)}>← {dayStamp(older.date)}, {older.title}</button>
+              )}
+              {newer && (
+                <button type="button" className="is-next" onClick={() => pick(newer.date)}>{dayStamp(newer.date)}, {newer.title} →</button>
+              )}
+            </footer>
+          </>
+        )}
+      </article>
     </div>
   );
 }

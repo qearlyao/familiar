@@ -43,11 +43,11 @@
 }
 .desk-tab.is-aside:hover { margin-left: 6px; background: rgba(231, 224, 213, 0.55); }
 .desk-tab.is-aside b { font-size: 16px; color: #4c3e2c; }
-.desk-tab.is-fresh b { color: rgba(43, 25, 1, 0.5); font-style: italic; }
+.desk-tab.is-fresh b { color: rgba(43, 25, 1, 0.65); font-style: italic; }
 
 .desk-rule { flex: none; margin: 10px 8px 4px 0; display: flex; align-items: center; gap: 10px; }
 .desk-rule span:first-child { flex: 1; height: 1px; background: rgba(76, 62, 44, 0.2); }
-.desk-rule span:last-child { font-size: 11.5px; color: rgba(76, 62, 44, 0.8); }
+.desk-rule span:last-child { font-size: 11.5px; color: #4c3e2c; }
 
 .desk-start {
   flex: none; height: 42px; border: 1.5px dashed rgba(76, 62, 44, 0.35); border-radius: 999px;
@@ -110,21 +110,21 @@
 .desk-name, .desk-when, .desk-body { border: 0; background: transparent; color: #2b1901; }
 .desk-name:focus, .desk-when:focus, .desk-body:focus { outline: none; }
 .desk-name { font: 35px/1.05 Caprasimo, Georgia, serif; letter-spacing: -0.02em; }
-.desk-name::placeholder { color: rgba(43, 25, 1, 0.34); }
+.desk-name::placeholder { color: rgba(43, 25, 1, 0.6); }
 .desk-when {
   padding-bottom: 6px; border-bottom: 1.5px dashed rgba(76, 62, 44, 0.32);
   font: 16px/1.5 Figtree, sans-serif; color: #4c3e2c; max-width: 54ch;
   /* the line wraps rather than scrolling sideways; it grows with what's written where that's supported */
   resize: none; field-sizing: content; min-height: 3em; max-height: 6em;
 }
-.desk-when::placeholder { color: rgba(76, 62, 44, 0.6); }
-.desk-hint { font-size: 11.5px; color: rgba(76, 62, 44, 0.8); }
+.desk-when::placeholder { color: rgba(76, 62, 44, 0.8); }
+.desk-hint { font-size: 11.5px; color: #4c3e2c; }
 
 .desk-body {
   flex: 1; min-height: 0; resize: none; padding-top: 4px; max-width: 74ch;
   font: 13.5px/1.7 ui-monospace, monospace; color: #2b1901;
 }
-.desk-body::placeholder { color: rgba(76, 62, 44, 0.55); }
+.desk-body::placeholder { color: rgba(76, 62, 44, 0.8); }
 
 .desk-foot {
   flex: none; display: flex; align-items: center; gap: 10px; padding-top: 16px;

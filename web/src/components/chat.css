@@ -51,6 +51,8 @@
 }
 
 /* ---------- shell + rail (1a) ---------- */
+/* Continue the room color through the document canvas and overscroll areas. */
+html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .familiar-shell { background: #2b1901; padding: 14px; gap: 14px; font-family: Figtree, sans-serif; }
 .room-surface { border-radius: 26px; overflow: hidden; background: #d3c9ba; }
 .room-rail {
@@ -521,7 +523,7 @@
 }
 .chat-transcribed span { text-decoration: underline 1.5px transparent; text-underline-offset: 3px; transition: text-decoration-color 0.15s; }
 .chat-transcribed:hover span { text-decoration-color: currentColor; }
-.chat-transcribed[aria-expanded="true"] { color: rgba(76, 62, 44, 0.55); }
+.chat-transcribed[aria-expanded="true"] { color: #525833; }
 
 .chat-words-toggle { font-size: 12.5px; }
 .chat-spoken-words { margin: 0; font-size: 16px; line-height: 1.7; color: rgba(43, 25, 1, 0.72); text-wrap: pretty; }
@@ -837,12 +839,21 @@
 @keyframes nav-flip-in { from { opacity: 0; transform: translateX(-16px); } }
 @keyframes nav-flip-in-rtl { from { opacity: 0; transform: translateX(16px); } }
 
+/* Where iOS exposes a top safe area, reserve it once in the installed app shell
+   so every room clears it, and paint it with the room color. */
+@media (display-mode: standalone) {
+  .familiar-shell {
+    border-top: env(safe-area-inset-top) solid #d3c9ba;
+    border-left: env(safe-area-inset-left) solid #d3c9ba;
+    border-right: env(safe-area-inset-right) solid #d3c9ba;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .room-mobile-nav button[data-slot="flip"] { animation: none; }
 }
 
 @media (max-width: 700px) {
-  .familiar-shell { padding: 0; gap: 0; }
+  .familiar-shell { padding: 0; gap: 0; background: #d3c9ba; }
   .room-rail { display: none; }
   .room-surface { border-radius: 0; }
   .room-mobile-nav {
@@ -887,7 +898,7 @@
   .chat-assistant-turn, .chat-turn-steps { padding-left: 14px; }
   .chat-assistant-turn { gap: 8px; }
   .chat-speaker { font-size: 12px; }
-  .chat-room .chat-markdown { font-size: 16px; line-height: 1.65; }
+  .chat-room .chat-markdown { font-size: 16px; line-height: 1.65; font-weight: 500; }
   /* after the line above, or it inherits the looser reading measure meant for their side */
   .chat-user-bubble .chat-markdown { line-height: 1.55; }
   .chat-user-bubble { max-width: 84%; padding: 13px 17px; border-radius: 20px 20px 7px 20px; }
@@ -936,6 +947,13 @@
   .settings-source { order: 3; margin-left: 0; }
   .settings-body { padding: 8px 16px calc(62px + max(24px, env(safe-area-inset-bottom))); }
   .settings-card { padding: 18px; border-radius: 18px; }
+}
+
+/* After the mobile rules: the shell already reserves the top safe area. */
+@media (display-mode: standalone) and (max-width: 700px) {
+  .chat-header { padding-top: 26px; }
+  .settings-nav { padding-top: 22px; }
+  .settings-panel-head { padding-top: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

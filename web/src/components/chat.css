@@ -716,10 +716,11 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   font: var(--font-weight-normal) 0.78125rem Figtree, sans-serif; color: #2b1901; outline: none; width: 9.375rem;
 }
 .sticker-search::placeholder { color: #525833; }
-.sticker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.625rem; align-content: start; max-height: 18.75rem; overflow-y: auto; }
-/* square via padding, not aspect-ratio: with the grid clamped to 300px Safari saw no content height in an
-   aspect-ratio button holding a percentage-height img, stretched the auto rows to fill, and tiles stacked. */
-.sticker-tile { position: relative; border: 0; border-radius: 1rem; overflow: hidden; background: rgba(82, 88, 51, 0.14); padding: 0 0 100%; transition: transform 0.15s; }
+/* Limit the scroll viewport, not the grid: WebKit can collapse auto rows when a
+   height-clamped grid switches from a short collection to overflowing content. */
+.sticker-scroll { max-height: 18.75rem; overflow-y: auto; }
+.sticker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.625rem; }
+.sticker-tile { position: relative; aspect-ratio: 1; border: 0; border-radius: 1rem; overflow: hidden; background: rgba(82, 88, 51, 0.14); padding: 0; transition: transform 0.15s; }
 .sticker-tile:hover { transform: translateY(-0.125rem); }
 .sticker-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .sticker-empty { padding: 1.125rem 0; text-align: center; font-size: 0.8125rem; color: #4c3e2c; }

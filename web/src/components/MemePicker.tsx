@@ -61,12 +61,14 @@ export function StickerPanel({ onPick, onClose }: { onPick: (meme: Meme) => void
           {visible.length === 0 ? (
             <p className="sticker-empty">nothing in this family matches</p>
           ) : (
-            <div className="sticker-grid">
-              {visible.map((meme) => (
-                <button key={meme.url} type="button" className="sticker-tile" title={meme.name} onClick={() => onPick(meme)}>
-                  <img src={meme.url} alt={meme.name} loading="lazy" />
-                </button>
-              ))}
+            <div className="sticker-scroll">
+              <div className="sticker-grid">
+                {visible.map((meme) => (
+                  <button key={meme.url} type="button" className="sticker-tile" title={meme.name} onClick={() => onPick(meme)}>
+                    <img src={meme.url} alt={meme.name} loading="lazy" />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </>

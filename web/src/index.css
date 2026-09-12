@@ -170,7 +170,7 @@
   html {
     @apply font-sans;
     /* Keep browser controls consistent with the app's light palette. */
-    color-scheme: only light;
+    color-scheme: light;
     }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button {

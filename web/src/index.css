@@ -169,7 +169,7 @@
     }
   html {
     @apply font-sans;
-    /* iOS standalone chrome follows the document scheme, not a body-only override. */
+    /* Keep browser controls consistent with the app's light palette. */
     color-scheme: only light;
     }
   input[type="number"]::-webkit-outer-spin-button,

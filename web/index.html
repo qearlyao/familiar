@@ -5,8 +5,12 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#2B1901" />
+    <!-- The app uses one light palette in both system appearances. -->
+    <meta name="color-scheme" content="only light" />
+    <meta name="theme-color" content="#d3c9ba" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Paint the launch canvas before the stylesheet and React shell are ready. -->
+    <style>html { background: #d3c9ba; }</style>
     <title>Familiar</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -8,6 +8,9 @@
 @media (max-width: 700px) {
   html {
     font-size: clamp(16px, calc(100vw / 23.25), calc(16px * 430 / 372));
+    /* One mobile text weight, shared by inherited text, controls, and font shorthands. */
+    --font-weight-normal: 500;
+    font-weight: var(--font-weight-normal);
   }
 }
 

@@ -155,7 +155,7 @@
   .is-full .diaries-side { display: none; }
   .is-full .diaries-open { margin-top: 0; }
 
-  .diaries-room { flex-direction: column; gap: 0; padding: 1.25rem 1.125rem 0; overflow: hidden; }
+  .diaries-room { flex-direction: column; gap: 0; padding: var(--mobile-page-top) 1.125rem 0; overflow: hidden; }
   .diaries-side { width: auto; flex: none; gap: 0.875rem; overflow: visible; }
   .cal-step { width: 2.375rem; height: 2.375rem; border: 0; background: rgba(82, 88, 51, 0.16); }
   .cal-step:disabled { border: 0; background: rgba(82, 88, 51, 0.08); }

@@ -890,7 +890,9 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   .qs-pill { height: 2.25rem; padding: 0 0.9375rem; }
   .qs-all { height: 2.875rem; font-size: 0.875rem; }
 
-  .chat-scroll { padding: 1.125rem 1.25rem calc(0.5rem + 4.0625rem + 1rem + 3.875rem + max(1.25rem, env(safe-area-inset-bottom))); }
+  /* Keep boundary gestures in the conversation instead of handing them to the
+     document, which can move the room during Safari's rubber-band scrolling. */
+  .chat-scroll { overscroll-behavior-y: contain; padding: 1.125rem 1.25rem calc(0.5rem + 4.0625rem + 1rem + 3.875rem + max(1.25rem, env(safe-area-inset-bottom))); }
   .chat-message-list { gap: 1.5rem; }
   .chat-turn-group { gap: 1.5rem; }
   .chat-assistant-turn, .chat-turn-steps { padding-left: 0.875rem; }
@@ -902,8 +904,9 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   .chat-user-bubble { max-width: 84%; padding: 0.8125rem 1.0625rem; border-radius: 1.25rem 1.25rem 0.4375rem 1.25rem; }
   .chat-silent { padding-left: 0.875rem; }
 
-  /* the composer floats over the conversation, above the bottom bar */
-  .composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 30; padding: 0 1rem calc(1rem + 3.875rem + max(1.25rem, env(safe-area-inset-bottom))); pointer-events: none; }
+  /* Anchor both floating controls to the viewport. A room-relative composer
+     moves with the document during Safari overscroll while the fixed nav stays put. */
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 0 1rem calc(1rem + 3.875rem + max(1.25rem, env(safe-area-inset-bottom))); pointer-events: none; }
   .composer-inner { pointer-events: auto; }
   .composer-veil { display: none; }
   .composer-box { gap: 0.25rem; padding: 0.5rem 0.5rem 0.5rem 0.875rem; border-radius: 1.5rem; box-shadow: 0 1.125rem 2.125rem -1.125rem rgba(43, 25, 1, 0.45); }

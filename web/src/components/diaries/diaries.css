@@ -110,7 +110,10 @@
   flex: none; height: 2.375rem; padding: 0 1.125rem; border: 0; border-radius: 62.4375rem;
   background: #525833; color: #d3c9ba; font: var(--font-weight-normal) 0.84375rem Caprasimo, Georgia, serif; cursor: pointer; transition: background 0.15s;
 }
-.diaries-bring:hover { background: #4c3e2c; }
+/* Touch Safari can retain :hover after a tap; only hover-capable pointers get it. */
+@media (hover: hover) and (pointer: fine) {
+  .diaries-bring:hover { background: #4c3e2c; }
+}
 /* the phone's own chrome: hidden until the room is a pushed page */
 .diaries-bar, .diaries-expand { display: none; }
 

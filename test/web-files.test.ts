@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { parseContactNickname } from "../src/conversation/contact-nickname.js";
 import { getContactNickname } from "../src/conversation/contact-note.js";
 import { HttpError } from "../src/web/http.js";
-import { listWebFiles, readWebFile, writeWebFile } from "../src/web/file-routes.js";
+import { listWebFiles, readWebFile, readWebFileSeen, writeWebFile, writeWebFileSeen } from "../src/web/file-routes.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function configWithWorkspace(t: Parameters<typeof configWithDataDir>[0]) {
@@ -29,6 +29,8 @@ describe("web file routes", () => {
 		assert.equal(files.every((file) => file.exists), true);
 		assert.equal(files[0]?.title, "soul");
 		assert.equal(files[3]?.description, "what they do when the room gets quiet");
+		// the shelf reads unread marks off the listing, so it has to carry the text
+		assert.equal(files[3]?.content, "# Heartbeat\n");
 	});
 	it("reads missing allowlisted files as empty editable notes", async (t) => {
 		const config = await configWithWorkspace(t);
@@ -65,6 +67,19 @@ describe("web file routes", () => {
 		assert.equal(parseContactNickname("<!-- blank means you -->", ""), "");
 		assert.equal(parseContactNickname("<!-- unfinished", "you"), "you");
 		assert.equal(parseContactNickname(null, "you"), "you");
+	});
+
+	it("keeps what you have read per file, and drops what a caller shouldn't be storing", async (t) => {
+		const config = await configWithWorkspace(t);
+
+		assert.deepEqual(await readWebFileSeen(config), {});
+
+		await writeWebFileSeen(config, "memory", ["abc", "def"]);
+		const seen = await writeWebFileSeen(config, "soul", ["ghi", "x".repeat(64), 7 as unknown as string]);
+
+		assert.deepEqual(seen, { memory: ["abc", "def"], soul: ["ghi"] });
+		assert.deepEqual(await readWebFileSeen(config), seen);
+		await assert.rejects(() => writeWebFileSeen(config, "../SOUL.md", []), HttpError);
 	});
 
 	it("rejects unknown file ids", async (t) => {

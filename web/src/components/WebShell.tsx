@@ -31,6 +31,8 @@ interface RoomProps {
   onBring: (text: string) => void;
   /** the way back out of a pushed page */
   onBack: () => void;
+  /** whether this room is the one on screen — a hidden room stays mounted */
+  visible: boolean;
 }
 
 /** one row per room: what the rail/mobile bar draws and what the surface renders.
@@ -211,7 +213,7 @@ export function WebShell({
       {ROOMS.map(({ id, Page }) =>
         Page && mounted.has(id) ? (
           <section key={id} className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === id ? "flex" : "hidden")}>
-            <Page onBring={bring} onBack={() => open("chat")} />
+            <Page onBring={bring} onBack={() => open("chat")} visible={selectedPage === id} />
           </section>
         ) : null,
       )}

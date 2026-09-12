@@ -111,6 +111,18 @@ export const IconEdit = glyph(
     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
   </>,
 );
+export const IconEye = glyph(
+  <>
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+    <circle cx="12" cy="12" r="2.6" />
+  </>,
+);
+export const IconKeep = glyph(
+  <>
+    <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H15l5 5v8.5A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z" />
+    <path d="M8 4v5h6" />
+  </>,
+);
 export const IconSticker = glyph(
   <>
     <path d="M13.5 3H7a4 4 0 0 0-4 4v10a4 4 0 0 0 4 4h10a4 4 0 0 0 4-4v-6.5z" />

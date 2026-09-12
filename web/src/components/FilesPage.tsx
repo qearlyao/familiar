@@ -1,360 +1,429 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Save } from "lucide-react";
+import { createElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import {
-  MarkdownEditorShell,
-  MarkdownEditorSkeleton,
-  type MarkdownViewMode,
-} from "@/components/MarkdownEditorShell";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  fetchFile,
+  fetchAuthMode,
   fetchFiles,
+  markFileSeen,
   saveFile,
-  type WebFileEntry,
   type WebFileId,
+  type WebFileSeen,
   type WebFileSummary,
 } from "@/lib/api";
+import { keepsakeBlocks, unreadLines } from "./keepsakeBlocks";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { IconChevronLeft, IconChevronRight, IconEdit, IconEye, IconInfo, IconKeep } from "./organicIcons";
+import "./keepsakes.css";
 
-interface FileRecord {
+/** Keepsakes 1a/1b/2a/2b: the kept shelf. These files ride into every chat, so the shelf reads
+    as kept things rather than a stack you pick from, and each card carries what it costs the
+    window. Reading is the default; the switch in the sheet head throws it to raw markdown.
+
+    A phone gets the shelf alone (2a); opening a file takes the whole screen (2b), with the
+    discard/keep pair above the tab bar. */
+
+const PHONE = "(max-width: 700px)";
+/** rough and honestly labelled — four bytes to a token is close enough to size the bars */
+const BYTES_PER_TOKEN = 4;
+
+interface Kept {
   summary: WebFileSummary;
-  savedContent?: string;
+  /** what's on disk; undefined until the file has been opened once */
+  saved?: string;
+  /** what's been typed since, kept per file so switching cards doesn't lose it */
   draft?: string;
 }
 
-type FileRecords = Partial<Record<WebFileId, FileRecord>>;
+type Shelf = Partial<Record<WebFileId, Kept>>;
 
-function formatSavedAt(mtimeMs: number | null): string {
-  if (mtimeMs === null) return "not written yet";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
+/** one tone per file, shared by the totals slice and that file's own strip */
+const TONES = ["#2b1901", "#4c3e2c", "#525833", "#d6bd8a", "#8c7a5c"];
+const UNSAVED = "#6e2e14";
+
+const tokens = (text: string) => Math.round(text.length / BYTES_PER_TOKEN);
+const stem = (name: string) => name.replace(/\.md$/i, "");
+const dirtyRow = (kept: Kept | undefined) =>
+  kept?.saved !== undefined && kept.draft !== undefined && kept.draft !== kept.saved;
+/** what a card weighs: whatever text is in hand, and the size on disk until it's been opened */
+const weight = (kept: Kept | undefined) => {
+  const text = kept?.draft ?? kept?.saved;
+  return text === undefined ? Math.round((kept?.summary.sizeBytes ?? 0) / BYTES_PER_TOKEN) : tokens(text);
+};
+
+function since(mtimeMs: number | null): string {
+  if (mtimeMs === null) return "nothing written yet";
+  return `saved ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     .format(new Date(mtimeMs))
-    .toLowerCase();
+    .toLowerCase()}`;
 }
 
-function fileMeta(file: WebFileSummary): string {
-  return file.exists ? `saved ${formatSavedAt(file.mtimeMs)}` : "ready for a first note";
+/** the blocks of a keepsake as it stands on disk, for marking it read */
+const fingerprints = (text: string) => keepsakeBlocks(text).map((block) => block.fingerprint);
+
+const NO_MARKS: ReadonlySet<number> = new Set();
+/** every element that can stand alone in a keepsake, so a mark lands on exactly what changed */
+const MARKABLE = ["p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"] as const;
+
+interface MarkableProps {
+  node?: { position?: { start: { line: number } } };
+  className?: string;
+  children?: ReactNode;
 }
 
-function mergeFileSummaries(current: FileRecords, summaries: WebFileSummary[]): FileRecords {
-  const next: FileRecords = {};
-  for (const summary of summaries) {
-    next[summary.id] = { ...current[summary.id], summary };
-  }
-  return next;
+/** tags each top-level block that started on an unread line, so the prose shows what's new */
+function markUnread(marks: ReadonlySet<number>): Components | undefined {
+  if (marks.size === 0) return undefined;
+  const wrap = (tag: string) =>
+    function Marked({ node, className, children, ...rest }: MarkableProps) {
+      const line = node?.position?.start.line;
+      return createElement(
+        tag,
+        { ...rest, className: cn(className, line !== undefined && marks.has(line) && "kept-new") },
+        children,
+      );
+    };
+  return Object.fromEntries(MARKABLE.map((tag) => [tag, wrap(tag)])) as Components;
 }
 
-function mergeLoadedFile(current: FileRecords, file: WebFileEntry): FileRecords {
-  const { content: savedContent, ...summary } = file;
-  return {
-    ...current,
-    [file.id]: {
-      ...current[file.id],
-      summary,
-      savedContent,
-    },
+export function FilesPage({ onBack, visible }: { onBack: () => void; visible: boolean }) {
+  const phone = useMediaQuery(PHONE);
+  const [order, setOrder] = useState<WebFileId[]>([]);
+  const [shelf, setShelf] = useState<Shelf>({});
+  const [openId, setOpenId] = useState<WebFileId>();
+  const [editing, setEditing] = useState(false);
+  const [seen, setSeen] = useState<WebFileSeen>({});
+  const [persona, setPersona] = useState("they");
+  const [note, setNote] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const say = (err: unknown) => setNote(err instanceof Error ? err.message : String(err));
+
+  const reload = useCallback(
+    () =>
+      fetchFiles()
+        .then(async ({ files, seen: read }) => {
+          setOrder(files.map((file) => file.id));
+          // the first card is open on a desk; a phone starts on the shelf itself
+          if (!window.matchMedia(PHONE).matches) setOpenId((cur) => cur ?? files[0]?.id);
+          // the listing carries each keepsake's text — the shelf needs it to say what's unread
+          setShelf((prev) => {
+            const next: Shelf = {};
+            for (const { content, ...summary } of files) {
+              next[summary.id] = { ...prev[summary.id], summary, saved: content };
+            }
+            return next;
+          });
+          setSeen(read);
+
+          // a keepsake with no record has never been looked at; baseline it now so the next
+          // change to it reads as new rather than the whole file reading as new
+          for (const file of files) {
+            if (read[file.id]) continue;
+            setSeen(await markFileSeen(file.id, fingerprints(file.content)));
+          }
+        })
+        .catch(say)
+        .finally(() => setLoading(false)),
+    [],
+  );
+
+  useEffect(() => {
+    void reload();
+    fetchAuthMode()
+      .then(({ personaName }) => setPersona(personaName))
+      .catch(() => undefined);
+  }, [reload]);
+
+  const kept = openId ? shelf[openId] : undefined;
+  const draft = kept?.draft ?? kept?.saved ?? "";
+  const dirty = dirtyRow(kept);
+  const ready = kept?.saved !== undefined;
+
+  // what's unread in each keepsake, against what was on disk the last time you looked at it
+  const unread = useMemo(() => {
+    const out: Partial<Record<WebFileId, ReadonlySet<number>>> = {};
+    for (const id of order) {
+      const text = shelf[id]?.saved;
+      if (text !== undefined) out[id] = unreadLines(text, seen[id]);
+    }
+    return out;
+  }, [order, seen, shelf]);
+
+  // an edit in hand moves every line under it, so the marks stand down until it's saved or dropped
+  const marks = (!dirty && openId && unread[openId]) || NO_MARKS;
+
+  // leaving a file is what marks it read: switching cards, closing it, or leaving the room
+  const latest = useRef(shelf);
+  useEffect(() => {
+    latest.current = shelf;
+  }, [shelf]);
+  useEffect(() => {
+    if (!openId || !visible) return;
+    return () => {
+      const text = latest.current[openId]?.saved;
+      if (text !== undefined) markFileSeen(openId, fingerprints(text)).then(setSeen).catch(() => undefined);
+    };
+  }, [openId, visible]);
+
+  const keep = () => {
+    if (!openId || !dirty) return;
+    setBusy(true);
+    setNote(undefined);
+    saveFile(openId, draft)
+      .then(({ content, ...summary }) => {
+        setShelf((prev) => ({ ...prev, [summary.id]: { summary, saved: content } }));
+        setNote(`${persona} knows this now`);
+        // what you just wrote is by definition read
+        return markFileSeen(summary.id, fingerprints(content)).then(setSeen);
+      })
+      .catch(say)
+      .finally(() => setBusy(false));
   };
-}
 
-function mergeSavedFile(current: FileRecords, file: WebFileEntry): FileRecords {
-  const { content: savedContent, ...summary } = file;
-  return {
-    ...current,
-    [file.id]: {
-      summary,
-      savedContent,
-    },
+  const discard = () => {
+    if (!openId) return;
+    setShelf((prev) => (prev[openId] ? { ...prev, [openId]: { ...prev[openId], draft: undefined } } : prev));
+    setNote(undefined);
   };
-}
 
-function mergeDraft(current: FileRecords, id: WebFileId, draft: string): FileRecords {
-  const record = current[id];
-  if (!record) return current;
-  return {
-    ...current,
-    [id]: { ...record, draft },
+  const files = order.flatMap((id) => (shelf[id]?.summary ? [{ id, kept: shelf[id] as Kept }] : []));
+  const total = files.reduce((sum, file) => sum + weight(file.kept), 0);
+  const share = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 100));
+
+  const openFile = (id: WebFileId) => {
+    setOpenId(id);
+    setEditing(dirtyRow(shelf[id]));
+    setNote(undefined);
   };
-}
 
-function isDirtyRecord(record: FileRecord | undefined): boolean {
-  return record?.savedContent !== undefined && record.draft !== undefined && record.draft !== record.savedContent;
-}
+  const tone = (index: number) => TONES[index];
+  const openIndex = Math.max(order.indexOf(openId as WebFileId), 0);
+  const onDisk = kept?.saved === undefined ? weight(kept) : tokens(kept.saved);
+  const delta = weight(kept) - onDisk;
 
-function FileListButton({
-  file,
-  active,
-  dirty,
-  onSelect,
-}: {
-  file: WebFileSummary;
-  active: boolean;
-  dirty: boolean;
-  onSelect: () => void;
-}) {
-  return (
+  /* what the open file costs: its own tone for what's on disk, clay for what isn't saved yet */
+  const weighBar = (
+    <span className="kept-weigh">
+      <span className="kept-track">
+        <span style={{ width: `${share(onDisk)}%`, background: tone(openIndex) }} />
+        {delta !== 0 && <span style={{ width: `${share(Math.abs(delta))}%`, background: UNSAVED }} />}
+      </span>
+      <span className={cn(delta !== 0 && "kept-loud")}>
+        {weight(kept).toLocaleString()}
+        {delta === 0 ? "" : ` · ${delta > 0 ? "+" : "−"}${Math.abs(delta).toLocaleString()} unsaved`}
+      </span>
+    </span>
+  );
+
+  const modeSwitch = (
     <button
       type="button"
-      onClick={onSelect}
-      aria-current={active ? "page" : undefined}
-      className={cn("note-row group", active && "note-row-active")}
+      role="switch"
+      aria-checked={editing}
+      className="kept-mode"
+      title={editing ? "back to reading" : "edit the file"}
+      onClick={() => setEditing(!editing)}
     >
-      <span className="note-row-name">{file.title}</span>
-      <span className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-        {file.description}
-      </span>
-      <span
-        className={cn(
-          "mt-1 block font-serif text-[0.7rem] italic",
-          dirty ? "text-primary/90" : "text-muted-foreground/80",
-        )}
-      >
-        {dirty ? "unsaved changes" : file.exists ? `saved ${formatSavedAt(file.mtimeMs)}` : "ready for a first note"}
-      </span>
-      <span className="sr-only">
-        {file.name}
-        {dirty ? " unsaved changes" : ""}
+      {editing ? <IconEdit size={13} /> : <IconEye size={13} />}
+      {editing ? "editing" : "reading"}
+      <span>
+        <span />
       </span>
     </button>
   );
-}
 
-export function FilesPage() {
-  const [fileOrder, setFileOrder] = useState<WebFileId[]>([]);
-  const [fileRecords, setFileRecords] = useState<FileRecords>({});
-  const [selectedId, setSelectedId] = useState<WebFileId>();
-  const [mode, setMode] = useState<MarkdownViewMode>("edit");
-  const [loadingList, setLoadingList] = useState(true);
-  const [loadingFile, setLoadingFile] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [savedNotice, setSavedNotice] = useState<string | undefined>();
-  const [mobileEditor, setMobileEditor] = useState(false);
-  const [settle, setSettle] = useState(false);
-
-  const selectedRecord = selectedId ? fileRecords[selectedId] : undefined;
-  const selectedSummary = selectedRecord?.summary;
-  const draft = selectedRecord?.draft ?? selectedRecord?.savedContent ?? "";
-  const dirty = isDirtyRecord(selectedRecord);
-
-  const loadList = useCallback(async () => {
-    setLoadingList(true);
-    setError(undefined);
-    try {
-      const next = await fetchFiles();
-      setFileOrder(next.map((file) => file.id));
-      setFileRecords((current) => mergeFileSummaries(current, next));
-      setSelectedId((current) => (current && next.some((file) => file.id === current) ? current : next[0]?.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoadingList(false);
-    }
-  }, []);
-
-  // Loads a file's saved baseline into the cache. Never touches `draft`, so an
-  // in-progress edit survives a reload, a note switch, or a refresh.
-  const loadFile = useCallback(async (id: WebFileId) => {
-    setLoadingFile(true);
-    setError(undefined);
-    try {
-      const next = await fetchFile(id);
-      setFileRecords((current) => mergeLoadedFile(current, next));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoadingFile(false);
-    }
-  }, []);
-
-  const saveCurrentFile = useCallback(async () => {
-    if (!selectedId) return;
-    setSaving(true);
-    setError(undefined);
-    setSavedNotice(undefined);
-    try {
-      const next = await saveFile(selectedId, draft);
-      setFileRecords((current) => mergeSavedFile(current, next));
-      setSavedNotice("familiar knows this now");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  }, [draft, selectedId]);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => void loadList(), 0);
-    return () => window.clearTimeout(id);
-  }, [loadList]);
-
-  useEffect(() => {
-    if (!selectedId || fileRecords[selectedId]?.savedContent !== undefined) return;
-    const id = window.setTimeout(() => void loadFile(selectedId), 0);
-    return () => window.clearTimeout(id);
-  }, [fileRecords, loadFile, selectedId]);
-
-  useEffect(() => {
-    if (!savedNotice) return;
-    const id = window.setTimeout(() => setSavedNotice(undefined), 2600);
-    return () => window.clearTimeout(id);
-  }, [savedNotice]);
-
-  const refresh = useCallback(() => {
-    void loadList();
-    if (selectedId) void loadFile(selectedId);
-  }, [loadFile, loadList, selectedId]);
-
-  const files = useMemo(
-    () => fileOrder.flatMap((id) => (fileRecords[id]?.summary ? [fileRecords[id].summary] : [])),
-    [fileOrder, fileRecords],
+  const body = !ready ? (
+    <div className="kept-read">
+      <p className="kept-quiet">opening it…</p>
+    </div>
+  ) : editing ? (
+    <textarea
+      className="kept-body"
+      value={draft}
+      aria-label={`edit ${kept?.summary.name}`}
+      placeholder="write it the way you'd tell a person. they read markdown."
+      onChange={(event) =>
+        setShelf((prev) =>
+          openId && prev[openId] ? { ...prev, [openId]: { ...prev[openId], draft: event.target.value } } : prev,
+        )
+      }
+    />
+  ) : (
+    <div className="kept-read">
+      {draft.trim() ? (
+        <MarkdownRenderer
+          text={draft}
+          remarkPlugins={[remarkGfm]}
+          components={markUnread(marks)}
+          className="warm-prose kept-prose"
+        />
+      ) : (
+        <p className="kept-quiet">this one is still empty — throw the switch and write the first line.</p>
+      )}
+    </div>
   );
 
-  const dirtyById = useMemo(() => {
-    const out: Partial<Record<WebFileId, boolean>> = {};
-    for (const id of fileOrder) {
-      if (isDirtyRecord(fileRecords[id])) out[id] = true;
-    }
-    return out;
-  }, [fileOrder, fileRecords]);
-
-  const canSave = dirty && !saving && !loadingFile;
-  const showInitialSkeleton = loadingList && fileOrder.length === 0;
-  const editorReady = selectedRecord?.savedContent !== undefined;
+  const foot = (
+    <footer className="kept-foot">
+      <span className={cn(note && "kept-loud", !note && marks.size > 0 && "kept-fresh")}>
+        {note ??
+          (dirty
+            ? "unsaved · not carried yet"
+            : marks.size > 0
+              ? "shaded parts are new since you last looked"
+              : kept
+                ? since(kept.summary.mtimeMs)
+                : "")}
+      </span>
+      <button type="button" className="kept-discard" disabled={busy || !dirty} onClick={discard}>
+        discard
+      </button>
+      <button type="button" className="kept-keep" disabled={busy || !dirty} onClick={keep}>
+        <IconKeep size={15} />
+        keep it
+      </button>
+    </footer>
+  );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <h1 className="font-serif text-2xl leading-none tracking-tight">keepsakes</h1>
-            <p className="font-serif text-[0.8rem] italic text-muted-foreground">the names and notes kept close</p>
+    <div className="kept chat-theme">
+      <div className="kept-shelf">
+        <header className="kept-head">
+          <button type="button" className="kept-back" aria-label="back to the talk" title="back to the talk" onClick={onBack}>
+            <IconChevronLeft size={17} />
+          </button>
+          <div>
+            <h2>keepsakes</h2>
+            <span>
+              {loading
+                ? "taking them off the shelf…"
+                : `${files.length} ${files.length === 1 ? "file" : "files"} ${persona} always carries`}
+            </span>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="refresh"
-            title="refresh"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={refresh}
-            disabled={loadingList}
-          >
-            <RefreshCw className={cn("size-4", loadingList && "animate-spin motion-reduce:animate-none")} />
-          </Button>
-        </div>
-      </header>
-      {error ? (
-        <p className="border-b border-border bg-card px-3 py-2 font-serif text-xs italic text-destructive md:px-8">
-          {error}
-        </p>
-      ) : savedNotice ? (
-        <p className="border-b border-border bg-card px-3 py-2 font-serif text-xs italic text-muted-foreground md:px-8">
-          {savedNotice}
-        </p>
-      ) : null}
-      {showInitialSkeleton ? (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <aside className="min-h-0 flex-1 rounded-md border border-border bg-card p-3 md:w-72 md:flex-none">
-            <div className="space-y-3" aria-hidden>
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-18 rounded-sm bg-muted-foreground/10" />
+        </header>
+
+        {total > 0 && (
+          <div className="kept-total">
+            <span>
+              <b>{total.toLocaleString()}</b>
+              <span>tokens of the window, about</span>
+            </span>
+            <span className="kept-slices">
+              {files.map((file, index) => (
+                <span
+                  key={file.id}
+                  style={{ width: `${share(weight(file.kept))}%`, background: tone(index) }}
+                />
               ))}
+            </span>
+            <span>{persona} reads all of them before you speak</span>
+          </div>
+        )}
+
+        <div className="kept-cards">
+          {files.map(({ id, kept: file }, index) => {
+            const isOpen = id === openId;
+            const unsaved = dirtyRow(file);
+            const fresh = (isOpen && !dirty ? marks.size : (unread[id]?.size ?? 0)) || 0;
+            return (
+              <button key={id} type="button" className={cn("kept-card", isOpen && "is-open")} onClick={() => openFile(id)}>
+                <span className="kept-card-name">
+                  <b>{stem(file.summary.name)}</b>
+                  <code className="kept-card-code">.md</code>
+                  <IconChevronRight size={17} />
+                </span>
+                <span className={cn("kept-card-line", unsaved && "is-loud", !unsaved && fresh > 0 && "is-new")}>
+                  {unsaved
+                    ? "unsaved · writing now"
+                    : fresh > 0
+                      ? `${fresh} ${fresh === 1 ? "part is" : "parts are"} new since you looked`
+                      : file.summary.description}
+                </span>
+                <span className="kept-weigh">
+                  <span className="kept-track">
+                    <span
+                      style={{ width: `${share(isOpen ? onDisk : weight(file))}%`, background: isOpen ? undefined : tone(index) }}
+                    />
+                    {isOpen && delta !== 0 && <span style={{ width: `${share(Math.abs(delta))}%`, background: UNSAVED }} />}
+                  </span>
+                  <span>{weight(file).toLocaleString()}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="kept-note" title={`${persona} writes in MEMORY.md too — edit or delete those lines like your own.`}>
+          <IconInfo size={14} />
+          kept for good — emptied, never removed
+        </p>
+      </div>
+
+      {!openId ? (
+        !phone && (
+          <article className="kept-sheet is-shut">
+            <p>{note ?? "pick one off the shelf."}</p>
+          </article>
+        )
+      ) : phone ? (
+        <div className="kept-open">
+          <header className="kept-bar">
+            <button
+              type="button"
+              className="kept-back"
+              aria-label="back to the shelf"
+              title="back to the shelf"
+              onClick={() => setOpenId(undefined)}
+            >
+              <IconChevronLeft size={17} />
+            </button>
+            <span>
+              <b>{kept?.summary.name}</b>
+              <span className={cn(dirty && "kept-loud", !dirty && marks.size > 0 && "kept-fresh")}>
+                {dirty
+                  ? `${editing ? "editing" : "reading"} · not saved`
+                  : marks.size > 0
+                    ? `${marks.size} shaded ${marks.size === 1 ? "part is" : "parts are"} new`
+                    : since(kept?.summary.mtimeMs ?? null)}
+              </span>
+            </span>
+            {modeSwitch}
+          </header>
+          {weighBar}
+          <article className="kept-sheet">
+            <div className="kept-naming">
+              <b>{kept?.summary.title}</b>
+              <span>{editing ? "raw markdown · both of you write here" : kept?.summary.description}</span>
             </div>
-          </aside>
-          <main className="hidden min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card md:block">
-            <MarkdownEditorSkeleton />
-          </main>
+            {body}
+          </article>
+          {foot}
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 md:flex-row md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <aside
-            className={cn(
-              "min-h-0 flex-col rounded-md border border-border bg-card py-2 md:flex md:w-72 md:flex-none",
-              mobileEditor ? "hidden md:flex" : "flex flex-1",
+        <article className="kept-sheet">
+          <header className="kept-sheet-head">
+            <code>keepsakes/{kept?.summary.name}</code>
+            <span className="kept-share">
+              {weight(kept).toLocaleString()} tokens · {share(weight(kept))}% of what {persona} carries
+            </span>
+            {delta !== 0 && (
+              <span className="kept-share kept-loud kept-unsaved">
+                {delta > 0 ? "+" : "−"}
+                {Math.abs(delta).toLocaleString()} unsaved
+              </span>
             )}
-          >
-            <div className="px-4 pb-2 pt-3">
-              <p className="font-serif text-sm leading-tight tracking-tight">the five notes</p>
-              <p className="mt-1 font-serif text-xs italic text-muted-foreground">
-                each one changes how familiar knows the room.
-              </p>
-            </div>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="px-1 pb-1">
-                {files.map((file) => (
-                  <FileListButton
-                    key={file.id}
-                    file={file}
-                    active={file.id === selectedId}
-                    dirty={dirtyById[file.id] === true}
-                    onSelect={() => {
-                      setSelectedId(file.id);
-                      setMobileEditor(true);
-                      setSettle(true);
-                      setSavedNotice(undefined);
-                    }}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
-          </aside>
-          <MarkdownEditorShell
-            mobileEditor={mobileEditor}
-            backLabel="all notes"
-            onBack={() => setMobileEditor(false)}
-            editorReady={editorReady}
-            mode={mode}
-            onModeChange={setMode}
-            modeSubject="file"
-            settle={settle}
-            toolbar={({ viewToggle }) => (
-              <div className="flex flex-col gap-3 px-4 pb-3 pt-2 md:flex-row md:flex-wrap md:items-start md:px-6 md:pb-4 md:pt-5">
-                <div className="min-w-0 flex-1">
-                  <h1 className="font-serif text-2xl leading-tight tracking-tight text-balance">
-                    {selectedSummary?.title ?? "note"}
-                  </h1>
-                  <p className="mt-1 max-w-[62ch] text-xs leading-relaxed text-muted-foreground">
-                    {selectedSummary?.description ?? "loading note"}
-                  </p>
-                </div>
-                <div className="flex w-full shrink-0 flex-wrap items-center justify-between gap-2 md:w-auto md:justify-end">
-                  {viewToggle}
-                  <Button type="button" size="sm" onClick={() => void saveCurrentFile()} disabled={!canSave}>
-                    <Save className="size-3.5" />
-                    {saving ? "saving" : "save note"}
-                  </Button>
-                </div>
-                <p className="basis-full font-serif text-xs italic text-muted-foreground">
-                  {dirty ? "unsaved changes" : selectedSummary ? fileMeta(selectedSummary) : "loading note"}
-                </p>
-              </div>
-            )}
-            renderEdit={(animationClassName) => (
-              <Textarea
-                value={draft}
-                onChange={(event) => {
-                  if (!selectedId) return;
-                  setFileRecords((current) => mergeDraft(current, selectedId, event.target.value));
-                }}
-                spellCheck
-                aria-label={`edit ${selectedSummary?.title ?? "note"}`}
-                className={cn(
-                  "mx-auto min-h-0 w-full max-w-[72ch] flex-1 resize-none rounded-none border-0 bg-card px-6 py-8 font-sans text-[0.95rem] leading-relaxed shadow-none focus-visible:ring-0 md:px-8 md:py-10",
-                  animationClassName,
-                )}
-              />
-            )}
-            previewText={draft}
-            previewProseClassName="file-prose"
-            emptyPreviewText="this note is quiet for now."
-          />
-        </div>
+            {modeSwitch}
+          </header>
+          <div className="kept-naming">
+            <b>{kept?.summary.title}</b>
+            <span>{editing ? "raw markdown · both of you write here" : kept?.summary.description}</span>
+          </div>
+          {body}
+          {foot}
+        </article>
       )}
     </div>
   );

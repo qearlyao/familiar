@@ -205,9 +205,17 @@ export async function fetchDiary(date: string): Promise<DiaryEntry> {
   return body.diary;
 }
 
-export async function fetchFiles(): Promise<WebFileSummary[]> {
-  const body = await getJson<{ files: WebFileSummary[] }>("/api/web/files", "files");
-  return body.files;
+/** which blocks of each keepsake have already been read, by fingerprint; a file with no entry
+    has never been looked at, so nothing in it counts as unread */
+export type WebFileSeen = Partial<Record<WebFileId, string[]>>;
+
+export async function fetchFiles(): Promise<{ files: WebFileEntry[]; seen: WebFileSeen }> {
+  return getJson<{ files: WebFileEntry[]; seen: WebFileSeen }>("/api/web/files", "files");
+}
+
+export async function markFileSeen(id: WebFileId, blocks: string[]): Promise<WebFileSeen> {
+  const body = await jsonRequest<{ seen: WebFileSeen }>("/api/web/keepsake-seen", "PUT", { id, blocks }, "seen");
+  return body.seen;
 }
 
 export async function fetchFile(id: WebFileId): Promise<WebFileEntry> {

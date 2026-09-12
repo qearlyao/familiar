@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 
 import type { Config } from "../config/index.js";
 import { applyContactNoteContent, setContactNotePath } from "../conversation/contact-note.js";
-import { isEnoent } from "../util/fs.js";
+import { atomicWriteJson, createWriteQueue, isEnoent, readFileOrNull } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import { HttpError, readJsonBody, sendJson } from "./http.js";
 import type { RegisterWebRoute } from "./routes.js";
@@ -80,10 +80,20 @@ export interface WebFileEntry extends WebFileSummary {
 }
 
 const MAX_WEB_FILE_BODY_BYTES = 1024 * 1024;
+/** a keepsake with more parts than this has bigger problems than an unread mark */
+const MAX_SEEN_BLOCKS = 4000;
+const MAX_SEEN_BLOCK_LENGTH = 32;
+
+/** which blocks of each keepsake have already been read, by the fingerprints the room computes.
+    A file with no entry has never been looked at, so nothing in it counts as unread yet. */
+export type WebFileSeen = Partial<Record<WebFileId, string[]>>;
+
+const enqueueSeenWrite = createWriteQueue("keepsake seen");
 
 export function registerWebFileRoutes(route: RegisterWebRoute, config: Config): void {
 	route("GET", "/api/web/files", async (_request, response) => {
-		sendJson(response, 200, { files: await listWebFiles(config) });
+		const [files, seen] = await Promise.all([listWebFiles(config), readWebFileSeen(config)]);
+		sendJson(response, 200, { files, seen });
 	});
 
 	route("GET", "/api/web/file", async (_request, response, url) => {
@@ -96,10 +106,59 @@ export function registerWebFileRoutes(route: RegisterWebRoute, config: Config): 
 		const { id, content } = fileUpdateFromBody(body);
 		sendJson(response, 200, { file: await writeWebFile(config, id, content) });
 	});
+
+	route("PUT", "/api/web/keepsake-seen", async (request, response) => {
+		const body = await readJsonBody(request, MAX_WEB_FILE_BODY_BYTES);
+		const { id, blocks } = seenUpdateFromBody(body);
+		sendJson(response, 200, { seen: await writeWebFileSeen(config, id, blocks) });
+	});
 }
 
-export async function listWebFiles(config: Config): Promise<WebFileSummary[]> {
-	return Promise.all(WEB_FILES.map((definition) => readFileSummary(config, definition)));
+function seenPath(config: Config): string {
+	return resolve(config.workspace.dataDir, "settings", "keepsakes-seen.json");
+}
+
+export async function readWebFileSeen(config: Config): Promise<WebFileSeen> {
+	const raw = await readFileOrNull(seenPath(config), "utf8");
+	if (!raw) return {};
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return {};
+	}
+	if (!isRecord(parsed)) return {};
+	const seen: WebFileSeen = {};
+	for (const definition of WEB_FILES) {
+		const blocks = parsed[definition.id];
+		if (Array.isArray(blocks)) seen[definition.id] = cleanBlocks(blocks);
+	}
+	return seen;
+}
+
+export async function writeWebFileSeen(config: Config, rawId: string, blocks: unknown[]): Promise<WebFileSeen> {
+	const definition = webFileDefinition(rawId);
+	return enqueueSeenWrite(async () => {
+		const seen = { ...(await readWebFileSeen(config)), [definition.id]: cleanBlocks(blocks) };
+		await atomicWriteJson(seenPath(config), seen);
+		return seen;
+	});
+}
+
+function cleanBlocks(blocks: unknown[]): string[] {
+	return blocks
+		.filter((block): block is string => typeof block === "string" && block.length <= MAX_SEEN_BLOCK_LENGTH)
+		.slice(0, MAX_SEEN_BLOCKS);
+}
+
+function seenUpdateFromBody(body: unknown): { id: string; blocks: unknown[] } {
+	if (!isRecord(body) || typeof body.id !== "string") throw new HttpError(400, "file id is required");
+	if (!Array.isArray(body.blocks)) throw new HttpError(400, "blocks are required");
+	return { id: body.id, blocks: body.blocks };
+}
+
+export async function listWebFiles(config: Config): Promise<WebFileEntry[]> {
+	return Promise.all(WEB_FILES.map((definition) => readWebFile(config, definition.id)));
 }
 
 export async function readWebFile(config: Config, rawId: string): Promise<WebFileEntry> {

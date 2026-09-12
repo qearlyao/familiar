@@ -87,7 +87,7 @@ export function AuthGate() {
   }
 
   return (
-    <div className="flex h-dvh items-center justify-center bg-background px-5 text-foreground antialiased">
+    <div className="flex h-dvh items-center justify-center bg-background px-5 text-foreground">
       <p className="font-serif text-sm italic text-muted-foreground">checking the door…</p>
     </div>
   );
@@ -124,7 +124,7 @@ function BearerLogin({
   };
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground antialiased">
+    <div className="flex h-dvh flex-col bg-background text-foreground">
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-5 py-10">
         <form onSubmit={submit} className="rounded-md border border-border bg-card px-5 py-5 shadow-sm">
           <div className="mb-5">

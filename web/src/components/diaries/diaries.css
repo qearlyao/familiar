@@ -3,17 +3,17 @@
    sits on; only the open day gets its own lighter sheet. */
 
 .diaries-room {
-  height: 100%; min-height: 0; padding: 26px; display: flex; gap: 22px;
+  height: 100%; min-height: 0; padding: 1.625rem; display: flex; gap: 1.375rem;
   background: #d3c9ba; color: #2b1901; font-family: Figtree, sans-serif;
 }
-.diaries-side { width: 296px; flex: none; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.diaries-side { width: 18.5rem; flex: none; display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; }
 
 .diaries-search {
-  flex: none; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px;
-  border-radius: 999px; background: #e7e0d5; border: 1.5px solid rgba(76, 62, 44, 0.22); color: #4c3e2c;
+  flex: none; display: flex; align-items: center; gap: 0.625rem; height: 2.5rem; padding: 0 1rem;
+  border-radius: 62.4375rem; background: #e7e0d5; border: 0.09375rem solid rgba(76, 62, 44, 0.22); color: #4c3e2c;
 }
 .diaries-search input {
-  min-width: 0; flex: 1; border: 0; background: transparent; font: 13.5px Figtree, sans-serif; color: #2b1901;
+  min-width: 0; flex: 1; border: 0; background: transparent; font: 0.84375rem Figtree, sans-serif; color: #2b1901;
 }
 .diaries-search input::placeholder { color: #525833; }
 .diaries-search input:focus { outline: none; }
@@ -21,15 +21,15 @@
 .diaries-search button { border: 0; background: transparent; color: #4c3e2c; display: grid; cursor: pointer; }
 
 /* month bar */
-.cal-bar { flex: none; display: flex; align-items: center; gap: 8px; }
+.cal-bar { flex: none; display: flex; align-items: center; gap: 0.5rem; }
 .cal-month {
-  flex: 1; min-width: 0; height: 38px; padding: 0 14px; border: 1.5px solid #525833; border-radius: 999px;
-  background: rgba(82, 88, 51, 0.16); color: #2b1901; font: 15px Caprasimo, Georgia, serif;
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  flex: 1; min-width: 0; height: 2.375rem; padding: 0 0.875rem; border: 0.09375rem solid #525833; border-radius: 62.4375rem;
+  background: rgba(82, 88, 51, 0.16); color: #2b1901; font: 0.9375rem Caprasimo, Georgia, serif;
+  display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
 }
 .cal-month svg { margin-left: auto; }
 .cal-step {
-  width: 34px; height: 34px; flex: none; border: 1.5px solid rgba(76, 62, 44, 0.3); border-radius: 999px;
+  width: 2.125rem; height: 2.125rem; flex: none; border: 0.09375rem solid rgba(76, 62, 44, 0.3); border-radius: 62.4375rem;
   background: transparent; color: #4c3e2c; display: grid; place-items: center; cursor: pointer;
 }
 .cal-step:hover:not(:disabled) { background: rgba(82, 88, 51, 0.14); }
@@ -37,31 +37,31 @@
 
 /* the year of months, with what each one holds */
 .cal-years {
-  flex: none; background: #e7e0d5; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-  box-shadow: 0 18px 34px -20px rgba(43, 25, 1, 0.4);
+  flex: none; background: #e7e0d5; border-radius: 1.25rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;
+  box-shadow: 0 1.125rem 2.125rem -1.25rem rgba(43, 25, 1, 0.4);
 }
-.cal-years-head { display: flex; align-items: center; gap: 10px; }
-.cal-years-head b { font: 15px Caprasimo, Georgia, serif; font-weight: 400; }
-.cal-years-head span { margin-left: auto; font-size: 11.5px; color: #4c3e2c; }
+.cal-years-head { display: flex; align-items: center; gap: 0.625rem; }
+.cal-years-head b { font: 0.9375rem Caprasimo, Georgia, serif; font-weight: 400; }
+.cal-years-head span { margin-left: auto; font-size: 0.71875rem; color: #4c3e2c; }
 .cal-years-head button {
-  width: 28px; height: 28px; flex: none; border: 0; border-radius: 999px; background: rgba(82, 88, 51, 0.16);
+  width: 1.75rem; height: 1.75rem; flex: none; border: 0; border-radius: 62.4375rem; background: rgba(82, 88, 51, 0.16);
   color: #4c3e2c; display: grid; place-items: center; cursor: pointer;
 }
 .cal-years-head button:disabled { background: transparent; color: rgba(76, 62, 44, 0.3); cursor: default; }
-.cal-year-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.cal-year-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.375rem; }
 .cal-year-month {
-  height: 52px; border: 1.5px solid transparent; border-radius: 14px; background: transparent;
-  color: rgba(76, 62, 44, 0.35); font: 600 12.5px Figtree, sans-serif; cursor: default;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  height: 3.25rem; border: 0.09375rem solid transparent; border-radius: 0.875rem; background: transparent;
+  color: rgba(76, 62, 44, 0.35); font: 600 0.78125rem Figtree, sans-serif; cursor: default;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem;
 }
-.cal-year-month span { font-size: 10.5px; font-weight: 500; opacity: 0.65; }
+.cal-year-month span { font-size: 0.65625rem; font-weight: 500; opacity: 0.65; }
 
 /* the month itself */
-.cal-grid { flex: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.cal-weekday { text-align: center; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #4c3e2c; }
+.cal-grid { flex: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3125rem; }
+.cal-weekday { text-align: center; font-size: 0.625rem; letter-spacing: 0.1em; text-transform: uppercase; color: #4c3e2c; }
 .cal-day {
-  height: 34px; border: 1.5px solid transparent; border-radius: 10px; background: transparent;
-  color: rgba(76, 62, 44, 0.35); font: 600 12.5px Figtree, sans-serif; cursor: default;
+  height: 2.125rem; border: 0.09375rem solid transparent; border-radius: 0.625rem; background: transparent;
+  color: rgba(76, 62, 44, 0.35); font: 600 0.78125rem Figtree, sans-serif; cursor: default;
   display: grid; place-items: center;
 }
 .cal-day.is-today { border-color: #525833; }
@@ -76,56 +76,56 @@
   background: #d6bd8a; color: #2b1901; border-color: #525833;
 }
 
-.diaries-legend { flex: none; display: flex; flex-wrap: wrap; gap: 13px; }
-.diaries-legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #4c3e2c; background: none; }
-.diaries-legend span::before { content: ""; width: 10px; height: 10px; border-radius: 4px; }
+.diaries-legend { flex: none; display: flex; flex-wrap: wrap; gap: 0.8125rem; }
+.diaries-legend span { display: inline-flex; align-items: center; gap: 0.4375rem; font-size: 0.71875rem; color: #4c3e2c; background: none; }
+.diaries-legend span::before { content: ""; width: 0.625rem; height: 0.625rem; border-radius: 0.25rem; }
 .diaries-legend span[data-weight="1"]::before { background: rgba(82, 88, 51, 0.2); }
 .diaries-legend span[data-weight="2"]::before { background: rgba(82, 88, 51, 0.42); }
 .diaries-legend span[data-weight="3"]::before { background: #525833; }
 
 /* what search turns up, where the calendar was */
-.diaries-found { min-height: 0; display: flex; flex-direction: column; gap: 7px; }
+.diaries-found { min-height: 0; display: flex; flex-direction: column; gap: 0.4375rem; }
 .diaries-hit {
-  padding: 11px 14px; border: 0; border-radius: 14px; background: rgba(82, 88, 51, 0.12); color: #2b1901;
-  font: inherit; text-align: left; display: flex; flex-direction: column; gap: 3px; cursor: pointer;
+  padding: 0.6875rem 0.875rem; border: 0; border-radius: 0.875rem; background: rgba(82, 88, 51, 0.12); color: #2b1901;
+  font: inherit; text-align: left; display: flex; flex-direction: column; gap: 0.1875rem; cursor: pointer;
 }
 .diaries-hit:hover { background: rgba(82, 88, 51, 0.2); }
 .diaries-hit.is-on { background: #d6bd8a; }
-.diaries-hit em { font-style: normal; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #525833; }
-.diaries-hit b { font: 14.5px/1.25 Caprasimo, Georgia, serif; font-weight: 400; }
+.diaries-hit em { font-style: normal; font-size: 0.65625rem; letter-spacing: 0.12em; text-transform: uppercase; color: #525833; }
+.diaries-hit b { font: 0.90625rem/1.25 Caprasimo, Georgia, serif; font-weight: 400; }
 
 /* the open day */
 /* only the writing scrolls — the day's head and the way out of it stay where you left them */
 .diaries-open {
-  flex: 1; min-width: 0; min-height: 0; background: #e7e0d5; border-radius: 22px; padding: 26px 28px;
-  display: flex; flex-direction: column; gap: 15px; overflow: hidden;
+  flex: 1; min-width: 0; min-height: 0; background: #e7e0d5; border-radius: 1.375rem; padding: 1.625rem 1.75rem;
+  display: flex; flex-direction: column; gap: 0.9375rem; overflow: hidden;
 }
-.diaries-note { margin: auto; font-size: 13.5px; color: #4c3e2c; }
-.diaries-head { flex: none; display: flex; align-items: flex-start; gap: 14px; }
-.diaries-title { margin-right: auto; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.diaries-title span { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #525833; }
-.diaries-title b { font: 27px/1.05 Caprasimo, Georgia, serif; font-weight: 400; text-wrap: pretty; }
-.diaries-do { flex: none; display: flex; gap: 6px; }
+.diaries-note { margin: auto; font-size: 0.84375rem; color: #4c3e2c; }
+.diaries-head { flex: none; display: flex; align-items: flex-start; gap: 0.875rem; }
+.diaries-title { margin-right: auto; display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
+.diaries-title span { font-size: 0.65625rem; letter-spacing: 0.14em; text-transform: uppercase; color: #525833; }
+.diaries-title b { font: 1.6875rem/1.05 Caprasimo, Georgia, serif; font-weight: 400; text-wrap: pretty; }
+.diaries-do { flex: none; display: flex; gap: 0.375rem; }
 .diaries-bring {
-  flex: none; height: 38px; padding: 0 18px; border: 0; border-radius: 999px;
-  background: #525833; color: #d3c9ba; font: 13.5px Caprasimo, Georgia, serif; cursor: pointer; transition: background 0.15s;
+  flex: none; height: 2.375rem; padding: 0 1.125rem; border: 0; border-radius: 62.4375rem;
+  background: #525833; color: #d3c9ba; font: 0.84375rem Caprasimo, Georgia, serif; cursor: pointer; transition: background 0.15s;
 }
 .diaries-bring:hover { background: #4c3e2c; }
 /* the phone's own chrome: hidden until the room is a pushed page */
 .diaries-bar, .diaries-expand { display: none; }
 
-.diaries-chips { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.diaries-chips { flex: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .diaries-chips span {
-  height: 28px; padding: 0 12px; border-radius: 999px; background: rgba(82, 88, 51, 0.16); color: #4c3e2c;
-  font-size: 12px; display: inline-flex; align-items: center;
+  height: 1.75rem; padding: 0 0.75rem; border-radius: 62.4375rem; background: rgba(82, 88, 51, 0.16); color: #4c3e2c;
+  font-size: 0.75rem; display: inline-flex; align-items: center;
 }
-.diaries-body { flex: 1; min-height: 0; overflow-y: auto; font-size: 16.5px; line-height: 1.68; color: #2b1901; text-wrap: pretty; }
+.diaries-body { flex: 1; min-height: 0; overflow-y: auto; font-size: 1.03125rem; line-height: 1.68; color: #2b1901; text-wrap: pretty; }
 .diaries-turn {
-  flex: none; margin-top: auto; display: flex; align-items: center; gap: 10px;
-  padding-top: 8px; border-top: 1px solid rgba(76, 62, 44, 0.16);
+  flex: none; margin-top: auto; display: flex; align-items: center; gap: 0.625rem;
+  padding-top: 0.5rem; border-top: 0.0625rem solid rgba(76, 62, 44, 0.16);
 }
 .diaries-turn button {
-  min-width: 0; border: 0; background: transparent; color: #525833; font: 13px Figtree, sans-serif;
+  min-width: 0; border: 0; background: transparent; color: #525833; font: 0.8125rem Figtree, sans-serif;
   text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .diaries-turn button:hover { color: #2b1901; text-decoration: underline; }
@@ -134,10 +134,10 @@
 /* 1b: a phone gets the archive as a pushed page — back to the talk instead of a room bar, the
    month on top, the day reading underneath, and search folded behind its icon. */
 @media (max-width: 700px) {
-  .diaries-bar { flex: none; display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .diaries-bar b { font: 22px/1 Caprasimo, Georgia, serif; font-weight: 400; }
+  .diaries-bar { flex: none; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.875rem; }
+  .diaries-bar b { font: 1.375rem/1 Caprasimo, Georgia, serif; font-weight: 400; }
   .diaries-bar button {
-    width: 36px; height: 36px; flex: none; border: 0; border-radius: 999px;
+    width: 2.25rem; height: 2.25rem; flex: none; border: 0; border-radius: 62.4375rem;
     background: rgba(82, 88, 51, 0.16); color: #4c3e2c; display: grid; place-items: center; cursor: pointer;
   }
   .diaries-bar .diaries-find { margin-left: auto; }
@@ -147,33 +147,33 @@
 
   /* read it all: the day takes the screen, the month waits behind it */
   .diaries-expand {
-    display: grid; place-items: center; flex: none; width: 46px; height: 46px;
-    border: 1.5px solid rgba(76, 62, 44, 0.3); border-radius: 999px; background: transparent;
+    display: grid; place-items: center; flex: none; width: 2.875rem; height: 2.875rem;
+    border: 0.09375rem solid rgba(76, 62, 44, 0.3); border-radius: 62.4375rem; background: transparent;
     color: #4c3e2c; cursor: pointer;
   }
   .diaries-expand[aria-pressed="true"] { background: rgba(82, 88, 51, 0.16); transform: rotate(180deg); }
   .is-full .diaries-side { display: none; }
   .is-full .diaries-open { margin-top: 0; }
 
-  .diaries-room { flex-direction: column; gap: 0; padding: 20px 18px 0; overflow: hidden; }
-  .diaries-side { width: auto; flex: none; gap: 14px; overflow: visible; }
-  .cal-step { width: 38px; height: 38px; border: 0; background: rgba(82, 88, 51, 0.16); }
+  .diaries-room { flex-direction: column; gap: 0; padding: 1.25rem 1.125rem 0; overflow: hidden; }
+  .diaries-side { width: auto; flex: none; gap: 0.875rem; overflow: visible; }
+  .cal-step { width: 2.375rem; height: 2.375rem; border: 0; background: rgba(82, 88, 51, 0.16); }
   .cal-step:disabled { border: 0; background: rgba(82, 88, 51, 0.08); }
-  .cal-step svg { width: 15px; height: 15px; }
-  .cal-day { height: 40px; border-radius: 12px; }
+  .cal-step svg { width: 0.9375rem; height: 0.9375rem; }
+  .cal-day { height: 2.5rem; border-radius: 0.75rem; }
   .diaries-legend { display: none; }
-  .diaries-chips span { height: 26px; padding: 0 11px; font-size: 11.5px; }
+  .diaries-chips span { height: 1.625rem; padding: 0 0.6875rem; font-size: 0.71875rem; }
   .diaries-open {
-    flex: 1; min-height: 0; gap: 13px; margin: 16px -18px 0;
-    padding: 20px 18px max(18px, env(safe-area-inset-bottom));
-    border-radius: 28px 28px 0 0;
+    flex: 1; min-height: 0; gap: 0.8125rem; margin: 1rem -1.125rem 0;
+    padding: 1.25rem 1.125rem max(1.125rem, env(safe-area-inset-bottom));
+    border-radius: 1.75rem 1.75rem 0 0;
   }
   /* the head lets go of its row so the title keeps the width and the two actions fall to the foot */
   .diaries-head { display: contents; }
-  .diaries-title b { font-size: 22px; }
-  .diaries-do { order: 1; gap: 8px; }
-  .diaries-bring { flex: 1; height: 46px; font-size: 14px; }
+  .diaries-title b { font-size: 1.375rem; }
+  .diaries-do { order: 1; gap: 0.5rem; }
+  .diaries-bring { flex: 1; height: 2.875rem; font-size: 0.875rem; }
   /* a thumb turns the day with the calendar above, not with a wire at the bottom */
   .diaries-turn { display: none; }
-  .diaries-body { font-size: 16px; line-height: 1.65; }
+  .diaries-body { font-size: 1rem; line-height: 1.65; }
 }

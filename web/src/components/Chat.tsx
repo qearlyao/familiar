@@ -54,7 +54,7 @@ export function Chat({
   // key flips with the mode, so the room remounts on the way in and out — as it did when these were two returns.
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      <div key={settingsOpen ? "settings" : "chat"} className="chat-room room-view flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden antialiased">
+      <div key={settingsOpen ? "settings" : "chat"} className="chat-room room-view flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {settingsOpen ? (
           <SettingsSurface
             channelKey={activeSessionKey}

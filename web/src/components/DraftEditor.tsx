@@ -43,17 +43,25 @@ export function DraftEditor({
   const emptyVisibleDraft = !hasDraftBlocksContent(blocks);
 
   useEffect(() => {
-    for (const el of textRefs.current.values()) {
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-    }
+    const fitText = () => {
+      for (const el of textRefs.current.values()) {
+        el.style.height = "auto";
+        // CSS owns the scaled maximum; remeasure when wrapping or mobile size changes.
+        el.style.height = `${el.scrollHeight}px`;
+      }
+    };
+    fitText();
+    window.addEventListener("resize", fitText);
     const focusIndex = pendingFocusIndexRef.current;
-    if (focusIndex === null) return;
-    pendingFocusIndexRef.current = null;
-    const el = textRefs.current.get(focusIndex);
-    if (!el) return;
-    el.focus();
-    el.setSelectionRange(0, 0);
+    if (focusIndex !== null) {
+      pendingFocusIndexRef.current = null;
+      const el = textRefs.current.get(focusIndex);
+      if (el) {
+        el.focus();
+        el.setSelectionRange(0, 0);
+      }
+    }
+    return () => window.removeEventListener("resize", fitText);
   }, [blocks]);
 
   const insertMeme = (meme: { name: string; url: string }) => {

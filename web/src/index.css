@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* The phone mockup has a 372px interior (392px frame minus its two 10px
+   bezels). Scale rem-based typography, controls and spacing together up to
+   the 430px phone size, without enlarging viewport units or safe-area insets.
+   Narrow phones keep at least the original 16px base; desktop is unchanged. */
+@media (max-width: 700px) {
+  html {
+    font-size: clamp(16px, calc(100vw / 23.25), calc(16px * 430 / 372));
+  }
+}
+
 @custom-variant low-dpr-wide (@media (min-width: 1440px) and (max-resolution: 1.5dppx));
 @custom-variant data-open {
   &:where([data-state="open"], [data-open]:not([data-open="false"])) {

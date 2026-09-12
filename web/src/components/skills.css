@@ -3,17 +3,17 @@
    the sheet it belongs to. The room surface is the desk; only the open file gets paper. */
 
 .desk {
-  height: 100%; min-height: 0; position: relative; padding: 28px 26px 26px 28px; display: flex; gap: 0;
+  height: 100%; min-height: 0; position: relative; padding: 1.75rem 1.625rem 1.625rem 1.75rem; display: flex; gap: 0;
   background: #d3c9ba; color: #2b1901; font-family: Figtree, sans-serif;
 }
 
-.desk-stack { width: 244px; flex: none; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
-.desk-head { flex: none; margin-bottom: 10px; display: flex; align-items: center; gap: 11px; }
-.desk-head > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.desk-head h2 { margin: 0; font: 31px/1 Caprasimo, Georgia, serif; font-weight: 400; letter-spacing: -0.02em; }
-.desk-head span { font-size: 13px; color: #4c3e2c; }
+.desk-stack { width: 15.25rem; flex: none; min-height: 0; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.125rem; }
+.desk-head { flex: none; margin-bottom: 0.625rem; display: flex; align-items: center; gap: 0.6875rem; }
+.desk-head > div { display: flex; flex-direction: column; gap: 0.3125rem; min-width: 0; }
+.desk-head h2 { margin: 0; font: 1.9375rem/1 Caprasimo, Georgia, serif; font-weight: 400; letter-spacing: -0.02em; }
+.desk-head span { font-size: 0.8125rem; color: #4c3e2c; }
 .desk-back {
-  width: 38px; height: 38px; flex: none; border: 0; border-radius: 999px; background: rgba(82, 88, 51, 0.16);
+  width: 2.375rem; height: 2.375rem; flex: none; border: 0; border-radius: 62.4375rem; background: rgba(82, 88, 51, 0.16);
   color: #4c3e2c; display: none; place-items: center; cursor: pointer;
 }
 .desk-back:hover { background: rgba(82, 88, 51, 0.3); }
@@ -21,170 +21,170 @@
 /* the tabs: the open one reaches under the sheet, the tucked-back ones sit further in */
 /* scrolling clips both axes, so the box is widened by the overhang the open tab needs */
 .desk-tabs {
-  min-height: 0; margin-right: -26px; padding-right: 26px; display: flex; flex-direction: column; gap: 6px;
+  min-height: 0; margin-right: -1.625rem; padding-right: 1.625rem; display: flex; flex-direction: column; gap: 0.375rem;
   overflow-y: auto; overflow-x: hidden;
 }
 .desk-tab {
-  flex: none; margin-right: 8px; border: 0; border-radius: 18px 0 0 18px; padding: 15px 18px 15px 17px;
+  flex: none; margin-right: 0.5rem; border: 0; border-radius: 1.125rem 0 0 1.125rem; padding: 0.9375rem 1.125rem 0.9375rem 1.0625rem;
   background: rgba(231, 224, 213, 0.55); color: #2b1901; font: inherit; text-align: left;
-  display: flex; flex-direction: column; gap: 5px; cursor: pointer; transition: margin 0.15s, background 0.15s;
+  display: flex; flex-direction: column; gap: 0.3125rem; cursor: pointer; transition: margin 0.15s, background 0.15s;
 }
-.desk-tab:hover { margin-right: 2px; background: rgba(231, 224, 213, 0.85); }
-.desk-tab b { font: 17px/1.15 Caprasimo, Georgia, serif; font-weight: 400; }
-.desk-tab span { font-size: 12px; color: #4c3e2c; }
-.desk-tab .is-loud { display: inline-flex; align-items: center; gap: 7px; color: #8c3e1f; }
-.desk-tab .is-loud::before { content: ""; width: 7px; height: 7px; flex: none; border-radius: 999px; background: #8c3e1f; }
+.desk-tab:hover { margin-right: 0.125rem; background: rgba(231, 224, 213, 0.85); }
+.desk-tab b { font: 1.0625rem/1.15 Caprasimo, Georgia, serif; font-weight: 400; }
+.desk-tab span { font-size: 0.75rem; color: #4c3e2c; }
+.desk-tab .is-loud { display: inline-flex; align-items: center; gap: 0.4375rem; color: #8c3e1f; }
+.desk-tab .is-loud::before { content: ""; width: 0.4375rem; height: 0.4375rem; flex: none; border-radius: 62.4375rem; background: #8c3e1f; }
 .desk-tab.is-open, .desk-tab.is-open:hover {
-  position: relative; z-index: 2; margin-right: -20px; background: #e7e0d5; cursor: default;
-  box-shadow: -3px 0 0 #525833 inset, 0 10px 22px -14px rgba(43, 25, 1, 0.5);
+  position: relative; z-index: 2; margin-right: -1.25rem; background: #e7e0d5; cursor: default;
+  box-shadow: -0.1875rem 0 0 #525833 inset, 0 0.625rem 1.375rem -0.875rem rgba(43, 25, 1, 0.5);
 }
 .desk-tab.is-aside {
-  margin-left: 16px; padding: 13px 18px 13px 15px; background: rgba(231, 224, 213, 0.3); color: #4c3e2c;
+  margin-left: 1rem; padding: 0.8125rem 1.125rem 0.8125rem 0.9375rem; background: rgba(231, 224, 213, 0.3); color: #4c3e2c;
 }
-.desk-tab.is-aside:hover { margin-left: 6px; background: rgba(231, 224, 213, 0.55); }
-.desk-tab.is-aside b { font-size: 16px; color: #4c3e2c; }
+.desk-tab.is-aside:hover { margin-left: 0.375rem; background: rgba(231, 224, 213, 0.55); }
+.desk-tab.is-aside b { font-size: 1rem; color: #4c3e2c; }
 .desk-tab.is-fresh b { color: rgba(43, 25, 1, 0.65); font-style: italic; }
 
-.desk-rule { flex: none; margin: 10px 8px 4px 0; display: flex; align-items: center; gap: 10px; }
-.desk-rule span:first-child { flex: 1; height: 1px; background: rgba(76, 62, 44, 0.2); }
-.desk-rule span:last-child { font-size: 11.5px; color: #4c3e2c; }
+.desk-rule { flex: none; margin: 0.625rem 0.5rem 0.25rem 0; display: flex; align-items: center; gap: 0.625rem; }
+.desk-rule span:first-child { flex: 1; height: 0.0625rem; background: rgba(76, 62, 44, 0.2); }
+.desk-rule span:last-child { font-size: 0.71875rem; color: #4c3e2c; }
 
 .desk-start {
-  flex: none; height: 42px; border: 1.5px dashed rgba(76, 62, 44, 0.35); border-radius: 999px;
-  background: transparent; color: #4c3e2c; font: 13.5px Caprasimo, Georgia, serif;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  flex: none; height: 2.625rem; border: 0.09375rem dashed rgba(76, 62, 44, 0.35); border-radius: 62.4375rem;
+  background: transparent; color: #4c3e2c; font: 0.84375rem Caprasimo, Georgia, serif;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer;
 }
 .desk-start:hover { border-color: #525833; background: rgba(82, 88, 51, 0.1); }
 .desk-aside-note {
-  flex: none; order: 1; margin: auto 8px 0 0; display: flex; align-items: center; gap: 7px;
-  font-size: 12px; color: #4c3e2c; cursor: help;
+  flex: none; order: 1; margin: auto 0.5rem 0 0; display: flex; align-items: center; gap: 0.4375rem;
+  font-size: 0.75rem; color: #4c3e2c; cursor: help;
 }
 .desk-aside-note svg { flex: none; color: #525833; }
 
 /* what you can do to the stack itself: one under the other on a desk, side by side on a phone */
-.desk-doings { flex: none; margin-right: 8px; display: flex; flex-direction: column; gap: 8px; }
+.desk-doings { flex: none; margin-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .desk-import {
-  flex: none; height: 40px; border-radius: 999px; background: rgba(82, 88, 51, 0.16); color: #4c3e2c;
-  font: 13px Figtree, sans-serif; display: inline-flex; align-items: center; justify-content: center;
-  gap: 8px; cursor: pointer;
+  flex: none; height: 2.5rem; border-radius: 62.4375rem; background: rgba(82, 88, 51, 0.16); color: #4c3e2c;
+  font: 0.8125rem Figtree, sans-serif; display: inline-flex; align-items: center; justify-content: center;
+  gap: 0.5rem; cursor: pointer;
 }
 .desk-import:hover { background: rgba(82, 88, 51, 0.3); }
 .desk-import input { display: none; }
 
 /* the listing, inline in the sheet head on a desk and its own card on a phone */
-.desk-listing { flex: none; display: flex; align-items: center; gap: 12px; }
-.desk-listing > span { display: flex; flex-direction: column; gap: 2px; }
-.desk-listing b { font: 15px Caprasimo, Georgia, serif; font-weight: 400; }
-.desk-listing > span > span { font-size: 11.5px; color: #4c3e2c; }
+.desk-listing { flex: none; display: flex; align-items: center; gap: 0.75rem; }
+.desk-listing > span { display: flex; flex-direction: column; gap: 0.125rem; }
+.desk-listing b { font: 0.9375rem Caprasimo, Georgia, serif; font-weight: 400; }
+.desk-listing > span > span { font-size: 0.71875rem; color: #4c3e2c; }
 .desk-sheet-head .desk-listing {
-  height: 30px; padding: 0 13px 0 11px; border-radius: 999px; background: rgba(82, 88, 51, 0.16); gap: 9px;
+  height: 1.875rem; padding: 0 0.8125rem 0 0.6875rem; border-radius: 62.4375rem; background: rgba(82, 88, 51, 0.16); gap: 0.5625rem;
 }
-.desk-sheet-head .desk-listing::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: #525833; }
-.desk-sheet-head .desk-listing b { font: 12px Figtree, sans-serif; color: #4c3e2c; }
+.desk-sheet-head .desk-listing::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 62.4375rem; background: #525833; }
+.desk-sheet-head .desk-listing b { font: 0.75rem Figtree, sans-serif; color: #4c3e2c; }
 .desk-sheet-head .desk-listing > span > span { display: none; }
 
 /* the open file, running out from under its tab */
 .desk-sheet {
   flex: 1; min-width: 0; min-height: 0; position: relative; z-index: 1;
-  background: #e7e0d5; border-radius: 22px; padding: 34px 44px 22px;
-  display: flex; flex-direction: column; gap: 20px; overflow: hidden;
-  box-shadow: 0 12px 30px -18px rgba(43, 25, 1, 0.45);
+  background: #e7e0d5; border-radius: 1.375rem; padding: 2.125rem 2.75rem 1.375rem;
+  display: flex; flex-direction: column; gap: 1.25rem; overflow: hidden;
+  box-shadow: 0 0.75rem 1.875rem -1.125rem rgba(43, 25, 1, 0.45);
 }
 .desk-sheet.is-shut { align-items: center; justify-content: center; }
-.desk-sheet.is-shut p { margin: 0; font-size: 13.5px; color: #4c3e2c; }
+.desk-sheet.is-shut p { margin: 0; font-size: 0.84375rem; color: #4c3e2c; }
 
-.desk-sheet-head { flex: none; display: flex; align-items: center; gap: 12px; }
+.desk-sheet-head { flex: none; display: flex; align-items: center; gap: 0.75rem; }
 .desk-sheet-head code {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 12px ui-monospace, monospace; color: #525833;
+  font: 0.75rem ui-monospace, monospace; color: #525833;
 }
-.desk-words { margin-left: auto; flex: none; font-size: 12px; color: #4c3e2c; }
+.desk-words { margin-left: auto; flex: none; font-size: 0.75rem; color: #4c3e2c; }
 .desk-switch {
-  flex: none; width: 42px; height: 25px; padding: 3px; border: 0; border-radius: 999px;
+  flex: none; width: 2.625rem; height: 1.5625rem; padding: 0.1875rem; border: 0; border-radius: 62.4375rem;
   background: rgba(76, 62, 44, 0.28); display: flex; justify-content: flex-start; cursor: pointer; transition: background 0.15s;
 }
 .desk-switch[aria-checked="true"] { background: #525833; justify-content: flex-end; }
-.desk-switch span { width: 19px; height: 19px; border-radius: 999px; background: #e7e0d5; }
+.desk-switch span { width: 1.1875rem; height: 1.1875rem; border-radius: 62.4375rem; background: #e7e0d5; }
 
-.desk-naming { flex: none; display: flex; flex-direction: column; gap: 11px; }
+.desk-naming { flex: none; display: flex; flex-direction: column; gap: 0.6875rem; }
 .desk-name, .desk-when, .desk-body { border: 0; background: transparent; color: #2b1901; }
 .desk-name:focus, .desk-when:focus, .desk-body:focus { outline: none; }
-.desk-name { font: 35px/1.05 Caprasimo, Georgia, serif; letter-spacing: -0.02em; }
+.desk-name { font: 2.1875rem/1.05 Caprasimo, Georgia, serif; letter-spacing: -0.02em; }
 .desk-name::placeholder { color: rgba(43, 25, 1, 0.6); }
 .desk-when {
-  padding-bottom: 6px; border-bottom: 1.5px dashed rgba(76, 62, 44, 0.32);
-  font: 16px/1.5 Figtree, sans-serif; color: #4c3e2c; max-width: 54ch;
+  padding-bottom: 0.375rem; border-bottom: 0.09375rem dashed rgba(76, 62, 44, 0.32);
+  font: 1rem/1.5 Figtree, sans-serif; color: #4c3e2c; max-width: 54ch;
   /* the line wraps rather than scrolling sideways; it grows with what's written where that's supported */
   resize: none; field-sizing: content; min-height: 3em; max-height: 6em;
 }
 .desk-when::placeholder { color: rgba(76, 62, 44, 0.8); }
-.desk-hint { font-size: 11.5px; color: #4c3e2c; }
+.desk-hint { font-size: 0.71875rem; color: #4c3e2c; }
 
 .desk-body {
-  flex: 1; min-height: 0; resize: none; padding-top: 4px; max-width: 74ch;
-  font: 13.5px/1.7 ui-monospace, monospace; color: #2b1901;
+  flex: 1; min-height: 0; resize: none; padding-top: 0.25rem; max-width: 74ch;
+  font: 0.84375rem/1.7 ui-monospace, monospace; color: #2b1901;
 }
 .desk-body::placeholder { color: rgba(76, 62, 44, 0.8); }
 
 .desk-foot {
-  flex: none; display: flex; align-items: center; gap: 10px; padding-top: 16px;
-  border-top: 1px solid rgba(76, 62, 44, 0.16); font-size: 12px; color: #4c3e2c;
+  flex: none; display: flex; align-items: center; gap: 0.625rem; padding-top: 1rem;
+  border-top: 0.0625rem solid rgba(76, 62, 44, 0.16); font-size: 0.75rem; color: #4c3e2c;
 }
 .desk-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .desk-loud { color: #8c3e1f; }
 .desk-save {
-  flex: none; height: 38px; padding: 0 20px; border: 0; border-radius: 999px;
-  background: #525833; color: #e7e0d5; font: 13.5px Caprasimo, Georgia, serif; cursor: pointer;
+  flex: none; height: 2.375rem; padding: 0 1.25rem; border: 0; border-radius: 62.4375rem;
+  background: #525833; color: #e7e0d5; font: 0.84375rem Caprasimo, Georgia, serif; cursor: pointer;
 }
 .desk-save:hover:not(:disabled) { background: #4c3e2c; }
 .desk-save:disabled { background: rgba(82, 88, 51, 0.35); color: rgba(231, 224, 213, 0.8); cursor: default; }
 .desk-throw {
-  margin-left: auto; flex: none; height: 38px; padding: 0 15px; border: 0; border-radius: 999px;
-  background: transparent; color: #8c3e1f; font: 13px Figtree, sans-serif; cursor: pointer;
+  margin-left: auto; flex: none; height: 2.375rem; padding: 0 0.9375rem; border: 0; border-radius: 62.4375rem;
+  background: transparent; color: #8c3e1f; font: 0.8125rem Figtree, sans-serif; cursor: pointer;
 }
 .desk-throw:hover:not(:disabled) { background: rgba(140, 62, 31, 0.13); }
 .desk-throw:disabled { opacity: 0.5; cursor: default; }
 
 /* 2c: on a phone the stack is the room, and opening a file takes the whole screen */
 @media (max-width: 700px) {
-  .desk { padding: 22px 0 0 20px; }
+  .desk { padding: 1.375rem 0 0 1.25rem; }
   .desk-back { display: grid; }
-  .desk-stack { width: auto; flex: 1; padding-right: 0; gap: 16px; }
-  .desk-head { padding-right: 20px; }
-  .desk-head h2 { font-size: 26px; }
-  .desk-tabs { flex: 0 1 auto; gap: 8px; padding-bottom: 4px; }
-  .desk-tab { margin-right: -10px; border-radius: 20px 0 0 20px; padding: 17px 22px 17px 18px; }
-  .desk-tab b { font-size: 19px; }
-  .desk-tab.is-open, .desk-tab.is-open:hover { margin-right: -22px; }
-  .desk-tab.is-aside { margin-left: 20px; padding: 15px 22px 15px 16px; }
-  .desk-rule { margin-right: 20px; }
-  .desk-aside-note { order: 0; margin: 14px 24px 0 0; }
-  .desk-doings { flex-direction: row; margin: auto 20px max(14px, env(safe-area-inset-bottom)) 0; gap: 9px; }
-  .desk-start { flex: 1; height: 52px; border: 0; background: #525833; color: #e7e0d5; font-size: 15px; gap: 9px; }
+  .desk-stack { width: auto; flex: 1; padding-right: 0; gap: 1rem; }
+  .desk-head { padding-right: 1.25rem; }
+  .desk-head h2 { font-size: 1.625rem; }
+  .desk-tabs { flex: 0 1 auto; gap: 0.5rem; padding-bottom: 0.25rem; }
+  .desk-tab { margin-right: -0.625rem; border-radius: 1.25rem 0 0 1.25rem; padding: 1.0625rem 1.375rem 1.0625rem 1.125rem; }
+  .desk-tab b { font-size: 1.1875rem; }
+  .desk-tab.is-open, .desk-tab.is-open:hover { margin-right: -1.375rem; }
+  .desk-tab.is-aside { margin-left: 1.25rem; padding: 0.9375rem 1.375rem 0.9375rem 1rem; }
+  .desk-rule { margin-right: 1.25rem; }
+  .desk-aside-note { order: 0; margin: 0.875rem 1.5rem 0 0; }
+  .desk-doings { flex-direction: row; margin: auto 1.25rem max(0.875rem, env(safe-area-inset-bottom)) 0; gap: 0.5625rem; }
+  .desk-start { flex: 1; height: 3.25rem; border: 0; background: #525833; color: #e7e0d5; font-size: 0.9375rem; gap: 0.5625rem; }
   .desk-start:hover { background: #4c3e2c; }
-  .desk-import { width: 52px; height: 52px; background: rgba(82, 88, 51, 0.18); }
+  .desk-import { width: 3.25rem; height: 3.25rem; background: rgba(82, 88, 51, 0.18); }
   /* the glyphs grow with the buttons they sit in */
-  .desk-start svg { width: 17px; height: 17px; }
-  .desk-import svg { width: 19px; height: 19px; }
+  .desk-start svg { width: 1.0625rem; height: 1.0625rem; }
+  .desk-import svg { width: 1.1875rem; height: 1.1875rem; }
   .desk-import span { display: none; }
 
   /* the file, over the stack: a bar to leave and save by, the paper, and the listing under it */
   .desk-open {
-    position: absolute; inset: 0; z-index: 3; padding: 24px 14px max(16px, env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; gap: 12px; background: #d3c9ba;
+    position: absolute; inset: 0; z-index: 3; padding: 1.5rem 0.875rem max(1rem, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 0.75rem; background: #d3c9ba;
   }
-  .desk-bar { flex: none; display: flex; align-items: center; gap: 11px; padding: 0 6px; }
+  .desk-bar { flex: none; display: flex; align-items: center; gap: 0.6875rem; padding: 0 0.375rem; }
   .desk-bar code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font: 12px ui-monospace, monospace; color: #525833; }
+    font: 0.75rem ui-monospace, monospace; color: #525833; }
   .desk-bar .desk-save { margin-left: auto; }
   .desk-sheet {
-    border-radius: 26px; padding: 26px 22px 18px; gap: 16px;
-    box-shadow: -3px 0 0 #525833 inset, 0 10px 26px -16px rgba(43, 25, 1, 0.45);
+    border-radius: 1.625rem; padding: 1.625rem 1.375rem 1.125rem; gap: 1rem;
+    box-shadow: -0.1875rem 0 0 #525833 inset, 0 0.625rem 1.625rem -1rem rgba(43, 25, 1, 0.45);
   }
-  .desk-listing { background: rgba(82, 88, 51, 0.18); border-radius: 24px; padding: 14px 18px; }
-  .desk-listing .desk-switch { margin-left: auto; width: 52px; height: 31px; }
-  .desk-listing .desk-switch span { width: 25px; height: 25px; }
-  .desk-name { font-size: 28px; }
-  .desk-when { font-size: 15px; }
-  .desk-foot { padding-top: 14px; }
+  .desk-listing { background: rgba(82, 88, 51, 0.18); border-radius: 1.5rem; padding: 0.875rem 1.125rem; }
+  .desk-listing .desk-switch { margin-left: auto; width: 3.25rem; height: 1.9375rem; }
+  .desk-listing .desk-switch span { width: 1.5625rem; height: 1.5625rem; }
+  .desk-name { font-size: 1.75rem; }
+  .desk-when { font-size: 0.9375rem; }
+  .desk-foot { padding-top: 0.875rem; }
 }

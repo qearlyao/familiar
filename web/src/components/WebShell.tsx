@@ -100,7 +100,7 @@ export function ShellChrome({
   };
 
   return (
-    <div className="familiar-shell relative flex h-dvh w-full overflow-hidden antialiased" data-pushed={pushed ? "" : undefined}>
+    <div className="familiar-shell relative flex h-dvh w-full overflow-hidden" data-pushed={pushed ? "" : undefined}>
       <nav className="room-rail" aria-label="rooms">
         <button className="room-brand" aria-label="home" onClick={() => go("chat")}>f</button>
         <div className="room-rail-items">

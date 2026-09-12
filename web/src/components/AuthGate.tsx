@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { LogIn } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, KeyRound, LoaderCircle, LockKeyhole } from "lucide-react";
 import {
   fetchAuthMode,
   fetchAuthSession,
@@ -8,6 +7,8 @@ import {
   type WebAuthDevice,
 } from "@/lib/api";
 import { WebShell } from "./WebShell";
+import "./chat.css";
+import "./auth-gate.css";
 
 type AuthState =
   | { status: "loading"; personaName: string; mode?: string }
@@ -87,8 +88,11 @@ export function AuthGate() {
   }
 
   return (
-    <div className="flex h-dvh items-center justify-center bg-background px-5 text-foreground">
-      <p className="font-serif text-sm italic text-muted-foreground">checking the door…</p>
+    <div className="chat-theme auth-gate">
+      <main className="auth-gate-surface auth-gate-loading" aria-busy="true">
+        <LoaderCircle size={24} className="auth-gate-spinner" aria-hidden="true" />
+        <p role="status">checking the door…</p>
+      </main>
     </div>
   );
 }
@@ -124,44 +128,66 @@ function BearerLogin({
   };
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
-      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-5 py-10">
-        <form onSubmit={submit} className="rounded-md border border-border bg-card px-5 py-5 shadow-sm">
-          <div className="mb-5">
-            <p className="font-serif text-2xl leading-tight tracking-tight">{personaName}</p>
-            <p className="mt-2 font-serif text-xs italic text-muted-foreground">come in with your token.</p>
+    <div className="chat-theme auth-gate">
+      <main className="auth-gate-surface">
+        <header className="auth-gate-brand">
+          <span className="auth-gate-monogram" aria-hidden="true">f</span>
+          <span>familiar</span>
+        </header>
+        <div className="auth-gate-content">
+          <div className="auth-gate-welcome">
+            <div className="auth-gate-avatar" aria-hidden="true">
+              {Array.from(personaName)[0] || "F"}
+            </div>
+            <p className="auth-gate-eyebrow">a little space for you &amp; {personaName}</p>
+            <h1>come on in.</h1>
+            <p>Your conversations, keepsakes, and quiet moments.<br />All right where you left them.</p>
           </div>
-          <label className="grid gap-2">
-            <span className="font-serif text-xs italic text-muted-foreground">token</span>
-            <input
-              type="password"
-              value={token}
-              onChange={(event) => {
-                setToken(event.target.value);
-                if (error) setError(undefined);
-              }}
-              autoComplete="current-password"
-              disabled={busy}
-              className="h-10 rounded-md border border-border bg-background px-3 font-mono text-sm text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
-            />
-          </label>
-          <label className="mt-4 grid gap-2">
-            <span className="font-serif text-xs italic text-muted-foreground">device name</span>
-            <input
-              type="text"
-              value={deviceName}
-              onChange={(event) => setDeviceName(event.target.value)}
-              autoComplete="off"
-              disabled={busy}
-              className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
-            />
-          </label>
-          {error ? <p className="mt-3 font-serif text-xs italic text-destructive">{error}</p> : null}
-          <Button type="submit" className="mt-5 h-9 w-full gap-2" disabled={busy || !token.trim()}>
-            <LogIn className="size-4" />
-            <span>{busy ? "checking" : "enter"}</span>
-          </Button>
-        </form>
+          <form onSubmit={submit} className="auth-gate-form" aria-label="Sign in" aria-busy={busy}>
+            <div className="auth-gate-form-heading">
+              <KeyRound size={20} aria-hidden="true" />
+              <h2>your key to the door</h2>
+            </div>
+            <label className="auth-gate-field">
+              <span>access token</span>
+              <input
+                type="password"
+                name="token"
+                value={token}
+                onChange={(event) => {
+                  setToken(event.target.value);
+                  if (error) setError(undefined);
+                }}
+                autoComplete="current-password"
+                placeholder="Paste your token here"
+                required
+                disabled={busy}
+                aria-describedby={error ? "auth-gate-error" : undefined}
+                className="auth-gate-token"
+              />
+            </label>
+            <label className="auth-gate-field">
+              <span>device name</span>
+              <input
+                type="text"
+                name="deviceName"
+                value={deviceName}
+                onChange={(event) => setDeviceName(event.target.value)}
+                autoComplete="off"
+                placeholder="e.g. my laptop"
+                disabled={busy}
+                aria-describedby="auth-gate-device-hint"
+              />
+            </label>
+            <p id="auth-gate-device-hint" className="auth-gate-hint">A name to recognise this browser in your devices.</p>
+            {error ? <p id="auth-gate-error" role="alert" className="auth-gate-error">{error}</p> : null}
+            <button type="submit" className="auth-gate-submit" disabled={busy || !token.trim()}>
+              <span>{busy ? "checking the key…" : "let’s settle in"}</span>
+              {busy ? <LoaderCircle size={18} className="auth-gate-spinner" aria-hidden="true" /> : <ArrowRight size={18} aria-hidden="true" />}
+            </button>
+          </form>
+        </div>
+        <footer className="auth-gate-footer"><LockKeyhole size={14} aria-hidden="true" />your space. a key to come in.</footer>
       </main>
     </div>
   );

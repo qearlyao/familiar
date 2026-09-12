@@ -1,0 +1,42 @@
+/* The entrance shares the room palette and typography through .chat-theme. */
+html:has(.auth-gate), body:has(.auth-gate) { background: #2b1901; }
+.auth-gate { min-height: 100dvh; padding: 0.875rem; background: var(--foreground); }
+.auth-gate-surface {
+  min-height: calc(100dvh - 1.75rem); display: flex; flex-direction: column;
+  padding: 2rem 2.5rem 1.5rem; border-radius: 1.625rem; background: var(--background);
+}
+.auth-gate-brand { display: flex; align-items: center; gap: 0.625rem; font: 500 1.125rem/1 var(--font-display); }
+.auth-gate-monogram { width: 2.25rem; height: 2.25rem; display: grid; place-items: center; border-radius: 50%; background: var(--foreground); color: var(--secondary); }
+.auth-gate-content { width: 100%; max-width: 26rem; margin: auto; padding: 2.5rem 0; }
+.auth-gate-welcome { text-align: center; margin-bottom: 1.75rem; }
+.auth-gate-avatar { width: 4rem; height: 4rem; margin: 0 auto 1.25rem; display: grid; place-items: center; border-radius: 50%; background: var(--primary); color: var(--secondary); font: 500 1.75rem/1 var(--font-display); text-transform: uppercase; }
+.auth-gate-eyebrow { font-size: 0.75rem; font-weight: 600; overflow-wrap: anywhere; }
+.auth-gate-welcome h1 { margin: 0.625rem 0 0.875rem; font: 500 clamp(2.5rem, 7vw, 3.25rem)/1.1 var(--font-display); letter-spacing: -0.035em; }
+.auth-gate-welcome > p:last-child { font-size: 0.9375rem; line-height: 1.6; color: var(--muted-foreground); }
+.auth-gate-form { padding: 1.75rem; border: 1px solid var(--border); border-radius: 1.625rem; background: var(--card); box-shadow: 0 0.25rem 0 rgba(76, 62, 44, 0.08); }
+.auth-gate-form-heading { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 1.5rem; color: var(--primary); }
+.auth-gate-form-heading h2 { margin: 0; font: 500 1.1875rem/1.3 var(--font-display); }
+.auth-gate-field { display: grid; gap: 0.5rem; margin-top: 1.125rem; font-size: 0.8125rem; font-weight: 600; }
+.auth-gate-field input { width: 100%; min-width: 0; min-height: 3rem; border: 1px solid var(--border); border-radius: 0.875rem; padding: 0.75rem 0.875rem; background: var(--background); color: var(--foreground); font: 400 1rem/1.4 var(--font-sans); }
+.auth-gate-field input::placeholder { color: var(--muted-foreground); opacity: 0.85; }
+.auth-gate-field input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.auth-gate-field input:disabled { opacity: 0.6; }
+.auth-gate-hint { margin-top: 0.5rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.5; }
+.auth-gate-error { margin-top: 1rem; padding: 0.75rem; border-left: 3px solid var(--destructive); color: var(--foreground); background: color-mix(in srgb, var(--destructive) 10%, var(--card)); border-radius: 0.25rem 0.5rem 0.5rem 0.25rem; font-size: 0.8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+.auth-gate-submit { display: flex; align-items: center; justify-content: center; gap: 0.75rem; width: 100%; min-height: 3rem; margin-top: 1.5rem; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-size: 0.9375rem; font-weight: 600; transition: filter 0.15s; }
+.auth-gate-submit:hover:enabled { filter: brightness(1.12); }
+.auth-gate-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+.auth-gate-footer { display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--muted-foreground); font-size: 0.75rem; }
+.auth-gate-loading { align-items: center; justify-content: center; gap: 0.75rem; color: var(--primary); }
+.auth-gate-spinner { animation: gate-spin 1s linear infinite; flex: none; }
+@keyframes gate-spin { to { transform: rotate(360deg); } }
+@media (max-width: 767.98px) {
+  .auth-gate { padding: 0.5rem; }
+  .auth-gate-surface { min-height: calc(100dvh - 1rem); padding: 1.25rem 1rem; border-radius: 1.375rem; }
+  .auth-gate-content { padding: 2rem 0; }
+  .auth-gate-form { padding: 1.375rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-gate-spinner { animation: none; }
+  .auth-gate-submit { transition: none; }
+}

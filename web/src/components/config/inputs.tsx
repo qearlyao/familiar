@@ -58,7 +58,7 @@ export function MinuteInput({ valueMs, disabled, onCommit }: { valueMs: number |
     },
     onCommit,
   );
-  return <input {...field.inputProps} type="number" inputMode="numeric" disabled={disabled || field.busy} min={1} className="pill-input is-number is-inline" />;
+  return <input {...field.inputProps} type="number" inputMode="numeric" disabled={disabled || field.busy} min={1} className="pill-input is-inline" />;
 }
 
 export function NumberInput({
@@ -103,23 +103,57 @@ export function NumberInput({
       step={step}
       min={min}
       max={max}
-      className={cn("pill-input is-number", inline && "is-inline")}
+      className={cn("pill-input", inline && "is-inline")}
     />
   );
 }
 
-/** A prose line with inline controls: "wakes after [45] minutes". */
+/** A prose line with inline controls: "wakes after [45] min of quiet". */
 export function Sentence({ children }: { children: ReactNode }) {
   return <p className="settings-sentence">{children}</p>;
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+/** An inline box and its unit, kept on one line so "[75]%" never wraps apart. */
+export function Unit({ children }: { children: ReactNode }) {
+  return <span className="settings-unit">{children}</span>;
+}
+
+/** One small card on a settings page: a Caprasimo title, whatever sits at the right of it, then the controls. */
+export function Card({ title, hint, action, off, bare, children }: { title: string; hint?: string; action?: ReactNode; off?: boolean; bare?: boolean; children?: ReactNode }) {
+  return (
+    <section className={cn("settings-card", off && "is-off", bare && "is-bare")}>
+      <div className="settings-card-head">
+        <div>
+          <h4>{title}</h4>
+          {hint && <p>{hint}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A label over its control. A div, not a label: a label around a pill group would press its first pill. */
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="settings-field">
       <span>{label}</span>
       {children}
-      {hint && <small>{hint}</small>}
     </div>
+  );
+}
+
+/** A tuning number under an "advanced" fold: a label pill on desktop (hint in the tooltip), a labelled row on phones. */
+export function Fine({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+  return (
+    <label className="settings-fine" title={hint}>
+      <span>
+        {label}
+        <small>{hint}</small>
+      </span>
+      {children}
+    </label>
   );
 }
 
@@ -156,7 +190,7 @@ export function TextInput({ value, placeholder, allowEmpty = false, pattern, dis
       placeholder={placeholder}
       disabled={disabled || field.busy}
       aria-invalid={field.invalid || undefined}
-      className={cn("pill-input", field.invalid && "is-invalid")}
+      className="pill-input"
     />
   );
 }

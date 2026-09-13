@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import { NOTIFICATIONS_CHANGED_EVENT, notificationState, setNotificationsEnabled, type NotificationState } from "@/lib/notifications";
 import { OnOffToggle } from "./inputs";
 
-const hints: Record<NotificationState, string> = {
-  on: "a word from this device when a message lands while you're away. if discord already reaches you here, leave this off to avoid hearing it twice.",
-  off: "a word from this device when a message lands while you're away. if discord already reaches you here, leave this off to avoid hearing it twice.",
-  denied: "the browser has notifications blocked for this site — allow them in its settings first.",
-  unsupported: "this browser can't show notifications. on iphone or ipad, add the app to your home screen first.",
+const blocked: Partial<Record<NotificationState, string>> = {
+  denied: "blocked for this site — allow them in the browser first",
+  unsupported: "on iphone or ipad, add the app to your home screen first",
 };
 
-export function NotificationsSection() {
+/** "notify this device", as one row among the ways they reach you. */
+export function NotificationsRow() {
   const [state, setState] = useState<NotificationState | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -23,13 +22,12 @@ export function NotificationsSection() {
   }, []);
   if (!state) return null;
   return (
-    <div className="settings-card">
-      <div className="settings-card-head">
-        <div className="settings-block-title">
-          <span>notifications</span>
-          <span>{hints[state]}</span>
-        </div>
-        {(state === "on" || state === "off") && (
+    <>
+      <div className="settings-row">
+        <span>notify this device</span>
+        {blocked[state] ? (
+          <small>{blocked[state]}</small>
+        ) : (
           <OnOffToggle
             enabled={state === "on"}
             disabled={busy}
@@ -52,6 +50,6 @@ export function NotificationsSection() {
           that didn't take — {error}
         </p>
       )}
-    </div>
+    </>
   );
 }

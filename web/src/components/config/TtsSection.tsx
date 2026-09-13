@@ -1,5 +1,5 @@
 import type { ConfigKey, ConfigValues } from "@/lib/api";
-import { EnumToggle, Field, TextInput } from "./inputs";
+import { Card, EnumToggle, TextInput } from "./inputs";
 
 export function TtsSection({
   values,
@@ -15,57 +15,51 @@ export function TtsSection({
   const voiceKey = cartesia ? "tts.cartesia.voice_id" : "tts.voice_id";
   const modelKey = cartesia ? "tts.cartesia.model_id" : "tts.model_id";
   return (
-    <>
-      <div className="settings-card">
-        <div className="settings-card-head">
-          <div className="settings-block-title">
-            <span>their voice</span>
-            <span>who speaks for them, and with which ids.</span>
-          </div>
-          <EnumToggle
-            value={provider}
-            options={[
-              { value: "elevenlabs", label: "11labs" },
-              { value: "cartesia", label: "cartesia" },
-            ]}
-            ariaPrefix="tts provider"
-            disabled={disabled}
-            onChange={(next) => void onChange("tts.provider", next)}
-          />
-        </div>
-        <div className="settings-grid is-wide">
-          <Field label="voice id">
-            <TextInput value={values?.[voiceKey].value} placeholder="not set" allowEmpty disabled={disabled} onCommit={(next) => onChange(voiceKey, next)} />
-          </Field>
-          <Field label="model id">
-            <TextInput value={values?.[modelKey].value} placeholder={cartesia ? "sonic-3.5" : "eleven_v3"} disabled={disabled} onCommit={(next) => onChange(modelKey, next)} />
-          </Field>
-          {!cartesia && (
-            <Field label="model id on a call" hint="a faster model keeps the call moving">
-              <TextInput value={values?.["tts.voice_call_model_id"].value} placeholder="eleven_v3_conversational" disabled={disabled} onCommit={(next) => onChange("tts.voice_call_model_id", next)} />
-            </Field>
-          )}
-        </div>
+    <Card
+      title="their voice"
+      action={
+        <EnumToggle
+          value={provider}
+          options={[
+            { value: "elevenlabs", label: "11labs" },
+            { value: "cartesia", label: "cartesia" },
+          ]}
+          ariaPrefix="tts provider"
+          disabled={disabled}
+          onChange={(next) => void onChange("tts.provider", next)}
+        />
+      }
+    >
+      <div className="settings-ids">
+        <label>
+          <span>voice id</span>
+          <TextInput value={values?.[voiceKey].value} placeholder="not set" allowEmpty disabled={disabled} onCommit={(next) => onChange(voiceKey, next)} />
+        </label>
+        <label>
+          <span>model id</span>
+          <TextInput value={values?.[modelKey].value} placeholder={cartesia ? "sonic-3.5" : "eleven_v3"} disabled={disabled} onCommit={(next) => onChange(modelKey, next)} />
+        </label>
+        {!cartesia && (
+          <label>
+            <span>model id on a call</span>
+            <TextInput value={values?.["tts.voice_call_model_id"].value} placeholder="eleven_v3_conversational" disabled={disabled} onCommit={(next) => onChange("tts.voice_call_model_id", next)} />
+          </label>
+        )}
       </div>
-
-      <div className="settings-card">
-        <div className="settings-card-head">
-          <div className="settings-block-title">
-            <span>on a call</span>
-            <span>continuous listens the whole time. push to talk only listens while you hold the button.</span>
-          </div>
-          <EnumToggle
-            value={values?.["web.voice_call_mode"].value}
-            options={[
-              { value: "continuous", label: "continuous" },
-              { value: "push_to_talk", label: "push to talk" },
-            ]}
-            ariaPrefix="voice call input"
-            disabled={disabled}
-            onChange={(next) => void onChange("web.voice_call_mode", next)}
-          />
-        </div>
+      <div className="settings-row">
+        <span>on a call</span>
+        <EnumToggle
+          value={values?.["web.voice_call_mode"].value}
+          options={[
+            { value: "continuous", label: "continuous" },
+            { value: "push_to_talk", label: "push to talk" },
+          ]}
+          ariaPrefix="voice call input"
+          disabled={disabled}
+          onChange={(next) => void onChange("web.voice_call_mode", next)}
+        />
       </div>
-    </>
+      <p className="settings-note">a faster model on a call keeps the conversation moving.</p>
+    </Card>
   );
 }

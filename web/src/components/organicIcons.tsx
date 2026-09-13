@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import type { ReactNode, SVGProps } from "react";
 
 // Glyphs transcribed from the redesign spec (Lucide-style, stroke 2.75).
@@ -159,48 +158,3 @@ export const IconDownload = glyph(
   </>,
 );
 
-export const NavModel = glyph(
-  <>
-    <rect x="4" y="8" width="16" height="12" rx="3" />
-    <path d="M12 4v4M9 14h.01M15 14h.01" />
-  </>,
-);
-export const NavThinking = glyph(
-  <path d="M12 4a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2.2A3 3 0 0 0 17 17v-2.2A3.5 3.5 0 0 0 16 8a4 4 0 0 0-4-4z" />,
-);
-export const NavHeartbeat = glyph(<path d="M3 12h3l2-4 3 8 2.5-5 1.5 3h4" />);
-export const NavVoice = glyph(
-  <>
-    <path d="M11 5 7 9H4v6h3l4 4z" />
-    <path d="M16 9a4 4 0 0 1 0 6" />
-    <path d="M19 6.5a7.5 7.5 0 0 1 0 11" />
-  </>,
-);
-export const NavImage = glyph(
-  <>
-    <rect x="3" y="4" width="18" height="16" rx="3" />
-    <circle cx="9" cy="10" r="1.6" />
-    <path d="M4 18l5-5 4 4 3-3 4 4" />
-  </>,
-);
-export const NavChannels = RailChat;
-export const NavMemory = glyph(
-  <>
-    <ellipse cx="12" cy="6" rx="8" ry="3" />
-    <path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
-    <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
-  </>,
-);
-export const NavNotifications = glyph(
-  <>
-    <path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
-    <path d="M10.3 20a2 2 0 0 0 3.4 0" />
-  </>,
-);
-export const NavDevices = glyph(
-  <>
-    <rect x="2" y="5" width="13" height="10" rx="2" />
-    <rect x="16" y="9" width="6" height="11" rx="2" />
-    <path d="M6 19h5" />
-  </>,
-);

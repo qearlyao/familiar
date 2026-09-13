@@ -154,7 +154,7 @@
   .desk-back { display: grid; }
   .desk-stack { width: auto; flex: 1; padding-right: 0; gap: 1rem; }
   .desk-head { padding-right: 1.25rem; }
-  .desk-head h2 { font-size: 1.625rem; }
+  .desk-head h2 { font-size: 1.875rem; }
   .desk-tabs { flex: 0 1 auto; gap: 0.5rem; padding-bottom: 0.25rem; }
   .desk-tab { margin-right: -0.625rem; border-radius: 1.25rem 0 0 1.25rem; padding: 1.0625rem 1.375rem 1.0625rem 1.125rem; }
   .desk-tab b { font-size: 1.1875rem; }

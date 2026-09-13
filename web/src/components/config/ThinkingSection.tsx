@@ -1,5 +1,6 @@
 import type { ThinkingLevel } from "@/lib/api";
 import { THINKING_ORDER } from "@/lib/thinkingLevels";
+import { Card, EnumToggle } from "./inputs";
 
 export function ThinkingSection({
   current,
@@ -13,14 +14,10 @@ export function ThinkingSection({
   onChange: (level: ThinkingLevel) => void;
 }) {
   const visible = THINKING_ORDER.filter((level) => supported.includes(level));
-  const options = visible.length > 0 ? visible : THINKING_ORDER;
+  const options = (visible.length > 0 ? visible : THINKING_ORDER).map((level) => ({ value: level, label: level }));
   return (
-    <div className="seg" role="group" aria-label="thinking">
-      {options.map((level) => (
-        <button key={level} type="button" className="seg-pill" aria-pressed={level === current} disabled={disabled} onClick={() => onChange(level)}>
-          {level}
-        </button>
-      ))}
-    </div>
+    <Card title="thinking" hint="how long they deliberate before answering." bare>
+      <EnumToggle value={current} options={options} ariaPrefix="thinking" disabled={disabled} onChange={onChange} />
+    </Card>
   );
 }

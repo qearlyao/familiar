@@ -1,5 +1,5 @@
 import type { ConfigKey, ConfigValues } from "@/lib/api";
-import { MinuteInput, OnOffToggle, Sentence } from "./inputs";
+import { Card, MinuteInput, OnOffToggle, Sentence, Unit } from "./inputs";
 
 export function HeartbeatSection({
   values,
@@ -11,20 +11,20 @@ export function HeartbeatSection({
   onChange: (key: ConfigKey, value: unknown) => Promise<void>;
 }) {
   const enabled = values?.["heartbeat.enabled"].value;
-  const isOn = enabled === true;
+  const off = disabled || enabled !== true;
   return (
-    <div className={isOn ? "settings-card" : "settings-card is-off"}>
-      <div className="settings-card-head">
-        <div className="settings-block-title">
-          <span>heartbeat</span>
-          <span>their pulse when you've gone quiet.</span>
-        </div>
-        <OnOffToggle enabled={enabled} disabled={disabled} ariaPrefix="heartbeat" onChange={(next) => void onChange("heartbeat.enabled", next)} />
-      </div>
+    <Card title="heartbeat" off={enabled !== true} action={<OnOffToggle enabled={enabled} disabled={disabled} ariaPrefix="heartbeat" onChange={(next) => void onChange("heartbeat.enabled", next)} />}>
       <Sentence>
-        wakes after <MinuteInput valueMs={values?.["heartbeat.idleThresholdMs"].value} disabled={disabled || !isOn} onCommit={(ms) => onChange("heartbeat.idleThresholdMs", ms)} /> minutes of quiet, then every{" "}
-        <MinuteInput valueMs={values?.["heartbeat.intervalMs"].value} disabled={disabled || !isOn} onCommit={(ms) => onChange("heartbeat.intervalMs", ms)} /> minutes while you stay away.
+        wakes after{" "}
+        <Unit>
+          <MinuteInput valueMs={values?.["heartbeat.idleThresholdMs"].value} disabled={off} onCommit={(ms) => onChange("heartbeat.idleThresholdMs", ms)} /> min
+        </Unit>{" "}
+        of quiet, then every{" "}
+        <Unit>
+          <MinuteInput valueMs={values?.["heartbeat.intervalMs"].value} disabled={off} onCommit={(ms) => onChange("heartbeat.intervalMs", ms)} /> min
+        </Unit>{" "}
+        while you stay away.
       </Sentence>
-    </div>
+    </Card>
   );
 }

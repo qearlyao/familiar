@@ -58,6 +58,7 @@ export function Chat({
         {settingsOpen ? (
           <SettingsSurface
             channelKey={activeSessionKey}
+            channelLabel={sessions.find((s) => s.key === activeSessionKey)?.label}
             authMode={authMode}
             authDevice={authDevice}
             onSignedOut={onSignedOut}

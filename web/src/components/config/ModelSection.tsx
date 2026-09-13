@@ -1,69 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { IconX } from "../organicIcons";
 import { byGateway, modelLeaf, modelRoute } from "@/lib/modelRoutes";
-
-export function ModelRows({
-  models,
-  current,
-  disabled,
-  onChange,
-  added = [],
-  onRemove,
-  idPrefix,
-}: {
-  models: string[];
-  current: string | undefined;
-  disabled: boolean;
-  onChange: (model: string) => void;
-  added?: string[];
-  onRemove?: (model: string) => void;
-  idPrefix: string;
-}) {
-  const addedSet = new Set(added);
-  const groups = byGateway(models);
-
-  const row = (model: string) => {
-    const route = modelRoute(model, groups.length > 0);
-    return (
-          <label key={model} className="model-row">
-            <input type="radio" name={idPrefix} value={model} checked={model === current} disabled={disabled} onChange={() => onChange(model)} />
-            <span className="model-radio" />
-            <span className="model-name">
-              {route && `${route}/`}
-              <b>{modelLeaf(model)}</b>
-            </span>
-            {addedSet.has(model) && <span className="model-added">added</span>}
-            {addedSet.has(model) && onRemove && (
-              <button
-                type="button"
-                className="model-remove"
-                aria-label={`remove ${model}`}
-                disabled={disabled}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove(model);
-                }}
-              >
-                <IconX />
-              </button>
-            )}
-          </label>
-    );
-  };
-
-  return (
-    <div className="model-rows" role="radiogroup" aria-label={idPrefix}>
-      {groups.length > 0
-        ? groups.map(({ gateway, models: list }) => (
-            <div key={gateway} className="model-group">
-              <span className="model-route-head">{gateway}</span>
-              {list.map(row)}
-            </div>
-          ))
-        : models.map(row)}
-    </div>
-  );
-}
+import { Card } from "./inputs";
 
 export function ModelSection({
   models,
@@ -85,6 +23,11 @@ export function ModelSection({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [addError, setAddError] = useState<string | undefined>();
+  const [gateway, setGateway] = useState<string | undefined>();
+  const groups = byGateway(models);
+  const shown = groups.find((g) => g.gateway === gateway)?.models ?? models;
+  const addedSet = new Set(added);
+  const count = `${shown.length} of ${models.length} shown`;
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -107,8 +50,51 @@ export function ModelSection({
   };
 
   return (
-    <>
-      <ModelRows models={models} current={current} disabled={disabled || busy} onChange={onChange} added={added} onRemove={(model) => void onRemove(model).catch(() => undefined)} idPrefix="model" />
+    <Card title="model" bare action={<span className="settings-count is-head">{count}</span>}>
+      {current && (
+        <p className="model-current">
+          <i />
+          <span>
+            {modelRoute(current, false)}/<b>{modelLeaf(current)}</b>
+          </span>
+        </p>
+      )}
+      {groups.length > 0 && (
+        <div className="model-filters" role="group" aria-label="filter by provider">
+          {[{ gateway: undefined, models }, ...groups].map((g) => (
+            <button key={g.gateway ?? "all"} type="button" className="model-filter" aria-pressed={g.gateway === gateway} onClick={() => setGateway(g.gateway)}>
+              {g.gateway ?? "all"}
+              <span>{g.models.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="model-bench" role="radiogroup" aria-label="model">
+        {shown.map((model) => (
+          <label key={model} className="model-row">
+            <input type="radio" name="model" value={model} checked={model === current} disabled={disabled || busy} onChange={() => onChange(model)} />
+            <span className="model-radio" />
+            <span className="model-name">
+              {modelRoute(model, false)}/<b>{modelLeaf(model)}</b>
+            </span>
+            {addedSet.has(model) && (
+              <button
+                type="button"
+                className="model-remove"
+                aria-label={`remove ${model}`}
+                title="remove"
+                disabled={disabled || busy}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void onRemove(model).catch(() => undefined);
+                }}
+              >
+                <IconX />
+              </button>
+            )}
+          </label>
+        ))}
+      </div>
       <form onSubmit={handleSubmit} className="model-add">
         <input
           type="text"
@@ -134,6 +120,7 @@ export function ModelSection({
           {addError}
         </p>
       )}
-    </>
+      <span className="settings-count is-foot">{count}</span>
+    </Card>
   );
 }

@@ -267,6 +267,34 @@ const fixtures: Message[] = [
   },
 
   {
+    id: "call-summary",
+    role: "user",
+    who: "you",
+    ts: now - 8 * minute,
+    steps: [],
+    call: { kept: "summary", durationMs: 252_000, summary: "You went back over the letter she'd read while you were out. She read page seventy-four aloud, and you decided the shutters sentence belongs in today's diary." },
+  },
+  {
+    id: "call-transcript",
+    role: "user",
+    who: "you",
+    ts: now - 7 * minute,
+    steps: [],
+    call: {
+      kept: "transcript",
+      durationMs: 252_000,
+      lines: [
+        { who: "you", text: "Did you read while I was out?", at: 4_000 },
+        { who: "them", text: "A few pages. I marked one for you — page seventy-four, the line you drew twice under.", at: 11_000 },
+        { who: "you", text: "Read it to me and I'll decide where it goes.", at: 26_000 },
+        { who: "them", text: "The rain kept everyone indoors for three days and the whole village went quiet…", at: 33_000 },
+        { who: "you", text: "That one. Diary.", at: 61_000 },
+        { who: "them", text: "Diary it is.", at: 64_000 },
+      ],
+    },
+  },
+  { id: "call-discarded", role: "system", who: "system", ts: now - 6 * minute, steps: [], call: { kept: false, durationMs: 252_000 } },
+  {
     id: "a-5",
     role: "assistant",
     who: "ghost",

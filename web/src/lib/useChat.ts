@@ -227,7 +227,7 @@ export function useChat(): ChatHook {
       const targetMessageId = pendingLatestAssistantMessageIdRef.current;
       switch (event.type) {
         case "message_started":
-          if (pendingAction === "retry" && event.role !== "user") {
+          if (pendingAction === "retry" && event.role === "assistant") {
             clearPendingLatestAssistantAction();
           }
           break;
@@ -292,7 +292,7 @@ export function useChat(): ChatHook {
 
       switch (event.type) {
         case "message_started": {
-          if (event.role !== "user") {
+          if (event.role === "assistant") {
             activeAssistantMessageIdsRef.current.add(event.messageId);
             setStreaming(true);
           }
@@ -305,6 +305,7 @@ export function useChat(): ChatHook {
                 role: event.role,
                 who: event.who,
                 steps: [],
+                call: event.call,
                 ts: event.ts,
               },
             ];

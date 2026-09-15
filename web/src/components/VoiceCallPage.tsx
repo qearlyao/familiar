@@ -88,7 +88,7 @@ function KeepCard({
     setBusy(choice);
     try {
       if (remember) await setConfig("web.voice_keep", choice);
-      if (choice !== "discard") await keepVoiceCall({ choice, durationMs, lines: lines.map(({ who, text, at }) => ({ who, text, at })) });
+      await keepVoiceCall({ choice, durationMs, lines: lines.map(({ who, text, at }) => ({ who, text, at })) });
       onDone();
     } catch (err) {
       setBusy(undefined);
@@ -194,7 +194,7 @@ export function VoiceCallPage({
   useEffect(() => {
     if (state !== "ended") return;
     const done = () => call.reset();
-    if (!said.length || keep === "discard") return done();
+    if (!said.length) return done();
     if (keep === "ask") return;
     void keepVoiceCall({ choice: keep, durationMs: call.durationMs, lines: said.map(({ who, text, at }) => ({ who, text, at })) })
       .then(() => setKeepError(undefined), (err: unknown) => setKeepError(err instanceof Error ? err.message : String(err)))

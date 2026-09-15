@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
-import type { ChatLogRecord } from "../conversation/chat-log.js";
+import type { ChatLogRecord, VoiceCallLine } from "../conversation/chat-log.js";
 import { getContactNickname } from "../conversation/contact-note.js";
 import { messageId } from "../conversation/ids.js";
 import type { DefaultLcmSummarizer } from "../memory/lcm/summarizer.js";
@@ -23,13 +23,6 @@ export interface VoiceCallDeps {
 	getMainRuntime: () => Promise<ConversationRuntime>;
 	personaName: string;
 	summarizer: Pick<DefaultLcmSummarizer, "summarizeVoiceCall">;
-}
-
-export interface VoiceCallLine {
-	who: "you" | "them";
-	text: string;
-	/** ms since the call picked up */
-	at: number;
 }
 
 function spokenText(message: WebMessage): string | undefined {
@@ -180,23 +173,22 @@ function spokenDuration(ms: number): string {
 	return `${hours === 1 ? "an hour" : `${hours} hours`}${rest ? ` and ${rest} minutes` : ""}`;
 }
 
-// TODO(ui): a kept call lands in the chat as a plain owner message, so a long transcript fills the view.
-// qearl is drawing a display of its own for call records (transcript and summary); wait for that mockup.
 export function voiceCallEntry(choice: "transcript" | "summary", durationMs: number, body: string): string {
 	const what = choice === "summary" ? "here's what it was about" : "here's all of it";
 	return `(we were on a voice call for ${spokenDuration(durationMs)} — ${what})\n${body}`;
 }
 
 function parseKeepBody(body: unknown): {
-	choice: "transcript" | "summary";
+	choice: "transcript" | "summary" | "discard";
 	durationMs: number;
 	lines: VoiceCallLine[];
 } {
 	if (!isRecord(body)) throw new HttpError(400, "body is required");
-	if (body.choice !== "transcript" && body.choice !== "summary")
-		throw new HttpError(400, "choice must be transcript or summary");
+	if (body.choice !== "transcript" && body.choice !== "summary" && body.choice !== "discard")
+		throw new HttpError(400, "choice must be transcript, summary or discard");
 	if (typeof body.durationMs !== "number" || !Number.isFinite(body.durationMs) || body.durationMs < 0)
 		throw new HttpError(400, "durationMs is required");
+	if (body.choice === "discard") return { choice: "discard", durationMs: body.durationMs, lines: [] };
 	if (!Array.isArray(body.lines) || body.lines.length === 0 || body.lines.length > 5000)
 		throw new HttpError(400, "lines are required");
 	const lines = body.lines.map((line): VoiceCallLine => {
@@ -214,14 +206,19 @@ function parseKeepBody(body: unknown): {
 
 export function registerWebVoiceCallRoutes(route: RegisterWebRoute, deps: VoiceCallDeps): void {
 	// A finished call lands in the main chat as one entry. It never asks for a reply;
-	// it rides along with whatever is said there next.
+	// it rides along with whatever is said there next. A discarded call leaves only a mark for you to see.
 	route("POST", "/api/web/voice/keep", async (request, response) => {
 		const { choice, durationMs, lines } = parseKeepBody(await readJsonBody(request));
+		const runtime = await deps.getMainRuntime();
+		if (choice === "discard") {
+			await runtime.noteCallDiscarded(durationMs);
+			sendJson(response, 200, { ok: true, channelKey: runtime.channelKey });
+			return;
+		}
 		if (lines.length === 0) throw new HttpError(400, "lines are required");
 		const you = getContactNickname(WEB_USER_NAME);
 		const transcript = formatVoiceTranscript(lines, you, deps.personaName);
 		const body = choice === "summary" ? await deps.summarizer.summarizeVoiceCall(transcript) : transcript;
-		const runtime = await deps.getMainRuntime();
 		const id = messageId("user");
 		await runtime.ingestInbound(
 			{
@@ -229,6 +226,10 @@ export function registerWebVoiceCallRoutes(route: RegisterWebRoute, deps: VoiceC
 				authorId: runtime.ownerId,
 				authorName: you,
 				text: voiceCallEntry(choice, durationMs, body),
+				call:
+					choice === "summary"
+						? { kept: "summary", durationMs, summary: body }
+						: { kept: "transcript", durationMs, lines },
 				isBot: false,
 				mentionedBot: false,
 				remoteTimestamp: new Date().toISOString(),

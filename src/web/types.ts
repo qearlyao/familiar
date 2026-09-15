@@ -1,5 +1,7 @@
 import type { Server } from "node:http";
 
+import type { StoredVoiceCall } from "../conversation/chat-log.js";
+
 export const WEB_USER_NAME = "you";
 export const EVENT_REPLAY_LIMIT = 1000;
 
@@ -75,6 +77,8 @@ export type WebMessage = {
 	tools?: WebToolEvent[];
 	usage?: WebUsage;
 	silent?: boolean;
+	/** a voice call's mark in the chat */
+	call?: StoredVoiceCall;
 	ts: number;
 };
 
@@ -85,8 +89,9 @@ export type WebStreamEvent =
 			ts: number;
 			channelKey?: string;
 			messageId: string;
-			role: "assistant" | "user";
+			role: WebMessage["role"];
 			who: string;
+			call?: StoredVoiceCall;
 	  }
 	| {
 			type: "delta";

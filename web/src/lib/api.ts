@@ -1,5 +1,6 @@
 import type { Message } from "../types";
 import type { WebMessage, WebStreamEvent } from "../../../src/web/types.js";
+import type { VoiceCallLine } from "../../../src/conversation/chat-log.js";
 import type { ControlCommand } from "@/lib/slashCommands";
 
 type WireMessage = WebMessage;
@@ -13,6 +14,7 @@ function wireToMessage(wire: WireMessage): Message {
     attachments: wire.attachments,
     usage: wire.usage,
     silent: wire.silent,
+    call: wire.call,
     ts: wire.ts,
   };
 }
@@ -335,15 +337,8 @@ export function fetchVoiceConfig(): Promise<VoiceConfig> {
   return getJson<VoiceConfig>("/api/web/voice/config", "voice config");
 }
 
-export interface VoiceCallLine {
-  who: "you" | "them";
-  text: string;
-  /** ms since the call picked up */
-  at: number;
-}
-
-/** a finished call, handed to the main chat as one entry */
-export async function keepVoiceCall(body: { choice: "transcript" | "summary"; durationMs: number; lines: VoiceCallLine[] }): Promise<void> {
+/** a finished call, handed to the main chat as one entry; a discarded one leaves only its mark */
+export async function keepVoiceCall(body: { choice: "transcript" | "summary" | "discard"; durationMs: number; lines: VoiceCallLine[] }): Promise<void> {
   await jsonRequest<{ ok: true }>("/api/web/voice/keep", "POST", body, "voice/keep");
 }
 

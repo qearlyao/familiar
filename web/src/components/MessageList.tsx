@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { Message } from "../types";
+import { CallEntry } from "./CallEntry";
 import { MessageBubble } from "./MessageBubble";
 
 const GAP_MS = 30 * 60 * 1000;
@@ -123,13 +124,17 @@ export function MessageList({
           return (
             <div key={m.id} className="chat-turn-group">
               {showGap && <div className="chat-time-divider">{formatGap(m.ts, prev.ts)}</div>}
-              <MessageBubble
-                message={m}
-                onRetry={latest ? onRetry : undefined}
-                onDelete={latest ? onDelete : undefined}
-                onEdit={latest ? onEdit : undefined}
-                pendingLatestAssistantAction={latest ? pendingLatestAssistantAction : undefined}
-              />
+              {m.call ? (
+                <CallEntry call={m.call} ts={m.ts} personaName={personaName} />
+              ) : (
+                <MessageBubble
+                  message={m}
+                  onRetry={latest ? onRetry : undefined}
+                  onDelete={latest ? onDelete : undefined}
+                  onEdit={latest ? onEdit : undefined}
+                  pendingLatestAssistantAction={latest ? pendingLatestAssistantAction : undefined}
+                />
+              )}
             </div>
           );
         })}

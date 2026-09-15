@@ -163,6 +163,7 @@ export function createWebEventHub(
 					messageId: record.messageId,
 					role: "user",
 					who: record.authorName || getContactNickname(WEB_USER_NAME),
+					call: record.call,
 					ts: toUnixMs(record.ts),
 				});
 				publishDelta(runtime.channelKey, record.messageId, "text", record.text, toUnixMs(record.ts));
@@ -205,6 +206,21 @@ export function createWebEventHub(
 					if (record.text) publishDelta(runtime.channelKey, outboundId, "text", record.text, toUnixMs(record.ts));
 				}
 				publish(completion);
+			}
+			if (record.type === "call_discarded") {
+				const call = { kept: false as const, durationMs: record.durationMs };
+				const id = `call_${record.recordId}`;
+				const ts = toUnixMs(record.ts);
+				publish({
+					type: "message_started",
+					channelKey: runtime.channelKey,
+					messageId: id,
+					role: "system",
+					who: "system",
+					call,
+					ts,
+				});
+				publish({ type: "message_completed", channelKey: runtime.channelKey, messageId: id, ts });
 			}
 			if (record.type === "message_edit") {
 				publish({

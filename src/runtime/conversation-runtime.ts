@@ -25,6 +25,7 @@ export interface InboundMessageInput {
 	isBot?: boolean;
 	mentionedBot?: boolean;
 	attachments?: InboundChatRecord["attachments"];
+	call?: InboundChatRecord["call"];
 	remoteTimestamp?: string;
 	checkpoint?: {
 		cursor?: string;
@@ -363,6 +364,7 @@ export class ConversationRuntime {
 			isBot: input.isBot ?? false,
 			mentionedBot: input.mentionedBot ?? false,
 			attachments: input.attachments ?? [],
+			call: input.call,
 		};
 		await this.appendRecord(record);
 		if (input.checkpoint) await this.noteCheckpoint(input.checkpoint);
@@ -633,6 +635,14 @@ export class ConversationRuntime {
 			type: "message_delete",
 			...buildRecordBase(this.channel, this.nextRecordId),
 			messageId,
+		});
+	}
+
+	async noteCallDiscarded(durationMs: number): Promise<void> {
+		await this.appendRecord({
+			type: "call_discarded",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			durationMs,
 		});
 	}
 

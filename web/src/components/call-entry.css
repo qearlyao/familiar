@@ -1,0 +1,40 @@
+/* ---------- what a call leaves behind (Chat 5a–5d) ---------- */
+.call-entry {
+  display: flex; flex-direction: column; gap: 0.8125rem; padding: 1rem 1.125rem; border-radius: 1.375rem;
+  background: rgba(214, 189, 138, 0.42); color: #2b1901; min-width: 0;
+}
+.call-entry svg { flex: none; color: #4c3e2c; }
+.call-entry-head { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.call-entry-head b { flex: none; font: var(--font-weight-normal) 0.90625rem/1.2 Caprasimo, Georgia, serif; font-weight: var(--font-weight-normal); }
+.call-entry-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 0.78125rem var(--font-mono); color: #4c3e2c; white-space: nowrap; }
+.call-entry-read {
+  flex: none; height: 1.875rem; padding: 0 0.75rem; border: 0; border-radius: 999px; background: rgba(43, 25, 1, 0.09); color: #4c3e2c;
+  font: 0.78125rem Figtree, sans-serif; display: inline-flex; align-items: center; gap: 0.4375rem; cursor: pointer; transition: background 0.15s;
+}
+.call-entry-head .call-entry-read { margin-left: auto; }
+.call-entry-read:hover { background: rgba(43, 25, 1, 0.17); }
+.call-entry-fold {
+  flex: none; margin-left: auto; width: 1.75rem; height: 1.75rem; border: 0; border-radius: 999px; background: transparent; color: #4c3e2c;
+  display: grid; place-items: center; cursor: pointer; transition: background 0.15s;
+}
+.call-entry-fold:hover { background: rgba(43, 25, 1, 0.12); }
+.call-entry-summary { margin: 0; font-size: 1.03125rem; line-height: 1.68; text-wrap: pretty; white-space: pre-line; }
+.call-entry-note { font-size: 0.78125rem; color: #4c3e2c; }
+.call-entry-lines { display: flex; flex-direction: column; gap: 0.8125rem; }
+.call-entry-line { display: grid; grid-template-columns: 3.25rem 1fr; gap: 0.875rem; align-items: start; }
+.call-entry-line span { font: 0.71875rem var(--font-mono); color: #4c3e2c; padding-top: 0.25rem; }
+.call-entry-line p { margin: 0; font-size: 0.96875rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
+.call-entry-line[data-who="them"] p { padding-left: 0.875rem; border-left: 0.125rem solid rgba(82, 88, 51, 0.45); }
+.call-entry-lines.has-more .call-entry-line:last-child { opacity: 0.4; }
+.call-entry-more { align-self: flex-start; height: 2rem; padding: 0 0.875rem 0 0.75rem; }
+
+.call-entry.is-discarded {
+  flex-direction: row; align-items: center; gap: 0.75rem; padding: 0.8125rem 1.125rem;
+  background: rgba(43, 25, 1, 0.06); font-size: 0.875rem; color: #4c3e2c;
+}
+
+@media (max-width: 700px) {
+  .call-entry { padding: 0.875rem 1rem; }
+  .call-entry-head { gap: 0.5625rem; }
+  .call-entry-line { grid-template-columns: 2.75rem 1fr; gap: 0.625rem; }
+}

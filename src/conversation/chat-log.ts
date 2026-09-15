@@ -59,6 +59,19 @@ interface ChatRecordBase {
 	threadId?: string;
 }
 
+export interface VoiceCallLine {
+	who: "you" | "them";
+	text: string;
+	/** ms since the call picked up */
+	at: number;
+}
+
+/** what the chat shows of a call; the agent only ever reads the entry's text */
+export type StoredVoiceCall =
+	| { kept: "transcript"; durationMs: number; lines: VoiceCallLine[] }
+	| { kept: "summary"; durationMs: number; summary: string }
+	| { kept: false; durationMs: number };
+
 export interface InboundChatRecord extends ChatRecordBase {
 	type: "inbound";
 	messageId: string;
@@ -68,6 +81,7 @@ export interface InboundChatRecord extends ChatRecordBase {
 	isBot: boolean;
 	mentionedBot: boolean;
 	attachments: StoredAttachment[];
+	call?: Exclude<StoredVoiceCall, { kept: false }>;
 }
 
 export interface ControlChatRecord extends ChatRecordBase {
@@ -193,6 +207,12 @@ export interface MessageEditChatRecord extends ChatRecordBase {
 	text: string;
 }
 
+/** a call that was let go: a mark in the web chat, never part of the conversation */
+export interface CallDiscardedChatRecord extends ChatRecordBase {
+	type: "call_discarded";
+	durationMs: number;
+}
+
 export type ChatLogRecord =
 	| InboundChatRecord
 	| ControlChatRecord
@@ -206,7 +226,8 @@ export type ChatLogRecord =
 	| ErrorChatRecord
 	| AssistantRetryChatRecord
 	| MessageDeleteChatRecord
-	| MessageEditChatRecord;
+	| MessageEditChatRecord
+	| CallDiscardedChatRecord;
 
 export function hiddenWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
 	return new Set(

@@ -411,6 +411,17 @@ export function webMessageFromRecord(
 			who: record.authorName || getContactNickname(WEB_USER_NAME),
 			text: record.text,
 			attachments: webAttachments(config, record.attachments),
+			call: record.call,
+			ts: toUnixMs(record.ts),
+		};
+	}
+	if (record.type === "call_discarded") {
+		return {
+			id: `call_${record.recordId}`,
+			role: "system",
+			who: "system",
+			text: "",
+			call: { kept: false, durationMs: record.durationMs },
 			ts: toUnixMs(record.ts),
 		};
 	}

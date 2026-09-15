@@ -14,7 +14,15 @@
   }
 }
 
-@custom-variant low-dpr-wide (@media (min-width: 1440px) and (max-resolution: 1.5dppx));
+/* Wide desktops: grow the same rem base past 1920px so a 1440p/5K canvas
+   looks like the 1080p layout scaled up, not a narrow column in a sea. Caps
+   at 4/3 (reached at 2560px). */
+@media (min-width: 1921px) {
+  html {
+    font-size: clamp(16px, calc(100vw / 120), calc(16px * 4 / 3));
+  }
+}
+
 @custom-variant data-open {
   &:where([data-state="open"], [data-open]:not([data-open="false"])) {
     @slot;

@@ -4,7 +4,7 @@ import { DiaryShelf } from "./diaries/DiaryShelf";
 import { SkillShelf } from "./SkillShelf";
 import { Header } from "./Header";
 import { MessageList } from "./MessageList";
-import { SettingsSurface } from "./SettingsSurface";
+import { SettingsSurface, type SettingsTabId } from "./SettingsSurface";
 import { useChat } from "@/lib/useChat";
 import type { WebAuthDevice } from "@/lib/api";
 
@@ -14,6 +14,7 @@ export type ShelfName = "diaries" | "skills";
 export function Chat({
   composer,
   settingsOpen,
+  settingsTab,
   onSettingsOpenChange,
   shelf,
   onShelfChange,
@@ -25,6 +26,7 @@ export function Chat({
   /** the draft, held by the shell so the archive can drop a day into it too */
   composer: RefObject<ComposerHandle | null>;
   settingsOpen: boolean;
+  settingsTab?: SettingsTabId;
   onSettingsOpenChange: (open: boolean) => void;
   shelf: ShelfName | undefined;
   onShelfChange: (shelf: ShelfName | undefined) => void;
@@ -62,6 +64,7 @@ export function Chat({
             authMode={authMode}
             authDevice={authDevice}
             onSignedOut={onSignedOut}
+            initialTab={settingsTab}
             onClose={() => onSettingsOpenChange(false)}
           />
         ) : (<>

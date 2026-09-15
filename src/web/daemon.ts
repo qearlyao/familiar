@@ -1,9 +1,12 @@
 import { createServer } from "node:http";
 
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config, WebAuthMode } from "../config/index.js";
 import { refreshContactNote, setContactNotePath } from "../conversation/contact-note.js";
 import type { RestartHandler } from "../lifecycle/control.js";
+import { DefaultLcmSummarizer } from "../memory/lcm/summarizer.js";
 import { setAddedModelsPath } from "../models/added-models.js";
 import { loadPersona, parsePersonaName } from "../prompting/persona.js";
 import type { AgentCore } from "../runtime/agent-core.js";
@@ -28,12 +31,13 @@ import { serveStatic } from "./static.js";
 import { attachWebSocketStream } from "./stream.js";
 import type { WebDaemon } from "./types.js";
 import { attachWebSocketVoice, registerWebVoiceRoutes } from "./voice.js";
+import { registerWebVoiceCallRoutes, type VoiceCallDeps } from "./voice-call.js";
 
 export async function startWebDaemon(
 	config: Config,
 	familiarAgent: FamiliarAgent,
 	agentCore: AgentCore,
-	options: { restart?: RestartHandler } = {},
+	options: { restart?: RestartHandler; modelRuntime?: ModelRuntime } = {},
 ): Promise<WebDaemon> {
 	setAddedModelsPath(config.workspace.dataDir);
 	setContactNotePath(config.persona.contact);
@@ -101,6 +105,14 @@ export async function startWebDaemon(
 	registerWebGalleryRoutes(route, config);
 	registerWebSkillRoutes(route, config);
 	registerWebVoiceRoutes(route, config);
+	const voiceCall: VoiceCallDeps = {
+		config,
+		familiarAgent,
+		getMainRuntime: () => getRuntime(),
+		personaName,
+		summarizer: new DefaultLcmSummarizer(config, undefined, options.modelRuntime),
+	};
+	registerWebVoiceCallRoutes(route, voiceCall);
 
 	await subscribeKnownRuntimes();
 
@@ -116,6 +128,7 @@ export async function startWebDaemon(
 	attachWebSocketVoice(server, {
 		authorize: (request, pathname) => auth.authorize(request, pathname),
 		config,
+		call: voiceCall,
 	});
 	attachWebSocketStream(server, {
 		authorize: (request, pathname) => auth.authorize(request, pathname),

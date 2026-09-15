@@ -1,5 +1,5 @@
 import type { ConfigKey, ConfigValues } from "@/lib/api";
-import { Card, EnumToggle, TextInput } from "./inputs";
+import { Card, EnumToggle, NumberInput, Sentence, TextInput, Unit } from "./inputs";
 
 export function TtsSection({
   values,
@@ -46,20 +46,46 @@ export function TtsSection({
           </label>
         )}
       </div>
+      <p className="settings-note">a faster model on a call keeps the conversation moving.</p>
+    </Card>
+  );
+}
+
+/** a call is its own conversation: how much of the chat it starts with, and what it leaves behind */
+export function VoiceCallSection({
+  values,
+  disabled,
+  onChange,
+}: {
+  values: ConfigValues | undefined;
+  disabled: boolean;
+  onChange: (key: ConfigKey, value: unknown) => Promise<void>;
+}) {
+  return (
+    <Card title="on a call">
+      <Sentence>
+        a call starts with the last{" "}
+        <Unit>
+          <NumberInput inline value={values?.["web.voice_context_messages"].value} min={0} max={200} disabled={disabled} onCommit={(next) => onChange("web.voice_context_messages", next)} /> messages
+        </Unit>{" "}
+        of the chat.
+      </Sentence>
       <div className="settings-row">
-        <span>on a call</span>
+        <span>after you hang up</span>
         <EnumToggle
-          value={values?.["web.voice_call_mode"].value}
+          value={values?.["web.voice_keep"].value}
           options={[
-            { value: "continuous", label: "continuous" },
-            { value: "push_to_talk", label: "push to talk" },
+            { value: "ask", label: "ask" },
+            { value: "transcript", label: "transcript" },
+            { value: "summary", label: "summary" },
+            { value: "discard", label: "discard" },
           ]}
-          ariaPrefix="voice call input"
+          ariaPrefix="after a call"
           disabled={disabled}
-          onChange={(next) => void onChange("web.voice_call_mode", next)}
+          onChange={(next) => void onChange("web.voice_keep", next)}
         />
       </div>
-      <p className="settings-note">a faster model on a call keeps the conversation moving.</p>
+      <p className="settings-note">a summary is written by the same model that folds long chats into memory.</p>
     </Card>
   );
 }

@@ -16,6 +16,10 @@ export interface FamiliarAgentReply {
 
 export interface FamiliarPromptOptions {
 	skipAmbient?: boolean;
+	/** a session that leaves no trace in LCM memory (a voice call until it is kept) */
+	ephemeral?: boolean;
+	/** use this session's model and thinking level instead of its own */
+	settingsFrom?: string;
 	ambientQuery?: string;
 	referenceAttachments?: StoredAttachment[];
 	onTurnEnd?: () => void | Promise<void>;
@@ -41,6 +45,8 @@ export interface FamiliarAgent {
 	steerMessage(sessionKey: string, message: AgentMessage): void;
 	followUpMessage(sessionKey: string, message: AgentMessage, options?: FamiliarPromptOptions): Promise<void>;
 	abort(sessionKey: string): Promise<void>;
+	/** abort and forget a short-lived session */
+	dispose(sessionKey: string): Promise<void>;
 	retryLastAssistant(
 		sessionKey: string,
 		onEvent?: (event: AgentEvent) => void | Promise<void>,

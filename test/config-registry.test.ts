@@ -6,13 +6,17 @@ import type { Config } from "../src/config/types.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 describe("TTS config registry", () => {
-	it("validates and writes the voice call input mode", async (t) => {
+	it("validates and writes the voice call context and keep choice", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const mode = CONFIG_REGISTRY["web.voice_call_mode"];
+		const keep = CONFIG_REGISTRY["web.voice_keep"];
+		const context = CONFIG_REGISTRY["web.voice_context_messages"];
 
-		mode.write(config, mode.validate("push_to_talk", config));
-		assert.equal(mode.read(config), "push_to_talk");
-		assert.throws(() => mode.validate("hold_to_speak", config), /web\.voice_call_mode must be one of/);
+		keep.write(config, keep.validate("summary", config));
+		assert.equal(keep.read(config), "summary");
+		assert.throws(() => keep.validate("forever", config), /web\.voice_keep must be one of/);
+		context.write(config, context.validate(0, config));
+		assert.equal(context.read(config), 0);
+		assert.throws(() => context.validate(-1, config), /web\.voice_context_messages must be a non-negative integer/);
 	});
 
 	it("validates and updates voice and model ids", async (t) => {

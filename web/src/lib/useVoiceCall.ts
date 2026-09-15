@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchVoiceConfig, voiceUrl, type VoiceConfig } from "./api";
 import { createVoicePlayer, startMicCapture, type MicCapture, type VoicePlayer } from "./voiceAudio";
+import { hasSilentMarker, stripStreamingTail } from "./silentMarker";
+import { placeLine, type VoiceLine } from "./voiceLines";
+import { createSpeechFeed } from "./voiceSpeech";
 
 export type CallState = "idle" | "connecting" | "live" | "ended";
 
-export interface VoiceLine {
-  id: string;
-  who: "you" | "them";
-  text: string;
-  final: boolean;
-}
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -28,59 +25,55 @@ export interface VoiceCallHook {
   error: string | undefined;
   speaking: boolean;
   level: number;
+  muted: boolean;
+  /** when the call picked up, for the clock */
+  startedAt: number | undefined;
+  /** how long the last call ran, once it has ended */
+  durationMs: number;
   start: () => void;
   stop: () => void;
-  speak: (text: string) => void;
-  endSpeech: () => void;
-  beginUtterance: () => void;
-  endUtterance: (commit: boolean) => void;
-  showLine: (who: VoiceLine["who"], text: string, final: boolean) => void;
+  setMuted: (muted: boolean) => void;
+  /** write a line instead of saying it */
+  say: (text: string) => void;
+  /** put an ended call away and go back to idle */
+  reset: () => void;
 }
 
-export function useVoiceCall({
-  onTranscript,
-  onBargeIn,
-}: { onTranscript?: (text: string) => void; onBargeIn?: () => void } = {}): VoiceCallHook {
+/** A call is its own conversation on the server: this side carries sound and shows the lines. */
+export function useVoiceCall(): VoiceCallHook {
   const [state, setState] = useState<CallState>("idle");
   const [config, setConfig] = useState<VoiceConfig>();
   const [lines, setLines] = useState<VoiceLine[]>([]);
   const [error, setError] = useState<string>();
   const [speaking, setSpeaking] = useState(false);
   const [level, setLevel] = useState(0);
+  const [muted, setMutedState] = useState(false);
+  const [startedAt, setStartedAt] = useState<number>();
+  const [durationMs, setDurationMs] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const micRef = useRef<MicCapture | null>(null);
   const playerRef = useRef<VoicePlayer | null>(null);
-  const voiceCallModeRef = useRef<VoiceConfig["voiceCallMode"]>("continuous");
-  const pushToTalkRef = useRef(false);
-  const pushToTalkPendingRef = useRef<ArrayBuffer | undefined>(undefined);
-  const captureStartingRef = useRef(false);
-  // held in a ref so a changing callback never tears down the socket
-  const onTranscriptRef = useRef(onTranscript);
-  const onBargeInRef = useRef(onBargeIn);
-  useLayoutEffect(() => {
-    onTranscriptRef.current = onTranscript;
-    onBargeInRef.current = onBargeIn;
-  });
+  const mutedRef = useRef(false);
+  const startedAtRef = useRef(0);
+  const feedRef = useRef(createSpeechFeed());
+  const replyRef = useRef<string | undefined>(undefined);
+  const interruptedRef = useRef<string | undefined>(undefined);
+
+  const refreshConfig = useCallback(
+    () =>
+      fetchVoiceConfig().then((next) => {
+        setConfig(next);
+        return next;
+      }),
+    [],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    void fetchVoiceConfig()
-      .then((next) => {
-        if (!cancelled) setConfig(next);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "voice is out of reach");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void refreshConfig().catch((err: unknown) => setError(err instanceof Error ? err.message : "voice is out of reach"));
+  }, [refreshConfig]);
 
   const teardown = useCallback(() => {
-    pushToTalkRef.current = false;
-    pushToTalkPendingRef.current = undefined;
-    captureStartingRef.current = false;
     micRef.current?.stop();
     micRef.current = null;
     const socket = socketRef.current;
@@ -90,11 +83,21 @@ export function useVoiceCall({
     playerRef.current?.clear();
     playerRef.current?.close();
     playerRef.current = null;
+    feedRef.current.reset();
+    replyRef.current = undefined;
+    interruptedRef.current = undefined;
     setSpeaking(false);
     setLevel(0);
   }, []);
 
   useEffect(() => teardown, [teardown]);
+
+  const end = useCallback(() => {
+    if (!socketRef.current && !micRef.current) return;
+    teardown();
+    setDurationMs(startedAtRef.current ? Date.now() - startedAtRef.current : 0);
+    setState("ended");
+  }, [teardown]);
 
   // one rAF loop drives the ink field from whichever side is making sound
   useEffect(() => {
@@ -102,7 +105,7 @@ export function useVoiceCall({
     let frame = 0;
     const tick = () => {
       const them = playerRef.current?.level() ?? 0;
-      const you = micRef.current?.level() ?? 0;
+      const you = mutedRef.current ? 0 : (micRef.current?.level() ?? 0);
       setLevel(Math.max(them, you));
       frame = requestAnimationFrame(tick);
     };
@@ -110,67 +113,34 @@ export function useVoiceCall({
     return () => cancelAnimationFrame(frame);
   }, [state]);
 
-  const appendLine = useCallback((who: VoiceLine["who"], text: string, final: boolean) => {
-    setLines((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.who === who && !last.final) {
-        const next = prev.slice(0, -1);
-        return [...next, { ...last, text, final }];
-      }
-      return [...prev, { id: `${who}-${prev.length}-${text.length}`, who, text, final }];
-    });
+  const send = (body: Record<string, unknown>) => {
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(body));
+  };
+
+  const putLine = useCallback((who: VoiceLine["who"], text: string, final: boolean, id?: string) => {
+    const at = Date.now() - startedAtRef.current;
+    setLines((prev) => placeLine(prev, who, text, final, at, id));
   }, []);
 
-  // capture runs for the whole call; push-to-talk only gates forwarding
-  const startCapture = useCallback(() => {
-    if (micRef.current || captureStartingRef.current) return;
-    captureStartingRef.current = true;
-    void startMicCapture(
-      (pcm) => {
-        const live = socketRef.current;
-        if (voiceCallModeRef.current === "push_to_talk") {
-          if (!pushToTalkRef.current) return;
-          // hold the newest chunk back so the release has something to commit
-          const pending = pushToTalkPendingRef.current;
-          pushToTalkPendingRef.current = pcm;
-          if (pending && live?.readyState === WebSocket.OPEN)
-            live.send(JSON.stringify({ type: "audio", audioBase64: toBase64(pending), sampleRate: 16_000 }));
-          return;
-        }
-        if (live?.readyState !== WebSocket.OPEN) return;
-        live.send(JSON.stringify({ type: "audio", audioBase64: toBase64(pcm), sampleRate: 16_000 }));
-      },
-      () => {
-        if (voiceCallModeRef.current === "push_to_talk" && !pushToTalkRef.current) return;
-        if (!playerRef.current?.playing()) return;
-        playerRef.current.clear();
-        setSpeaking(false);
-        socketRef.current?.send(JSON.stringify({ type: "tts_cancel" }));
-        onBargeInRef.current?.();
-      },
-    )
-      .then((capture) => {
-        captureStartingRef.current = false;
-        if (!socketRef.current) {
-          capture.stop();
-          return;
-        }
-        micRef.current = capture;
-        setState("live");
-      })
-      .catch((err: unknown) => {
-        captureStartingRef.current = false;
-        setError(err instanceof Error ? err.message : "the mic stayed shut");
-        teardown();
-        setState("ended");
-      });
-  }, [teardown]);
+  const dropLine = useCallback((id: string) => setLines((prev) => prev.filter((line) => line.id !== id)), []);
 
-  const openCall = useCallback((voiceCallMode: VoiceConfig["voiceCallMode"]) => {
+  // you talked over the reply: silence it here and stop the rest being written
+  const bargeIn = useCallback(() => {
+    if (!playerRef.current?.playing()) return;
+    playerRef.current.clear();
+    setSpeaking(false);
+    interruptedRef.current = replyRef.current;
+    feedRef.current.reset();
+    send({ type: "tts_cancel" });
+  }, []);
+
+  const start = useCallback(() => {
     if (socketRef.current) return;
-    voiceCallModeRef.current = voiceCallMode;
     setError(undefined);
     setLines([]);
+    setMutedState(false);
+    mutedRef.current = false;
     setState("connecting");
 
     const socket = new WebSocket(voiceUrl());
@@ -178,26 +148,80 @@ export function useVoiceCall({
 
     socket.addEventListener("open", () => {
       playerRef.current = createVoicePlayer();
-      startCapture();
+      void startMicCapture(
+        (pcm) => {
+          if (mutedRef.current || socketRef.current?.readyState !== WebSocket.OPEN) return;
+          socketRef.current.send(JSON.stringify({ type: "audio", audioBase64: toBase64(pcm), sampleRate: 16_000 }));
+        },
+        () => {
+          if (!mutedRef.current) bargeIn();
+        },
+      )
+        .then((capture) => {
+          if (socketRef.current !== socket) {
+            capture.stop();
+            return;
+          }
+          micRef.current = capture;
+          startedAtRef.current = Date.now();
+          setStartedAt(startedAtRef.current);
+          setState("live");
+          // refresh the keep choice so a settings change since load counts for this call
+          void refreshConfig().catch(() => undefined);
+        })
+        .catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : "the mic stayed shut");
+          teardown();
+          setState("idle");
+        });
     });
 
     socket.addEventListener("message", (event) => {
-      let message: unknown;
+      let body: Record<string, unknown>;
       try {
-        message = JSON.parse(typeof event.data === "string" ? event.data : "");
+        const parsed: unknown = JSON.parse(typeof event.data === "string" ? event.data : "");
+        if (typeof parsed !== "object" || parsed === null) return;
+        body = parsed as Record<string, unknown>;
       } catch {
         return;
       }
-      if (typeof message !== "object" || message === null) return;
-      const body = message as Record<string, unknown>;
       if (body.type === "transcript" && typeof body.text === "string") {
-        const final = body.final === true;
-        appendLine("you", body.text, final);
-        // a committed transcript is a finished turn: hand it up to drive the agent
-        if (final && body.text.trim()) onTranscriptRef.current?.(body.text.trim());
+        // an empty final still closes the open partial; empty lines are never shown or kept
+        putLine("you", body.text, body.final === true);
+        return;
+      }
+      if ((body.type === "reply" || body.type === "reply_end") && typeof body.id === "string" && typeof body.text === "string") {
+        const id = body.id;
+        if (replyRef.current !== id) {
+          replyRef.current = id;
+          feedRef.current.reset();
+        }
+        const interrupted = interruptedRef.current === id;
+        if (body.type === "reply") {
+          if (!interrupted) for (const chunk of feedRef.current.push(body.text)) send({ type: "tts", id, text: chunk });
+          // a silent turn is for the eyes only, and never lands as a spoken line
+          if (!hasSilentMarker(body.text)) putLine("them", stripStreamingTail(body.text), false, id);
+          return;
+        }
+        if (!interrupted) {
+          for (const chunk of feedRef.current.end()) send({ type: "tts", id, text: chunk });
+          send({ type: "tts_end", id });
+        }
+        if (body.silent === true || !body.text) dropLine(id);
+        else putLine("them", body.text, true, id);
+        return;
+      }
+      // you spoke again before the reply was done: the server cut it, so silence what's left of it
+      if (body.type === "interrupted" && typeof body.id === "string") {
+        interruptedRef.current = body.id;
+        if (replyRef.current === body.id) feedRef.current.reset();
+        playerRef.current?.clear();
+        setSpeaking(false);
         return;
       }
       if (body.type === "audio" && typeof body.audioBase64 === "string") {
+        // audio of a cut reply can still be on the wire; it's dropped until the next reply speaks
+        if (replyRef.current && interruptedRef.current === replyRef.current) return;
         playerRef.current?.enqueue(body.audioBase64);
         setSpeaking(true);
         return;
@@ -206,89 +230,38 @@ export function useVoiceCall({
         setSpeaking(false);
         return;
       }
-      // the upstream transcriber idles out between turns; the relay reopens it on the next press
-      if (body.type === "stt_closed") return;
       if (body.type === "error" && typeof body.message === "string") setError(body.message);
     });
 
     socket.addEventListener("close", () => {
       if (socketRef.current !== socket) return;
-      teardown();
-      setState("ended");
+      end();
     });
     socket.addEventListener("error", () => setError("the line dropped"));
-  }, [appendLine, startCapture, teardown]);
+  }, [bargeIn, dropLine, end, putLine, refreshConfig, teardown]);
 
-  const start = useCallback(() => {
-    if (socketRef.current) return;
-    setError(undefined);
+  const setMuted = useCallback((next: boolean) => {
+    mutedRef.current = next;
+    setMutedState(next);
+  }, []);
+
+  const say = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || socketRef.current?.readyState !== WebSocket.OPEN) return;
+      bargeIn();
+      putLine("you", trimmed, true, `typed-${Date.now()}`);
+      send({ type: "say", text: trimmed });
+    },
+    [bargeIn, putLine],
+  );
+
+  const reset = useCallback(() => {
     setLines([]);
-    setState("connecting");
-    void fetchVoiceConfig()
-      .then((next) => {
-        setConfig(next);
-        openCall(next.voiceCallMode);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "voice is out of reach");
-        setState("ended");
-      });
-  }, [openCall]);
-
-  const stop = useCallback(() => {
-    teardown();
-    setState("ended");
-  }, [teardown]);
-
-  // Text chunks are punctuation-bounded by the page feed before they reach the relay.
-  const speak = useCallback((text: string) => {
-    const socket = socketRef.current;
-    if (socket?.readyState !== WebSocket.OPEN || !text.trim()) return;
-    setSpeaking(true);
-    socket.send(JSON.stringify({ type: "tts", text }));
+    setError(undefined);
+    setStartedAt(undefined);
+    setState("idle");
   }, []);
 
-  const endSpeech = useCallback(() => {
-    const socket = socketRef.current;
-    if (socket?.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ type: "tts_end" }));
-  }, []);
-
-  const beginUtterance = useCallback(() => {
-    if (voiceCallModeRef.current !== "push_to_talk") return;
-    pushToTalkPendingRef.current = undefined;
-    pushToTalkRef.current = true;
-    if (playerRef.current?.playing()) {
-      playerRef.current.clear();
-      setSpeaking(false);
-      socketRef.current?.send(JSON.stringify({ type: "tts_cancel" }));
-      onBargeInRef.current?.();
-    }
-  }, []);
-
-  const endUtterance = useCallback((commit: boolean) => {
-    if (!pushToTalkRef.current) return;
-    pushToTalkRef.current = false;
-    const pending = pushToTalkPendingRef.current;
-    pushToTalkPendingRef.current = undefined;
-    const socket = socketRef.current;
-    if (!commit || socket?.readyState !== WebSocket.OPEN || !pending) return;
-    socket.send(JSON.stringify({ type: "audio", audioBase64: toBase64(pending), commit: true, sampleRate: 16_000 }));
-  }, []);
-
-  return {
-    state,
-    config,
-    lines,
-    error,
-    speaking,
-    level,
-    start,
-    stop,
-    speak,
-    endSpeech,
-    beginUtterance,
-    endUtterance,
-    showLine: appendLine,
-  };
+  return { state, config, lines, error, speaking, level, muted, startedAt, durationMs, start, stop: end, setMuted, say, reset };
 }

@@ -28,9 +28,6 @@ describe("web voice protocol", () => {
 		assert.equal(stt.searchParams.get("vad_silence_threshold_secs"), "1.2");
 		assert.equal(stt.searchParams.get("language_code"), "zho");
 		assert.equal(stt.searchParams.get("token"), "secret");
-		const manualStt = new URL(buildElevenLabsRealtimeSttUrl("secret", undefined, "push_to_talk"));
-		assert.equal(manualStt.searchParams.get("commit_strategy"), "manual");
-		assert.equal(manualStt.searchParams.get("vad_silence_threshold_secs"), null);
 		assert.equal(normalizeElevenLabsLanguageCode("en-US"), undefined);
 		assert.equal(normalizeElevenLabsLanguageCode("ENG"), "eng");
 

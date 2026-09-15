@@ -22,7 +22,7 @@ import {
 	MEMORY_EMBEDDING_FORMATS,
 	THINKING_LEVELS,
 	TTS_PROVIDERS,
-	VOICE_CALL_MODES,
+	VOICE_KEEP_CHOICES,
 	WEB_AUTH_MODES,
 } from "./enums.js";
 import { interpolateValue } from "./interpolate.js";
@@ -83,7 +83,7 @@ export type {
 	ThinkingLevel,
 	TtsProvider,
 	TtsVoiceSettings,
-	VoiceCallMode,
+	VoiceKeep,
 	WebAuthMode,
 } from "./types.js";
 
@@ -641,11 +641,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		web: {
 			port: readInteger(web.port, 8787, "web.port"),
 			authMode: readEnum(readOptionalString(web.auth_mode, "tailscale-only"), "web.auth_mode", WEB_AUTH_MODES),
-			voiceCallMode: readEnum(
-				readOptionalString(web.voice_call_mode, "continuous"),
-				"web.voice_call_mode",
-				VOICE_CALL_MODES,
-			),
+			voiceContextMessages: readInteger(web.voice_context_messages, 20, "web.voice_context_messages", 0),
+			voiceKeep: readEnum(readOptionalString(web.voice_keep, "ask"), "web.voice_keep", VOICE_KEEP_CHOICES),
 			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
 			totpSecret: readOptionalString(web.totp_secret, "") || undefined,
 			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),

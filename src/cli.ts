@@ -348,7 +348,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	const token = config.discord.token;
 	if (identity && config.discord.ownerId) await agentCore.useCachedIdentity(identity);
 	await agentCore.start();
-	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart });
+	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart, modelRuntime });
 	if (config.discord.enabled && token) {
 		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {
 			restart: requestRestart,

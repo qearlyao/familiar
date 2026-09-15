@@ -7,6 +7,7 @@ import { isRecord } from "../util/guards.js";
 import { acceptWebSocket, decodeFrames, encodeFrame } from "./events.js";
 import { sendJson } from "./http.js";
 import type { RegisterWebRoute } from "./routes.js";
+import { createVoiceCall, type VoiceCallDeps } from "./voice-call.js";
 
 export const WEB_VOICE_PATH = "/api/web/voice";
 const ELEVENLABS_STT_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
@@ -37,18 +38,12 @@ function apiKey(config: Config): string {
 	return key;
 }
 
-export function buildElevenLabsRealtimeSttUrl(
-	token: string,
-	languageCode?: string,
-	voiceCallMode: "continuous" | "push_to_talk" = "continuous",
-): string {
+export function buildElevenLabsRealtimeSttUrl(token: string, languageCode?: string): string {
 	const url = new URL(ELEVENLABS_STT_URL);
 	url.searchParams.set("model_id", STT_MODEL_ID);
 	url.searchParams.set("audio_format", "pcm_16000");
-	url.searchParams.set("commit_strategy", voiceCallMode === "push_to_talk" ? "manual" : "vad");
-	if (voiceCallMode !== "push_to_talk") {
-		url.searchParams.set("vad_silence_threshold_secs", String(STT_VAD_SILENCE_THRESHOLD_SECS));
-	}
+	url.searchParams.set("commit_strategy", "vad");
+	url.searchParams.set("vad_silence_threshold_secs", String(STT_VAD_SILENCE_THRESHOLD_SECS));
 	url.searchParams.set("token", token);
 	const normalizedLanguageCode = normalizeElevenLabsLanguageCode(languageCode);
 	if (normalizedLanguageCode) url.searchParams.set("language_code", normalizedLanguageCode);
@@ -180,14 +175,18 @@ export function registerWebVoiceRoutes(route: RegisterWebRoute, config: Config):
 	route("GET", "/api/web/voice/config", async (_request, response) => {
 		sendJson(response, 200, {
 			enabled: config.tts.provider === "elevenlabs",
-			voiceCallMode: config.web.voiceCallMode,
+			keep: config.web.voiceKeep,
 		});
 	});
 }
 
 export function attachWebSocketVoice(
 	server: Server,
-	options: { authorize(request: IncomingMessage, pathname: string): Promise<boolean>; config: Config },
+	options: {
+		authorize(request: IncomingMessage, pathname: string): Promise<boolean>;
+		config: Config;
+		call: VoiceCallDeps;
+	},
 ): void {
 	server.on("upgrade", (request, rawSocket) => {
 		const socket = rawSocket as Socket;
@@ -211,9 +210,17 @@ export function attachWebSocketVoice(
 				let ttsDialogueNeedsTurn = true;
 				let frameBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 				let closed = false;
+				const cancelTts = (): void => {
+					tts?.close();
+					tts = undefined;
+					ttsReady = undefined;
+					ttsDialogueNeedsTurn = true;
+				};
+				const call = createVoiceCall(options.call, (body) => send(socket, body), cancelTts);
 				const close = (): void => {
 					if (closed) return;
 					closed = true;
+					call.close();
 					if (ttsKeepAliveTimer) clearInterval(ttsKeepAliveTimer);
 					ttsKeepAliveTimer = undefined;
 					stt?.close();
@@ -241,11 +248,7 @@ export function attachWebSocketVoice(
 					sttReady ??= (async () => {
 						const token = await createSttToken(key);
 						const connection = await openUpstream(
-							buildElevenLabsRealtimeSttUrl(
-								token,
-								url.searchParams.get("language_code") ?? undefined,
-								options.config.web.voiceCallMode,
-							),
+							buildElevenLabsRealtimeSttUrl(token, url.searchParams.get("language_code") ?? undefined),
 							"STT",
 						);
 						stt = connection;
@@ -255,7 +258,15 @@ export function attachWebSocketVoice(
 									if (!text) return;
 									try {
 										const normalized = normalizeSpeechEvent(JSON.parse(text));
-										if (normalized) send(socket, normalized);
+										if (!normalized) return;
+										send(socket, normalized);
+										// a committed transcript is a finished turn: the call's session answers it
+										if (
+											normalized.type === "transcript" &&
+											normalized.final &&
+											String(normalized.text).trim()
+										)
+											call.say(String(normalized.text).trim());
 									} catch (error) {
 										fail("stt-message", error);
 									}
@@ -342,13 +353,10 @@ export function attachWebSocketVoice(
 					return ttsReady;
 				};
 
-				// push-to-talk is silent until the first press, so let that chunk open it
-				if (options.config.web.voiceCallMode !== "push_to_talk") {
-					void connectStt().catch((error) => {
-						fail("stt", error);
-						close();
-					});
-				}
+				void connectStt().catch((error) => {
+					fail("stt", error);
+					close();
+				});
 				const handleMessage = async (raw: string): Promise<void> => {
 					const message = JSON.parse(raw) as unknown;
 					if (!isRecord(message) || typeof message.type !== "string") return;
@@ -365,11 +373,16 @@ export function attachWebSocketVoice(
 							message_type: "input_audio_chunk",
 							audio_base_64: message.audioBase64,
 						};
-						if (typeof message.commit === "boolean") chunk.commit = message.commit;
 						if (Number.isInteger(message.sampleRate)) chunk.sample_rate = message.sampleRate;
 						connection.send(JSON.stringify(chunk));
 						return;
 					}
+					if (message.type === "say") {
+						if (typeof message.text !== "string" || !message.text.trim()) throw new Error("text is required");
+						call.say(message.text.trim());
+						return;
+					}
+					if ((message.type === "tts" || message.type === "tts_end") && call.wasCut(message.id)) return;
 					if (message.type === "tts") {
 						if (typeof message.text !== "string") throw new Error("text is required");
 						if (message.text.length > options.config.tts.maxInputChars)
@@ -399,10 +412,8 @@ export function attachWebSocketVoice(
 						return;
 					}
 					if (message.type === "tts_cancel") {
-						tts?.close();
-						tts = undefined;
-						ttsReady = undefined;
-						ttsDialogueNeedsTurn = true;
+						call.interrupt();
+						cancelTts();
 						return;
 					}
 					if (message.type === "close") close();

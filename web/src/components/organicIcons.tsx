@@ -141,6 +141,27 @@ export const IconMic = glyph(
     <path d="M12 19v3" />
   </>,
 );
+export const IconMicOff = glyph(
+  <>
+    <path d="M15 9.3V6a3 3 0 0 0-5.7-1.3" />
+    <path d="M9 9v3a3 3 0 0 0 5.1 2.1" />
+    <path d="M19 11v1a7 7 0 0 1-.9 3.4M16.5 17.8A7 7 0 0 1 5 12v-1" />
+    <path d="M12 19v3M2 2l20 20" />
+  </>,
+);
+export const IconHangUp = glyph(
+  <>
+    <path d="M21 15.5v3a2 2 0 0 1-2.2 2 19 19 0 0 1-8.3-3 18.6 18.6 0 0 1-5.7-5.7 19 19 0 0 1-3-8.4A2 2 0 0 1 3.8 1h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.5 2.1L7.6 9a15 15 0 0 0 5.7 5.7l1.4-1.4a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z" />
+    <path d="M2 2l20 20" />
+  </>,
+);
+/** step out of a room while what's in it keeps going */
+export const IconLeave = glyph(
+  <>
+    <path d="M9 5l-7 7 7 7" />
+    <path d="M2 12h13a6 6 0 0 1 0 12h-3" />
+  </>,
+);
 export const IconStop = glyph(<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />);
 export const IconPlay = glyph(<path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none" />);
 export const IconPause = glyph(

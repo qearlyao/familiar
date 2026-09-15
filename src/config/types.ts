@@ -9,7 +9,8 @@ export type DiscordChannelTrigger = "mention" | "always";
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
-export type VoiceCallMode = "continuous" | "push_to_talk";
+/** what a finished voice call leaves in the chat, or "ask" to decide each time */
+export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
 export type TtsProvider = "elevenlabs" | "cartesia";
 export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
 export type MediaUnderstandingProvider = "groq" | "google";
@@ -98,7 +99,9 @@ export interface Config {
 	web: {
 		port: number;
 		authMode: WebAuthMode;
-		voiceCallMode: VoiceCallMode;
+		/** how many recent main-chat messages open a voice call */
+		voiceContextMessages: number;
+		voiceKeep: VoiceKeep;
 		bearerToken?: string;
 		totpSecret?: string;
 		bindAddress: string;

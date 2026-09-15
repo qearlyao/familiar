@@ -1,223 +1,379 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
-import { Mic, PhoneOff } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useChat } from "@/lib/useChat";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { fetchAuthMode, keepVoiceCall, setConfig, type VoiceKeep } from "@/lib/api";
 import { useVoiceCall } from "@/lib/useVoiceCall";
-import { createSpeechFeed } from "@/lib/voiceSpeech";
-import type { Message } from "@/types";
+import type { VoiceLine } from "@/lib/voiceLines";
+import { IconArrow, IconHangUp, IconLeave, IconMic, IconMicOff, RailChat } from "./organicIcons";
+import "./voice.css";
 
-function InkField({ speaking, level }: { speaking: boolean; level: number }) {
-  // level rides the analyser so the blobs breathe with whoever is talking
-  const scale = 1 + Math.min(level, 1) * 0.26;
+/** how long the chrome stays up after you last moved */
+const CHROME_REST_MS = 3500;
+
+function clock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function spokenLength(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (!minutes) return unit(seconds, "second");
+  return `${unit(minutes, "minute")}, ${unit(seconds % 60, "second")}`;
+}
+
+/** a long reply keeps only its newest sentences on stage */
+function stageText(text: string, max = 180): string {
+  if (text.length <= max) return text;
+  const tail = text.slice(-max);
+  const boundary = tail.search(/[.!?。！？]\s+\S/);
+  return boundary >= 0 ? tail.slice(boundary + 1).trimStart() : `…${tail.slice(tail.indexOf(" ") + 1)}`;
+}
+
+function Wave({ small }: { small?: boolean }) {
   return (
-    <div className={cn("ink-field", speaking && "ink-field-speaking")} aria-hidden>
-      <div className="ink-blob ink-blob-a" style={{ "--ink-scale": scale } as CSSProperties} />
-      <div className="ink-blob ink-blob-b" style={{ "--ink-scale": 1 + (scale - 1) * 0.6 } as CSSProperties} />
-      <div className="ink-blob ink-blob-c" style={{ "--ink-scale": 1 + (scale - 1) * 0.35 } as CSSProperties} />
-      <div className="ink-veil" />
+    <span className="voice-wave" data-small={small ? "" : undefined} aria-hidden>
+      <span /><span /><span /><span />
+    </span>
+  );
+}
+
+function InkField({ level, speaking }: { level: number; speaking: boolean }) {
+  // level rides the analyser so the blooms swell with whoever is talking
+  const swell = { "--swell": 1 + Math.min(level, 1) * 0.22 } as CSSProperties;
+  return (
+    <div className="voice-ink" data-speaking={speaking ? "" : undefined} aria-hidden>
+      <div className="voice-ink-blooms" style={swell}>
+        <span className="voice-bloom voice-bloom-a" />
+        <span className="voice-bloom voice-bloom-b" />
+        <span className="voice-bloom voice-bloom-c" />
+      </div>
+      <div className="voice-ink-vignette" />
     </div>
   );
 }
 
-function assistantText(message: Message | undefined): string {
-  if (!message || message.role !== "assistant") return "";
-  return message.steps
-    .filter((step) => step.kind === "text")
-    .map((step) => step.text)
-    .join("");
+function Lines({ lines }: { lines: VoiceLine[] }) {
+  const list = useRef<HTMLOListElement>(null);
+  // keep the newest line in view inside the dock, without scrolling the page around it
+  useEffect(() => {
+    const scroller = list.current?.parentElement;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }, [lines]);
+  return (
+    <ol ref={list} className="voice-lines" aria-label="what's been said">
+      {lines.map((line) => (
+        <li key={line.id} data-who={line.who}>
+          <time>{clock(line.at)}</time>
+          <p>{line.text}</p>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
-export function VoiceCallPage() {
-  const chat = useChat();
-  const sendRef = useRef(chat.send);
-  const latestRef = useRef<Message | undefined>(undefined);
-  useLayoutEffect(() => {
-    sendRef.current = chat.send;
-    latestRef.current = chat.messages[chat.messages.length - 1];
-  });
+function KeepCard({
+  lines,
+  durationMs,
+  onDone,
+}: {
+  lines: VoiceLine[];
+  durationMs: number;
+  onDone: (error?: string) => void;
+}) {
+  const [remember, setRemember] = useState(false);
+  const [busy, setBusy] = useState<"transcript" | "summary" | "discard">();
 
-  const onTranscript = useCallback((text: string) => {
-    void sendRef.current(text).catch(() => undefined);
-  }, []);
-
-  const interruptedMessageRef = useRef<string | undefined>(undefined);
-  const tailRef = useRef<HTMLDivElement>(null);
-  const feed = useMemo(() => createSpeechFeed(), []);
-  const spokenMessageRef = useRef<string | undefined>(undefined);
-  const closedMessageRef = useRef<string | undefined>(undefined);
-  const callBaselineAssistantRef = useRef<string | undefined>(undefined);
-  const onBargeIn = useCallback(() => {
-    const latest = latestRef.current;
-    interruptedMessageRef.current = latest?.role === "assistant" ? latest.id : undefined;
-    spokenMessageRef.current = undefined;
-    closedMessageRef.current = undefined;
-    feed.reset();
-  }, [feed]);
-  const {
-    state,
-    config,
-    lines,
-    error,
-    speaking,
-    level,
-    start,
-    stop,
-    speak,
-    endSpeech,
-    beginUtterance,
-    endUtterance,
-    showLine,
-  } = useVoiceCall({
-    onTranscript,
-    onBargeIn,
-  });
-
-  const latest = chat.messages[chat.messages.length - 1];
-  const replyText = assistantText(latest);
-  const live = state === "live";
-
-  // Forward each streamed text delta; ElevenLabs owns its own audio buffering.
-  useEffect(() => {
-    if (!live || !latest || latest.role !== "assistant") return;
-    if (latest.id === callBaselineAssistantRef.current) return;
-    if (latest.id === interruptedMessageRef.current) return;
-    if (spokenMessageRef.current !== latest.id) {
-      spokenMessageRef.current = latest.id;
-      interruptedMessageRef.current = undefined;
-      feed.reset();
+  const choose = async (choice: "transcript" | "summary" | "discard") => {
+    setBusy(choice);
+    try {
+      if (remember) await setConfig("web.voice_keep", choice);
+      if (choice !== "discard") await keepVoiceCall({ choice, durationMs, lines: lines.map(({ who, text, at }) => ({ who, text, at })) });
+      onDone();
+    } catch (err) {
+      setBusy(undefined);
+      onDone(err instanceof Error ? err.message : String(err));
     }
-    for (const chunk of feed.push(replyText)) speak(chunk);
-  }, [live, latest, replyText, feed, speak]);
-
-  // Turn finished: flush the upstream buffer and close out the audio.
-  useEffect(() => {
-    const id = spokenMessageRef.current;
-    if (!live || chat.streaming || id === undefined || closedMessageRef.current === id) return;
-    closedMessageRef.current = id;
-    for (const chunk of feed.end()) speak(chunk);
-    endSpeech();
-    if (replyText.trim()) showLine("them", replyText.trim(), true);
-  }, [live, chat.streaming, feed, speak, endSpeech, replyText, showLine]);
-
-  useEffect(() => {
-    tailRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [lines]);
-
-  const unavailable = config?.enabled === false;
-  const currentLine = lines.at(-1);
-  const status = live ? (speaking ? "speaking" : "listening") : state === "connecting" ? "connecting" : "ready when you are";
-  const pushMode = config?.voiceCallMode === "push_to_talk";
-  const pushToTalk = live && pushMode;
-  const pttGestureRef = useRef(false);
-  const pointerDownAtRef = useRef<number | undefined>(undefined);
-  const controlLabel = pushToTalk ? "hold to speak" : live || state === "connecting" ? "end voice call" : "start voice call";
-  const startCall = () => {
-    callBaselineAssistantRef.current = latest?.role === "assistant" ? latest.id : undefined;
-    spokenMessageRef.current = undefined;
-    closedMessageRef.current = undefined;
-    interruptedMessageRef.current = undefined;
-    feed.reset();
-    start();
   };
 
   return (
-    <div className="voice-stage relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <InkField speaking={speaking} level={level} />
-      <header className="voice-header relative z-10 px-3 py-4 md:px-8">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-            <h1 className="font-serif text-2xl leading-none tracking-tight">voice</h1>
-            <p className={cn("voice-status", live && "voice-status-live")}>
-              <span className="voice-status-dot" aria-hidden />
-              {status}
-            </p>
+    <div className="voice-keep">
+      <div className="voice-keep-ended">
+        <span>{spokenLength(durationMs)}</span>
+        <small>the call has ended</small>
+      </div>
+      <section className="voice-keep-card" aria-label="keep this call">
+        <header>
+          <h2>Keep this in the conversation?</h2>
+          <time>{clock(durationMs)}</time>
+          <p>Nothing is written to the chat until you choose.</p>
+        </header>
+        <div className="voice-keep-choices">
+          <button type="button" data-choice="transcript" disabled={!!busy} onClick={() => void choose("transcript")}>
+            <b><span className="voice-keep-long">keep the </span>whole transcript</b>
+            <small>{lines.length} {lines.length === 1 ? "line" : "lines"}, with times</small>
+          </button>
+          <button type="button" data-choice="summary" disabled={!!busy} onClick={() => void choose("summary")}>
+            <b>{busy === "summary" ? "writing it down…" : <><span className="voice-keep-long">keep a </span>summary only</>}</b>
+            <small>a few lines about what was said</small>
+          </button>
+          <button type="button" data-choice="discard" disabled={!!busy} onClick={() => void choose("discard")}>
+            <b>discard<span className="voice-keep-long"> it</span></b>
+          </button>
+        </div>
+        <button type="button" className="voice-keep-remember" aria-pressed={remember} onClick={() => setRemember((v) => !v)}>
+          <span aria-hidden />
+          remember my choice for next time
+        </button>
+        <p className="voice-keep-note">Whatever you pick lands as one entry in the chat, timestamped.</p>
+      </section>
+    </div>
+  );
+}
+
+function LiveBar({ name, startedAt, speaking, onReturn, onHangUp }: { name: string; startedAt?: number; speaking: boolean; onReturn: () => void; onHangUp: () => void }) {
+  const now = useNow(true);
+  return createPortal(
+    <div className="voice-live-bar" role="status">
+      <span className="voice-live-dot" aria-hidden />
+      <span className="voice-live-name"><span className="voice-desktop-only">on a call with </span>{name}</span>
+      {speaking && <Wave small />}
+      <time>{startedAt ? clock(now - startedAt) : "--:--"}</time>
+      <button type="button" className="voice-live-return" onClick={onReturn}>return</button>
+      <button type="button" className="voice-live-hangup" title="hang up" aria-label="hang up" onClick={onHangUp}>
+        <IconHangUp size={17} />
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
+function useNow(ticking: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ticking) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [ticking]);
+  return now;
+}
+
+export function VoiceCallPage({
+  onBack,
+  onShow,
+  onOpenSettings,
+  visible,
+}: {
+  onBack: () => void;
+  onShow: () => void;
+  onOpenSettings: (tab: "voice") => void;
+  visible: boolean;
+}) {
+  const call = useVoiceCall();
+  const { state, config, lines, error, speaking, level, muted, startedAt } = call;
+  const [name, setName] = useState("them");
+  const [awake, setAwake] = useState(true);
+  const [readBack, setReadBack] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [keepError, setKeepError] = useState<string>();
+  const restTimer = useRef<number | undefined>(undefined);
+  const live = state === "live";
+  const now = useNow(live && visible);
+
+  useEffect(() => {
+    void fetchAuthMode()
+      .then((info) => setName(info.personaName))
+      .catch(() => undefined);
+  }, []);
+
+  const said = lines.filter((line) => line.text.trim());
+  const keep: VoiceKeep = config?.keep ?? "ask";
+
+  // a call that ends with nothing said, or with its keeping already decided, never asks
+  useEffect(() => {
+    if (state !== "ended") return;
+    const done = () => call.reset();
+    if (!said.length || keep === "discard") return done();
+    if (keep === "ask") return;
+    void keepVoiceCall({ choice: keep, durationMs: call.durationMs, lines: said.map(({ who, text, at }) => ({ who, text, at })) })
+      .then(() => setKeepError(undefined), (err: unknown) => setKeepError(err instanceof Error ? err.message : String(err)))
+      .finally(done);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per ended call
+  }, [state]);
+
+  const wake = () => {
+    setAwake(true);
+    window.clearTimeout(restTimer.current);
+    restTimer.current = window.setTimeout(() => setAwake(false), CHROME_REST_MS);
+  };
+  // the chrome starts sinking the moment the line opens, not only after you first move
+  useEffect(() => {
+    if (!live || !visible) return;
+    restTimer.current = window.setTimeout(() => setAwake(false), CHROME_REST_MS);
+    return () => window.clearTimeout(restTimer.current);
+  }, [live, visible]);
+
+  useEffect(() => {
+    if (!visible || state !== "connecting") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") call.stop();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [visible, state, call]);
+
+  const leave = () => {
+    setReadBack(false);
+    onBack();
+  };
+
+  const current = said.at(-1);
+  const sunk = live && !awake && !readBack && !writing;
+  const unavailable = config?.enabled === false;
+
+  if (!visible) {
+    return state === "live" || state === "connecting" ? (
+      <LiveBar name={name} startedAt={startedAt} speaking={speaking} onReturn={onShow} onHangUp={() => { call.stop(); onShow(); }} />
+    ) : null;
+  }
+
+  if (state === "ended" && said.length && keep === "ask") {
+    return (
+      <div className="voice-room room-view" data-state="ended">
+        <InkField level={0} speaking={false} />
+        <KeepCard
+          lines={said}
+          durationMs={call.durationMs}
+          onDone={(err) => {
+            setKeepError(err);
+            if (!err) call.reset();
+          }}
+        />
+        {keepError && <p className="voice-error voice-error-floating" role="alert"><span>it didn't reach the chat</span>{keepError}</p>}
+      </div>
+    );
+  }
+
+  if (!live && state !== "ended") {
+    return (
+      <div className="voice-room room-view" data-state={state}>
+        <InkField level={0} speaking={false} />
+        {state === "connecting" ? (
+          <button type="button" className="voice-connecting" onClick={call.stop}>
+            <b>picking up…</b>
+            <small><span className="voice-desktop-only">press escape to stop</span><span className="voice-mobile-only">tap to stop</span></small>
+          </button>
+        ) : unavailable ? (
+          <div className="voice-idle">
+            <span className="voice-kicker">voice is off</span>
+            <p>{name} has no voice until an elevenlabs key is set.</p>
+            <div className="voice-idle-row">
+              <button type="button" className="voice-primary is-small" onClick={() => onOpenSettings("voice")}>
+                open voice settings
+                <IconArrow size={14} />
+              </button>
+              <small>writing still works</small>
+            </div>
           </div>
+        ) : (
+          <div className="voice-idle">
+            <p>{name}'s quiet. Call and the line opens.</p>
+            <div className="voice-idle-row">
+              <button type="button" className="voice-primary" onClick={() => {
+                  setKeepError(undefined);
+                  setReadBack(false);
+                  setWriting(false);
+                  call.start();
+                }}>
+                <IconMic size={19} />
+                call {name}
+              </button>
+              <small>
+                {keep === "transcript" ? "the whole call lands in the chat afterwards" : keep === "summary" ? "a summary lands in the chat afterwards" : keep === "discard" ? "nothing is kept afterwards" : "nothing is kept unless you say so afterwards"}
+              </small>
+            </div>
+            {(error || keepError) && (
+              <p className="voice-error" role="alert">
+                <span>{keepError ? "it didn't reach the chat" : "the line didn't open"}</span>
+                {keepError ?? error}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="voice-room room-view"
+      data-state="live"
+      data-sunk={sunk ? "" : undefined}
+      data-reading={readBack ? "" : undefined}
+      onPointerMove={wake}
+      onPointerDown={wake}
+      onKeyDown={wake}
+    >
+      <InkField level={level} speaking={speaking} />
+      <header className="voice-top">
+        <button type="button" className="voice-back" onClick={leave} title="leave it running" aria-label="leave it running">
+          <IconLeave size={15} />
+          <span>leave it running</span>
+        </button>
+        <div className="voice-who">
+          <span className="voice-live-dot" aria-hidden />
+          <b>{name}</b>
+          <time>{startedAt ? clock(now - startedAt) : "00:00"}</time>
         </div>
       </header>
 
-      <main className="voice-main relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6">
-        <div className="voice-focus mx-auto flex max-w-2xl flex-col items-center text-center">
-          <div
-            className={cn("voice-pulse", speaking && "voice-pulse-active")}
-            style={{ "--voice-scale": 1 + Math.min(level, 1) * 0.24 } as CSSProperties}
-            aria-hidden
-          />
-          <p className="voice-kicker">{currentLine ? (currentLine.who === "you" ? "you said" : "they said") : "a quiet line between you"}</p>
-          <p className={cn("voice-current-line font-serif", !currentLine && "voice-current-line-empty")} aria-live="polite">
-            {currentLine?.text || (unavailable ? "voice needs an elevenlabs key on the other end" : "say something when you're ready")}
-          </p>
-        </div>
-
-        {lines.length > 1 ? (
-          <div className="voice-transcript mx-auto max-w-2xl" aria-label="conversation transcript">
-            {lines.slice(0, -1).map((line) => (
-              <p key={line.id} className={cn("voice-line", line.who === "you" ? "voice-line-you" : "voice-line-them")}>
-                {line.text}
-              </p>
-            ))}
-            <div ref={tailRef} />
-          </div>
-        ) : (
-          <div ref={tailRef} />
-        )}
+      <main className="voice-stage" aria-live="polite">
+        <span className="voice-orb" style={{ "--swell": 1 + Math.min(level, 1) * 0.3 } as CSSProperties} aria-hidden />
+        <p className="voice-line" data-who={current?.who ?? "them"} data-empty={current ? undefined : ""}>
+          {current ? stageText(current.text) : "say something when you're ready"}
+        </p>
+        {speaking && <Wave />}
       </main>
 
-      <footer className="voice-footer relative z-10 flex flex-col items-center gap-3 px-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {error ? <p className="font-serif text-xs italic text-destructive" role="alert">{error}</p> : null}
-        <button
-          type="button"
-          onClick={() => {
-            if (pttGestureRef.current) {
-              pttGestureRef.current = false;
-              return;
-            }
-            if (pushToTalk) return;
-            if (live || state === "connecting") stop();
-            else startCall();
-          }}
-          onPointerDown={(event) => {
-            if (!pushMode) return;
-            // an idle/ended call arms on the click instead, so the press is not a gesture
-            if (!live && state !== "connecting") return;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            pttGestureRef.current = true;
-            pointerDownAtRef.current = performance.now();
-            beginUtterance();
-          }}
-          onPointerUp={() => {
-            if (!pushMode || !pttGestureRef.current) return;
-            const elapsed = pointerDownAtRef.current === undefined ? 0 : performance.now() - pointerDownAtRef.current;
-            pointerDownAtRef.current = undefined;
-            // too short to be speech: read it as a tap to hang up, not a turn
-            if (elapsed < 350) {
-              endUtterance(false);
-              if (live || state === "connecting") stop();
-              return;
-            }
-            endUtterance(true);
-          }}
-          onPointerCancel={() => {
-            if (pushMode && pttGestureRef.current) {
-              endUtterance(false);
-              pointerDownAtRef.current = undefined;
-              pttGestureRef.current = false;
-            }
-          }}
-          onContextMenu={(event) => {
-            if (pushMode) event.preventDefault();
-          }}
-          disabled={unavailable}
-          aria-label={controlLabel}
-          className={cn(
-            "voice-call-control",
-            live && !pushToTalk && "voice-call-control-live",
-            pushToTalk && "voice-call-control-ptt",
-            unavailable && "opacity-40",
-          )}
-        >
-          {live && !pushToTalk ? <PhoneOff className="size-6" /> : <Mic className="size-6" />}
+      <div className="voice-dock">
+        <button type="button" className="voice-pull" aria-expanded={readBack} onClick={() => setReadBack((v) => !v)}>
+          <span aria-hidden />
+          <small>{readBack ? "push down to put it away" : "pull up to read back"}</small>
         </button>
-      </footer>
+        {/* the dock previews the two lines before the one on stage; pulled up, it has all of them */}
+        {said.length > (readBack ? 0 : 1) && (
+          <div className="voice-read">
+            <Lines lines={readBack ? said : said.slice(-3, -1)} />
+          </div>
+        )}
+        {writing && (
+          <form
+            className="voice-write"
+            onSubmit={(event) => {
+              event.preventDefault();
+              call.say(draft);
+              setDraft("");
+            }}
+          >
+            <input autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={`write to ${name}…`} aria-label={`write to ${name}`} />
+          </form>
+        )}
+        {error && <p className="voice-error" role="alert"><span>static on the line</span>{error}</p>}
+        <div className="voice-controls">
+          <button type="button" className="voice-round" data-slot="mute" aria-pressed={muted} title={muted ? "unmute your mic" : "mute your mic"} aria-label={muted ? "unmute your mic" : "mute your mic"} onClick={() => call.setMuted(!muted)}>
+            {muted ? <IconMicOff size={21} /> : <IconMic size={21} />}
+          </button>
+          <button type="button" className="voice-round" data-slot="write" aria-pressed={writing} title="write instead" aria-label="write instead" onClick={() => setWriting((v) => !v)}>
+            <RailChat size={21} />
+          </button>
+          <small className="voice-hint">{muted ? `mic off · ${name} can't hear you` : `open mic · ${name} pauses when you speak`}</small>
+          <button type="button" className="voice-primary" data-slot="hangup" onClick={call.stop}>
+            <IconHangUp size={20} />
+            hang up
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

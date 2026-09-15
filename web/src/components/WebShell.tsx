@@ -8,6 +8,7 @@ import { DiariesPage } from "./DiariesPage";
 import { FilesPage } from "./FilesPage";
 import { GalleryPage } from "./GalleryPage";
 import { LibraryPage } from "./LibraryPage";
+import type { SettingsTabId } from "./SettingsSurface";
 import { SkillsPage } from "./SkillsPage";
 import { VoiceCallPage } from "./VoiceCallPage";
 import {
@@ -31,6 +32,9 @@ interface RoomProps {
   onBring: (text: string) => void;
   /** the way back out of a pushed page */
   onBack: () => void;
+  /** land on this room without leaving the one it was held from */
+  onShow: () => void;
+  onOpenSettings: (tab: SettingsTabId) => void;
   /** whether this room is the one on screen — a hidden room stays mounted */
   visible: boolean;
 }
@@ -149,6 +153,7 @@ export function WebShell({
   onSignedOut?: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>();
   const [selectedPage, setSelectedPage] = useState<ShellPage>("chat");
   const [shelf, setShelf] = useState<ShelfName | undefined>();
   const [mounted, setMounted] = useState<Set<ShellPage>>(() => new Set(["chat"]));
@@ -171,6 +176,7 @@ export function WebShell({
 
   const navigate = (target: NavTarget) => {
     if (target === "settings") {
+      setSettingsTab(undefined);
       setSelectedPage("chat");
       setSettingsOpen(true);
       return;
@@ -198,6 +204,7 @@ export function WebShell({
         <Chat
           composer={composer}
           settingsOpen={settingsOpen}
+          settingsTab={settingsTab}
           onSettingsOpenChange={setSettingsOpen}
           shelf={shelf}
           onShelfChange={setShelf}
@@ -213,7 +220,16 @@ export function WebShell({
       {ROOMS.map(({ id, Page }) =>
         Page && mounted.has(id) ? (
           <section key={id} className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === id ? "flex" : "hidden")}>
-            <Page onBring={bring} onBack={() => open("chat")} visible={selectedPage === id} />
+            <Page
+              onBring={bring}
+              onBack={() => open("chat")}
+              onShow={() => open(id)}
+              onOpenSettings={(tab) => {
+                navigate("settings");
+                setSettingsTab(tab);
+              }}
+              visible={selectedPage === id}
+            />
           </section>
         ) : null,
       )}

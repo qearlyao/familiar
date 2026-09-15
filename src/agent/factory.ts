@@ -98,9 +98,12 @@ export async function createFamiliarAgent(
 		};
 	};
 	let reloadInProgress: Promise<void> | undefined;
+	// a session that borrows another's model and thinking (a voice call takes its chat's)
+	const settingsSources = new Map<string, string>();
+	const settingsKey = (sessionKey: string): string => settingsSources.get(sessionKey) ?? sessionKey;
 
 	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
-		const override = settings.getChannelModel(sessionKey);
+		const override = settings.getChannelModel(settingsKey(sessionKey));
 		const modelName = resolveModelName(override.value, defaultModel);
 		const ref = parseModelRef(modelName);
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
@@ -110,7 +113,7 @@ export async function createFamiliarAgent(
 	};
 
 	const resolveChannelThinkingLevel = (sessionKey: string, model: Model<any>): EffectiveSetting<ThinkingLevel> => {
-		const setting = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel);
+		const setting = settings.getChannelThinkingLevel(settingsKey(sessionKey), config.agent.thinkingLevel);
 		return {
 			value: clampConfiguredThinkingLevel(model, setting.value),
 			source: setting.source,
@@ -122,7 +125,7 @@ export async function createFamiliarAgent(
 		nextDefaultModel: Model<any>,
 		sessionKey: string,
 	): { model: Model<any>; source: "config" | "override" } => {
-		const override = settings.getChannelModel(sessionKey);
+		const override = settings.getChannelModel(settingsKey(sessionKey));
 		const modelName = resolveModelName(override.value, nextDefaultModel);
 		const ref = parseModelRef(modelName);
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
@@ -136,7 +139,7 @@ export async function createFamiliarAgent(
 		sessionKey: string,
 		model: Model<any>,
 	): EffectiveSetting<ThinkingLevel> => {
-		const setting = settings.getChannelThinkingLevel(sessionKey, nextConfig.agent.thinkingLevel);
+		const setting = settings.getChannelThinkingLevel(settingsKey(sessionKey), nextConfig.agent.thinkingLevel);
 		return {
 			value: clampConfiguredThinkingLevel(model, setting.value),
 			source: setting.source,
@@ -210,6 +213,7 @@ export async function createFamiliarAgent(
 								estimateTextTokens(agent.state.systemPrompt) +
 								estimateTextTokens(JSON.stringify(agent.state.tools)),
 							...(skipAmbient ? { skipAmbient: true } : {}),
+							...(activeOptions?.ephemeral ? { skipLcm: true } : {}),
 							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
 						});
 					}
@@ -367,6 +371,19 @@ export async function createFamiliarAgent(
 		return run;
 	};
 
+	const abortSession = async (sessionKey: string): Promise<void> => {
+		const session = sessions.get(sessionKey);
+		if (!session) return;
+		try {
+			const resolved = await session;
+			resolved.agent.abort();
+			resolved.agent.clearAllQueues();
+			await resolved.agent.waitForIdle();
+		} catch (error) {
+			console.error(`failed to abort familiar session ${sessionKey}`, error);
+		}
+	};
+
 	const popLastAssistant = (session: FamiliarAgentSession, action: "retry" | "delete"): void => {
 		const messages = session.agent.state.messages;
 		const message = messages.at(-1);
@@ -429,17 +446,12 @@ export async function createFamiliarAgent(
 			const completed = completedContexts.get(sessionKey);
 			return completed?.tokens === tokens ? completed.breakdown : undefined;
 		},
-		async abort(sessionKey: string): Promise<void> {
-			const session = sessions.get(sessionKey);
-			if (!session) return;
-			try {
-				const resolved = await session;
-				resolved.agent.abort();
-				resolved.agent.clearAllQueues();
-				await resolved.agent.waitForIdle();
-			} catch (error) {
-				console.error(`failed to abort familiar session ${sessionKey}`, error);
-			}
+		abort: abortSession,
+		async dispose(sessionKey: string): Promise<void> {
+			await abortSession(sessionKey);
+			sessions.delete(sessionKey);
+			completedContexts.delete(sessionKey);
+			settingsSources.delete(sessionKey);
 		},
 		async retryLastAssistant(
 			sessionKey: string,
@@ -525,7 +537,10 @@ export async function createFamiliarAgent(
 			assertModelAllowed(config, ref);
 			const nextModel = resolveModel(ref, config);
 			await assertModelCanAuthenticateWithRuntime(config, modelRuntime, nextModel);
-			const previousThinking = settings.getChannelThinkingLevel(sessionKey, config.agent.thinkingLevel).value;
+			const previousThinking = settings.getChannelThinkingLevel(
+				settingsKey(sessionKey),
+				config.agent.thinkingLevel,
+			).value;
 			const nextThinking = clampConfiguredThinkingLevel(nextModel, previousThinking);
 			await settings.setChannelModel(sessionKey, formatModel(nextModel));
 			const sessionPromise = sessions.get(sessionKey);
@@ -564,7 +579,9 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
-			const eventHandler = Array.isArray(imagesOrOnEvent) ? onEvent : imagesOrOnEvent;
+			if (options.settingsFrom) settingsSources.set(sessionKey, options.settingsFrom);
+			// the listener may ride in the images slot; a missing images slot must not drop the fourth argument
+			const eventHandler = typeof imagesOrOnEvent === "function" ? imagesOrOnEvent : onEvent;
 			return runPromptTurn(
 				sessionKey,
 				options,

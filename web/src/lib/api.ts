@@ -324,13 +324,27 @@ export function voiceUrl(languageCode?: string): string {
   return `${proto}//${window.location.host}/api/web/voice${params}`;
 }
 
+export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
+
 export interface VoiceConfig {
   enabled: boolean;
-  voiceCallMode: "continuous" | "push_to_talk";
+  keep: VoiceKeep;
 }
 
 export function fetchVoiceConfig(): Promise<VoiceConfig> {
   return getJson<VoiceConfig>("/api/web/voice/config", "voice config");
+}
+
+export interface VoiceCallLine {
+  who: "you" | "them";
+  text: string;
+  /** ms since the call picked up */
+  at: number;
+}
+
+/** a finished call, handed to the main chat as one entry */
+export async function keepVoiceCall(body: { choice: "transcript" | "summary"; durationMs: number; lines: VoiceCallLine[] }): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/voice/keep", "POST", body, "voice/keep");
 }
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -618,7 +632,8 @@ export type ConfigKey =
   | "heartbeat.enabled"
   | "heartbeat.idleThresholdMs"
   | "heartbeat.intervalMs"
-  | "web.voice_call_mode"
+  | "web.voice_context_messages"
+  | "web.voice_keep"
   | "tts.provider"
   | "tts.voice_id"
   | "tts.model_id"
@@ -667,7 +682,8 @@ export interface ConfigPayload {
     "heartbeat.enabled": ConfigValue<boolean>;
     "heartbeat.idleThresholdMs": ConfigValue<number>;
     "heartbeat.intervalMs": ConfigValue<number>;
-    "web.voice_call_mode": ConfigValue<"continuous" | "push_to_talk">;
+    "web.voice_context_messages": ConfigValue<number>;
+    "web.voice_keep": ConfigValue<VoiceKeep>;
     "tts.provider": ConfigValue<TtsProvider>;
     "tts.voice_id": ConfigValue<string>;
     "tts.model_id": ConfigValue<string>;

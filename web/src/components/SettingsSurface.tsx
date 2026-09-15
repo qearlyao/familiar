@@ -4,7 +4,7 @@ import { ThinkingSection } from "./config/ThinkingSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
-import { TtsSection } from "./config/TtsSection";
+import { TtsSection, VoiceCallSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
 import { ReachCard, RepliesCard } from "./config/ChannelsSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
@@ -15,7 +15,7 @@ import type { WebAuthDevice } from "@/lib/api";
 import { IconX } from "./organicIcons";
 import "./settings.css";
 
-type TabId = "mind" | "reach" | "voice" | "devices";
+export type SettingsTabId = "mind" | "reach" | "voice" | "devices";
 
 export function SettingsSurface({
   channelKey,
@@ -24,6 +24,7 @@ export function SettingsSurface({
   authDevice,
   onSignedOut,
   onClose,
+  initialTab = "mind",
 }: {
   channelKey: string | undefined;
   channelLabel?: string;
@@ -31,8 +32,9 @@ export function SettingsSurface({
   authDevice?: WebAuthDevice;
   onSignedOut?: () => void;
   onClose: () => void;
+  initialTab?: SettingsTabId;
 }) {
-  const [tab, setTab] = useState<TabId>("mind");
+  const [tab, setTab] = useState<SettingsTabId>(initialTab);
   const agent = useAgentSettings(channelKey);
   const config = useConfig(true);
   const showDevices = authMode === "bearer" && !!onSignedOut;
@@ -45,7 +47,7 @@ export function SettingsSurface({
   const overridden = agent.data?.model.source === "override" || agent.data?.thinking.source === "override";
   const here = channelLabel ?? "this channel";
 
-  const tabs: { id: TabId; label: string; sub: string }[] = [
+  const tabs: { id: SettingsTabId; label: string; sub: string }[] = [
     { id: "mind", label: "how they think", sub: agent.data ? modelLeaf(agent.data.model.value) : "…" },
     { id: "reach", label: "how they reach you", sub: values ? `heartbeat ${values["heartbeat.enabled"].value ? "on" : "off"}` : "…" },
     { id: "voice", label: "voice and pictures", sub: values ? (values["tts.provider"].value === "cartesia" ? "cartesia" : "11labs") : "…" },
@@ -87,7 +89,10 @@ export function SettingsSurface({
     case "voice":
       page = (
         <>
-          <TtsSection values={values} disabled={disabled} onChange={config.setConfig} />
+          <div className="settings-column">
+            <TtsSection values={values} disabled={disabled} onChange={config.setConfig} />
+            <VoiceCallSection values={values} disabled={disabled} onChange={config.setConfig} />
+          </div>
           <ImageGenSection values={values} disabled={disabled} onChange={config.setConfig} />
         </>
       );

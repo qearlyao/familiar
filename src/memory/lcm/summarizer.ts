@@ -79,6 +79,16 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		return capSummaryText(text || fallbackSummary(input.text), targetTokens);
 	}
 
+	/** A voice call, told back in a few lines for the chat — same model as compaction. */
+	async summarizeVoiceCall(transcript: string, signal?: AbortSignal): Promise<string> {
+		const prompt = [
+			"Tell back this voice call in a few plain lines, so both people can glance at the chat later and remember what was said. Name who said what. Keep the moments that mattered; drop the hellos and filler.",
+			"Plain text only. No preamble, no headings, no markdown.",
+			`<voice_call>\n${transcript}\n</voice_call>`,
+		].join("\n\n");
+		return this.runCompletion(prompt, 400, signal);
+	}
+
 	private resolveModel(): Model<Api> {
 		const settings = this.config.memory.lcm;
 		if (!settings.enabled) throw new Error("LCM is disabled");

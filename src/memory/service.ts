@@ -49,6 +49,8 @@ export interface MemoryTransformOptions {
 	sessionId?: string;
 	model?: Model<any>;
 	skipAmbient?: boolean;
+	/** keep this session out of LCM entirely — nothing projected, nothing compacted */
+	skipLcm?: boolean;
 	ambientQuery?: string;
 	/** System prompt and tool definitions, estimated by the caller. */
 	otherContextTokens?: number;
@@ -154,7 +156,9 @@ class DefaultMemoryService implements MemoryOperatorService {
 		signal?: AbortSignal,
 		options: MemoryTransformOptions = {},
 	): Promise<AgentMessage[]> {
-		const compacted = await this.contextTransformer.transformLcmContext(messages, signal, options);
+		const compacted = options.skipLcm
+			? messages
+			: await this.contextTransformer.transformLcmContext(messages, signal, options);
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
 		if (options.skipAmbient) {
 			this.contextTransformer.recordAdditionalContextTokens(sessionKey, options.otherContextTokens ?? 0);

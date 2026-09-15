@@ -1,8 +1,8 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
 import { readEnum } from "../util/guards.js";
-import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS, VOICE_CALL_MODES } from "./enums.js";
+import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS, VOICE_KEEP_CHOICES } from "./enums.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
-import type { Config, TtsProvider, VoiceCallMode } from "./types.js";
+import type { Config, TtsProvider, VoiceKeep } from "./types.js";
 
 export type ConfigKey =
 	| "discord.enabled"
@@ -14,7 +14,8 @@ export type ConfigKey =
 	| "heartbeat.enabled"
 	| "heartbeat.idleThresholdMs"
 	| "heartbeat.intervalMs"
-	| "web.voice_call_mode"
+	| "web.voice_context_messages"
+	| "web.voice_keep"
 	| "tts.provider"
 	| "tts.voice_id"
 	| "tts.model_id"
@@ -179,16 +180,23 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			scheduler.rearmHeartbeat();
 		},
 	},
-	"web.voice_call_mode": {
-		read: (config) => config.web.voiceCallMode,
+	"web.voice_context_messages": {
+		read: (config) => config.web.voiceContextMessages,
+		validate: (value) => requireNonNegativeInt(value, "web.voice_context_messages"),
+		write: (config, value) => {
+			config.web.voiceContextMessages = value as number;
+		},
+	},
+	"web.voice_keep": {
+		read: (config) => config.web.voiceKeep,
 		validate: (value) => {
-			if (typeof value !== "string" || !(VOICE_CALL_MODES as readonly string[]).includes(value)) {
-				throw new Error(`web.voice_call_mode must be one of: ${VOICE_CALL_MODES.join(", ")}`);
+			if (typeof value !== "string" || !(VOICE_KEEP_CHOICES as readonly string[]).includes(value)) {
+				throw new Error(`web.voice_keep must be one of: ${VOICE_KEEP_CHOICES.join(", ")}`);
 			}
 			return value;
 		},
 		write: (config, value) => {
-			config.web.voiceCallMode = value as VoiceCallMode;
+			config.web.voiceKeep = value as VoiceKeep;
 		},
 	},
 	"tts.provider": {

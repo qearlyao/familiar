@@ -642,6 +642,12 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 /* Only the message list scrolls. Focus/resize must not scroll this containing
    block and pull the absolutely positioned composer away from the bottom. */
 .chat-room { position: relative; overflow: clip; }
+/* the composer veil's backdrop root: an opaque, rounded group of its own, so the blur reads only the room
+   (never the dark ground past .room-surface's edge) and stays inside its rounded corners. mobile's composer
+   is position: fixed, which a filter would re-anchor to this box — and it has no veil anyway */
+@media (width > 700px) {
+  .chat-room { background: #d3c9ba; border-radius: 1.625rem; filter: opacity(1); }
+}
 /* desktop: the composer floats over the conversation; what passes behind it is frosted, not covered */
 .composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; padding: 0.875rem 2.75rem 1.625rem; pointer-events: none; }
 .composer-inner, .composer-hint, .composer-error { pointer-events: auto; }
@@ -651,8 +657,8 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
    message action row above clears it. blur strength and ramp height move together:
    a strong blur over a short band is just a hard line again. */
 .composer-veil {
-  position: absolute; inset: -1.875rem 0 0 0; z-index: -1; pointer-events: none; overflow: hidden;
-  border-radius: 0 0 1.625rem 1.625rem; /* the blur layers escape .room-surface's rounded clip otherwise */
+  /* past the room's sides and bottom: a blur fades out at its own box edge, so that fade must fall outside the clip */
+  position: absolute; inset: -1.875rem -1rem -1rem; z-index: -1; pointer-events: none;
 }
 .composer-veil i { position: absolute; inset: 0; }
 .composer-veil i:nth-child(1) { -webkit-backdrop-filter: blur(0.0375rem); backdrop-filter: blur(0.0375rem);

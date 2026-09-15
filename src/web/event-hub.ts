@@ -5,7 +5,7 @@ import { eventId, toUnixMs } from "../conversation/ids.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { parseAgentReply } from "../runtime/silent-marker.js";
 import { encodeFrame, replayEvents, type WebSocketClient } from "./events.js";
-import { toolFromStoredAgentEvent, webAttachments } from "./messages.js";
+import { toolFromStoredAgentEvent, webAttachments, webMessageFromRecord } from "./messages.js";
 import { EVENT_REPLAY_LIMIT, WEB_USER_NAME, type WebPublishEvent, type WebStreamEvent } from "./types.js";
 
 type InFlightMessage = {
@@ -208,19 +208,20 @@ export function createWebEventHub(
 				publish(completion);
 			}
 			if (record.type === "call_discarded") {
-				const call = { kept: false as const, durationMs: record.durationMs };
-				const id = `call_${record.recordId}`;
-				const ts = toUnixMs(record.ts);
-				publish({
-					type: "message_started",
-					channelKey: runtime.channelKey,
-					messageId: id,
-					role: "system",
-					who: "system",
-					call,
-					ts,
-				});
-				publish({ type: "message_completed", channelKey: runtime.channelKey, messageId: id, ts });
+				const mark = webMessageFromRecord(config, record, personaName);
+				if (mark) {
+					const { channelKey } = runtime;
+					publish({
+						type: "message_started",
+						channelKey,
+						messageId: mark.id,
+						role: "system",
+						who: "system",
+						call: mark.call,
+						ts: mark.ts,
+					});
+					publish({ type: "message_completed", channelKey, messageId: mark.id, ts: mark.ts });
+				}
 			}
 			if (record.type === "message_edit") {
 				publish({

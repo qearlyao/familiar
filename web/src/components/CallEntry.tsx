@@ -1,19 +1,15 @@
 import { useState } from "react";
 import type { Message } from "../types";
 import { IconChevronDown, IconChevronUp, IconHangUp } from "./organicIcons";
+import { clock } from "@/lib/voiceLines";
 import "./call-entry.css";
 
 type Call = NonNullable<Message["call"]>;
 
 const OPENED_LINES = 4;
 
-function clock(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const hours = Math.floor(total / 3600);
-  const mm = String(Math.floor((total % 3600) / 60));
-  const ss = String(total % 60).padStart(2, "0");
-  return hours ? `${hours}:${mm.padStart(2, "0")}:${ss}` : `${mm}:${ss}`;
-}
+/** a call's length, 4:12 */
+const length = (ms: number) => clock(ms).replace(/^0(?=\d)/, "");
 
 function Head({ title, meta, open, onToggle }: { title: string; meta: string; open: boolean; onToggle: () => void }) {
   return (
@@ -44,7 +40,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     return (
       <div className="call-entry is-discarded">
         <IconHangUp size={14} />
-        <span>a call, {clock(call.durationMs)} · nothing kept</span>
+        <span>a call, {length(call.durationMs)} · nothing kept</span>
       </div>
     );
   }
@@ -53,7 +49,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     const ended = new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
     return (
       <section className="call-entry">
-        <Head title={`you called ${personaName}`} meta={`${clock(call.durationMs)} · ended ${ended}`} open={open} onToggle={toggle} />
+        <Head title={`you called ${personaName}`} meta={`${length(call.durationMs)} · ended ${ended}`} open={open} onToggle={toggle} />
         {open && (
           <>
             <p className="call-entry-summary">{call.summary}</p>
@@ -70,7 +66,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     <section className="call-entry">
       <Head
         title={`a call with ${personaName}`}
-        meta={`${clock(call.durationMs)} · ${call.lines.length} ${call.lines.length === 1 ? "line" : "lines"}`}
+        meta={`${length(call.durationMs)} · ${call.lines.length} ${call.lines.length === 1 ? "line" : "lines"}`}
         open={open}
         onToggle={toggle}
       />
@@ -79,7 +75,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
           <div className={more ? "call-entry-lines has-more" : "call-entry-lines"}>
             {shown.map((line, index) => (
               <div key={index} className="call-entry-line" data-who={line.who}>
-                <span>{clock(line.at).padStart(5, "0")}</span>
+                <span>{clock(line.at)}</span>
                 <p>{line.text}</p>
               </div>
             ))}

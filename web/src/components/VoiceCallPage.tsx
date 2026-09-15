@@ -2,17 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { fetchAuthMode, keepVoiceCall, setConfig, type VoiceKeep } from "@/lib/api";
 import { useVoiceCall } from "@/lib/useVoiceCall";
-import type { VoiceLine } from "@/lib/voiceLines";
+import { clock, type VoiceLine } from "@/lib/voiceLines";
 import { IconArrow, IconHangUp, IconLeave, IconMic, IconMicOff, RailChat } from "./organicIcons";
 import "./voice.css";
 
 /** how long the chrome stays up after you last moved */
 const CHROME_REST_MS = 3500;
-
-function clock(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 function spokenLength(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));

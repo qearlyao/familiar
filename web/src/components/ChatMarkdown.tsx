@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { MediaPreview } from "@/components/MediaPreview";
-import { pageQuoteCitation } from "@/components/reader/marginMessage";
+import { marginQuoteCitation } from "@/components/reader/marginCitation";
 import { CHAT_MARKDOWN_LINK_CARD_CLASS, remarkImageParagraphs, remarkLinkCards } from "@/lib/chatMarkdownLayout";
 import { cn } from "@/lib/utils";
 
@@ -82,11 +82,11 @@ function markdownComponents(align: "start" | "end"): Components {
         />
       );
     },
-    // A page sent from a book's margins is context, not conversation: fold it
+    // A passage sent from a book's margin is context, not conversation: fold it
     // behind its citation line so the exchange stays readable.
     blockquote(props) {
       const { node, children, ...blockquoteProps } = props;
-      const citation = pageQuoteCitation(hastText(node));
+      const citation = marginQuoteCitation(hastText(node));
       if (!citation) return <blockquote {...blockquoteProps}>{children}</blockquote>;
       return (
         <details>

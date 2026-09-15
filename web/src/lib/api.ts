@@ -13,7 +13,6 @@ function wireToMessage(wire: WireMessage): Message {
     attachments: wire.attachments,
     usage: wire.usage,
     silent: wire.silent,
-    bookId: wire.bookId,
     ts: wire.ts,
   };
 }
@@ -275,13 +274,11 @@ export async function sendMessage(
   clientId: string,
   channelKey?: string,
   attachments: File[] = [],
-  bookId?: string,
 ): Promise<{ id: string; ts: number; channelKey: string }> {
   const body = new FormData();
   body.set("text", text);
   body.set("clientId", clientId);
   if (channelKey) body.set("channelKey", channelKey);
-  if (bookId) body.set("bookId", bookId);
   for (const attachment of attachments) body.append("attachments", attachment, attachment.name);
   const res = await fetch("/api/web/send", { method: "POST", body });
   if (!res.ok) {
@@ -479,6 +476,9 @@ export interface BookDetail extends BookSummary {
   toc: BookChapterInfo[];
 }
 
+/** Characters per book page — mirrors BOOK_PAGE_CHARS on the server, so "p. 148" means the same thing everywhere. */
+export const BOOK_PAGE_CHARS = 1500;
+
 export interface BookChapter {
   index: number;
   title: string;
@@ -487,13 +487,31 @@ export interface BookChapter {
   css?: string;
 }
 
-export interface MarginaliaEntry {
-  id: string;
+export type MarginScale = "word" | "paragraph" | "page";
+
+export interface MarginAnchor {
   chapter: number;
+  offset: number;
+  scale: MarginScale;
   quote: string;
   prefix: string;
   suffix: string;
+}
+
+export interface MarginMessage {
+  id: string;
+  author: "you" | "companion";
+  text: string;
+  createdAt: number;
+  reply?: "waiting" | "quiet" | "failed";
+  error?: string;
+}
+
+export interface MarginaliaEntry extends MarginAnchor {
+  id: string;
+  page: number;
   note?: string;
+  thread: MarginMessage[];
   createdAt: number;
   updatedAt: number;
 }
@@ -542,16 +560,6 @@ export async function saveBookPosition(
   return body.percent;
 }
 
-/** The book's durable margin-conversation log — mirrored turns from the main session, never LCM-compressed. */
-export async function fetchBookConversation(id: string, channelKey: string): Promise<Message[]> {
-  const params = new URLSearchParams({ id, channelKey });
-  const body = await getJson<{ messages: WireMessage[] }>(
-    `/api/web/book/conversation?${params}`,
-    "book/conversation",
-  );
-  return body.messages.map(wireToMessage);
-}
-
 export async function fetchMarginalia(id: string): Promise<MarginaliaEntry[]> {
   const body = await getJson<{ entries: MarginaliaEntry[] }>(
     `/api/web/book/marginalia?id=${encodeURIComponent(id)}`,
@@ -562,7 +570,7 @@ export async function fetchMarginalia(id: string): Promise<MarginaliaEntry[]> {
 
 export async function createMarginalia(
   id: string,
-  draft: { chapter: number; quote: string; prefix: string; suffix: string; note?: string },
+  draft: MarginAnchor,
 ): Promise<MarginaliaEntry> {
   const body = await jsonRequest<{ entry: MarginaliaEntry }>(
     "/api/web/book/marginalia",
@@ -581,6 +589,19 @@ export async function updateMarginalia(id: string, entryId: string, note: string
     "book/marginalia",
   );
   return body.entry;
+}
+
+/** Hands a passage to her (anchor) or answers in an existing thread (entryId + text). */
+export async function discussInMargin(
+  id: string,
+  input: { anchor: MarginAnchor } | { entryId: string; text: string },
+): Promise<{ entry: MarginaliaEntry }> {
+  return jsonRequest<{ entry: MarginaliaEntry }>(
+    "/api/web/book/discuss",
+    "POST",
+    { id, ...input },
+    "book/discuss",
+  );
 }
 
 export async function deleteMarginalia(id: string, entryId: string): Promise<void> {

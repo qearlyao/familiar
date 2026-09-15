@@ -42,7 +42,7 @@ export async function readMultipartBody(
 	const form = await new Response(new Uint8Array(raw) as BodyInit, { headers: { "content-type": header } }).formData();
 	const attachments: WebUploadAttachment[] = [];
 	const body: Record<string, unknown> = { text: "" };
-	for (const name of ["text", "channelKey", "clientId", "bookId"]) {
+	for (const name of ["text", "channelKey", "clientId"]) {
 		const value = form.get(name);
 		if (typeof value === "string") body[name] = value;
 	}

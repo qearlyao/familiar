@@ -95,7 +95,7 @@ export async function startWebDaemon(
 	});
 	registerWebConfigRoutes(route, config, agentCore, options.restart);
 	registerWebPushRoutes(route, push);
-	registerWebBookRoutes(route, config);
+	registerWebBookRoutes(route, config, { getRuntime, drainJobs: actions.drainJobs });
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);

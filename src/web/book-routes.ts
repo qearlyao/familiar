@@ -3,30 +3,43 @@ import type { ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import type { Config } from "../config/index.js";
+import { getContactNickname } from "../conversation/contact-note.js";
+import { messageId } from "../conversation/ids.js";
+import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import {
 	assertBookId,
 	bookDir,
-	createBookMarginalia,
-	deleteBookMarginalia,
 	deleteWebBook,
 	listWebBooks,
-	readBookMarginalia,
 	readWebBook,
 	readWebBookChapter,
-	updateBookMarginalia,
 	writeBookPosition,
 } from "./book-library.js";
+import {
+	askInBookMargin,
+	createBookMargin,
+	deleteBookMargin,
+	readBookMargins,
+	updateBookMargin,
+} from "./book-margins.js";
 import { ingestBook } from "./epub-ingest.js";
 import { HttpError, readJsonBody, sendJson, sendText } from "./http.js";
 import { isMultipartContentType, isWebUploadAttachment, readMultipartBody } from "./multipart.js";
 import type { RegisterWebRoute } from "./routes.js";
+import type { WebRuntimeActions } from "./runtime-actions.js";
 import { servePrivateFile } from "./static.js";
+import { WEB_USER_NAME } from "./types.js";
 
 const ASSET_PREFIX = "/api/web/books/assets/";
 
-export function registerWebBookRoutes(route: RegisterWebRoute, config: Config): void {
+interface BookRouteRuntime {
+	getRuntime: (channelKey?: string) => Promise<ConversationRuntime>;
+	drainJobs: WebRuntimeActions["drainJobs"];
+}
+
+export function registerWebBookRoutes(route: RegisterWebRoute, config: Config, runtimes: BookRouteRuntime): void {
 	route("POST", "/api/web/books", async (request, response) => {
 		const contentType = request.headers["content-type"] ?? "";
 		if (!isMultipartContentType(contentType)) throw new HttpError(400, "multipart form data is required");
@@ -71,36 +84,63 @@ export function registerWebBookRoutes(route: RegisterWebRoute, config: Config): 
 	});
 
 	route("GET", "/api/web/book/marginalia", async (_request, response, url) => {
-		sendJson(response, 200, { entries: await readBookMarginalia(config, requiredBookId(url)) });
+		const entries = await readBookMargins(config, requiredBookId(url), async (key) =>
+			(await runtimes.getRuntime(key)).getRecords(),
+		);
+		sendJson(response, 200, { entries });
 	});
 
 	route("POST", "/api/web/book/marginalia", async (request, response) => {
 		const body = await readJsonBody(request);
 		if (!isRecord(body) || typeof body.id !== "string") throw new HttpError(400, "book id is required");
-		if (typeof body.chapter !== "number") throw new HttpError(400, "chapter is required");
-		if (typeof body.quote !== "string" || typeof body.prefix !== "string" || typeof body.suffix !== "string") {
-			throw new HttpError(400, "quote, prefix, and suffix are required");
-		}
-		if (body.note !== undefined && typeof body.note !== "string") throw new HttpError(400, "note must be a string");
-		const entry = await createBookMarginalia(config, body.id, {
-			chapter: body.chapter,
-			quote: body.quote,
-			prefix: body.prefix,
-			suffix: body.suffix,
-			...(body.note !== undefined ? { note: body.note } : {}),
-		});
-		sendJson(response, 201, { entry });
+		sendJson(response, 201, { entry: await createBookMargin(config, body.id, body) });
 	});
 
 	route("PUT", "/api/web/book/marginalia", async (request, response) => {
 		const { id, entryId, note } = marginaliaChangeBody(await readJsonBody(request));
-		sendJson(response, 200, { entry: await updateBookMarginalia(config, id, entryId, note) });
+		sendJson(response, 200, { entry: await updateBookMargin(config, id, entryId, note) });
 	});
 
 	route("DELETE", "/api/web/book/marginalia", async (request, response) => {
 		const { id, entryId } = marginaliaChangeBody(await readJsonBody(request), false);
-		await deleteBookMarginalia(config, id, entryId);
+		await deleteBookMargin(config, id, entryId);
 		sendJson(response, 200, { ok: true });
+	});
+
+	// Hands a passage (or a reply in its thread) to her. The turn runs in the
+	// main session so she remembers it; her answer is filed back into the thread.
+	route("POST", "/api/web/book/discuss", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (!isRecord(body) || typeof body.id !== "string") throw new HttpError(400, "book id is required");
+		const anchor = isRecord(body.anchor) ? body.anchor : undefined;
+		const entryId = typeof body.entryId === "string" ? body.entryId : undefined;
+		if (!anchor === !entryId) throw new HttpError(400, "exactly one of anchor or entryId is required");
+		const text = entryId && typeof body.text === "string" ? body.text : "";
+		if (entryId && !text.trim()) throw new HttpError(400, "text is required to reply");
+		const runtime = await runtimes.getRuntime();
+		const id = messageId("user");
+		const { entry, prompt } = await askInBookMargin(config, assertBookId(body.id), {
+			anchor,
+			entryId,
+			text,
+			messageId: id,
+			channelKey: runtime.channelKey,
+		});
+		await runtime.ingestInbound(
+			{
+				messageId: id,
+				authorId: runtime.ownerId,
+				authorName: getContactNickname(WEB_USER_NAME),
+				text: prompt,
+				isBot: false,
+				mentionedBot: true,
+				remoteTimestamp: new Date().toISOString(),
+				checkpoint: { messageId: id },
+			},
+			{ mode: "queue" },
+		);
+		void runtimes.drainJobs(runtime).catch((error) => console.error("Margin job drain failed", error));
+		sendJson(response, 200, { entry });
 	});
 
 	route("DELETE", "/api/web/book", async (request, response) => {

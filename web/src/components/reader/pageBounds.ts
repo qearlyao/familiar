@@ -1,5 +1,3 @@
-import type { PageSegment } from "./marginMessage.js";
-
 /** Past this much overshoot from snapping outward, fall back to a sentence break. */
 const OVERSHOOT_LIMIT = 300;
 const SENTENCE_END = /[.!?。！？”"』」)\]]\s/g;
@@ -34,20 +32,9 @@ export function pageSegments(
   text: string,
   spans: readonly { start: number; end: number }[],
   visible: { start: number; end: number },
-): { segments: PageSegment[]; start: number; end: number } | undefined {
+): { start: number; end: number } | undefined {
   if (spans.length === 0) return undefined;
-  const firstVisible = spans[0]!;
-  const lastVisible = spans[spans.length - 1]!;
-  const start = trimStart(text, visible.start, firstVisible.start);
-  const end = trimEnd(text, visible.end, lastVisible.end);
-
-  const segments = spans
-    .map((span, i) => {
-      const from = i === 0 ? start : span.start;
-      const to = i === spans.length - 1 ? end : span.end;
-      return { start: from, end: to, text: text.slice(from, to).trim() };
-    })
-    .filter((segment) => segment.text.length > 0);
-  if (segments.length === 0) return undefined;
-  return { segments, start, end };
+  const start = trimStart(text, visible.start, spans[0]!.start);
+  const end = trimEnd(text, visible.end, spans[spans.length - 1]!.end);
+  return text.slice(start, end).trim() ? { start, end } : undefined;
 }

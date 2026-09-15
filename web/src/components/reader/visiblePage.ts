@@ -1,5 +1,4 @@
 import type { TextIndex } from "./anchors.js";
-import type { PageSegment } from "./marginMessage.js";
 import { pageSegments } from "./pageBounds.js";
 
 /** Columns land within a pixel or two of the viewport edge; don't count a hairline sliver as visible. */
@@ -45,7 +44,8 @@ function visibleOffsets(index: TextIndex, entry: TextIndex["nodes"][number], rec
       if (offset !== undefined) offsets.push(offset);
     }
   }
-  if (offsets.length === 0) throw new Error("Unable to resolve visible page text bounds");
+  // Hit-testing misses when something sits over the text (a sheet, the toolbar): take the whole node.
+  if (offsets.length === 0) return { start: entry.start, end: entryEnd };
   const start = Math.max(entry.start, Math.min(entryEnd, Math.min(...offsets)));
   const end = Math.max(start, Math.min(entryEnd, Math.max(...offsets)));
   return { start, end: end === start && start < entryEnd ? start + 1 : end };
@@ -62,7 +62,7 @@ export function visiblePage(
   index: TextIndex,
   viewport: HTMLElement,
   content: HTMLElement,
-): { segments: PageSegment[]; start: number; end: number } | undefined {
+): { start: number; end: number } | undefined {
   const bounds = viewport.getBoundingClientRect();
   const blocks: HTMLElement[] = [];
   const range = document.createRange();
@@ -92,4 +92,23 @@ export function visiblePage(
   const start = visibleOffsets(index, firstVisible.entry, firstVisible.rects).start;
   const end = visibleOffsets(index, lastVisible.entry, lastVisible.rects).end;
   return pageSegments(index.text, spans, { start, end });
+}
+
+/** The paragraphs a selection touches: their elements (for painting) and the text span they cover. */
+export function paragraphsOf(
+  index: TextIndex,
+  content: HTMLElement,
+  start: number,
+  end: number,
+): { blocks: HTMLElement[]; start: number; end: number } | undefined {
+  const blocks: HTMLElement[] = [];
+  for (const entry of index.nodes) {
+    const length = entry.node.textContent?.length ?? 0;
+    if (entry.start >= end || entry.start + length <= start || !entry.node.textContent?.trim()) continue;
+    const block = blockAncestor(entry.node, content);
+    if (!blocks.includes(block)) blocks.push(block);
+  }
+  const spans = blocks.map((block) => spanOf(index, block)).filter((s): s is { start: number; end: number } => !!s);
+  if (spans.length === 0) return undefined;
+  return { blocks, start: Math.min(...spans.map((s) => s.start)), end: Math.max(...spans.map((s) => s.end)) };
 }

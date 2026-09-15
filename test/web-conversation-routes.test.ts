@@ -9,8 +9,6 @@ import type { AgentCore } from "../src/runtime/agent-core.js";
 import type { ConversationRuntime, InboundDispatchOptions, InboundMessageInput } from "../src/runtime/conversation-runtime.js";
 import { registerWebConversationRoutes } from "../src/web/conversation-routes.js";
 import { lastSaid } from "../src/web/payloads.js";
-import { createWebEventHub } from "../src/web/event-hub.js";
-import { decodeFrames, type WebSocketClient } from "../src/web/events.js";
 import type { RegisterWebRoute, WebRoute } from "../src/web/routes.js";
 import type { WebAuth } from "../src/web/auth.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
@@ -56,7 +54,6 @@ describe("web conversation routes", () => {
 		const records: ChatLogRecord[] = [];
 		const steered: string[] = [];
 		let drained = false;
-		let recordListener: (record: ChatLogRecord) => void | Promise<void> = () => undefined;
 		const runtime = {
 			channel: { service: "discord", scope: "dm", channelId: "dm-1" },
 			channelKey: "discord:dm:dm-1",
@@ -64,11 +61,6 @@ describe("web conversation routes", () => {
 			ownerId: "runtime-owner",
 			hasActiveJob: () => true,
 			getRecords: () => records,
-			subscribe: (listener: typeof recordListener) => {
-				recordListener = listener;
-				return () => undefined;
-			},
-			subscribeAgentEvents: () => () => undefined,
 			ingestInbound: async (input: InboundMessageInput, options: InboundDispatchOptions) => {
 				inputs.push(input);
 				modes.push(options.mode);
@@ -83,13 +75,11 @@ describe("web conversation routes", () => {
 						authorId: input.authorId,
 						authorName: input.authorName,
 						text: input.text.trim(),
-						bookId: input.bookId,
 						isBot: false,
 						mentionedBot: true,
 						attachments: [],
 					};
 				records.push(record);
-				await recordListener(record);
 				return { jobQueued: false, record };
 			},
 			buildSteerPromptForRecord: (record: { text: string }) => `steer:${record.text}`,
@@ -102,22 +92,6 @@ describe("web conversation routes", () => {
 		const familiarAgent = {
 			steer: (_sessionKey: string, prompt: string) => steered.push(prompt),
 		} as unknown as FamiliarAgent;
-		const frames: Buffer[] = [];
-		const eventHub = createWebEventHub(config, "familiar");
-		t.after(() => eventHub.stop());
-		eventHub.subscribeRuntime(runtime);
-		eventHub.registerClient({
-			channelKey: runtime.channelKey,
-			authed: true,
-			socket: {
-				destroyed: false,
-				write: (chunk: Uint8Array) => {
-					frames.push(Buffer.from(chunk));
-					return true;
-				},
-				destroy: () => undefined,
-			},
-		} as unknown as WebSocketClient);
 
 		registerWebConversationRoutes({
 			route,
@@ -132,41 +106,16 @@ describe("web conversation routes", () => {
 		});
 		const handler = routes.get("POST /api/web/send");
 		assert.ok(handler);
-		assert.ok(routes.has("GET /api/web/book/conversation"));
 		const response = new FakeResponse();
 
 		await handler(
-			multipartRequest({ text: "use the shorter path", bookId: "aaaaaaaaaa" }),
+			multipartRequest({ text: "use the shorter path" }),
 			response as unknown as ServerResponse,
 			new URL("http://localhost/api/web/send"),
 		);
 
 		assert.equal(response.statusCode, 200);
-		assert.equal(inputs[0]?.bookId, "aaaaaaaaaa");
 		assert.equal(inputs[0]?.authorId, "runtime-owner");
-		const events = decodeFrames(Buffer.concat(frames)).messages.map((message) => JSON.parse(message) as Record<string, unknown>);
-		assert.equal(events.find((event) => event.type === "message_started")?.bookId, "aaaaaaaaaa");
-		records.push({
-			type: "outbound",
-			recordId: 2,
-			ts: new Date().toISOString(),
-			service: "discord",
-			scope: "dm",
-			channelId: "dm-1",
-			messageIds: ["assistant-1"],
-			webMessageId: "assistant-1",
-			text: "book reply",
-		});
-		const conversationHandler = routes.get("GET /api/web/book/conversation");
-		assert.ok(conversationHandler);
-		const conversationResponse = new FakeResponse();
-		await conversationHandler(
-			jsonRequest({}),
-			conversationResponse as unknown as ServerResponse,
-			new URL("http://localhost/api/web/book/conversation?id=aaaaaaaaaa&channelKey=discord%3Adm%3Adm-1"),
-		);
-		const { messages } = JSON.parse(conversationResponse.body) as { messages: Array<{ text: string }> };
-		assert.deepEqual(messages.map((message) => message.text), ["use the shorter path", "book reply"]);
 		assert.deepEqual(modes, ["collect"]);
 		assert.deepEqual(steered, ["steer:use the shorter path"]);
 		assert.equal(drained, false);

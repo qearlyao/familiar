@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { BookPlus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FileText, MessageSquareText, Plus, Search } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,41 +10,46 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { deleteBook, fetchBooks, uploadBook, type BookSummary } from "@/lib/api";
+import {
+  deleteBook,
+  fetchBooks,
+  fetchMarginalia,
+  uploadBook,
+  type BookSummary,
+  type MarginaliaEntry,
+} from "@/lib/api";
 import { BookCover } from "./library/BookCover";
+import { noteAge } from "./reader/marginText";
 import { ReaderView } from "./reader/ReaderView";
+import "./library.css";
 
 const ACCEPTED = ".epub,.txt,.md";
+const FILTERS = ["everything", "books", "papers", "annotated"] as const;
+type LibraryFilter = (typeof FILTERS)[number];
 
-function progressPhrase(percent: number): string {
-  if (percent < 4) return "just begun";
-  if (percent < 30) return "early pages";
-  if (percent < 62) return "midway through";
-  if (percent < 92) return "deep in it";
-  return "nearly done";
+function shelfLine(book: BookSummary, notes: MarginaliaEntry[]): string {
+  if (book.position) {
+    const progress = book.percent != null ? `${Math.max(1, Math.round(book.percent))}% read` : `chapter ${book.position.chapter + 1}`;
+    return notes.length > 0 ? `${progress} · ${notes.length} ${notes.length === 1 ? "note" : "notes"}` : progress;
+  }
+  if (notes.length > 0) return `${notes.length} ${notes.length === 1 ? "note" : "notes"}`;
+  return `added ${noteAge(book.createdAt)}`;
 }
 
-/**
- * Right-click (or long-press) any book to let it go — nothing on the tile
- * itself, and a proper confirmation before it leaves.
- */
-function ShelfBook({
-  book,
-  onRemove,
-  children,
-}: {
-  book: BookSummary;
-  onRemove: () => void;
-  children: ReactNode;
-}) {
+function matchesFilter(book: BookSummary, notes: MarginaliaEntry[], filter: LibraryFilter): boolean {
+  if (filter === "everything") return true;
+  if (filter === "books") return book.format === "epub";
+  if (filter === "papers") return book.format === "text";
+  return notes.length > 0;
+}
+
+function ShelfBook({ book, onRemove, children }: { book: BookSummary; onRemove: () => void; children: ReactNode }) {
   const [confirming, setConfirming] = useState(false);
   return (
     <>
@@ -76,55 +81,94 @@ function ShelfBook({
   );
 }
 
-function BookTile({
+function OpenBookCard({
   book,
+  notes,
   onOpen,
   onRemove,
 }: {
   book: BookSummary;
+  notes: MarginaliaEntry[];
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  const percent = Math.max(1, Math.round(book.percent ?? 0));
+  return (
+    <ShelfBook book={book} onRemove={onRemove}>
+      <button type="button" className="library-open-card" onClick={onOpen}>
+        <BookCover book={book} className="library-open-cover" />
+        <span className="library-open-copy">
+          <strong>{book.title}</strong>
+          <span>
+            {book.author ? `${book.author} · ` : ""}chapter {(book.position?.chapter ?? 0) + 1} of {book.chapterCount}
+          </span>
+          <span className="library-progress" aria-label={`${percent}% read`}>
+            <i style={{ width: `${percent}%` }} />
+          </span>
+          <span>{percent}% read</span>
+          <span className="library-margin-count">
+            {notes.length > 0 ? (
+              <>
+                <MessageSquareText aria-hidden="true" />
+                {notes.length} {notes.length === 1 ? "note" : "notes"} in the margin
+              </>
+            ) : (
+              "the margin is waiting"
+            )}
+          </span>
+          <span className="library-keep-reading">keep reading</span>
+        </span>
+      </button>
+    </ShelfBook>
+  );
+}
+
+function ShelfTile({
+  book,
+  notes,
+  onOpen,
+  onRemove,
+}: {
+  book: BookSummary;
+  notes: MarginaliaEntry[];
   onOpen: () => void;
   onRemove: () => void;
 }) {
   return (
     <ShelfBook book={book} onRemove={onRemove}>
-      <div className="group flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="rounded-sm text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <BookCover
-            book={book}
-            className="transition-shadow duration-300 ease-out group-hover:shadow-lg motion-reduce:transition-none"
-          />
-        </button>
-        <div className="min-w-0 px-0.5">
-          <p className="truncate text-[13px] leading-tight">{book.title}</p>
-          {book.author ? (
-            <p className="truncate font-serif text-[11px] italic text-muted-foreground">{book.author}</p>
-          ) : null}
-          {book.percent != null && book.percent > 0 ? (
-            <p className="font-serif text-[11px] italic text-muted-foreground/80">{Math.round(book.percent)}%</p>
-          ) : null}
-        </div>
-      </div>
+      <button type="button" className="library-shelf-tile" onClick={onOpen}>
+        <BookCover book={book} className="library-shelf-cover" />
+        <span className="library-shelf-copy">
+          <strong>{book.title}</strong>
+          <span>
+            <span className="library-shelf-kind">{book.format === "epub" ? "book" : "paper"} · </span>
+            {shelfLine(book, notes)}
+          </span>
+        </span>
+      </button>
     </ShelfBook>
   );
 }
 
 export function LibraryPage() {
   const [books, setBooks] = useState<BookSummary[]>([]);
+  const [notesByBook, setNotesByBook] = useState<Record<string, MarginaliaEntry[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [openBookId, setOpenBookId] = useState<string>();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<LibraryFilter>("everything");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
 
   const reload = useCallback(async () => {
     try {
-      setBooks(await fetchBooks());
+      const nextBooks = await fetchBooks();
+      const notes = await Promise.all(nextBooks.map(async (book) => [book.id, await fetchMarginalia(book.id)] as const));
+      setBooks(nextBooks);
+      setNotesByBook(Object.fromEntries(notes));
       setError(undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -138,44 +182,55 @@ export function LibraryPage() {
     return () => window.clearTimeout(id);
   }, [reload]);
 
-  const importFiles = useCallback(
-    async (files: FileList | File[]) => {
-      const accepted = Array.from(files).filter((f) => /\.(epub|txt|md)$/i.test(f.name));
-      if (accepted.length === 0) return;
-      setUploading(true);
-      try {
-        for (const file of accepted) {
-          const book = await uploadBook(file);
-          setBooks((prev) => [book, ...prev.filter((b) => b.id !== book.id)]);
-        }
-        setError(undefined);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setUploading(false);
-      }
-    },
-    [],
-  );
+  const importFiles = useCallback(async (files: FileList | File[]) => {
+    const accepted = Array.from(files).filter((file) => /\.(epub|txt|md)$/i.test(file.name));
+    if (accepted.length === 0) {
+      setError("only epub, txt, and markdown files can join the shelf");
+      return;
+    }
+    setUploading(true);
+    try {
+      for (const file of accepted) await uploadBook(file);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
+  }, [reload]);
 
   const remove = useCallback(async (id: string) => {
     try {
       await deleteBook(id);
-      setBooks((prev) => prev.filter((b) => b.id !== id));
+      await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [reload]);
 
-  const current = books.find((b) => b.position);
-  const rest = books.filter((b) => b !== current);
-  const openBook = books.find((b) => b.id === openBookId);
+  const matching = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return books.filter((book) => {
+      const notes = notesByBook[book.id] ?? [];
+      if (!matchesFilter(book, notes, filter)) return false;
+      if (!needle) return true;
+      const haystack = [book.title, book.author ?? "", ...notes.flatMap((entry) => [entry.quote, entry.note ?? ""])]
+        .join("\n")
+        .toLocaleLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [books, filter, notesByBook, query]);
+
+  const openBooks = matching.filter((book) => book.position);
+  const shelfBooks = matching.filter((book) => !book.position);
+  const mobileShelfBooks = matching.filter((book, index) => !book.position || index > 0);
+  const openBook = books.find((book) => book.id === openBookId);
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col bg-background text-foreground"
-      onDragEnter={(e) => {
-        if (!e.dataTransfer.types.includes("Files")) return;
+      className="library-room relative flex h-full min-h-0 flex-col"
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
         dragDepthRef.current += 1;
         setDragging(true);
       }}
@@ -183,125 +238,126 @@ export function LibraryPage() {
         dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
         if (dragDepthRef.current === 0) setDragging(false);
       }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
         dragDepthRef.current = 0;
         setDragging(false);
-        void importFiles(e.dataTransfer.files);
+        void importFiles(event.dataTransfer.files);
       }}
     >
-      <header className="border-b-2 border-primary/20 bg-background px-3 py-4 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <h1 className="font-serif text-2xl leading-none tracking-tight">library</h1>
-            <p className="font-serif text-[0.8rem] italic text-muted-foreground">the shelf you share</p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={uploading ? "bringing it in" : "add a book"}
-            title={uploading ? "bringing it in" : "add a book"}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="size-11 text-muted-foreground hover:text-foreground"
-          >
-            <BookPlus
-              className={uploading ? "size-5 animate-pulse motion-reduce:animate-none" : "size-5"}
-            />
-          </Button>
-        </div>
-      </header>
       <input
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED}
         multiple
         className="hidden"
-        onChange={(e) => {
-          if (e.target.files) void importFiles(e.target.files);
-          e.target.value = "";
+        onChange={(event) => {
+          if (event.target.files) void importFiles(event.target.files);
+          event.target.value = "";
         }}
       />
 
-      {error ? (
-        <p className="px-3 py-2 text-center font-serif text-xs italic text-destructive md:px-8">
-          couldn't tend the shelf · {error}
-        </p>
-      ) : null}
-
-      {loaded && books.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
-          <p className="max-w-sm text-center font-serif text-base italic leading-relaxed text-muted-foreground">
-            the shelf is bare. drop an epub anywhere — we'll read it together.
-          </p>
-          <Button type="button" onClick={() => fileInputRef.current?.click()}>
-            choose a book
-          </Button>
+      <header className="library-header">
+        <div className="library-title-block">
+          <span>{books.length} {books.length === 1 ? "thing" : "things"}, {books.filter((book) => book.position).length} open</span>
+          <h1>the library</h1>
         </div>
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto max-w-6xl px-4 pt-6 pb-12 md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-            {current ? (
-              <section className="mt-10 flex items-center gap-6 md:gap-10">
-                <ShelfBook book={current} onRemove={() => void remove(current.id)}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenBookId(current.id)}
-                    className="group w-32 shrink-0 rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:w-44"
-                  >
-                    <BookCover
-                      book={current}
-                      className="shadow-lg transition-shadow duration-300 ease-out group-hover:shadow-xl motion-reduce:transition-none"
+        <div className="library-actions">
+          <label className="library-search">
+            <Search aria-hidden="true" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="search titles and notes" />
+          </label>
+          <button
+            type="button"
+            className="library-add"
+            aria-label={uploading ? "bringing it in" : "add to the library"}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <Plus aria-hidden="true" />
+            <span>{uploading ? "adding…" : "add"}</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="library-filters" role="group" aria-label="filter the library">
+        {FILTERS.map((item) => (
+          <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)}>
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {error ? <p className="library-error">couldn't tend the shelf · {error}</p> : null}
+
+      <div className="library-scroll">
+        {!loaded ? (
+          <p className="library-empty">opening the library…</p>
+        ) : books.length === 0 ? (
+          <div className="library-empty">
+            <p>the shelf is bare. bring an epub, text, or markdown file and we’ll read it together.</p>
+            <button type="button" onClick={() => fileInputRef.current?.click()}>choose a book</button>
+          </div>
+        ) : matching.length === 0 ? (
+          <p className="library-empty">nothing on the shelf matches that.</p>
+        ) : (
+          <>
+            {openBooks.length > 0 ? (
+              <section className="library-open-section">
+                <h2>still open</h2>
+                <div className="library-open-grid">
+                  {openBooks.map((book) => (
+                    <OpenBookCard
+                      key={book.id}
+                      book={book}
+                      notes={notesByBook[book.id] ?? []}
+                      onOpen={() => setOpenBookId(book.id)}
+                      onRemove={() => void remove(book.id)}
                     />
-                  </button>
-                </ShelfBook>
-                <div className="min-w-0">
-                  <p className="font-serif text-xs italic text-muted-foreground">reading now</p>
-                  <h2 className="mt-1.5 font-serif text-2xl leading-tight tracking-tight md:text-3xl">
-                    {current.title}
-                  </h2>
-                  {current.author ? (
-                    <p className="mt-1 font-serif text-base italic text-muted-foreground">{current.author}</p>
-                  ) : null}
-                  {current.percent != null ? (
-                    <p className="mt-4 font-serif text-xs italic text-muted-foreground">
-                      {progressPhrase(current.percent)} · {Math.round(current.percent)}%
-                    </p>
-                  ) : null}
-                  <Button type="button" className="mt-5" onClick={() => setOpenBookId(current.id)}>
-                    keep reading
-                  </Button>
+                  ))}
                 </div>
               </section>
             ) : null}
 
-            {rest.length > 0 ? (
-              <div className="mt-12 grid grid-cols-3 gap-x-5 gap-y-8 sm:grid-cols-4 md:grid-cols-5">
-                {rest.map((book) => (
-                  <BookTile
+            <section className="library-shelf-section">
+              <h2>on the shelf</h2>
+              <div className="library-shelf-grid library-shelf-desktop">
+                {shelfBooks.map((book) => (
+                  <ShelfTile
                     key={book.id}
                     book={book}
+                    notes={notesByBook[book.id] ?? []}
+                    onOpen={() => setOpenBookId(book.id)}
+                    onRemove={() => void remove(book.id)}
+                  />
+                ))}
+                <button type="button" className="library-drop-tile" onClick={() => fileInputRef.current?.click()}>
+                  <span><Plus aria-hidden="true" />drop a file</span>
+                  <small>epub, text, or markdown</small>
+                </button>
+              </div>
+              <div className="library-shelf-list library-shelf-mobile">
+                {mobileShelfBooks.map((book) => (
+                  <ShelfTile
+                    key={book.id}
+                    book={book}
+                    notes={notesByBook[book.id] ?? []}
                     onOpen={() => setOpenBookId(book.id)}
                     onRemove={() => void remove(book.id)}
                   />
                 ))}
               </div>
-            ) : null}
-          </div>
-        </ScrollArea>
-      )}
+            </section>
+          </>
+        )}
+      </div>
 
       {dragging ? (
-        <div
-          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/85"
-          style={{
-            backgroundImage:
-              "radial-gradient(closest-side at 50% 50%, color-mix(in oklch, var(--primary) 14%, transparent), transparent)",
-          }}
-        >
-          <p className="font-serif text-lg italic text-muted-foreground">let it fall here</p>
+        <div className="library-drag-overlay">
+          <FileText aria-hidden="true" />
+          <p>let it fall here</p>
+          <span>epub, text, or markdown</span>
         </div>
       ) : null}
 

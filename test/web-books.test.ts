@@ -9,16 +9,21 @@ import sharp from "sharp";
 import {
 	assertBookId,
 	bookDir,
-	createBookMarginalia,
-	deleteBookMarginalia,
 	deleteWebBook,
 	listWebBooks,
-	readBookMarginalia,
 	readWebBook,
 	readWebBookChapter,
-	updateBookMarginalia,
 	writeBookPosition,
 } from "../src/web/book-library.js";
+import {
+	askInBookMargin,
+	BOOK_PAGE_CHARS,
+	createBookMargin,
+	deleteBookMargin,
+	readBookMargins,
+	updateBookMargin,
+} from "../src/web/book-margins.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
 import { registerWebBookRoutes } from "../src/web/book-routes.js";
 import { ingestBook, MAX_BOOK_BYTES } from "../src/web/epub-ingest.js";
 import { HttpError } from "../src/web/http.js";
@@ -270,21 +275,63 @@ describe("web books", () => {
 		assert.equal((await listWebBooks(config))[0]?.percent, expected);
 		await expectHttpStatus(() => readWebBookChapter(config, record.id, 2), 404);
 
-		const created = await createBookMarginalia(config, record.id, {
+		const noRecords = async () => [];
+		const created = await createBookMargin(config, record.id, {
 			chapter: 1,
+			offset: 0,
+			scale: "word",
 			quote: "Hello reader.",
 			prefix: "Fallback Heading ",
 			suffix: " Next chapter",
 			note: "remember",
 		});
-		assert.deepEqual(await readBookMarginalia(config, record.id), [created]);
-		const updated = await updateBookMarginalia(config, record.id, created.id, "updated");
+		assert.equal(created.page, Math.floor(detail.chapters[0]!.chars / BOOK_PAGE_CHARS) + 1);
+		assert.deepEqual(await readBookMargins(config, record.id, noRecords), [created]);
+		const updated = await updateBookMargin(config, record.id, created.id, "updated");
 		assert.equal(updated.note, "updated");
-		await deleteBookMarginalia(config, record.id, created.id);
-		assert.deepEqual(await readBookMarginalia(config, record.id), []);
+		await deleteBookMargin(config, record.id, created.id);
+		assert.deepEqual(await readBookMargins(config, record.id, noRecords), []);
 
 		await deleteWebBook(config, record.id);
 		await expectHttpStatus(() => readWebBook(config, record.id), 404);
+	});
+
+	it("opens a margin thread and files her reply from the session log", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const record = await ingestBook(config, { name: "fixture.epub", buffer: tinyEpub() });
+		const anchor = { chapter: 1, offset: 0, scale: "paragraph", quote: "Hello reader.", prefix: "", suffix: "" };
+		const { entry, prompt } = await askInBookMargin(config, record.id, {
+			anchor,
+			text: "",
+			messageId: "user_1",
+			channelKey: "web:main",
+		});
+		assert.match(prompt, /^from the margin — a paragraph:\n\n> Hello reader\.\n> — \*.+\*, .+ · p\. \d+$/);
+		assert.equal(entry.thread[0]?.reply, "waiting");
+		await expectHttpStatus(
+			() => askInBookMargin(config, record.id, { entryId: entry.id, text: "and?", messageId: "user_2", channelKey: "web:main" }),
+			409,
+		);
+
+		const base = { ts: new Date(5).toISOString(), service: "web", scope: "web", channelId: "main" } as const;
+		const records = [
+			{ ...base, type: "inbound", recordId: 1, messageId: "user_1", authorId: "me", text: prompt, isBot: false, mentionedBot: true, attachments: [] },
+			{ ...base, type: "outbound", recordId: 2, messageIds: ["asst_1"], webMessageId: "asst_1", text: "only later.", replyToMessageId: "user_1" },
+		] as unknown as ChatLogRecord[];
+		const seen: string[] = [];
+		const [filed] = await readBookMargins(config, record.id, async (key) => (seen.push(key), records));
+		assert.deepEqual(seen, ["web:main"]);
+		assert.deepEqual(filed?.thread.map((m) => [m.author, m.text, m.reply]), [["you", "", undefined], ["companion", "only later.", undefined]]);
+
+		const reply = await askInBookMargin(config, record.id, { entryId: entry.id, text: "whole book?", messageId: "user_2", channelKey: "web:main" });
+		assert.match(reply.prompt, /^back in the margin, on:\n\n> Hello reader\.\n> — .+ · p\. \d+\n\nwhole book\?$/);
+		const failed = [
+			...records,
+			{ ...base, type: "inbound", recordId: 3, messageId: "user_2", authorId: "me", text: reply.prompt, isBot: false, mentionedBot: true, attachments: [] },
+			{ ...base, type: "job_failed", recordId: 4, jobId: "j", triggerRecordId: 3, error: "model down" },
+		] as unknown as ChatLogRecord[];
+		const [afterFail] = await readBookMargins(config, record.id, async () => failed);
+		assert.deepEqual([afterFail?.thread.at(-1)?.reply, afterFail?.thread.at(-1)?.error], ["failed", "model down"]);
 	});
 
 	it("rejects traversal ids, oversized uploads, and unsupported formats", async (t) => {
@@ -304,7 +351,7 @@ describe("web books", () => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const routes = new Set<string>();
 		const route: RegisterWebRoute = (method, pathname) => routes.add(`${method} ${pathname}`);
-		registerWebBookRoutes(route, config);
+		registerWebBookRoutes(route, config, { getRuntime: async () => assert.fail(), drainJobs: async () => undefined });
 		assert.deepEqual(routes, new Set([
 			"POST /api/web/books",
 			"GET /api/web/books",
@@ -315,6 +362,7 @@ describe("web books", () => {
 			"POST /api/web/book/marginalia",
 			"PUT /api/web/book/marginalia",
 			"DELETE /api/web/book/marginalia",
+			"POST /api/web/book/discuss",
 			"DELETE /api/web/book",
 		]));
 	});

@@ -6,7 +6,7 @@ const WHEEL_QUIET_MS = 160;
 const WHEEL_RESTART_THRESHOLD = 24;
 const WHEEL_RESTART_RATIO = 1.8;
 const SWIPE_THRESHOLD_PX = 48;
-const TURN_MS = 240;
+export const TURN_MS = 240;
 
 /**
  * True e-reader pagination: chapter HTML flows into CSS columns inside a
@@ -106,6 +106,17 @@ export function usePagination({
       applyTransform(next, true);
     },
     [applyTransform, setPageBoth],
+  );
+
+  const seek = useCallback(
+    (ratio: number) => {
+      const normalized = Math.min(1, Math.max(0, ratio));
+      entryRef.current = normalized;
+      const target = Math.min(pageCountRef.current - 1, Math.max(0, Math.round(normalized * pageCountRef.current)));
+      setPageBoth(target);
+      applyTransform(target, false);
+    },
+    [applyTransform, entryRef, setPageBoth],
   );
 
   // Measure on layout changes via the observer's initial delivery (fires on
@@ -233,5 +244,6 @@ export function usePagination({
     ready,
     ratio: pageCount <= 1 ? 0 : page / pageCount,
     turn,
+    seek,
   };
 }

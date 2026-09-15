@@ -75,7 +75,6 @@ export type WebMessage = {
 	tools?: WebToolEvent[];
 	usage?: WebUsage;
 	silent?: boolean;
-	bookId?: string;
 	ts: number;
 };
 
@@ -88,7 +87,6 @@ export type WebStreamEvent =
 			messageId: string;
 			role: "assistant" | "user";
 			who: string;
-			bookId?: string;
 	  }
 	| {
 			type: "delta";

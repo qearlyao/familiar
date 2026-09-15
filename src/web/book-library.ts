@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -48,21 +47,6 @@ export interface BookSummary {
 export interface BookDetail extends BookSummary {
 	chapters: BookChapter[];
 	toc: BookChapter[];
-}
-
-export interface MarginaliaEntry {
-	id: string;
-	chapter: number;
-	quote: string;
-	prefix: string;
-	suffix: string;
-	note?: string;
-	createdAt: number;
-	updatedAt: number;
-}
-
-interface MarginaliaFile {
-	entries: MarginaliaEntry[];
 }
 
 const BOOK_ID_RE = /^[a-f0-9]{10}$/;
@@ -151,62 +135,6 @@ export async function writeBookPosition(
 	return { position, percent: bookPercent(book, position) };
 }
 
-export async function readBookMarginalia(config: Config, id: string): Promise<MarginaliaEntry[]> {
-	await readBookRecord(config, id);
-	return (await readMarginaliaFile(config, id)).entries;
-}
-
-export async function createBookMarginalia(
-	config: Config,
-	id: string,
-	input: Pick<MarginaliaEntry, "chapter" | "quote" | "prefix" | "suffix" | "note">,
-): Promise<MarginaliaEntry> {
-	const book = await readBookRecord(config, id);
-	if (!Number.isSafeInteger(input.chapter) || input.chapter < 0 || input.chapter >= book.chapters.length) {
-		throw new HttpError(400, "invalid book chapter");
-	}
-	const file = await readMarginaliaFile(config, id);
-	const now = Date.now();
-	const entry: MarginaliaEntry = {
-		id: randomBytes(8).toString("base64url"),
-		chapter: input.chapter,
-		quote: input.quote,
-		prefix: input.prefix,
-		suffix: input.suffix,
-		...(input.note !== undefined ? { note: input.note } : {}),
-		createdAt: now,
-		updatedAt: now,
-	};
-	file.entries.push(entry);
-	await writeMarginaliaFile(config, id, file);
-	return entry;
-}
-
-export async function updateBookMarginalia(
-	config: Config,
-	id: string,
-	entryId: string,
-	note: string,
-): Promise<MarginaliaEntry> {
-	await readBookRecord(config, id);
-	const file = await readMarginaliaFile(config, id);
-	const entry = file.entries.find((candidate) => candidate.id === entryId);
-	if (!entry) throw new HttpError(404, "marginalia entry not found");
-	entry.note = note;
-	entry.updatedAt = Date.now();
-	await writeMarginaliaFile(config, id, file);
-	return entry;
-}
-
-export async function deleteBookMarginalia(config: Config, id: string, entryId: string): Promise<void> {
-	await readBookRecord(config, id);
-	const file = await readMarginaliaFile(config, id);
-	const index = file.entries.findIndex((entry) => entry.id === entryId);
-	if (index < 0) throw new HttpError(404, "marginalia entry not found");
-	file.entries.splice(index, 1);
-	await writeMarginaliaFile(config, id, file);
-}
-
 export async function deleteWebBook(config: Config, id: string): Promise<void> {
 	await readBookRecord(config, id);
 	await rm(bookDir(config, id), { recursive: true });
@@ -220,7 +148,7 @@ export function bookPercent(book: Pick<BookRecord, "chapters">, position: BookPo
 	return Math.min(100, Math.max(0, ((completed + current * position.offsetRatio) / total) * 100));
 }
 
-async function readBookRecord(config: Config, id: string): Promise<BookRecord> {
+export async function readBookRecord(config: Config, id: string): Promise<BookRecord> {
 	const path = resolve(bookDir(config, id), "book.json");
 	let raw: string;
 	try {
@@ -319,43 +247,4 @@ function parseBookRecord(value: unknown): BookRecord {
 		toc: rawToc === undefined ? chapters.map((chapter) => chapter.index) : rawToc.map((index) => index as number),
 		...(cover ? { cover: { file: cover.file as string } } : {}),
 	};
-}
-
-async function readMarginaliaFile(config: Config, id: string): Promise<MarginaliaFile> {
-	const raw = await readFileOrNull(resolve(bookDir(config, id), "marginalia.json"), "utf8");
-	if (raw === null) throw new Error(`Missing marginalia for ${id}`);
-	const value: unknown = JSON.parse(raw);
-	if (!isRecord(value) || !Array.isArray(value.entries)) throw new Error(`Invalid marginalia for ${id}`);
-	return { entries: value.entries.map(parseMarginaliaEntry) };
-}
-
-function parseMarginaliaEntry(value: unknown): MarginaliaEntry {
-	if (
-		!isRecord(value) ||
-		typeof value.id !== "string" ||
-		!Number.isSafeInteger(value.chapter) ||
-		typeof value.quote !== "string" ||
-		typeof value.prefix !== "string" ||
-		typeof value.suffix !== "string" ||
-		typeof value.createdAt !== "number" ||
-		typeof value.updatedAt !== "number" ||
-		!Number.isFinite(value.createdAt) ||
-		!Number.isFinite(value.updatedAt)
-	) {
-		throw new Error("Invalid marginalia entry");
-	}
-	return {
-		id: value.id,
-		chapter: value.chapter as number,
-		quote: value.quote,
-		prefix: value.prefix,
-		suffix: value.suffix,
-		...(typeof value.note === "string" ? { note: value.note } : {}),
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
-
-function writeMarginaliaFile(config: Config, id: string, file: MarginaliaFile): Promise<void> {
-	return atomicWriteJson(resolve(bookDir(config, id), "marginalia.json"), file);
 }

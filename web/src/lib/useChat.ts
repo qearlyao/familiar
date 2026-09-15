@@ -115,7 +115,7 @@ export interface ChatHook {
   streaming: boolean;
   pendingLatestAssistantAction: LatestAssistantAction | undefined;
   selectSession: (key: string) => void;
-  send: (text: string, attachments?: File[], bookId?: string) => Promise<void>;
+  send: (text: string, attachments?: File[]) => Promise<void>;
   abort: () => void;
   retry: () => void;
   deleteLatest: () => void;
@@ -140,7 +140,7 @@ export function useChat(): ChatHook {
   const lastEventAtRef = useRef<number>(0);
   const messagesRef = useRef<Message[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const sendRef = useRef<(text: string, attachments?: File[], bookId?: string) => Promise<void>>(async () => undefined);
+  const sendRef = useRef<(text: string, attachments?: File[]) => Promise<void>>(async () => undefined);
   const dispatchLatestAssistantActionRef = useRef<(action: LatestAssistantControlAction) => Promise<void>>(
     async () => undefined,
   );
@@ -305,7 +305,6 @@ export function useChat(): ChatHook {
                 role: event.role,
                 who: event.who,
                 steps: [],
-                bookId: event.bookId,
                 ts: event.ts,
               },
             ];
@@ -676,7 +675,7 @@ export function useChat(): ChatHook {
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
 
-    sendRef.current = async (text: string, attachments: File[] = [], bookId?: string) => {
+    sendRef.current = async (text: string, attachments: File[] = []) => {
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
       const control = attachments.length === 0 ? parseControlCommandText(trimmed) : undefined;
@@ -687,7 +686,7 @@ export function useChat(): ChatHook {
         return;
       }
       const messageId = uid();
-      const result = await sendMessageApi(trimmed, messageId, activeSessionKey, attachments, bookId);
+      const result = await sendMessageApi(trimmed, messageId, activeSessionKey, attachments);
       if (resyncTimer) clearTimeout(resyncTimer);
       resyncTimer = window.setTimeout(() => {
         if (cancelled) return;
@@ -730,7 +729,7 @@ export function useChat(): ChatHook {
   ]);
 
   const send = useCallback(
-    (text: string, attachments: File[] = [], bookId?: string) => sendRef.current(text, attachments, bookId),
+    (text: string, attachments: File[] = []) => sendRef.current(text, attachments),
     [],
   );
   const selectSession = useCallback((key: string) => setActiveSessionKey(key), []);

@@ -1,25 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ALargeSmall, Feather, LibraryBig, TableOfContents, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
+  BOOK_PAGE_CHARS,
+  fetchAuthMode,
   fetchBook,
   fetchBookChapter,
   saveBookPosition,
   type BookChapter,
   type BookDetail,
   type BookSummary,
+  type MarginScale,
   type MarginaliaEntry,
 } from "@/lib/api";
-import { buildTextIndex, rangeToOffsets, type TextIndex } from "./anchors";
-import { usePagination } from "./usePagination";
-import { useMarginalia } from "./useMarginalia";
-import { MarginPanel, type PendingPage, type PendingQuote } from "./MarginPanel";
-import { visiblePage } from "./visiblePage";
+import { buildTextIndex, findQuote, rangeToOffsets, type TextIndex } from "./anchors";
+import { TURN_MS, usePagination } from "./usePagination";
+import { useMarginalia, type MarginRange } from "./useMarginalia";
+import { paragraphsOf, visiblePage } from "./visiblePage";
 import { NoteCard, SelectionToolbar, type SelectionAnchor } from "./SelectionToolbar";
+import { BookNotesDrawer } from "./BookNotesDrawer";
+import { ReaderMargin } from "./ReaderMargin";
+import { PageOverlay, type PageDot, type ScaleBox } from "./PageOverlay";
+import { ReaderTypePopover } from "./ReaderTypePopover";
+import { entryKind, noteTally } from "./marginText";
+import { CircleGauge } from "lucide-react";
+import { BackIcon, MarginIcon, NotesIcon } from "./readerIcons";
 
 const CHROME_IDLE_MS = 3000;
 const FONT_KEY = "familiar.reader.fontsize";
+const PAPER_KEY = "familiar.reader.paper";
+/** A steady reading pace, in characters a minute, for "min left in this chapter". */
+const CHARS_PER_MINUTE = 1200;
 /** Wait for a selection to stop changing (touch handles, keyboard) before showing the toolbar. */
 const SELECTION_SETTLE_MS = 220;
 /** Keep toolbar state alive briefly after native selection collapses so its tap still lands. */
@@ -32,6 +43,8 @@ interface SelectionState extends SelectionAnchor {
   end: number;
   /** Layout the anchor rects were measured in; a mismatch means they're stale. */
   layoutId: string;
+  /** The chapter content it was made in, for growing it to whole paragraphs. */
+  content: HTMLElement;
 }
 
 interface NoteTarget {
@@ -40,55 +53,33 @@ interface NoteTarget {
   layoutId: string;
 }
 
-function ChromeAction({
-  icon: Icon,
-  iconClassName,
-  label,
-  active,
-  onClick,
-}: {
-  icon: LucideIcon;
-  iconClassName?: string;
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-      onClick={onClick}
-      className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        active
-          ? "text-primary"
-          : "text-muted-foreground hover:text-primary focus-visible:text-foreground",
-      )}
-    >
-      <Icon className={cn("size-4", iconClassName)} />
-    </button>
-  );
-}
-
 export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () => void }) {
   const [detail, setDetail] = useState<BookDetail>();
+  const [personaName, setPersonaName] = useState("Fern");
   const [chapterData, setChapterData] = useState<BookChapter>();
   const [chapterError, setChapterError] = useState<string>();
+  const [seekError, setSeekError] = useState<string>();
   const [fontSize, setFontSize] = useState(() => {
     const stored = Number(localStorage.getItem(FONT_KEY));
     return stored >= 14 && stored <= 22 ? stored : 17;
   });
+  const [paper, setPaper] = useState(() => {
+    const stored = localStorage.getItem(PAPER_KEY);
+    return stored === "clay" || stored === "sage" ? stored : "sand";
+  });
   const [textIndex, setTextIndex] = useState<TextIndex>();
   const [selection, setSelection] = useState<SelectionState>();
+  // The chosen scale belongs to one selection; a new selection starts back at words.
+  const [scaleChoice, setScaleChoice] = useState<{ key: string; scale: MarginScale }>();
   const [noteTarget, setNoteTarget] = useState<NoteTarget>();
-  const [pendingQuote, setPendingQuote] = useState<PendingQuote>();
-  const [pendingPage, setPendingPage] = useState<PendingPage>();
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [visible, setVisible] = useState<{ start: number; end: number; layoutId: string }>();
+  const [marginVisible, setMarginVisible] = useState(true);
+  const [marginSheetOpen, setMarginSheetOpen] = useState(false);
+  const [allNotesOpen, setAllNotesOpen] = useState(false);
   const [menu, setMenu] = useState<"toc" | "type">();
   const [chromeVisible, setChromeVisible] = useState(true);
 
+  const layoutRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -100,10 +91,12 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
   const chromeTimerRef = useRef<number | undefined>(undefined);
   const overlayOpenRef = useRef(false);
   const dismissedAtRef = useRef(0);
+  const pendingJumpRef = useRef<MarginaliaEntry | undefined>(undefined);
 
   const wide = useMediaQuery("(min-width: 768px)");
   const coarse = useMediaQuery("(pointer: coarse)");
-  const spread = useMediaQuery("(min-width: 1280px)") && !panelOpen;
+  // Reading without the margin is full-screen reading: two pages side by side when there's room.
+  const spread = useMediaQuery("(min-width: 1100px)") && !marginVisible;
   const chapter = chapterData?.index ?? book.position?.chapter ?? 0;
   const chapterCount = detail?.chapters.length ?? book.chapterCount;
 
@@ -118,9 +111,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
       try {
         // ponytail: fetch on navigation; cache only if measured latency matters.
         const loaded = await fetchBookChapter(book.id, index);
-        if (loadSeqRef.current === seq) {
-          setChapterData(loaded);
-        }
+        if (loadSeqRef.current === seq) setChapterData(loaded);
       } catch (err) {
         if (loadSeqRef.current === seq) setChapterError(err instanceof Error ? err.message : String(err));
       }
@@ -133,6 +124,11 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     fetchBook(book.id)
       .then((d) => {
         if (!cancelled) setDetail(d);
+      })
+      .catch(() => undefined);
+    fetchAuthMode()
+      .then(({ personaName: name }) => {
+        if (!cancelled) setPersonaName(name);
       })
       .catch(() => undefined);
     const timer = window.setTimeout(
@@ -166,19 +162,23 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     },
   });
 
-  // Anything positioned against the text (selection toolbar, note cards) is
-  // only valid for the layout it was measured in; a mismatch hides it.
-  const layoutId = `${contentKey}:${spread}:${pagination.page}:${pagination.pageCount}`;
+  // Anything positioned against the text (selection toolbar, note cards, the
+  // visible span) is only valid for the layout it was measured in.
+  const layoutId = `${contentKey}:${spread}:${pagination.page}:${pagination.pageCount}:${marginVisible && wide}`;
   const layoutIdRef = useRef(layoutId);
   useEffect(() => {
     layoutIdRef.current = layoutId;
-    overlayOpenRef.current = menu !== undefined || noteTarget !== undefined;
+    // A pinned margin means reading with the margin: idle never takes it (or the chrome) away.
+    overlayOpenRef.current = menu !== undefined || noteTarget !== undefined || selection !== undefined || (wide && marginVisible);
   });
   const activeSelection = selection && selection.layoutId === layoutId ? selection : undefined;
+  const selectionKey = selection ? `${selection.start}:${selection.end}` : "";
+  const scale = scaleChoice?.key === selectionKey ? scaleChoice.scale : "word";
   const activeNote = noteTarget && noteTarget.layoutId === layoutId ? noteTarget : undefined;
+  const onScreen = visible && visible.layoutId === layoutId ? visible : undefined;
 
   // Keep the entry pinned to wherever the reader actually is, so any
-  // re-measure (resize, panel toggle, font settle) lands on the same text.
+  // re-measure (resize, margin toggle, font settle) lands on the same text.
   useEffect(() => {
     if (pagination.ready) entryRef.current = pagination.ratio;
   }, [pagination.ratio, pagination.ready]);
@@ -190,7 +190,46 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     return () => cancelAnimationFrame(raf);
   }, [chapterData]);
 
+  // What's on screen, as chapter text offsets: drives the margin and the page scale.
+  useEffect(() => {
+    if (!pagination.ready || !textIndex) return;
+    // Measure once the page turn has settled; mid-slide the rects belong to neither page.
+    const timer = window.setTimeout(() => {
+      const viewport = viewportRef.current;
+      const content = contentRef.current;
+      const found = viewport && content ? visiblePage(textIndex, viewport, content) : undefined;
+      setVisible(found ? { start: found.start, end: found.end, layoutId } : undefined);
+    }, TURN_MS);
+    return () => window.clearTimeout(timer);
+  }, [layoutId, pagination.ready, textIndex]);
+
   const marginalia = useMarginalia({ bookId: book.id, chapter, textIndex });
+  const chapterEntries = useMemo(
+    () => marginalia.entries.filter((entry) => entry.chapter === chapter),
+    [chapter, marginalia.entries],
+  );
+  const tally = noteTally(marginalia.entries);
+
+  const jumpTo = useCallback((entry: MarginaliaEntry, index: TextIndex) => {
+    pendingJumpRef.current = undefined;
+    const found = findQuote(index, entry.quote, entry.prefix, entry.suffix);
+    if (!found) return setSeekError("that note's place on the page could not be found");
+    pagination.seek(found.start / Math.max(1, index.text.length));
+  }, [pagination]);
+
+  const seekEntry = useCallback((entry: MarginaliaEntry) => {
+    setAllNotesOpen(false);
+    setMarginSheetOpen(false);
+    setSeekError(undefined);
+    pendingJumpRef.current = entry;
+    if (entry.chapter !== chapter) return void loadChapter(entry.chapter, 0);
+    if (textIndex) jumpTo(entry, textIndex);
+  }, [chapter, jumpTo, loadChapter, textIndex]);
+
+  useEffect(() => {
+    const pending = pendingJumpRef.current;
+    if (pending && textIndex && chapterData?.index === pending.chapter) jumpTo(pending, textIndex);
+  }, [chapterData?.index, jumpTo, textIndex]);
 
   // Persist position: debounced while reading, flushed on unmount.
   useEffect(() => {
@@ -210,25 +249,25 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     [book.id],
   );
 
-  useEffect(() => {
-    localStorage.setItem(FONT_KEY, String(fontSize));
-  }, [fontSize]);
+  useEffect(() => localStorage.setItem(FONT_KEY, String(fontSize)), [fontSize]);
+  useEffect(() => localStorage.setItem(PAPER_KEY, paper), [paper]);
 
   // Chrome fades after idle; mouse movement brings it back. Menus and note
   // cards hold it open — a popover anchored to a faded header is unusable.
-  const bumpChrome = useCallback(() => {
-    setChromeVisible(true);
+  const fadeChromeLater = useCallback(() => {
     window.clearTimeout(chromeTimerRef.current);
     chromeTimerRef.current = window.setTimeout(() => {
       if (!overlayOpenRef.current) setChromeVisible(false);
     }, CHROME_IDLE_MS);
   }, []);
+  const bumpChrome = useCallback(() => {
+    setChromeVisible(true);
+    fadeChromeLater();
+  }, [fadeChromeLater]);
   useEffect(() => {
-    chromeTimerRef.current = window.setTimeout(() => {
-      if (!overlayOpenRef.current) setChromeVisible(false);
-    }, CHROME_IDLE_MS);
+    fadeChromeLater();
     return () => window.clearTimeout(chromeTimerRef.current);
-  }, []);
+  }, [fadeChromeLater]);
 
   // Selection engine. Driven by document.selectionchange (not pointerup on the
   // viewport) so it catches drags released off-viewport, iOS handle
@@ -254,6 +293,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
       setSelection({
         ...offsets,
         layoutId: layoutIdRef.current,
+        content,
         head: { top: head.top, bottom: head.bottom, left: head.left, width: head.width },
         tail: { top: tail.top, bottom: tail.bottom, left: tail.left, width: tail.width },
       });
@@ -297,24 +337,22 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     };
   }, [textIndex]);
 
-  // Layout moved under the toolbar/note card: their anchors are stale.
-  // Handled by the layoutId derivation above — no imperative clearing needed.
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (allNotesOpen) return setAllNotesOpen(false);
       if (activeNote) return setNoteTarget(undefined);
       if (activeSelection) {
         window.getSelection()?.removeAllRanges();
         return setSelection(undefined);
       }
       if (menu) return setMenu(undefined);
-      if (panelOpen) return setPanelOpen(false);
+      if (marginSheetOpen) return setMarginSheetOpen(false);
       onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeNote, activeSelection, menu, onClose, panelOpen]);
+  }, [activeNote, activeSelection, allNotesOpen, marginSheetOpen, menu, onClose]);
 
   useEffect(() => {
     if (!menu) return;
@@ -337,43 +375,68 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     setSelection(undefined);
   }, []);
 
-  const askAboutSelection = useCallback(() => {
-    if (!activeSelection || !textIndex) return;
-    setPendingQuote({
-      quote: textIndex.text.slice(activeSelection.start, activeSelection.end).trim(),
-      chapterTitle: chapterData?.title,
-      chapterIndex: chapter,
-      start: activeSelection.start,
-      end: activeSelection.end,
-    });
-    setPanelOpen(true);
+  // The selection as grown to its chosen scale: the words, their paragraphs, or the page.
+  const scaled = useMemo((): (MarginRange & { box?: ScaleBox }) | undefined => {
+    if (!activeSelection) return undefined;
+    const words = { start: activeSelection.start, end: activeSelection.end, scale };
+    if (scale === "page") return onScreen ? { start: onScreen.start, end: onScreen.end, scale, box: { kind: "page" } } : words;
+    if (scale === "paragraph" && textIndex) {
+      const found = paragraphsOf(textIndex, activeSelection.content, activeSelection.start, activeSelection.end);
+      if (found) return { start: found.start, end: found.end, scale, box: { kind: "paragraph", blocks: found.blocks } };
+    }
+    return words;
+  }, [activeSelection, onScreen, scale, textIndex]);
+
+  // Grown to a paragraph, the toolbar sits under the whole paragraph, not the words.
+  const toolbarAnchor = useMemo((): SelectionAnchor | undefined => {
+    if (!activeSelection || scaled?.box?.kind !== "paragraph") return undefined;
+    const last = scaled.box.blocks.at(-1)?.getBoundingClientRect();
+    return last ? { ...activeSelection, tail: { top: last.top, bottom: last.bottom + 8, left: last.left, width: last.width } } : undefined;
+  }, [activeSelection, scaled]);
+
+  const revealMargin = useCallback(() => {
+    if (wide) setMarginVisible(true);
+    else setMarginSheetOpen(true);
+  }, [wide]);
+
+  const discussSelection = useCallback(async () => {
+    if (!scaled) return;
     clearSelection();
-  }, [activeSelection, chapter, chapterData?.title, clearSelection, textIndex]);
+    revealMargin();
+    await marginalia.discuss(scaled);
+  }, [clearSelection, marginalia, revealMargin, scaled]);
 
-  // Reads what's on screen at tap time. One-shot, like the quote chip: consumed
-  // by the message it's attached to, so there's no sticky state to forget.
-  const grabPage = useCallback(() => {
-    const viewport = viewportRef.current;
-    const content = contentRef.current;
-    if (!textIndex || !viewport || !content) return;
-    const found = visiblePage(textIndex, viewport, content);
-    if (!found) return;
-    setPendingPage({ ...found, chapterTitle: chapterData?.title, chapterIndex: chapter });
-  }, [chapter, chapterData?.title, textIndex]);
+  const noteSelection = useCallback(async () => {
+    if (!scaled || !activeSelection) return;
+    const at = {
+      top: activeSelection.tail.bottom + 10,
+      left: activeSelection.tail.left + activeSelection.tail.width / 2,
+    };
+    clearSelection();
+    const created = await marginalia.add(scaled);
+    if (created) setNoteTarget({ entry: created, at, layoutId: layoutIdRef.current });
+  }, [activeSelection, clearSelection, marginalia, scaled]);
 
-  const markSelection = useCallback(
-    async (openNote: boolean) => {
-      if (!activeSelection) return;
-      const at = {
-        top: activeSelection.tail.bottom + 10,
-        left: activeSelection.tail.left + activeSelection.tail.width / 2,
-      };
-      const range = { start: activeSelection.start, end: activeSelection.end };
-      clearSelection();
-      const created = await marginalia.add(range);
-      if (created && openNote) setNoteTarget({ entry: created, at, layoutId: layoutIdRef.current });
+  const highlightSelection = useCallback(async () => {
+    if (!scaled) return;
+    clearSelection();
+    await marginalia.add(scaled);
+  }, [clearSelection, marginalia, scaled]);
+
+  const openEntry = useCallback(
+    (entry: MarginaliaEntry, rect?: DOMRect) => {
+      if (entryKind(entry) === "thread" || !rect) {
+        revealMargin();
+        if (wide) setChromeVisible(true);
+        return;
+      }
+      setNoteTarget({
+        entry,
+        at: { top: rect.bottom + 10, left: rect.left + rect.width / 2 },
+        layoutId: layoutIdRef.current,
+      });
     },
-    [activeSelection, clearSelection, marginalia],
+    [revealMargin, wide],
   );
 
   const onViewportClick = useCallback(
@@ -383,13 +446,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
       if (performance.now() - dismissedAtRef.current < DISMISS_QUIET_MS) return;
       // The highlight is the affordance: a tap on a marked passage opens it.
       const hit = marginalia.entryAt(event.clientX, event.clientY);
-      if (hit) {
-        return setNoteTarget({
-          entry: hit.entry,
-          at: { top: hit.rect.bottom + 10, left: hit.rect.left + hit.rect.width / 2 },
-          layoutId: layoutIdRef.current,
-        });
-      }
+      if (hit) return openEntry(hit.entry, hit.rect);
       const bounds = event.currentTarget.getBoundingClientRect();
       const x = (event.clientX - bounds.left) / bounds.width;
       const edge = coarse ? 0.3 : 0.12;
@@ -397,228 +454,253 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
       if (x > 1 - edge) return pagination.turn(1);
       if (x > 0.3 && x < 0.7) setChromeVisible((v) => !v);
     },
-    [activeSelection, clearSelection, coarse, marginalia, pagination],
+    [activeSelection, clearSelection, coarse, marginalia, openEntry, pagination],
   );
 
-  const percent = useMemo(() => {
-    if (!detail || !chapterData) return book.percent;
+  const progress = useMemo(() => {
+    if (!detail || !chapterData) return { percent: book.percent ?? 0 };
     const total = detail.chapters.reduce((sum, c) => sum + c.chars, 0);
-    if (total <= 0) return undefined;
     const before = detail.chapters.slice(0, chapterData.index).reduce((sum, c) => sum + c.chars, 0);
     const here = detail.chapters[chapterData.index]?.chars ?? 0;
-    return ((before + here * pagination.ratio) / total) * 100;
+    const read = before + here * pagination.ratio;
+    return {
+      percent: total > 0 ? (read / total) * 100 : 0,
+      page: Math.floor(read / BOOK_PAGE_CHARS) + 1,
+      pageCount: Math.max(1, Math.ceil(total / BOOK_PAGE_CHARS)),
+      minutesLeft: Math.round((here * (1 - pagination.ratio)) / CHARS_PER_MINUTE),
+    };
   }, [book.percent, chapterData, detail, pagination.ratio]);
+  const pageLabel = progress.page ? `p. ${Math.min(progress.page, progress.pageCount)} of ${progress.pageCount}` : "opening…";
 
-  const chromeClass = chromeVisible
-    ? "opacity-100 translate-y-0"
-    : "pointer-events-none opacity-0 -translate-y-1.5";
+  const margin = (
+    <ReaderMargin
+      entries={chapterEntries}
+      visible={onScreen}
+      personaName={personaName}
+      onSeek={seekEntry}
+      onReply={marginalia.reply}
+    />
+  );
+  const showMargin = wide && marginVisible;
+  // Marks in the edge stand in for the margin whenever it isn't showing.
+  const { ranges } = marginalia;
+  const dots = useMemo((): PageDot[] => {
+    if (showMargin) return [];
+    if (!onScreen) return [];
+    return chapterEntries.flatMap((entry) => {
+      const kind = entryKind(entry);
+      const range = ranges.get(entry.id);
+      if (kind === "highlight" || !range || entry.offset < onScreen.start || entry.offset >= onScreen.end) return [];
+      return [{ entry, kind, range }];
+    });
+  }, [chapterEntries, onScreen, ranges, showMargin]);
+
+  const toggleMenu = (name: "toc" | "type") => setMenu((m) => (m === name ? undefined : name));
+  const chromeClass = chromeVisible ? "" : "is-hidden";
+  const contents = detail ? (
+    <nav ref={tocRef} aria-label="contents" className="reader-popover reader-toc">
+      {detail.toc.map((c) => {
+        const isCurrent = c.index === chapter;
+        return (
+          <button
+            key={c.index}
+            type="button"
+            data-current={isCurrent || undefined}
+            onClick={() => {
+              setMenu(undefined);
+              void loadChapter(c.index, 0);
+            }}
+            className={cn(isCurrent && "is-current", c.index < chapter && "is-read")}
+          >
+            {c.title || `chapter ${c.index + 1}`}
+          </button>
+        );
+      })}
+    </nav>
+  ) : null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-background text-foreground"
+      className="reader-shell fixed inset-0 z-50 flex"
+      data-paper={paper}
       onPointerMove={(e) => {
         if (e.pointerType === "mouse") bumpChrome();
       }}
     >
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header
-          ref={headerRef}
-          className={cn(
-            "relative z-20 flex h-13 items-center px-3 transition-all duration-300 ease-out sm:px-6 motion-reduce:transition-none",
-            chromeClass,
-          )}
-        >
-          <ChromeAction icon={LibraryBig} label="shelf" onClick={onClose} />
-          <div className="pointer-events-none absolute inset-x-36 top-1/2 min-w-0 -translate-y-1/2 text-center sm:inset-x-40">
-            <p className="truncate font-serif text-sm leading-tight">{book.title}</p>
-            {chapterData?.title ? (
-              <p className="truncate font-serif text-[11px] italic leading-tight text-muted-foreground">
-                {chapterData.title}
-              </p>
-            ) : null}
-          </div>
-          <div className="ml-auto flex items-center">
-            <ChromeAction
-              icon={ALargeSmall}
-              iconClassName="size-5 translate-y-0.5"
-              label="type"
-              active={menu === "type"}
-              onClick={() => setMenu((m) => (m === "type" ? undefined : "type"))}
-            />
-            <ChromeAction
-              icon={TableOfContents}
-              label="contents"
-              active={menu === "toc"}
-              onClick={() => setMenu((m) => (m === "toc" ? undefined : "toc"))}
-            />
-            <ChromeAction
-              icon={Feather}
-              label="margins"
-              active={panelOpen}
-              onClick={() => setPanelOpen((v) => !v)}
-            />
-          </div>
-
-          {menu === "type" ? (
-            <div className="absolute top-12 right-3 z-30 w-60 origin-top-right animate-in rounded-xl bg-popover p-4 shadow-xl duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] sm:right-6 motion-reduce:animate-none">
-              <div className="flex items-center justify-between">
-                <span className="font-serif text-xs italic text-muted-foreground">type size</span>
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    aria-label="smaller type"
-                    disabled={fontSize <= 14}
-                    onClick={() => setFontSize((s) => Math.max(14, s - 1))}
-                    className="flex h-7 w-9 items-center justify-center rounded-md font-serif text-[13px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-35 focus-visible:text-foreground focus-visible:outline-none"
-                  >
-                    A
-                  </button>
-                  <span className="min-w-7 text-center font-serif text-xs italic text-muted-foreground">
-                    {fontSize}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="larger type"
-                    disabled={fontSize >= 22}
-                    onClick={() => setFontSize((s) => Math.min(22, s + 1))}
-                    className="flex h-7 w-9 items-center justify-center rounded-md font-serif text-[19px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-35 focus-visible:text-foreground focus-visible:outline-none"
-                  >
-                    A
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {menu === "toc" && detail ? (
-            <nav
-              ref={tocRef}
-              aria-label="contents"
-              className="absolute top-12 right-3 z-30 max-h-[60vh] w-max min-w-44 max-w-80 origin-top-right animate-in overflow-y-auto rounded-xl bg-popover py-3 shadow-xl duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] sm:right-6 motion-reduce:animate-none"
-            >
-              {detail.toc.map((c) => {
-                const isCurrent = c.index === chapter;
-                return (
-                  <button
-                    key={c.index}
-                    type="button"
-                    data-current={isCurrent || undefined}
-                    onClick={() => {
-                      setMenu(undefined);
-                      void loadChapter(c.index, 0);
-                    }}
-                    className={cn(
-                      "block w-full truncate px-5 py-2 text-left font-serif text-sm transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none",
-                      isCurrent
-                        ? "text-primary"
-                        : c.index < chapter
-                          ? "text-muted-foreground/70"
-                          : "text-popover-foreground",
-                    )}
-                  >
-                    {c.title || `chapter ${c.index + 1}`}
-                  </button>
-                );
-              })}
-            </nav>
-          ) : null}
-        </header>
-
-        <div className="relative min-h-0 flex-1">
-          <div
-            className={cn(
-              "mx-auto h-full px-6 pb-2 sm:px-14",
-              spread ? "max-w-[88rem]" : "max-w-2xl",
-            )}
+      <div className="reader-surface">
+        <header ref={headerRef} className={cn("reader-header", chromeClass)}>
+          <button type="button" className="reader-icon-button reader-back" aria-label="back to the library" title="back to the library" onClick={onClose}>
+            <BackIcon />
+          </button>
+          <button
+            type="button"
+            className="reader-book-title"
+            aria-label="contents"
+            aria-expanded={menu === "toc"}
+            onClick={() => toggleMenu("toc")}
           >
-            <div
-              ref={viewportRef}
-              className={cn("h-full overflow-hidden select-text", !pagination.ready && "opacity-0")}
-              onClick={onViewportClick}
-            >
-              {chapterData ? (
-                <>
-                  {chapterData.css ? <style>{chapterData.css}</style> : null}
-                  <div
-                    ref={contentRef}
-                    className="reader-content"
-                    style={{ fontSize: `${fontSize}px` }}
-                    dangerouslySetInnerHTML={chapterHtml}
-                  />
-                </>
+            <p>{book.title}</p>
+            <span>
+              {wide
+                ? `${book.author ? `${book.author} · ` : ""}${chapterData?.title || `chapter ${chapter + 1}`}`
+                : pageLabel}
+            </span>
+          </button>
+          <div className="reader-header-actions">
+            {wide ? (
+              <div className="reader-page-anchor">
+              <button
+                type="button"
+                className="reader-page-position"
+                title="contents"
+                aria-expanded={menu === "toc"}
+                onClick={() => toggleMenu("toc")}
+              >
+                <CircleGauge aria-hidden="true" />
+                {pageLabel}
+              </button>
+              {menu === "toc" ? contents : null}
+              </div>
+            ) : null}
+            <div className="reader-control-group">
+              <button
+                type="button"
+                className={cn("reader-icon-button reader-type-toggle", menu === "type" && "is-open")}
+                title="type size"
+                aria-expanded={menu === "type"}
+                onClick={() => toggleMenu("type")}
+              >
+                Aa
+              </button>
+              {wide ? (
+                <button
+                  type="button"
+                  className={cn("reader-icon-button", marginVisible && "is-active")}
+                  title={marginVisible ? "hide the margin" : "show the margin"}
+                  aria-pressed={marginVisible}
+                  onClick={() => {
+                    setMarginVisible((v) => !v);
+                    bumpChrome();
+                  }}
+                >
+                  <MarginIcon />
+                </button>
+              ) : null}
+              {menu === "type" ? (
+                <ReaderTypePopover fontSize={fontSize} paper={paper} onFontSize={setFontSize} onPaper={setPaper} />
               ) : null}
             </div>
+            <button type="button" className="reader-all-notes" title="every note in this book" onClick={() => setAllNotesOpen(true)}>
+              <NotesIcon />
+              <span>{tally.total}{wide ? ` ${tally.total === 1 ? "note" : "notes"}` : ""}</span>
+            </button>
+          </div>
+
+          {menu === "toc" && !wide ? contents : null}
+        </header>
+
+        <main className="reader-stage">
+          <div ref={layoutRef} className={cn("reader-reading-layout", showMargin && "has-margin", spread && "is-spread")}>
+            <div className="reader-page-frame">
+              <div
+                ref={viewportRef}
+                className={cn("reader-viewport select-text", !pagination.ready && "opacity-0")}
+                onClick={onViewportClick}
+              >
+                {chapterData ? (
+                  <>
+                    {chapterData.css ? <style>{chapterData.css}</style> : null}
+                    <div
+                      ref={contentRef}
+                      className="reader-content"
+                      data-scale={activeSelection ? scale : undefined}
+                      style={{ fontSize: `${fontSize}px` }}
+                      dangerouslySetInnerHTML={chapterHtml}
+                    />
+                  </>
+                ) : null}
+              </div>
+            </div>
+            {showMargin ? margin : null}
+            <PageOverlay
+              stageRef={layoutRef}
+              viewportRef={viewportRef}
+              layoutId={layoutId}
+              scaleBox={scaled?.box}
+              dots={dots}
+              dotGap={wide ? 46 : 13}
+              onDot={openEntry}
+            />
           </div>
 
           {!chapterData ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="reader-loading">
               {chapterError ? (
-                <div className="pointer-events-auto max-w-sm px-6 text-center">
-                  <p className="font-serif text-sm italic text-destructive">the page wouldn't turn</p>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">{chapterError}</p>
-                  <button
-                    type="button"
-                    onClick={() => void loadChapter(pendingChapterRef.current, entryRef.current)}
-                    className="mt-3 font-serif text-sm italic text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                  >
+                <div>
+                  <p>the page wouldn't turn</p>
+                  <code>{chapterError}</code>
+                  <button type="button" onClick={() => void loadChapter(pendingChapterRef.current, entryRef.current)}>
                     try again
                   </button>
                 </div>
               ) : (
-                <p className="animate-in font-serif text-sm italic text-muted-foreground/70 delay-250 duration-300 ease-out fade-in-0 fill-mode-backwards motion-reduce:animate-none">
-                  opening…
-                </p>
+                <p>opening…</p>
               )}
             </div>
           ) : null}
+        </main>
 
-        </div>
-
-        <footer className="flex min-h-9 items-center justify-center px-6 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          <p className="truncate font-serif text-[11px] italic text-muted-foreground/80">
-            {marginalia.error
-              ? `the margins slipped · ${marginalia.error}`
-              : pagination.ready
-                ? `${pagination.page + 1} of ${pagination.pageCount}${percent != null ? ` · ${Math.round(percent)}%` : ""}`
-                : ""}
+        <footer className={cn("reader-footer", chromeClass)}>
+          <div className="reader-progress-track">
+            <i style={{ width: `${Math.max(0, Math.min(100, progress.percent))}%` }} />
+            <b style={{ left: `${Math.max(0, Math.min(100, progress.percent))}%` }} />
+          </div>
+          <p>
+            {seekError
+              ? seekError
+              : marginalia.error
+                ? `the margins slipped · ${marginalia.error}`
+                : !progress.page
+                  ? ""
+                  : wide
+                    ? progress.minutesLeft >= 1
+                      ? `${progress.minutesLeft} min left in this chapter`
+                      : "almost the end of this chapter"
+                    : `p. ${progress.page}`}
           </p>
         </footer>
+        {!chromeVisible && progress.page ? <span className="reader-quiet-page">{progress.page}</span> : null}
       </div>
 
-      {panelOpen ? (
-        wide ? (
-          <aside className="z-20 my-3 mr-3 w-95 shrink-0 animate-in overflow-hidden rounded-xl bg-card shadow-lg duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] motion-reduce:animate-none">
-            <MarginPanel
-              book={book}
-              pendingQuote={pendingQuote}
-              pendingPage={pendingPage}
-              onClearQuote={() => setPendingQuote(undefined)}
-              onClearPage={() => setPendingPage(undefined)}
-              onGrabPage={grabPage}
-              onClose={() => setPanelOpen(false)}
-            />
-          </aside>
-        ) : (
-          <div className="fixed inset-0 z-30 bg-card">
-            <MarginPanel
-              book={book}
-              pendingQuote={pendingQuote}
-              pendingPage={pendingPage}
-              onClearQuote={() => setPendingQuote(undefined)}
-              onClearPage={() => setPendingPage(undefined)}
-              onGrabPage={grabPage}
-              onClose={() => setPanelOpen(false)}
-            />
-          </div>
-        )
+      {marginSheetOpen && !wide ? (
+        <div className="reader-margin-sheet" role="dialog" aria-label="the margin">
+          <button type="button" className="reader-margin-sheet-dim" aria-label="back to the page" onClick={() => setMarginSheetOpen(false)} />
+          <div>{margin}</div>
+        </div>
+      ) : null}
+
+      {allNotesOpen ? (
+        <BookNotesDrawer
+          book={book}
+          chapters={detail?.chapters ?? []}
+          entries={marginalia.entries}
+          personaName={personaName}
+          compact={!wide}
+          onClose={() => setAllNotesOpen(false)}
+          onEntry={seekEntry}
+        />
       ) : null}
 
       {activeSelection ? (
         <SelectionToolbar
-          anchor={activeSelection}
+          anchor={toolbarAnchor ?? activeSelection}
           coarse={coarse}
-          onAsk={askAboutSelection}
-          onNote={() => void markSelection(true)}
-          onMark={() => void markSelection(false)}
+          compact={!wide}
+          scale={scale}
+          onScale={(next) => setScaleChoice({ key: selectionKey, scale: next })}
+          onDiscuss={() => void discussSelection()}
+          onNote={() => void noteSelection()}
+          onHighlight={() => void highlightSelection()}
         />
       ) : null}
 

@@ -171,7 +171,6 @@ export async function ingestBook(config: Config, attachment: WebUploadAttachment
 			...(parsed.cover ? { cover: { file: parsed.cover.file } } : {}),
 		};
 		await atomicWriteJson(resolve(tempDir, "book.json"), book);
-		await atomicWriteJson(resolve(tempDir, "marginalia.json"), { entries: [] });
 		await rename(tempDir, finalDir);
 		return book;
 	} catch (error) {

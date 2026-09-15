@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MarginaliaEntry } from "@/lib/api";
+import { Highlighter } from "lucide-react";
+import type { MarginScale, MarginaliaEntry } from "@/lib/api";
+import { DiscussIcon, MoreIcon, NoteIcon } from "./readerIcons";
 
 export interface SelectionAnchor {
   /** First line of the selection (viewport coordinates). */
@@ -10,35 +12,47 @@ export interface SelectionAnchor {
 
 const EDGE = 8;
 const GAP = 10;
+const SCALES: MarginScale[] = ["word", "paragraph", "page"];
 
 /**
- * Floating ask · note · mark pill. Sits above the first selected line on fine
- * pointers; below the last line on touch, clear of the native handles.
- * Measured after mount so it clamps to the real viewport, never clips.
+ * Floating discuss · note pill with the selection's scale — the words you
+ * picked, their paragraph, or the whole page. Sits above the first selected
+ * line on fine pointers; below the last line on touch, clear of the native
+ * handles. Measured after mount so it clamps to the real viewport, never clips.
  */
 export function SelectionToolbar({
   anchor,
   coarse,
-  onAsk,
+  compact,
+  scale,
+  onScale,
+  onDiscuss,
   onNote,
-  onMark,
+  onHighlight,
 }: {
   anchor: SelectionAnchor;
   coarse: boolean;
-  onAsk: () => void;
+  /** Phone width: scale chips fold behind a "more" button. */
+  compact: boolean;
+  scale: MarginScale;
+  onScale: (scale: MarginScale) => void;
+  onDiscuss: () => void;
   onNote: () => void;
-  onMark: () => void;
+  onHighlight: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [scalesOpen, setScalesOpen] = useState(false);
+  const showScales = !compact || scalesOpen;
 
   // Position by measuring the rendered pill, then writing styles directly:
-  // clamped to the viewport, flipped below the selection when there's no
-  // headroom (and always below on touch, clear of the native handles).
+  // clamped to the viewport, under the selection (flipped above only when
+  // there's no room below).
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const { width, height } = el.getBoundingClientRect();
-    const below = coarse || anchor.head.top - height - GAP < EDGE;
+    // Below the passage, as on the page mockups; above only when it would fall off the screen.
+    const below = coarse || anchor.tail.bottom + GAP + height <= window.innerHeight - EDGE || anchor.head.top - height - GAP < EDGE;
     const base = below ? anchor.tail : anchor.head;
     const top = below
       ? Math.min(base.bottom + GAP, window.innerHeight - height - EDGE)
@@ -47,35 +61,56 @@ export function SelectionToolbar({
     const left = Math.min(Math.max(center - width / 2, EDGE), window.innerWidth - width - EDGE);
     el.style.top = `${top}px`;
     el.style.left = `${left}px`;
-    el.style.transformOrigin = below ? "top center" : "bottom center";
     el.style.visibility = "visible";
-  }, [anchor, coarse]);
+  }, [anchor, coarse, showScales]);
 
-  const actions = [
-    { label: "ask", run: onAsk },
-    { label: "note", run: onNote },
-    { label: "mark", run: onMark },
-  ];
+  // Keep the native selection alive: a pointerdown on the pill would collapse it.
+  const hold = (e: React.MouseEvent) => e.preventDefault();
 
   return (
     <div
       ref={ref}
       role="toolbar"
       aria-label="passage actions"
-      className="fixed z-50 flex animate-in items-stretch rounded-full bg-popover px-1 font-serif text-sm text-popover-foreground shadow-xl duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] motion-reduce:animate-none"
+      className="reader-selection-toolbar fixed z-50"
       style={{ top: anchor.head.top, left: anchor.head.left, visibility: "hidden" }}
     >
-      {actions.map((action) => (
+      <button type="button" className="is-primary" onMouseDown={hold} onClick={onDiscuss}>
+        <DiscussIcon />
+        discuss
+      </button>
+      <button type="button" onMouseDown={hold} onClick={onNote}>
+        <NoteIcon />
+        {compact ? "note" : "add note"}
+      </button>
+      <button type="button" onMouseDown={hold} onClick={onHighlight}>
+        <Highlighter />
+        highlight
+      </button>
+      {compact ? (
         <button
-          key={action.label}
           type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={action.run}
-          className="touch-manipulation px-3.5 py-2 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
+          className="reader-selection-more"
+          aria-label="selection size"
+          aria-expanded={scalesOpen}
+          onMouseDown={hold}
+          onClick={() => setScalesOpen((open) => !open)}
         >
-          {action.label}
+          <MoreIcon />
         </button>
-      ))}
+      ) : null}
+      {showScales ? (
+        <>
+          <span className="reader-selection-divider" aria-hidden="true" />
+          <div className="reader-selection-scales" role="group" aria-label="selection size">
+            {SCALES.map((item) => (
+              <button key={item} type="button" aria-pressed={scale === item} onMouseDown={hold} onClick={() => onScale(item)}>
+                {item}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -117,9 +152,8 @@ export function NoteCard({
 
   const body = (
     <>
-      <p className="line-clamp-3 font-serif text-xs italic leading-[1.9] text-muted-foreground">
-        <span className="rounded-xs bg-primary/15 box-decoration-clone px-1 py-0.5">{entry.quote}</span>
-      </p>
+      <span>{entry.note ? "your note" : "a highlight"} · p. {entry.page}</span>
+      {entry.scale !== "page" ? <q>{entry.quote.trim()}</q> : null}
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -132,25 +166,18 @@ export function NoteCard({
         placeholder="what do you feel here…"
         rows={sheet ? 4 : 3}
         autoFocus={!entry.note}
-        className="mt-3 w-full resize-none bg-transparent font-serif text-sm leading-relaxed placeholder:italic placeholder:text-muted-foreground/60 focus:outline-none"
       />
-      <div className="mt-4 flex items-center justify-between">
+      <div>
         <button
           type="button"
           onClick={() => {
             onRemove();
             onClose();
           }}
-          className="font-serif text-xs italic text-muted-foreground transition-colors hover:text-destructive focus-visible:text-destructive focus-visible:outline-none"
         >
-          {entry.note ? "remove note" : "remove mark"}
+          {entry.note ? "remove note" : "remove highlight"}
         </button>
-        <button
-          type="button"
-          disabled={!dirty}
-          onClick={save}
-          className="rounded-md bg-primary px-3 py-1.5 font-serif text-xs text-primary-foreground transition-[opacity,transform] active:translate-y-px disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
+        <button type="button" className="is-save" disabled={!dirty} onClick={save}>
           keep note
         </button>
       </div>
@@ -161,7 +188,7 @@ export function NoteCard({
     return (
       <div
         ref={cardRef}
-        className="fixed inset-x-0 bottom-0 z-50 animate-in rounded-t-2xl bg-popover p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl duration-200 ease-out-quart fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
+        className="reader-note-card is-sheet fixed inset-x-0 bottom-0 z-50 animate-in duration-200 ease-out-quart fade-in-0 slide-in-from-bottom-4 motion-reduce:animate-none"
       >
         {body}
       </div>
@@ -173,7 +200,7 @@ export function NoteCard({
   return (
     <div
       ref={cardRef}
-      className="fixed z-50 w-80 animate-in rounded-xl bg-popover p-5 shadow-xl duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] motion-reduce:animate-none"
+      className="reader-note-card fixed z-50 w-80 animate-in duration-150 ease-out-quart fade-in-0 slide-in-from-bottom-[3px] motion-reduce:animate-none"
       style={{ top, left }}
     >
       {body}

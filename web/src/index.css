@@ -601,19 +601,18 @@
   text-decoration: none;
   pointer-events: none;
 }
-.reader-content ::selection {
-  background: color-mix(in oklch, var(--primary) 28%, transparent);
-}
 
 ::highlight(book-mark) {
-  background-color: color-mix(in oklch, var(--primary) 20%, transparent);
+  background-color: rgba(214, 189, 138, 0.55);
 }
 ::highlight(book-note) {
-  background-color: color-mix(in oklch, var(--primary) 14%, transparent);
+  background-color: rgba(214, 189, 138, 0.85);
+}
+::highlight(book-thread) {
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklch, var(--primary) 65%, transparent);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
+  text-decoration-color: rgba(214, 189, 138, 0.9);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 /* ---- voice call ---- */

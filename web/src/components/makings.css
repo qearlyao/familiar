@@ -41,7 +41,7 @@
 @media (min-width: 1600px) { .makings-columns { grid-template-columns: minmax(0, 1fr) 27rem; } }
 @media (max-width: 1000px) { .makings { padding: 1.75rem; } .makings-columns { grid-template-columns: minmax(0, 1fr) 20rem; gap: 1.5rem; } .makings-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
-  .makings { padding: 1.5rem 1.125rem 6.25rem; overflow-y: auto; }
+  .makings { padding: max(1.5rem, env(safe-area-inset-top)) 1.125rem 6.25rem; overflow-y: auto; }
   .makings-header h1 { font-size: 1.875rem; }
 }
 /* The source stays intact; each square viewport displays one of its four transparent washes. */

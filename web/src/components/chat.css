@@ -56,6 +56,12 @@
 /* Continue the room color through the document canvas and overscroll areas. */
 html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .familiar-shell { background: #2b1901; padding: 0.875rem; gap: 0.875rem; font-family: Figtree, sans-serif; }
+/* Installed WebKit can exclude safe-area space from dynamic viewport heights.
+   Size the whole room to the full viewport; controls retain their safe-area padding.
+   https://bugs.webkit.org/show_bug.cgi?id=254868 */
+@media (display-mode: standalone) {
+  .familiar-shell { height: 100vh; }
+}
 .room-surface { border-radius: 1.625rem; overflow: hidden; background: #d3c9ba; }
 .room-rail {
   width: 4.125rem; flex: none; display: flex; flex-direction: column; align-items: center;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchGallery, saveGalleryNote, type GalleryItem } from "@/lib/api";
+import { fetchGallery, type GalleryItem } from "@/lib/api";
 
 export function useGalleryItems() {
   const [items, setItems] = useState<GalleryItem[]>([]);
@@ -27,11 +27,5 @@ export function useGalleryItems() {
     return () => window.clearTimeout(id);
   }, [load]);
 
-  const updateNote = useCallback(async (id: string, text: string) => {
-    const saved = await saveGalleryNote(id, text);
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, note: saved } : it)));
-    return saved;
-  }, []);
-
-  return { items, loading, loaded, error, reload: load, updateNote };
+  return { items, loading, loaded, error, reload: load };
 }

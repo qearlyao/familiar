@@ -1,156 +1,128 @@
-import { Palette, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { Download, ImageIcon, MoreHorizontal, Pause, Play, RefreshCw } from "lucide-react";
+import { Popover } from "radix-ui";
+import { MediaPreview, type PreviewMedia } from "../MediaPreview";
+import { AudioWaveform } from "./AudioWaveform";
 import type { GalleryItem } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { formatDuration, formatShortDate, type TimeGroup } from "./format";
-import { InkBloomField } from "./InkBloom";
-import { bloomPulseForId } from "./inkBloomModel";
-import { useAudioMetadata } from "./useAudioElement";
+import { InkTexture } from "./InkTexture";
+import { useAudioElement } from "./useAudioElement";
 
-function GroupHeading({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="mb-4 flex items-baseline gap-3">
-      <h2 className="font-serif text-lg leading-none tracking-tight text-foreground">{label}</h2>
-      <span className="font-serif text-xs italic text-muted-foreground">
-        {count} {count === 1 ? "piece" : "pieces"}
-      </span>
-      <span className="h-px flex-1 bg-border/70" aria-hidden />
-    </div>
-  );
+function GroupHeading({ label }: { label: string }) {
+  return <h3 className="makings-group-heading">{label}</h3>;
 }
 
-export function NoteMark({ note }: { note: string }) {
-  return (
-    <span className="mt-1 flex items-start gap-1.5">
-      <span className="mt-[0.45rem] size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-      <span className="line-clamp-2 font-serif text-[0.72rem] italic leading-snug text-muted-foreground">{note}</span>
-    </span>
-  );
-}
-
-function ImageTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group/tile mb-3 block w-full break-inside-avoid text-left focus-visible:outline-none"
-      aria-label={`open image from ${formatShortDate(item.createdAt)}`}
-    >
-      <span
-        className={cn(
-          "block overflow-hidden rounded-md border border-border bg-card p-1 shadow-xs",
-          "transition-[transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
-          "group-hover/tile:-translate-y-0.5 group-hover/tile:shadow-md",
-          "group-focus-visible/tile:ring-3 group-focus-visible/tile:ring-ring/50",
-        )}
-      >
-        <img
-          src={item.url}
-          alt={item.note || item.name}
-          loading="lazy"
-          className="block h-auto w-full rounded-sm bg-muted object-cover"
-        />
-      </span>
-      <span className="mt-1.5 flex flex-col px-0.5">
-        <span className="font-serif text-[0.7rem] italic text-muted-foreground/80">
-          {formatShortDate(item.createdAt)}
-        </span>
-        {item.note ? <NoteMark note={item.note} /> : null}
-      </span>
-    </button>
-  );
-}
-
-function AudioTile({ item, onOpen }: { item: GalleryItem; onOpen: () => void }) {
-  const { audioRef, duration } = useAudioMetadata();
-  const durationLabel = formatDuration(duration);
-  return (
-    <div className="mb-3 break-inside-avoid">
-      <audio ref={audioRef} src={item.url} preload="metadata" />
-      <button
-        type="button"
-        onClick={onOpen}
-        className={cn(
-          "group/tile block w-full rounded-md border border-border bg-card px-2.5 py-2.5 text-left shadow-xs",
-          "transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out motion-reduce:transition-none",
-          "hover:-translate-y-0.5 hover:border-primary/45 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        )}
-        aria-label={`open recording from ${formatShortDate(item.createdAt)}`}
-      >
-        <span className="flex items-center gap-2">
-          <InkBloomField id={item.id} playing={false} pulse={bloomPulseForId(item.id)} className="size-8 shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block font-serif text-base italic leading-none text-foreground tabular-nums">
-              {durationLabel ?? "recording"}
-            </span>
-            <span className="mt-1 block truncate font-serif text-[0.7rem] italic text-muted-foreground/80">
-              {formatShortDate(item.createdAt)}
-            </span>
-          </span>
-        </span>
-        {item.note ? <NoteMark note={item.note} /> : null}
-      </button>
-    </div>
-  );
-}
-
-export function GalleryGrid({
-  groups,
-  onOpen,
-}: {
-  groups: TimeGroup[];
-  onOpen: (index: number) => void;
+function ImageTile({ item, onOpen, media, featured = false }: {
+  item: GalleryItem; onOpen: () => void; media: PreviewMedia[]; featured?: boolean;
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]">
-      {groups.map((group) => (
-        <section key={group.key} className="mb-9 last:mb-2">
-          <GroupHeading label={group.label} count={group.entries.length} />
-          <div className="columns-2 gap-3 sm:columns-3 lg:columns-5">
-            {group.entries.map(({ item, index }) =>
-              item.kind === "audio" ? (
-                <AudioTile key={item.id} item={item} onOpen={() => onOpen(index)} />
-              ) : (
-                <ImageTile key={item.id} item={item} onOpen={() => onOpen(index)} />
-              ),
-            )}
-          </div>
-        </section>
-      ))}
+    <figure className={`makings-image${featured ? " is-featured" : ""}`}>
+      <MediaPreview src={item.url} alt={item.note || `image from ${formatShortDate(item.createdAt)}`}
+        className="makings-image-frame" items={media} closeLabel="back to makings"
+        onOpenChange={(open) => { if (open) onOpen(); }} />
+      <span className="makings-caption">
+        <span>{item.note || ""}</span>
+        <time dateTime={new Date(item.createdAt).toISOString()}>{formatShortDate(item.createdAt)}</time>
+      </span>
+    </figure>
+  );
+}
+
+export function GalleryGrid({ groups, visible }: {
+  groups: TimeGroup[]; visible: boolean;
+}) {
+  const images = groups.flatMap((group) => group.entries.filter(({ item }) => item.kind === "image"));
+  const media: PreviewMedia[] = images.map(({ item }) => ({ src: item.url, name: item.note || item.name, kind: "image" }));
+  const [featured, ...earlier] = images;
+  const imageGroups = groups.map((group) => ({ ...group,
+    entries: group.entries.filter(({ item }) => item.kind === "image" && item.id !== featured?.item.id),
+  })).filter((group) => group.entries.length);
+  const sounds = groups.map((group) => ({ ...group,
+    entries: group.entries.filter(({ item }) => item.kind === "audio"),
+  })).filter((group) => group.entries.length);
+  const [selectedId, setSelectedId] = useState<string>();
+  const { audioRef, pause, toggle, playSource, playing: isPlaying, duration, currentTime, seek, error } = useAudioElement();
+  useEffect(() => { if (!visible) pause(); }, [visible, pause]);
+  useEffect(() => {
+    if (selectedId && !sounds.some((group) => group.entries.some(({ item }) => item.id === selectedId))) pause();
+  }, [sounds, selectedId, pause]);
+
+  const play = (item: GalleryItem) => {
+    if (selectedId === item.id) toggle();
+    else {
+      setSelectedId(item.id);
+      playSource(item.url);
+    }
+  };
+
+  return (
+    <div className="makings-columns">
+      <section className="makings-pictures" aria-labelledby="makings-pictures-title">
+        <h2 id="makings-pictures-title">pictures to look back on</h2>
+        <div className="makings-picture-list">
+        {featured ? <>
+          <GroupHeading label={groups.find((group) => group.entries.some(({ item }) => item.id === featured.item.id))?.label ?? "latest image"} />
+          <ImageTile item={featured.item} featured media={media} onOpen={pause} />
+          {earlier.length > 0 && <div className="makings-earlier">
+            {imageGroups.map((group) => <section key={group.key}>
+              <GroupHeading label={group.key === groups[0]?.key ? "a little earlier" : group.label} />
+              <div className="makings-thumbnails">
+                {group.entries.map(({ item }) => <ImageTile key={item.id} item={item} media={media} onOpen={pause} />)}
+              </div>
+            </section>)}
+          </div>}
+        </> : <div className="makings-empty-column"><ImageIcon size={28} /><h2>pictures will find their way here</h2><p>the images it makes will be kept here.</p></div>}
+        </div>
+      </section>
+      <section className="makings-sounds" aria-labelledby="makings-sounds-title">
+        <h2 id="makings-sounds-title">sounds to come back to</h2>
+        <audio ref={audioRef} preload="metadata" />
+        <div className="makings-sound-list" tabIndex={0} aria-label="recordings">
+          {sounds.length ? sounds.map((group) => <section key={group.key}>
+            <GroupHeading label={group.label} />
+            {group.entries.map(({ item }) => {
+              const active = selectedId === item.id;
+              const playing = active && isPlaying;
+              return <article key={item.id} className={`makings-recording${active ? " is-active" : ""}`}>
+                <button type="button" className="makings-play" onClick={() => play(item)}
+                  aria-label={`${playing ? "pause" : "play"} recording from ${formatShortDate(item.createdAt)}`}>
+                  {playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
+                </button>
+                <div className="makings-recording-copy">
+                  <button type="button" className="makings-recording-title" onClick={() => play(item)}
+                    title={new Date(item.createdAt).toLocaleString()}>a voice from {formatShortDate(item.createdAt)}</button>
+                {active && <span className="makings-player-time">{formatDuration(currentTime) ?? "0:00"} / {formatDuration(duration) ?? "—"}</span>}
+                </div>
+                <InkTexture id={item.id} />
+                {active && <div className="makings-recording-meta">
+                <Popover.Root>
+                  <Popover.Trigger asChild><button type="button" className="makings-details" aria-label="recording actions"><MoreHorizontal size={17} /></button></Popover.Trigger>
+                  <Popover.Portal><Popover.Content className="chat-theme makings-actions" sideOffset={6} align="end">
+                    <a href={item.url} download={item.name}><Download size={16} /> download recording</a>
+                  </Popover.Content></Popover.Portal>
+                </Popover.Root>
+                </div>}
+                {active && <div className="makings-inline-player">
+                  <AudioWaveform key={item.id} url={item.url} duration={duration} currentTime={currentTime} onSeek={seek} />
+                  {error && <p role="alert" className="makings-error">{error}</p>}
+                </div>}
+              </article>;
+            })}
+          </section>) : <p className="makings-empty-sounds">a quiet shelf for the sounds it makes.</p>}
+        </div>
+      </section>
     </div>
   );
 }
 
 export function GallerySkeleton() {
-  const spans = [40, 26, 34, 30, 44, 28, 36, 32, 40, 24, 30, 38];
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 low-dpr-wide:max-w-[clamp(72rem,62vw,88rem)]" aria-hidden>
-      <div className="mb-4 h-4 w-28 rounded-sm bg-muted-foreground/15" />
-      <div className="columns-2 gap-3 sm:columns-3 lg:columns-4">
-        {spans.map((h, i) => (
-          <div key={i} className="mb-3 break-inside-avoid rounded-md border border-border bg-card p-1">
-            <div className="rounded-sm bg-muted-foreground/10" style={{ height: `${h * 4}px` }} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className="makings-loading" role="status">gathering the things it made…</div>;
 }
 
 export function EmptyGallery({ onRefresh }: { onRefresh: () => void }) {
-  return (
-    <div className="flex h-full min-h-[18rem] items-center justify-center px-6 text-center">
-      <div className="max-w-sm">
-        <Palette className="mx-auto size-7 text-muted-foreground" />
-        <h2 className="mt-5 font-serif text-xl leading-tight tracking-tight">nothing made yet</h2>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          when familiar draws something or records a sound, it will be kept here for you to look back on.
-        </p>
-        <Button type="button" variant="ghost" className="mt-5" onClick={onRefresh}>
-          <RefreshCw className="size-4" />
-          look again
-        </Button>
-      </div>
-    </div>
-  );
+  return <div className="makings-empty-column makings-empty">
+    <ImageIcon size={30} /><h2>nothing made yet</h2>
+    <p>when familiar draws something or records a sound, it will be kept here.</p>
+    <button type="button" className="makings-refresh" onClick={onRefresh}><RefreshCw size={16} /> look again</button>
+  </div>;
 }

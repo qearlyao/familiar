@@ -95,11 +95,6 @@ export async function fetchGallery(): Promise<GalleryItem[]> {
   return body.items;
 }
 
-export async function saveGalleryNote(id: string, note: string): Promise<string> {
-  const body = await jsonRequest<{ note: string }>("/api/web/gallery/note", "PUT", { id, note }, "gallery/note");
-  return body.note;
-}
-
 export interface WebSkillSummary {
   id: string;
   name: string;

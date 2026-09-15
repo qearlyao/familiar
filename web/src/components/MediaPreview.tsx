@@ -114,8 +114,8 @@ function Stage({ item, onBare }: { item: PreviewMedia; onBare: () => void }) {
   );
 }
 
-export function MediaPreview({ src, alt, className, imageClassName, kind = "image", items }: {
-  src: string; alt: string; className?: string; imageClassName?: string; kind?: "image" | "video"; items?: PreviewMedia[];
+export function MediaPreview({ src, alt, className, imageClassName, kind = "image", items, onOpenChange, closeLabel = "back to the thread" }: {
+  src: string; alt: string; className?: string; imageClassName?: string; kind?: "image" | "video"; items?: PreviewMedia[]; onOpenChange?: (open: boolean) => void; closeLabel?: string;
 }) {
   const [selected, setSelected] = useState(src);
   const [bare, setBare] = useState(false);
@@ -126,7 +126,7 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
   const move = (delta: number) => setSelected(media[(index + delta + media.length) % media.length].src);
 
   return (
-    <Dialog.Root onOpenChange={(open) => { if (open) { setSelected(src); setBare(false); } }}>
+    <Dialog.Root onOpenChange={(open) => { if (open) { setSelected(src); setBare(false); } onOpenChange?.(open); }}>
       <Dialog.Trigger asChild>
         <button type="button" aria-label={`open ${alt}`} className={cn("media-preview-trigger inline-block w-fit max-w-full rounded-md text-left outline-none transition-opacity hover:opacity-90 sm:max-w-[24rem]", className)}>
           {kind === "image" ? (
@@ -159,7 +159,7 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
           }}
         >
           <header className="viewer-head">
-            <Dialog.Close className="viewer-ghost viewer-close-top" aria-label="back to the thread"><IconX size={18} /></Dialog.Close>
+            <Dialog.Close className="viewer-ghost viewer-close-top" aria-label={closeLabel}><IconX size={18} /></Dialog.Close>
             <span className="viewer-title">
               <Dialog.Title title={current.name}>{current.name}</Dialog.Title>
               <p>{current.kind === "video" ? "a clip" : "a picture"}{media.length > 1 ? ` · ${index + 1} of ${media.length}` : ""}</p>

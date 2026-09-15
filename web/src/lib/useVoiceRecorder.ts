@@ -46,7 +46,7 @@ type VoiceRecordingState = {
   recording: boolean;
 };
 
-type RecordingFinishMode = "attach" | "discard";
+type RecordingFinishMode = "send" | "discard";
 
 type RecordingSession = {
   chunks: Blob[];
@@ -58,17 +58,17 @@ type RecordingSession = {
 function createRecordingSession(stream: MediaStream, mimeType: string): RecordingSession {
   return {
     chunks: [],
-    finishMode: "attach",
+    finishMode: "send",
     mimeType,
     stream,
   };
 }
 
 export function useVoiceRecorder({
-  onAttach,
+  onRecorded,
   onError,
 }: {
-  onAttach: (files: File[]) => void;
+  onRecorded: (file: File) => void;
   onError: (message: string | undefined) => void;
 }): VoiceRecorderState {
   const [pending, setPending] = useState(false);
@@ -130,7 +130,7 @@ export function useVoiceRecorder({
           onError("no audio was recorded");
           return;
         }
-        onAttach([new File(session.chunks, voiceMessageName(session.mimeType), { type: session.mimeType })]);
+        onRecorded(new File(session.chunks, voiceMessageName(session.mimeType), { type: session.mimeType }));
       };
       setRecording(true);
       recorder.start();
@@ -142,7 +142,7 @@ export function useVoiceRecorder({
     }
   };
 
-  const stopRecording = () => finishRecording("attach");
+  const stopRecording = () => finishRecording("send");
   const cancelRecording = () => finishRecording("discard");
 
   const toggleRecording = () => {

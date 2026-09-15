@@ -67,7 +67,7 @@ export function Composer({
   const [commandSelection, setCommandSelection] = useState<{ text: string | undefined; index: number }>({ text: undefined, index: 0 });
   const [dismissedCommandText, setDismissedCommandText] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
-  const voice = useVoiceRecorder({ onAttach: (files) => addAttachments(files), onError: setError });
+  const voice = useVoiceRecorder({ onRecorded: (file) => void sendVoice(file), onError: setError });
   const { blocks, attachments } = draft;
   const serializedText = useMemo(() => serializeDraftBlocks(blocks), [blocks]);
   const commandDraftText = singleTextBlock(blocks);
@@ -99,6 +99,20 @@ export function Composer({
       await onSend(text, submitted.attachments);
     } catch (err) {
       setDraft((current) => (isClearedDraft(current, clearedRevision) ? submitted : current));
+      setError(sendErrorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // voice goes out on its own; the typed draft stays put. a failed send parks the audio as an attachment so it isn't lost
+  const sendVoice = async (file: File) => {
+    setError(undefined);
+    setSending(true);
+    try {
+      await onSend("", [file]);
+    } catch (err) {
+      addAttachments([file]);
       setError(sendErrorMessage(err));
     } finally {
       setSending(false);
@@ -195,7 +209,7 @@ export function Composer({
             <button type="button" className="composer-rec-cancel" aria-label="let it go" title="let it go" onClick={voice.cancelRecording}>
               <IconX />
             </button>
-            <button type="button" className="composer-rec-stop" aria-label="stop and attach" title="stop and attach" onClick={voice.toggleRecording}>
+            <button type="button" className="composer-rec-stop" aria-label="send it" title="send it" onClick={voice.toggleRecording}>
               <IconStop />
             </button>
           </div>

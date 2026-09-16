@@ -55,7 +55,7 @@ export function voiceCallOpening(
 					.slice(-count)
 			: [];
 	const intro =
-		"hey, i'm calling you~ this is a voice call, its own little room apart from our chat. everything you say is spoken out loud, so talk the way you would on the phone.";
+		"hey, i'm calling you~ this is a voice call, its own little room apart from our chat. everything you say is spoken out loud, so talk the way you would on the phone. no need to reach for the tts tool here — your plain words already come out as your voice.";
 	const chat = recent.length
 		? `\n\nhere's where our chat was when i called:\n<recent_chat>\n${recent.join("\n")}\n</recent_chat>`
 		: "";

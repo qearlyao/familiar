@@ -806,8 +806,10 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   .room-rail { display: none; }
   .room-surface { border-radius: 0; }
   /* iOS may sample the document canvas for its status-bar tint. Hidden rooms stay mounted. */
-  :is(html, body, .familiar-shell):has(.room-surface:not(.hidden) > .voice-room) { background: #211302; }
-  :is(html, body, .familiar-shell):has(.room-surface:not(.hidden) > .makings-stage) { background: #2b1901; }
+  :is(html, body, .familiar-shell):has(:where(.room-surface:not(.hidden)) > .voice-room) { background: #211302; }
+  :is(html, body, .familiar-shell):has(:where(.room-surface:not(.hidden)) > .makings-stage) { background: #2b1901; }
+  /* The portaled viewer takes precedence over the room beneath it. */
+  :is(html, body):has(.viewer[data-state="open"]) { background: #241503; }
   .room-mobile-nav {
     display: flex; position: fixed; left: 1rem; right: 1rem; bottom: max(1.25rem, env(safe-area-inset-bottom)); z-index: 40; padding: 0.4375rem; border-radius: 62.4375rem;
     background: #2b1901; justify-content: space-between; box-shadow: 0 1.125rem 2.125rem -1.125rem rgba(43, 25, 1, 0.7);

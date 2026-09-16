@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 - 2026-09-16
+
+### Fixed
+
+- Tell voice calls not to reach for the `tts` tool; spoken replies are already synthesized from plain text.
+
 ## 1.0.0 - 2026-09-16
 
 ### Added

@@ -301,6 +301,21 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .is-sheet .is-listed .shelf-switch::before { transform: translateX(1.125rem); }
 .is-sheet .shelf-bring { height: 3rem; font-size: 0.90625rem; }
 
+/* Portrait and smaller tablets use a bounded drawer with modal dismissal/focus behavior.
+   Landscape tablets with enough width use the compact inline column below. */
+@keyframes shelf-drawer-in { from { opacity: 0; transform: translateX(calc(100% + 0.875rem)); } }
+@keyframes shelf-drawer-out { to { opacity: 0; transform: translateX(calc(100% + 0.875rem)); } }
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .shelf.is-sheet {
+    inset: max(0.875rem, env(safe-area-inset-top)) max(0.875rem, env(safe-area-inset-right)) max(0.875rem, env(safe-area-inset-bottom)) auto;
+    width: 23.75rem; max-height: none; border-radius: 1.375rem; padding: 1.5rem 1.375rem; gap: 1.25rem;
+    box-shadow: -1rem 0 3rem -1rem rgba(43, 25, 1, 0.45);
+  }
+  .shelf.is-sheet .shelf-grab { display: none; }
+  .shelf.is-sheet[data-state="open"] { animation-name: shelf-drawer-in; }
+  .shelf.is-sheet[data-state="closed"] { animation-name: shelf-drawer-out; }
+}
+
 .switch-model-button {
   height: 2.5rem; padding: 0 1.125rem; border-radius: 62.4375rem; border: 0; background: #525833; color: #d3c9ba;
   font: var(--font-weight-normal) 0.875rem Caprasimo, Georgia, serif; display: inline-flex; align-items: center; gap: 0.5625rem; transition: background 0.15s;
@@ -310,16 +325,22 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .chat-divider { flex: none; height: 0.0625rem; margin: 0 2.75rem; background: linear-gradient(to right, rgba(76, 62, 44, 0.32), rgba(76, 62, 44, 0)); }
 
 /* ---------- the shelf: a room held open beside the talk (Chat 1a) ---------- */
-/* Desktop: an inline column beside the talk. Narrower: the same panel raised as a sheet. */
+/* Desktop and landscape tablets: inline columns. Other tablets: a drawer. Phone: a sheet. */
 .shelf-slot { display: none; }
 /* the slot is the box; the shelves are stacked inside it, so swapping one for the other never
-   takes the column away and back — only what's written on it changes. Below 1200 the shelf is
-   raised as a sheet and portals out of the slot, so the slot stays shut. */
-@media (min-width: 1200px) {
+   takes the column away and back — only what's written on it changes. When the shelf becomes
+   a dialog it portals out of the slot, so the slot stays shut. Match INLINE_SHELF in Shelf.tsx. */
+@media (min-width: 1200px), (min-width: 1024px) and (orientation: landscape) {
   .shelf-slot[data-open] {
     flex: none; width: 20.625rem; margin: 0.75rem 0.75rem 0.75rem 0; display: grid;
     animation: roomin 0.2s ease both;
   }
+}
+@media (min-width: 1024px) and (max-width: 1199.98px) and (orientation: landscape) {
+  .shelf-slot[data-open] { width: clamp(15rem, 24vw, 17.5rem); }
+  .shelf-slot > .shelf { padding-inline: 1rem; }
+  /* Reclaim header whitespace while the column is open so the status stays on one line. */
+  .chat-room:has(+ .shelf-slot[data-open]) .chat-header { padding-inline: 1.25rem; gap: 0.75rem; }
 }
 .shelf {
   padding: 1.5rem 1.375rem; border-radius: 1.375rem;

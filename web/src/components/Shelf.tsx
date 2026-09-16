@@ -4,11 +4,10 @@ import { useMediaQuery } from "@/lib/useMediaQuery";
 import { Sheet } from "./Sheet";
 import { IconX } from "./organicIcons";
 
-/** A room held open beside the talk instead of replacing it (Chat 1a): a 330px column on the
-    right, the same panel raised as a sheet once the talk needs the width back. The shelf costs
-    354px, so it gives up the column long before the rail does — under 1200 the header starts
-    wrapping its status line. The mock draws the column layout at 1240. */
-const SHEET_BELOW = "(max-width: 1199.98px)";
+/** A column beside the talk on desktop and landscape tablets, narrower on tablets.
+    Other tablets get a floating drawer; phones get a bottom sheet. Keep this query
+    in step with the shelf-slot rules in chat.css so portaled panels never reserve a column. */
+const INLINE_SHELF = "(min-width: 1200px), (min-width: 1024px) and (orientation: landscape)";
 
 export function Shelf({ open, onClose, title, sub, children }: {
   open: boolean;
@@ -18,7 +17,7 @@ export function Shelf({ open, onClose, title, sub, children }: {
   sub: string;
   children: ReactNode;
 }) {
-  const sheet = useMediaQuery(SHEET_BELOW);
+  const sheet = !useMediaQuery(INLINE_SHELF);
   const heading = <b>{title}</b>;
   const panel = (
     <>

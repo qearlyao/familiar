@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { focusPanel } from "@/lib/focusPanel";
 import { cn } from "@/lib/utils";
 
-/** The shape a panel takes when the screen runs out of room: raised from the bottom edge over a
-    dimmed room, with a dialog's overlay, focus trap and exit run. Look lives on .is-sheet in
-    chat.css; each caller decides at what width it stops being a popover (useMediaQuery). */
+/** A panel over a dimmed room, with a dialog's overlay, focus trap and exit run.
+    Look lives on .is-sheet in chat.css: bottom sheets, or a right drawer for tablet shelves.
+    Each caller decides at what width it leaves the layout (useMediaQuery). */
 export function Sheet({ open, onOpenChange, className, trigger, children }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;

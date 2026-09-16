@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 - 2026-09-16
+
+### Fixed
+
+- Keep reader controls hidden on mouse movement and pause automatic hiding while reading controls or the margin are open.
+- Adapt chat shelves to tablet orientation, using a compact column in landscape and a floating drawer on narrower tablets.
+- Keep settings pill controls inside their cards on mobile.
+- Match the mobile page background to the visible voice or makings room, including the iOS status-bar area.
+- Show the meme picker button background only on hover.
+
 ## 1.0.1 - 2026-09-16
 
 ### Fixed

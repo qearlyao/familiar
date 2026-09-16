@@ -711,8 +711,6 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   width: 2.625rem; height: 2.625rem; border: 0; border-radius: 62.4375rem; background: transparent; color: #4c3e2c; display: grid; place-items: center; transition: background 0.15s;
 }
 .composer-icon:hover { background: rgba(82, 88, 51, 0.16); }
-.composer-icon.is-filled { background: rgba(82, 88, 51, 0.16); }
-.composer-icon.is-filled:hover { background: rgba(82, 88, 51, 0.28); }
 .composer-icon:disabled { opacity: 0.4; pointer-events: none; }
 .composer-icon svg { width: 1.1875rem; height: 1.1875rem; }
 .composer-attach-btn svg { width: 1.25rem; height: 1.25rem; }
@@ -845,7 +843,6 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   .composer-left { padding: 0.625rem 0; } /* (46px button - 26px line) / 2, so a one-line draft centers against the buttons */
   .composer-icon { width: 2.75rem; height: 2.75rem; }
   .composer-icon svg { width: 1.25rem; height: 1.25rem; }
-  .composer-icon.composer-stickers-btn { background: rgba(82, 88, 51, 0.16); }
   .composer-attach-btn { order: -1; } /* 1c: clip · stickers · mic */
   .composer-send { width: 2.875rem; height: 2.875rem; padding: 0; justify-content: center; margin-left: 0.125rem; }
   .composer-send svg { width: 1.25rem; height: 1.25rem; }

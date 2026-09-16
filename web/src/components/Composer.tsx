@@ -246,7 +246,7 @@ export function Composer({
               onStickersOpenChange={setStickersOpen}
             />
             <div className="composer-right">
-              <button type="button" className={cn("composer-icon composer-stickers-btn", stickersOpen && "is-filled")} aria-label="stickers" title="stickers" aria-expanded={stickersOpen} onClick={() => setStickersOpen((v) => !v)}>
+              <button type="button" className="composer-icon composer-stickers-btn" aria-label="stickers" title="stickers" aria-expanded={stickersOpen} onClick={() => setStickersOpen((v) => !v)}>
                 <IconSticker />
               </button>
               <button type="button" className="composer-icon composer-attach-btn" aria-label="attach" title="bring something in" disabled={sending} onClick={() => fileRef.current?.click()}>

@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.0 - 2026-09-16
+
+### Added
+
+- Add reader margin threads for discussing words, paragraphs, and pages with the companion, plus a filterable notes drawer and note export.
+- Run voice calls in their own sessions, opening with the latest 10 main-chat messages by default. Keep a transcript or summary in the chat, or discard the call; completed calls appear as distinct chat entries.
+- Add a contact card for editing your nickname, context usage breakdowns, unread keepsake markers, and direct voice-message sending from the recording bar.
+
+### Changed
+
+- Redesign the WebUI across chat, diaries, skills, keepsakes, makings, settings, library, reader, and voice calls, with refreshed branding and desktop and mobile layouts.
+- Replace README screenshots with an interface tour and correct CI caching to use the published npm shrinkwrap.
+
+### Fixed
+
+- Wait for memory retention to finish before acknowledging conversation resets, surface failures, and log reset results.
+- Correct Safari composer positioning, touch hover behavior, sticker layouts, text contrast, and full-screen iOS PWA backgrounds.
+- Update the WebUI lockfile past the Browserslist security advisory.
+
+### Breaking
+
+- Remove `web.voice_call_mode` and the push-to-talk call mode. Remove that setting from existing configuration; use `web.voice_context_messages` to set opening context and `web.voice_keep` (`ask`, `transcript`, `summary`, or `discard`) to choose what a finished call retains.
+- Replace the reader annotation format with margin threads. Existing `data/books/<book-id>/marginalia.json` files are incompatible and are not migrated. Before upgrading, stop Familiar and move those files to a backup location outside the books directory; the reader starts with empty annotations. Use your configured data directory if it differs from `data`.
+
 ## 0.10.3 - 2026-09-04
 
 ### Added

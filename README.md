@@ -5,7 +5,7 @@
   <p>
     <a href="https://www.npmjs.com/package/@qearlyao/familiar"><img src="https://img.shields.io/npm/v/%40qearlyao%2Ffamiliar?style=flat-square&color=b58900" alt="npm version" /></a>
     <a href="https://github.com/qearlyao/familiar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/qearlyao/familiar?style=flat-square" alt="license" /></a>
-    <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%E2%89%A522-5fa04e?style=flat-square" alt="node >=22" /></a>
+    <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%E2%89%A522.19.0-5fa04e?style=flat-square" alt="node >=22.19.0" /></a>
   </p>
 </div>
 
@@ -131,9 +131,9 @@ access, heartbeat, optional capabilities, upgrades, and common setup problems.
 Chat platforms are optional: with no Discord or QQ configured, familiar runs
 web-only and the WebUI is the whole interface.
 
-This project is still early. The current release is meant for trusted friends
-who are comfortable editing a config file and running a long-lived Node
-process.
+Familiar 1.0 is self-hosted software for people comfortable editing a config
+file and running a long-lived Node process. Before upgrading an existing
+workspace, read the [release notes and breaking changes](CHANGELOG.md#100---2026-09-16).
 
 ---
 
@@ -158,7 +158,7 @@ trusted specs only.
 
 ## Source Checkout
 
-Source builds require Node.js 22 or newer. Node.js 24 LTS is recommended and is
+Source builds require Node.js 22.19.0 or newer. Node.js 24 LTS is recommended and is
 the primary tested runtime.
 
 ```sh

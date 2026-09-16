@@ -21,7 +21,7 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: |
-            package-lock.json
+            npm-shrinkwrap.json
             web/package-lock.json
 
       - run: npm ci

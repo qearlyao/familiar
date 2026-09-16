@@ -26,28 +26,10 @@ quiet, and has a little inner life of its own between conversations.
 
 ## Showcase
 
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/images/webui-light.png" alt="WebUI chat, light theme" />
-      <br /><b>WebUI</b> · warm, bubble-less chat
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/images/webui-dark.png" alt="WebUI chat, dark theme" />
-      <br /><b>WebUI</b> · dark theme
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/images/webui-mobile.png" alt="WebUI on a phone" width="200" />
-      <br /><b>On your phone</b> · the same conversation, anywhere
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/images/discord.png" alt="Discord DM conversation" width="200" />
-      <br /><b>Discord</b> · where it lives day to day
-    </td>
-  </tr>
-</table>
+![A short tour of Familiar: chat, diaries, library, keepsakes, and mobile](docs/images/familiar-intro.gif)
+
+A quiet look around Familiar. Interface previews use the redesign mockups
+with sample content.
 
 ## What Familiar Can Do
 

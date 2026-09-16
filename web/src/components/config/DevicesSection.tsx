@@ -3,7 +3,6 @@ import { logoutAuthSession, revokeAuthDevice, revokeOtherAuthDevices, type WebAu
 import type { useDevices } from "@/lib/useDevices";
 import { cn } from "@/lib/utils";
 import { IconX } from "../organicIcons";
-import { Card } from "./inputs";
 
 const day = (date: Date) => new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date).toLowerCase();
 const time = (date: Date) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date).toLowerCase();
@@ -69,8 +68,23 @@ export function DevicesSection({ state, onSignedOut }: { state: ReturnType<typeo
     }
   };
 
+  /* Two surfaces, CSS picks one: a phone has no room for the line, so there the actions ride on the tickets. */
+  const logOutHere = () => void run("current", async () => { await logoutAuthSession(); onSignedOut(); });
+  const signOutOthers = () => void run("others", async () => { await revokeOtherAuthDevices(); setDevices((prev) => prev.filter((d) => d.current)); });
+
   return (
     <>
+      <div className="device-signout">
+        <p className="settings-note">signing out the others ends every session but this one. they will need the pairing code again.</p>
+        <div className="device-actions">
+          <button type="button" className="pill-button" disabled={Boolean(busyId)} onClick={logOutHere}>
+            log out here
+          </button>
+          <button type="button" className="pill-button is-quiet" disabled={Boolean(busyId) || others.length === 0} onClick={signOutOthers}>
+            sign out the others
+          </button>
+        </div>
+      </div>
       <div className="settings-column">
         {sorted.map((device) => (
           <article key={device.id} className={cn("device-ticket", device.current && "is-current")}>
@@ -79,7 +93,16 @@ export function DevicesSection({ state, onSignedOut }: { state: ReturnType<typeo
                 <i />
                 <h4>{device.deviceName || "unnamed device"}</h4>
                 {device.current && <em>this one</em>}
-                {!device.current && (
+                {device.current ? (
+                  <button
+                    type="button"
+                    className="device-revoke is-logout"
+                    disabled={Boolean(busyId)}
+                    onClick={logOutHere}
+                  >
+                    <span>log out</span>
+                  </button>
+                ) : (
                   <button
                     type="button"
                     className="device-revoke"
@@ -111,27 +134,20 @@ export function DevicesSection({ state, onSignedOut }: { state: ReturnType<typeo
         {loading && <p className="settings-note">checking devices…</p>}
         {!loading && sorted.length === 0 && <p className="settings-note">no devices found.</p>}
       </div>
-      <Card title="signing out">
-        <p className="settings-note">signing out the others ends every session but this one. they will need the pairing code again.</p>
-        <div className="device-actions">
-          <button type="button" className="pill-button" disabled={Boolean(busyId)} onClick={() => void run("current", async () => { await logoutAuthSession(); onSignedOut(); })}>
-            log out here
-          </button>
-          <button
-            type="button"
-            className="pill-button is-quiet"
-            disabled={Boolean(busyId) || others.length === 0}
-            onClick={() => void run("others", async () => { await revokeOtherAuthDevices(); setDevices((prev) => prev.filter((d) => d.current)); })}
-          >
-            sign out the others
-          </button>
-        </div>
-        {error && (
-          <p role="alert" className="settings-error">
-            {error}
-          </p>
-        )}
-      </Card>
+      <button
+        type="button"
+        className="pill-button is-quiet is-tail"
+        title="they will need the pairing code again"
+        disabled={Boolean(busyId) || others.length === 0}
+        onClick={signOutOthers}
+      >
+        sign out the others
+      </button>
+      {error && (
+        <p role="alert" className="settings-error">
+          {error}
+        </p>
+      )}
     </>
   );
 }

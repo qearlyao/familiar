@@ -205,8 +205,19 @@
 .device-stub { flex: none; width: 6.25rem; padding: 0.875rem 0.75rem; border-left: 0.09375rem dashed var(--rule); display: flex; flex-direction: column; justify-content: center; gap: 0.125rem; }
 .device-ticket .device-stub span { font-size: 0.65625rem; letter-spacing: 0.12em; text-transform: uppercase; }
 .device-stub b { font: var(--font-weight-normal) 0.9375rem/1.15 Caprasimo, Georgia, serif; }
-.device-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.device-actions .pill-button { height: 2.375rem; padding: 0 1rem; }
+/* Devices is the one page that is a list, not two columns of cards: the tickets
+   fill the whole width, and signing out is the line they are stacked under
+   rather than a card marooned in an empty second column. */
+.settings-page:has(> .device-signout) { grid-template-columns: minmax(0, 1fr); }
+.device-signout ~ .settings-column { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
+@media (min-width: 1001px) { .device-signout ~ .settings-column { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Two buttons and a sentence do not earn a card — it reads as the page's own
+   standfirst, on the same bare line as the source label on the mind page. */
+.device-signout { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.875rem; padding: 0 0.5rem 0.125rem; }
+.device-actions { flex: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.device-signout .pill-button { height: 2rem; padding: 0 0.875rem; }
+/* the on-ticket way out and its tail action are the phone's layout only */
+.pill-button.is-tail, .device-revoke.is-logout { display: none; }
 
 /* ---------- phones (3b) ---------- */
 @media (max-width: 700px) {
@@ -296,15 +307,25 @@
   .settings-ids label > span { width: auto; font-size: 0.9375rem; }
   .settings-ids .pill-input { height: 3.1875rem; padding: 0 1rem; background: var(--well); }
 
-  .device-ticket, .device-ticket.is-current { --sub: #4c3e2c; align-items: flex-start; border-radius: 1.625rem; background: #e7e0d5; color: #2b1901; }
-  .device-ticket > div:first-child { padding: 1rem 1.125rem; gap: 0.1875rem; }
-  .device-ticket code, .device-ticket span { font: 0.90625rem/1.4 Figtree, sans-serif; }
-  .device-ticket .device-seen { display: block; }
-  .device-stub, .device-name i { display: none; }
-  .device-name h4 { font: 600 0.9375rem/1.4 Figtree, sans-serif; }
-  .device-name em { font-style: italic; font-size: 0.9375rem; letter-spacing: 0; text-transform: none; color: #4c3e2c; }
-  .device-revoke { width: 2.875rem; height: 2.875rem; padding: 0; justify-content: center; background: rgba(82, 88, 51, 0.16); color: #4c3e2c; }
-  .device-revoke svg { display: block; width: 1rem; height: 1rem; }
+  /* The side stub cannot survive a 372px ticket, so it tears off along the
+     bottom instead: name and address up top, the dashed rule, the dates under
+     it. Everything else keeps the desktop ticket — the dot, the serif name,
+     the mono address, and the dark ticket for the device you are holding. */
+  .device-ticket { --sub: #6b6144; border-radius: 1.625rem; background: #e7e0d5; }
+  .device-ticket > div:first-child { padding: 0.9375rem 1.125rem 0.875rem; gap: 0.3125rem; }
+  .device-ticket code, .device-ticket span { font-size: 0.8125rem; line-height: 1.5; }
+  .device-ticket .device-seen { display: block; margin-top: 0.3125rem; padding-top: 0.625rem; border-top: 0.09375rem dashed var(--rule); }
+  .device-stub { display: none; }
+  .device-name { min-height: 2.25rem; gap: 0.625rem; }
+  .device-name i { width: 0.4375rem; height: 0.4375rem; }
+  .device-name h4 { font-size: 1.125rem; line-height: 1.2; }
+  .device-name em { font-size: 0.65625rem; }
+  .device-revoke { width: 2.25rem; height: 2.25rem; padding: 0; justify-content: center; background: rgba(82, 88, 51, 0.16); color: inherit; }
+  .device-revoke svg { display: block; width: 0.9375rem; height: 0.9375rem; }
   .device-ticket .device-revoke span { display: none; }
-  .device-actions .pill-button { height: 3.3125rem; padding: 0 1.125rem; font: 1rem Figtree, sans-serif; }
+  .device-revoke.is-logout { display: inline-flex; width: auto; height: 2.25rem; padding: 0 0.75rem; background: rgba(214, 189, 138, 0.16); }
+  .device-ticket .device-revoke.is-logout span { display: inline; }
+  /* the sentence and its pair of buttons give way to the actions on the tickets */
+  .device-signout { display: none; }
+  .pill-button.is-tail { display: inline-flex; align-items: center; justify-self: start; margin: 0.25rem 0 0 0.25rem; height: 2.5rem; padding: 0 1rem; }
 }

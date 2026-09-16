@@ -26,7 +26,7 @@ port = 8787
 auth_mode = "tailscale-only" # tailscale-only | bearer | public-2fa
 # bearer mode uses this token as the WebUI login secret, then issues device cookies.
 bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN:-}"
-# voice_context_messages = 20  # recent main-chat messages a voice call opens with
+# voice_context_messages = 10  # recent main-chat messages a voice call opens with
 # voice_keep = "ask"            # after a call: ask | transcript | summary | discard
 totp_secret = "${FAMILIAR_WEB_TOTP_SECRET:-}"
 # keep 127.0.0.1 when exposing through nginx/caddy on a VPS.

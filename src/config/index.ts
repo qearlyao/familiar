@@ -641,7 +641,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		web: {
 			port: readInteger(web.port, 8787, "web.port"),
 			authMode: readEnum(readOptionalString(web.auth_mode, "tailscale-only"), "web.auth_mode", WEB_AUTH_MODES),
-			voiceContextMessages: readInteger(web.voice_context_messages, 20, "web.voice_context_messages", 0),
+			voiceContextMessages: readInteger(web.voice_context_messages, 10, "web.voice_context_messages", 0),
 			voiceKeep: readEnum(readOptionalString(web.voice_keep, "ask"), "web.voice_keep", VOICE_KEEP_CHOICES),
 			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
 			totpSecret: readOptionalString(web.totp_secret, "") || undefined,

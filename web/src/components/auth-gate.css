@@ -7,12 +7,12 @@ html:has(.auth-gate), body:has(.auth-gate) { background: #2b1901; }
 }
 .auth-gate-brand { display: flex; align-items: center; gap: 0.625rem; font: 500 1.125rem/1 var(--font-display); }
 .auth-gate-monogram { width: 2.25rem; height: 2.25rem; display: grid; place-items: center; border-radius: 50%; background: var(--foreground); color: var(--secondary); }
-.auth-gate-content { width: 100%; max-width: 26rem; margin: auto; padding: 2.5rem 0; }
-.auth-gate-welcome { text-align: center; margin-bottom: 1.75rem; }
-.auth-gate-avatar { width: 4rem; height: 4rem; margin: 0 auto 1.25rem; display: grid; place-items: center; border-radius: 50%; background: var(--primary); color: var(--secondary); font: 500 1.75rem/1 var(--font-display); text-transform: uppercase; }
+/* Extra space below balances the form's visual weight against the lighter welcome. */
+.auth-gate-content { width: 100%; max-width: 26rem; margin: auto; padding: 1rem 0 clamp(1rem, calc(50dvh - 23rem), 8rem); }
+.auth-gate-welcome { text-align: center; margin-bottom: 1.25rem; }
+.auth-gate-avatar { width: 2.5rem; height: 2.5rem; margin: 0 auto 0.5rem; display: grid; place-items: center; border-radius: 50%; background: var(--primary); color: var(--secondary); font: 500 1.25rem/1 var(--font-display); text-transform: uppercase; }
 .auth-gate-eyebrow { font-size: 0.75rem; font-weight: 600; overflow-wrap: anywhere; }
-.auth-gate-welcome h1 { margin: 0.625rem 0 0.875rem; font: 500 clamp(2.5rem, 7vw, 3.25rem)/1.1 var(--font-display); letter-spacing: -0.035em; }
-.auth-gate-welcome > p:last-child { font-size: 0.9375rem; line-height: 1.6; color: var(--muted-foreground); }
+.auth-gate-welcome h1 { margin: 0.375rem 0 0.5rem; font: 500 clamp(2rem, 6vw, 2.5rem)/1.1 var(--font-display); letter-spacing: -0.035em; }
 .auth-gate-form { padding: 1.75rem; border: 1px solid var(--border); border-radius: 1.625rem; background: var(--card); box-shadow: 0 0.25rem 0 rgba(76, 62, 44, 0.08); }
 .auth-gate-form-heading { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 1.5rem; color: var(--primary); }
 .auth-gate-form-heading h2 { margin: 0; font: 500 1.1875rem/1.3 var(--font-display); }
@@ -33,7 +33,7 @@ html:has(.auth-gate), body:has(.auth-gate) { background: #2b1901; }
 @media (max-width: 767.98px) {
   .auth-gate { padding: 0.5rem; }
   .auth-gate-surface { min-height: calc(100dvh - 1rem); padding: 1.25rem 1rem; border-radius: 1.375rem; }
-  .auth-gate-content { padding: 2rem 0; }
+  .auth-gate-content { padding: 1rem 0 2rem; }
   .auth-gate-form { padding: 1.375rem; }
 }
 @media (prefers-reduced-motion: reduce) {

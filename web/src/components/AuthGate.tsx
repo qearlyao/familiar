@@ -141,7 +141,6 @@ function BearerLogin({
             </div>
             <p className="auth-gate-eyebrow">a little space for you &amp; {personaName}</p>
             <h1>come on in.</h1>
-            <p>Your conversations, keepsakes, and quiet moments.<br />All right where you left them.</p>
           </div>
           <form onSubmit={submit} className="auth-gate-form" aria-label="Sign in" aria-busy={busy}>
             <div className="auth-gate-form-heading">

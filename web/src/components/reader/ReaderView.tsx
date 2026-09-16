@@ -88,8 +88,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
   const pendingChapterRef = useRef(book.position?.chapter ?? 0);
   const entryRef = useRef(book.position?.offsetRatio ?? 0);
   const posRef = useRef<{ chapter: number; ratio: number } | undefined>(undefined);
-  const chromeTimerRef = useRef<number | undefined>(undefined);
-  const overlayOpenRef = useRef(false);
   const dismissedAtRef = useRef(0);
   const pendingJumpRef = useRef<MarginaliaEntry | undefined>(undefined);
 
@@ -168,8 +166,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
   const layoutIdRef = useRef(layoutId);
   useEffect(() => {
     layoutIdRef.current = layoutId;
-    // A pinned margin means reading with the margin: idle never takes it (or the chrome) away.
-    overlayOpenRef.current = menu !== undefined || noteTarget !== undefined || selection !== undefined || (wide && marginVisible);
   });
   const activeSelection = selection && selection.layoutId === layoutId ? selection : undefined;
   const selectionKey = selection ? `${selection.start}:${selection.end}` : "";
@@ -252,22 +248,16 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
   useEffect(() => localStorage.setItem(FONT_KEY, String(fontSize)), [fontSize]);
   useEffect(() => localStorage.setItem(PAPER_KEY, paper), [paper]);
 
-  // Chrome fades after idle; mouse movement brings it back. Menus and note
-  // cards hold it open — a popover anchored to a faded header is unusable.
-  const fadeChromeLater = useCallback(() => {
-    window.clearTimeout(chromeTimerRef.current);
-    chromeTimerRef.current = window.setTimeout(() => {
-      if (!overlayOpenRef.current) setChromeVisible(false);
-    }, CHROME_IDLE_MS);
-  }, []);
-  const bumpChrome = useCallback(() => {
-    setChromeVisible(true);
-    fadeChromeLater();
-  }, [fadeChromeLater]);
+  // A center click toggles the chrome; pointer movement never reveals it.
+  // Pause idle hiding while the margin or a reading control is open, then give
+  // the reader a fresh timeout when it closes or the chrome is revealed again.
+  const chromeHeldOpen = menu !== undefined || activeNote !== undefined || activeSelection !== undefined
+    || allNotesOpen || marginSheetOpen || (wide && marginVisible);
   useEffect(() => {
-    fadeChromeLater();
-    return () => window.clearTimeout(chromeTimerRef.current);
-  }, [fadeChromeLater]);
+    if (!chromeVisible || chromeHeldOpen) return;
+    const timer = window.setTimeout(() => setChromeVisible(false), CHROME_IDLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [chromeVisible, chromeHeldOpen]);
 
   // Selection engine. Driven by document.selectionchange (not pointerup on the
   // viewport) so it catches drags released off-viewport, iOS handle
@@ -523,9 +513,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     <div
       className="reader-shell fixed inset-0 z-50 flex"
       data-paper={paper}
-      onPointerMove={(e) => {
-        if (e.pointerType === "mouse") bumpChrome();
-      }}
     >
       <div className="reader-surface">
         <header ref={headerRef} className={cn("reader-header", chromeClass)}>
@@ -580,7 +567,7 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
                   aria-pressed={marginVisible}
                   onClick={() => {
                     setMarginVisible((v) => !v);
-                    bumpChrome();
+                    setChromeVisible(true);
                   }}
                 >
                   <MarginIcon />

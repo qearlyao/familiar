@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.3 - 2026-09-17
+
+### Changed
+
+- Give chat heartbeat notices, conversation resets, and errors distinct visual treatments, and stream heartbeat notices into the chat as they occur.
+- Redesign the devices settings page with responsive device cards and phone-friendly sign-out controls.
+- Refresh the maskable app icon for improved display.
+
+### Fixed
+
+- Match the mobile page background to the open media viewer, including the iOS status-bar area.
+- Keep the reader notes drawer header below the iPhone Dynamic Island and other top safe areas.
+
 ## 1.0.2 - 2026-09-16
 
 ### Fixed

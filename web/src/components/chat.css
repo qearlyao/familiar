@@ -600,6 +600,15 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .chat-silent .chat-speaker { color: #4c3e2c; letter-spacing: 0; }
 .chat-silent em { font-size: 0.9375rem; color: #4c3e2c; }
 .chat-system { text-align: center; font-size: 0.78125rem; color: #4c3e2c; }
+.chat-notice-pill {
+  align-self: center; display: inline-flex; align-items: center; gap: 0.4375rem; height: 1.625rem; padding: 0 0.75rem 0 0.625rem; border-radius: 62.4375rem;
+  background: rgba(82, 88, 51, 0.16); color: #4c3e2c; font-size: 0.75rem; letter-spacing: 0.02em;
+}
+.chat-notice-pill svg { color: #525833; flex: none; }
+.chat-notice-pill.is-live svg { animation: fernpulse 1.6s ease-in-out infinite; }
+.chat-time-divider + .chat-notice-pill { margin-top: -1.125rem; } /* tucked under the timestamp */
+.chat-page-break { display: flex; align-items: center; gap: 1rem; color: #4c3e2c; font: var(--font-weight-normal) 0.8125rem Caprasimo, Georgia, serif; letter-spacing: 0.04em; }
+.chat-page-break::before, .chat-page-break::after { content: ""; flex: 1; height: 0.0625rem; background: rgba(76, 62, 44, 0.28); }
 
 .chat-edit textarea {
   width: 100%; resize: vertical; padding: 0.875rem 1rem; border-radius: 1.125rem; border: 0.09375rem solid rgba(76, 62, 44, 0.22); background: #e7e0d5;

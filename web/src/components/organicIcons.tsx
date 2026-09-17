@@ -170,6 +170,14 @@ export const IconPause = glyph(
     <rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor" stroke="none" />
   </>,
 );
+export const IconFern = glyph(
+  <>
+    <path d="M12 21V9" />
+    <path d="M12 13c-3 0-6-2-6-6 4 0 6 2 6 6Z" />
+    <path d="M12 13c3 0 6-2 6-6-4 0-6 2-6 6Z" />
+    <path d="M12 9c0-3 1-5 3-6" />
+  </>,
+);
 export const IconCheck = glyph(<path d="M5 12l5 5L20 7" />);
 export const IconDownload = glyph(
   <>

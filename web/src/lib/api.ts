@@ -15,6 +15,7 @@ function wireToMessage(wire: WireMessage): Message {
     usage: wire.usage,
     silent: wire.silent,
     call: wire.call,
+    notice: wire.notice,
     ts: wire.ts,
   };
 }

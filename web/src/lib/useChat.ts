@@ -150,7 +150,7 @@ export function useChat(): ChatHook {
   const latestAssistantActionResyncTimerRef = useRef<number | null>(null);
   const scheduleLatestAssistantActionRecoveryRef = useRef<() => void>(() => undefined);
 
-  const appendSystemMessage = useCallback((text: string) => {
+  const appendSystemMessage = useCallback((text: string, notice?: Message["notice"]) => {
     setMessages((prev) => [
       ...prev,
       {
@@ -158,6 +158,7 @@ export function useChat(): ChatHook {
         role: "system",
         who: "",
         steps: [{ kind: "text", id: uid(), text, complete: true }],
+        notice,
         ts: Date.now(),
       },
     ]);
@@ -306,6 +307,7 @@ export function useChat(): ChatHook {
                 who: event.who,
                 steps: [],
                 call: event.call,
+                notice: event.notice,
                 ts: event.ts,
               },
             ];
@@ -440,14 +442,8 @@ export function useChat(): ChatHook {
               id: uid(),
               role: "system",
               who: "",
-              steps: [
-                {
-                  kind: "text",
-                  id: uid(),
-                  text: `error · ${event.code}: ${event.message}`,
-                  complete: true,
-                },
-              ],
+              steps: [{ kind: "text", id: uid(), text: `${event.code}: ${event.message}`, complete: true }],
+              notice: "error",
               ts: event.ts,
             },
           ]);
@@ -749,7 +745,7 @@ export function useChat(): ChatHook {
     beginPendingLatestAssistantAction("retry", messageId);
     void dispatchLatestAssistantActionRef.current("retry").catch((error) => {
       clearPendingLatestAssistantAction();
-      appendSystemMessage(error instanceof Error ? error.message : String(error));
+      appendSystemMessage(error instanceof Error ? error.message : String(error), "error");
     });
   }, [
     appendSystemMessage,
@@ -769,7 +765,7 @@ export function useChat(): ChatHook {
     beginPendingLatestAssistantAction("delete", messageId);
     void dispatchLatestAssistantActionRef.current("delete").catch((error) => {
       clearPendingLatestAssistantAction();
-      appendSystemMessage(error instanceof Error ? error.message : String(error));
+      appendSystemMessage(error instanceof Error ? error.message : String(error), "error");
     });
   }, [
     appendSystemMessage,
@@ -793,7 +789,7 @@ export function useChat(): ChatHook {
         scheduleLatestAssistantActionRecoveryRef.current();
       } catch (error) {
         clearPendingLatestAssistantAction();
-        appendSystemMessage(error instanceof Error ? error.message : String(error));
+        appendSystemMessage(error instanceof Error ? error.message : String(error), "error");
         throw error;
       }
     },
@@ -808,7 +804,7 @@ export function useChat(): ChatHook {
   );
 
   const notifyNewChat = useCallback(() => {
-    appendSystemMessage("started fresh");
+    appendSystemMessage("started fresh", "reset");
   }, [appendSystemMessage]);
 
   return {

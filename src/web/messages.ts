@@ -13,7 +13,7 @@ import { applyMessageEditToSteps } from "./message-edit.js";
 import { WEB_USER_NAME, type WebAttachment, type WebMessage, type WebStep, type WebToolEvent } from "./types.js";
 
 export function isUserVisibleRuntimeRecord(record: ChatLogRecord): boolean {
-	return record.type !== "runtime" || !["armed", "reset", "stopped"].includes(record.event);
+	return record.type !== "runtime" || !["armed", "reset", "stopped", "heartbeat_failed"].includes(record.event);
 }
 
 export function webAttachments(
@@ -444,6 +444,7 @@ export function webMessageFromRecord(
 			role: "system",
 			who: "system",
 			text: record.type === "runtime" ? record.detail || record.event : record.message,
+			notice: record.type === "error" ? "error" : record.event === "heartbeat" ? "heartbeat" : undefined,
 			ts: toUnixMs(record.ts),
 		};
 	}

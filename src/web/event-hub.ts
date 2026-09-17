@@ -207,7 +207,7 @@ export function createWebEventHub(
 				}
 				publish(completion);
 			}
-			if (record.type === "call_discarded") {
+			if (record.type === "call_discarded" || (record.type === "runtime" && record.event === "heartbeat")) {
 				const mark = webMessageFromRecord(config, record, personaName);
 				if (mark) {
 					const { channelKey } = runtime;
@@ -218,6 +218,7 @@ export function createWebEventHub(
 						role: "system",
 						who: "system",
 						call: mark.call,
+						notice: mark.notice,
 						ts: mark.ts,
 					});
 					publish({ type: "message_completed", channelKey, messageId: mark.id, ts: mark.ts });

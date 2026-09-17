@@ -18,7 +18,7 @@ export type Usage = WebUsage;
 
 export type Message = Pick<
   WebMessage,
-  "id" | "role" | "who" | "attachments" | "usage" | "silent" | "call" | "ts"
+  "id" | "role" | "who" | "attachments" | "usage" | "silent" | "call" | "notice" | "ts"
 > & {
   steps: Step[];
 };

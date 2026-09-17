@@ -5,7 +5,7 @@ import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
 import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
-import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconMic, IconX } from "./organicIcons";
+import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
 
 type ImageAttachment = Attachment & { url: string };
 
@@ -144,25 +144,51 @@ function EditForm({ initialText, onSave, onCancel, saving }: { initialText: stri
   );
 }
 
+function SystemRow({ message, text, live }: { message: Message; text: string; live?: boolean }) {
+  switch (message.notice) {
+    case "heartbeat":
+      return (
+        <div className={live ? "chat-notice-pill is-live" : "chat-notice-pill"}>
+          <IconFern size={12} />
+          heartbeat
+        </div>
+      );
+    case "reset":
+      return <div className="chat-page-break">a fresh page</div>;
+    case "error":
+      return (
+        <div className="chat-error">
+          <span>something slipped</span>
+          <pre>{text}</pre>
+        </div>
+      );
+    default:
+      return text ? <p className="chat-system">{text}</p> : null;
+  }
+}
+
 export const MessageBubble = memo(function MessageBubble({
   message,
   onRetry,
   onDelete,
   onEdit,
   pendingLatestAssistantAction,
+  live,
 }: {
   message: Message;
   onRetry?: () => void;
   onDelete?: () => void;
   onEdit?: (text: string) => Promise<void>;
   pendingLatestAssistantAction?: "retry" | "delete" | "edit";
+  /** a heartbeat pill still breathes while he's waking */
+  live?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const pending = pendingLatestAssistantAction != null;
   const text = messageText(message);
   const canEdit = !!onEdit && !!text.trim();
 
-  if (message.role === "system") return text ? <p className="chat-system">{text}</p> : null;
+  if (message.role === "system") return <SystemRow message={message} text={text} live={live} />;
   if (message.role === "user") return <UserTurn message={message} />;
   if (editing) return <EditForm initialText={text} onSave={onEdit} onCancel={() => setEditing(false)} saving={pendingLatestAssistantAction === "edit"} />;
 

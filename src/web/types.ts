@@ -79,8 +79,12 @@ export type WebMessage = {
 	silent?: boolean;
 	/** a voice call's mark in the chat */
 	call?: StoredVoiceCall;
+	/** how a system row is drawn: his heartbeat pill, a page break, or a rust error block */
+	notice?: WebNotice;
 	ts: number;
 };
+
+export type WebNotice = "heartbeat" | "reset" | "error";
 
 export type WebStreamEvent =
 	| {
@@ -92,6 +96,7 @@ export type WebStreamEvent =
 			role: WebMessage["role"];
 			who: string;
 			call?: StoredVoiceCall;
+			notice?: WebNotice;
 	  }
 	| {
 			type: "delta";

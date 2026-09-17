@@ -750,7 +750,7 @@
   .reader-paper-row > span { font-size: .75rem; }
   .book-notes-dim { display: none; }
   .book-notes-drawer { width: 100%; border-left: 0; box-shadow: none; }
-  .book-notes-drawer > header { padding: 1.375rem 1.25rem .875rem; }
+  .book-notes-drawer > header { padding: max(1.375rem,env(safe-area-inset-top)) 1.25rem .875rem; }
   .book-notes-drawer > header h2 { font-size: 1.5rem; }
   .book-notes-drawer > nav { flex-wrap: nowrap; padding: 0 1.25rem .875rem; overflow-x: auto; scrollbar-width: none; }
   .book-notes-drawer > nav::-webkit-scrollbar { display: none; }

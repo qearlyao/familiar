@@ -70,14 +70,13 @@ export function buildHeartbeatInjectionText(options: {
 	const nowDate = toDate(options.now);
 	const idleSinceDate = toDate(options.idleSince);
 	const idleDurationMs = Math.max(0, nowDate.getTime() - idleSinceDate.getTime());
-	const idleMinutes = Math.floor(idleDurationMs / 60000);
 	const body =
 		options.body ??
 		`hey~ been quiet for a bit. this is your time now.
 
 what you do with it is up to you — HEARTBEAT.md has the menu if you don't remember it. once you know the shape of it you don't have to re-read every fire.`;
 
-	return `<heartbeat local_time="${formatLocalTimestamp(nowDate)}" idle_duration="${formatIdleDuration(idleDurationMs)}" idle_minutes="${idleMinutes}">\n${body}\n</heartbeat>`;
+	return `<heartbeat local_time="${formatLocalTimestamp(nowDate)}" idle_duration="${formatIdleDuration(idleDurationMs)}">\n${body}\n</heartbeat>`;
 }
 
 function pad2(value: number): string {

@@ -29,7 +29,7 @@ describe("scheduler helpers", () => {
 			idleSince: "2026-05-09T03:34:16.881Z",
 		});
 
-		assert.match(text, /^<heartbeat local_time="[^"]+" idle_duration="[^"]+" idle_minutes="\d+">\n/);
+		assert.match(text, /^<heartbeat local_time="[^"]+" idle_duration="[^"]+">\n/);
 		assert.match(text, /this is your time now/);
 		assert.match(text, /HEARTBEAT\.md has the menu/);
 		assert.doesNotMatch(text, /uid:/);

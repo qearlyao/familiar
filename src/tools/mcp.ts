@@ -139,7 +139,7 @@ export function createLoadToolsTool(
 	return {
 		name: "load_tools",
 		label: "Load Tools",
-		description: `bring more tools into reach. these sit out of the way until you ask for them. available: ${deferred.map((tool) => tool.name).join(", ")}`,
+		description: `bring more tools into reach. these sit out of the way until you ask for them; name them or search by words and the matches become callable from your next turn. prefer names or a narrow query — a broad one loads everything it touches, and each loaded tool costs context until you're done with it. available: ${deferred.map((tool) => tool.name).join(", ")}`,
 		parameters: loadToolsSchema,
 		async execute(_toolCallId, params) {
 			const names = new Set(params.names ?? []);

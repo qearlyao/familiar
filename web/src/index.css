@@ -56,20 +56,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: Libre Baskerville, serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
+    --font-sans: var(--font-sans);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -95,8 +82,8 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --font-mono: IBM Plex Mono, monospace;
-    --font-serif: Lora, serif;
+    --font-mono: var(--font-mono);
+    --font-serif: var(--font-serif);
     --radius: 0.25rem;
     --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
     --tracking-tight: calc(var(--tracking-normal) - 0.025em);
@@ -125,42 +112,30 @@
 }
 
 :root {
-    --background: oklch(0.9582 0.0152 90.2357);
-    --foreground: oklch(0.3760 0.0225 64.3434);
-    --card: oklch(0.9914 0.0098 87.4695);
-    --card-foreground: oklch(0.3760 0.0225 64.3434);
-    --popover: oklch(0.9914 0.0098 87.4695);
-    --popover-foreground: oklch(0.3760 0.0225 64.3434);
-    --primary: oklch(0.6180 0.0778 65.5444);
-    --primary-foreground: oklch(1.0000 0 0);
-    --secondary: oklch(0.8846 0.0302 85.5655);
-    --secondary-foreground: oklch(0.4313 0.0300 64.9288);
-    --muted: oklch(0.9239 0.0190 83.0636);
-    --muted-foreground: oklch(0.5391 0.0387 71.1655);
-    --accent: oklch(0.8348 0.0426 88.8064);
-    --accent-foreground: oklch(0.3760 0.0225 64.3434);
-    --destructive: oklch(0.5471 0.1438 32.9149);
-    --border: oklch(0.8606 0.0321 84.5881);
-    --input: oklch(0.8606 0.0321 84.5881);
-    --ring: oklch(0.6180 0.0778 65.5444);
-    --chart-1: oklch(0.6180 0.0778 65.5444);
-    --chart-2: oklch(0.5604 0.0624 68.5805);
-    --chart-3: oklch(0.4851 0.0570 72.6827);
-    --chart-4: oklch(0.6777 0.0624 64.7755);
-    --chart-5: oklch(0.7264 0.0581 66.6967);
+    --background: #d3c9ba;
+    --foreground: #2b1901;
+    --card: #e7e0d5;
+    --card-foreground: #2b1901;
+    --popover: #e7e0d5;
+    --popover-foreground: #2b1901;
+    --primary: #525833;
+    --primary-foreground: #e7e0d5;
+    --secondary: #d6bd8a;
+    --secondary-foreground: #2b1901;
+    --muted: #c9bfaf;
+    --muted-foreground: #4c3e2c;
+    --accent: #c4c1ab;
+    --accent-foreground: #2b1901;
+    --destructive: #a85b2a;
+    --destructive-foreground: #e7e0d5;
+    --border: rgba(76, 62, 44, 0.22);
+    --input: rgba(76, 62, 44, 0.22);
+    --ring: #525833;
     --radius: 0.25rem;
-    --sidebar: oklch(0.9239 0.0190 83.0636);
-    --sidebar-foreground: oklch(0.3760 0.0225 64.3434);
-    --sidebar-primary: oklch(0.6180 0.0778 65.5444);
-    --sidebar-primary-foreground: oklch(1.0000 0 0);
-    --sidebar-accent: oklch(0.8348 0.0426 88.8064);
-    --sidebar-accent-foreground: oklch(0.3760 0.0225 64.3434);
-    --sidebar-border: oklch(0.8606 0.0321 84.5881);
-    --sidebar-ring: oklch(0.6180 0.0778 65.5444);
-    --destructive-foreground: oklch(1.0000 0 0);
-    --font-sans: Libre Baskerville, serif;
-    --font-serif: Lora, serif;
-    --font-mono: IBM Plex Mono, monospace;
+    --font-sans: Figtree, sans-serif;
+    --font-serif: Caprasimo, Georgia, serif;
+    --font-display: Caprasimo, Georgia, serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
     --shadow-color: hsl(28 13% 20%);
     --shadow-opacity: 0.12;
     --shadow-blur: 5px;
@@ -357,145 +332,6 @@
     content: "▎";
   }
 
-  /* Gallery audio bloom — the diffusion token for recordings, replacing the
-     waveform. Still at rest; drifts on hover; livelier while playing. Each tile
-     rotates/scales the field by an inline transform (seeded from the item id)
-     so no two blooms read the same. */
-  .bloom {
-    @apply relative grid place-items-center;
-    cursor: pointer;
-    border: 0;
-    background: transparent;
-    isolation: isolate;
-  }
-  .bloom:focus-visible {
-    outline: none;
-  }
-  .bloom:focus-visible .bloom-glyph {
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 55%, transparent);
-    border-radius: 9999px;
-  }
-  .bloom-glyph {
-    @apply relative z-[2] grid place-items-center;
-    color: color-mix(in oklch, var(--primary) 78%, black);
-    opacity: 0.45;
-    padding: 0.4rem;
-    transition:
-      opacity 0.3s var(--ease-out-quart),
-      transform 0.3s var(--ease-out-quart);
-  }
-  .bloom:hover .bloom-glyph {
-    opacity: 0.95;
-    transform: scale(1.06);
-  }
-  .bloom-field {
-    position: absolute;
-    inset: -58%;
-    z-index: 0;
-    pointer-events: none;
-    filter: blur(11px);
-  }
-  .bloom-blob {
-    position: absolute;
-    border-radius: 9999px;
-    opacity: 0.6;
-    mix-blend-mode: multiply;
-    transition: opacity 0.5s var(--ease-out-quart);
-    will-change: transform;
-  }
-  .bloom-blob-a {
-    inset: 12% 30% 32% 10%;
-    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 76%, white), transparent 68%);
-  }
-  .bloom-blob-b {
-    inset: 28% 10% 14% 32%;
-    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 60%, var(--accent)), transparent 68%);
-  }
-  .bloom-blob-c {
-    inset: 32% 34% 18% 18%;
-    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 54%, white), transparent 70%);
-  }
-  .bloom-blob-d {
-    inset: 10% 16% 38% 36%;
-    background: radial-gradient(circle, color-mix(in oklch, var(--primary) 64%, var(--accent)), transparent 66%);
-  }
-  .bloom:hover .bloom-blob {
-    opacity: 0.78;
-  }
-  .bloom:hover .bloom-blob-a {
-    animation: bloom-drift-a 12s ease-in-out infinite;
-  }
-  .bloom:hover .bloom-blob-b {
-    animation: bloom-drift-b 14s ease-in-out infinite;
-  }
-  .bloom:hover .bloom-blob-c {
-    animation: bloom-drift-c 16s ease-in-out infinite;
-  }
-  .bloom:hover .bloom-blob-d {
-    animation: bloom-drift-d 18s ease-in-out infinite;
-  }
-  .bloom.is-playing .bloom-blob {
-    opacity: 0.9;
-  }
-  .bloom.is-playing .bloom-blob-a {
-    animation: bloom-drift-a 8s ease-in-out infinite;
-  }
-  .bloom.is-playing .bloom-blob-b {
-    animation: bloom-drift-b 9.5s ease-in-out infinite;
-  }
-  .bloom.is-playing .bloom-blob-c {
-    animation: bloom-drift-c 11s ease-in-out infinite;
-  }
-  .bloom.is-playing .bloom-blob-d {
-    animation: bloom-drift-d 12.5s ease-in-out infinite;
-  }
-
-  /* Bloom-shaped audio card: a soft radial wash, no hard rectangle. */
-  .gallery-audio-card {
-    background: radial-gradient(
-      120% 90% at 50% 38%,
-      color-mix(in oklch, var(--primary) 12%, var(--card)) 0%,
-      var(--card) 70%
-    );
-    box-shadow: var(--shadow-xs);
-  }
-}
-
-@keyframes bloom-drift-a {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(13%, -10%) scale(1.13);
-  }
-}
-@keyframes bloom-drift-b {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-12%, 9%) scale(1.1);
-  }
-}
-@keyframes bloom-drift-c {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(9%, 12%) scale(0.9);
-  }
-}
-@keyframes bloom-drift-d {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-10%, -11%) scale(1.08);
-  }
 }
 
 @keyframes retry-dot {
@@ -520,15 +356,6 @@
   50% {
     transform: scale(1.18);
     opacity: 0.82;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bloom-blob {
-    animation: none !important;
-  }
-  .bloom.is-playing .bloom-blob {
-    opacity: 0.9;
   }
 }
 

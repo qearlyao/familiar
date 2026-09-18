@@ -1,24 +1,5 @@
 .library-room,
 .reader-shell {
-  --background: #d3c9ba;
-  --foreground: #2b1901;
-  --card: #e7e0d5;
-  --card-foreground: #2b1901;
-  --popover: #e7e0d5;
-  --popover-foreground: #2b1901;
-  --primary: #525833;
-  --primary-foreground: #e7e0d5;
-  --secondary: #d6bd8a;
-  --secondary-foreground: #2b1901;
-  --muted: #c9bfaf;
-  --muted-foreground: #4c3e2c;
-  --accent: #c4c1ab;
-  --accent-foreground: #2b1901;
-  --border: rgba(76, 62, 44, 0.22);
-  --input: rgba(76, 62, 44, 0.22);
-  --ring: #525833;
-  --font-sans: Figtree, sans-serif;
-  --font-serif: Caprasimo, Georgia, serif;
   background: var(--background);
   color: var(--foreground);
   font-family: Figtree, sans-serif;

@@ -71,7 +71,6 @@ export async function createFamiliarAgent(
 	setConfigOverridesPath(config.workspace.dataDir);
 	applyConfigOverridesToConfig(config);
 	const modelRuntime = options.modelRuntime ?? (await createModelRuntime(config));
-	const mcp = await connectMcpServers(config);
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);
@@ -83,6 +82,7 @@ export async function createFamiliarAgent(
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
+	const mcp = await connectMcpServers(config);
 	let defaultModel = createConfiguredModel(config);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();

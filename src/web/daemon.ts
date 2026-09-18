@@ -22,6 +22,7 @@ import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
 import { sendText } from "./http.js";
+import { registerWebMcpRoutes } from "./mcp-routes.js";
 import { createWebPushService } from "./push.js";
 import { registerWebPushRoutes } from "./push-routes.js";
 import { createWebRouteRegistry } from "./routes.js";
@@ -98,6 +99,7 @@ export async function startWebDaemon(
 		publish: eventHub.publish,
 	});
 	registerWebConfigRoutes(route, config, agentCore, options.restart);
+	registerWebMcpRoutes(route, config, familiarAgent, getRuntime);
 	registerWebPushRoutes(route, push);
 	registerWebBookRoutes(route, config, { getRuntime, drainJobs: actions.drainJobs });
 	registerWebDiaryRoutes(route, config);

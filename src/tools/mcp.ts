@@ -5,17 +5,30 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Type } from "typebox";
-import type { Config } from "../config/index.js";
+import type { McpServerConfig } from "../config/types.js";
+import { createWriteQueue } from "../util/fs.js";
+import type { McpSource } from "./mcp-servers.js";
+
+export interface McpServerState {
+	name: string;
+	source: McpSource;
+	spec: McpServerConfig;
+	status: "connected" | "failed";
+	error?: string;
+	tools: AgentTool<any>[];
+}
 
 export interface McpHub {
 	/** tools that ride along in every request */
-	tools: AgentTool<any>[];
+	readonly tools: AgentTool<any>[];
 	/** tools that stay out of the request until load_tools brings them in */
-	deferred: AgentTool<any>[];
+	readonly deferred: AgentTool<any>[];
+	servers(): McpServerState[];
+	/** connect what's new or changed, drop what's gone; a deferred flip alone never reconnects */
+	sync(specs: Record<string, { spec: McpServerConfig; source: McpSource }>): Promise<void>;
+	reconnect(name: string): Promise<void>;
 	close(): Promise<void>;
 }
-
-const EMPTY_HUB: McpHub = { tools: [], deferred: [], close: async () => {} };
 
 function toolName(server: string, name: string): string {
 	return `${server}__${name}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
@@ -65,36 +78,87 @@ export async function connectMcpClient(
 	};
 }
 
-export async function connectMcpServers(config: Config): Promise<McpHub> {
-	const entries = Object.entries(config.mcp.servers);
-	if (entries.length === 0) return EMPTY_HUB;
-	const hub: McpHub = { tools: [], deferred: [], close: async () => {} };
-	const clients: Client[] = [];
-	for (const [server, spec] of entries) {
+function openTransport(spec: McpServerConfig): Transport {
+	return spec.url
+		? new StreamableHTTPClientTransport(new URL(spec.url), { requestInit: { headers: spec.headers } })
+		: new StdioClientTransport({
+				command: spec.command!,
+				args: spec.args,
+				env: { ...(process.env as Record<string, string>), ...spec.env },
+				stderr: "ignore",
+			});
+}
+
+function sameTransport(a: McpServerConfig, b: McpServerConfig): boolean {
+	return JSON.stringify({ ...a, deferred: undefined }) === JSON.stringify({ ...b, deferred: undefined });
+}
+
+/** onChange fires after the tool set shifts, so live sessions can rebuild their tool lists */
+export function createMcpHub(onChange: () => void | Promise<void> = () => {}): McpHub {
+	const states = new Map<string, McpServerState & { client?: Client }>();
+	const serial = createWriteQueue("mcp");
+	const pick = (deferred: boolean) =>
+		[...states.values()].flatMap((state) => (state.spec.deferred === deferred ? state.tools : []));
+
+	const connect = async (name: string, spec: McpServerConfig, source: McpSource): Promise<void> => {
+		await states.get(name)?.client?.close();
+		const state: McpServerState & { client?: Client } = { name, source, spec, status: "failed", tools: [] };
+		states.set(name, state);
 		try {
-			const transport = spec.url
-				? new StreamableHTTPClientTransport(new URL(spec.url), { requestInit: { headers: spec.headers } })
-				: new StdioClientTransport({
-						command: spec.command!,
-						args: spec.args,
-						env: { ...(process.env as Record<string, string>), ...spec.env },
-						stderr: "ignore",
-					});
-			const { client, tools } = await connectMcpClient(server, transport);
-			clients.push(client);
-			(spec.deferred ? hub.deferred : hub.tools).push(...tools);
+			const { client, tools } = await connectMcpClient(name, openTransport(spec));
+			Object.assign(state, { client, tools, status: "connected" });
 			const listChanged = client.getServerCapabilities()?.tools?.listChanged ? ", announces list changes" : "";
 			console.log(
-				`mcp: ${server} connected (${tools.length} tools${spec.deferred ? ", deferred" : ""}${listChanged})`,
+				`mcp: ${name} connected (${tools.length} tools${spec.deferred ? ", deferred" : ""}${listChanged})`,
 			);
 		} catch (error) {
-			console.error(`mcp: ${server} failed to connect`, error);
+			state.error = error instanceof Error ? error.message : String(error);
+			console.error(`mcp: ${name} failed to connect`, error);
 		}
-	}
-	hub.close = async () => {
-		await Promise.allSettled(clients.map((client) => client.close()));
 	};
-	return hub;
+
+	return {
+		get tools() {
+			return pick(false);
+		},
+		get deferred() {
+			return pick(true);
+		},
+		servers: () => [...states.values()].map(({ client: _client, ...state }) => state),
+		sync: (specs) =>
+			serial(async () => {
+				let changed = false;
+				for (const [name, state] of states) {
+					if (name in specs) continue;
+					await state.client?.close();
+					states.delete(name);
+					changed = true;
+				}
+				await Promise.all(
+					Object.entries(specs).map(async ([name, { spec, source }]) => {
+						const current = states.get(name);
+						if (current && sameTransport(current.spec, spec)) {
+							if (current.spec.deferred === spec.deferred && current.source === source) return;
+							Object.assign(current, { spec, source });
+						} else await connect(name, spec, source);
+						changed = true;
+					}),
+				);
+				if (changed) await onChange();
+			}),
+		reconnect: async (name) => {
+			if (!states.has(name)) throw new Error(`no mcp server named ${name}`);
+			await serial(async () => {
+				const state = states.get(name);
+				if (!state) return;
+				await connect(name, state.spec, state.source);
+				await onChange();
+			});
+		},
+		close: async () => {
+			await Promise.allSettled([...states.values()].map((state) => state.client?.close()));
+		},
+	};
 }
 
 /** names a past tool result brought into the request; how loaded tools survive restarts and reloads */

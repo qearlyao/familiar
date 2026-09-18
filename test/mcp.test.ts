@@ -6,8 +6,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { loadConfig } from "../src/config/index.js";
-import { connectMcpClient, createLoadToolsTool, loadedToolNames, pruneCondensedTools } from "../src/tools/mcp.js";
-import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
+import {
+	connectMcpClient,
+	createLoadToolsTool,
+	createMcpHub,
+	loadedToolNames,
+	pruneCondensedTools,
+} from "../src/tools/mcp.js";
+import { mcpServerSpecs, saveWebMcpServers, setMcpServersPath } from "../src/tools/mcp-servers.js";
+import { configWithDataDir, createTempDataDir, createWorkspace, minimalConfigToml, withDiscordToken, withEnv } from "./helpers.js";
 
 async function inMemoryTools() {
 	const server = new McpServer({ name: "demo", version: "0" });
@@ -107,5 +114,40 @@ deferred = false
 			const bad = await createWorkspace(t, minimalConfigToml(`[mcp.servers.x]\ncommand = "a"\nurl = "http://b"\n`));
 			await assert.rejects(loadConfig(bad), /exactly one of command or url/);
 		});
+	});
+
+	it("layers web servers over config.toml and syncs the hub without reconnecting on a deferred flip", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir, {
+			mcp: { servers: { fs: { command: "/nonexistent-mcp-server", deferred: true } } },
+		});
+		setMcpServersPath(dataDir);
+		await saveWebMcpServers({
+				fs: { deferred: false },
+				remote: { url: "http://127.0.0.1:9/mcp", headers: { Authorization: "Bearer ${MCP_TEST_TOKEN}" }, deferred: true },
+				gone: { deferred: false },
+			});
+		const specs = await withEnv("MCP_TEST_TOKEN", "sekrit", async () => mcpServerSpecs(config));
+		assert.deepEqual(Object.keys(specs).sort(), ["fs", "remote"]);
+		assert.equal(specs.fs.source, "config");
+		assert.equal(specs.fs.spec.deferred, false);
+		assert.equal(specs.remote.source, "web");
+		assert.equal(specs.remote.spec.headers?.Authorization, "Bearer sekrit");
+
+		let changes = 0;
+		const hub = createMcpHub(() => {
+			changes++;
+		});
+		t.after(() => hub.close());
+		await hub.sync({ fs: specs.fs });
+		const failed = hub.servers()[0];
+		assert.equal(failed.status, "failed");
+		assert.ok(failed.error);
+		await hub.sync({ fs: { ...specs.fs, spec: { ...specs.fs.spec, deferred: true } } });
+		assert.equal(hub.servers()[0].error, failed.error);
+		assert.equal(hub.servers()[0].spec.deferred, true);
+		await hub.sync({});
+		assert.deepEqual(hub.servers(), []);
+		assert.equal(changes, 3);
 	});
 });

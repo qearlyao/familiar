@@ -22,7 +22,8 @@ import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
-import { connectMcpServers, pruneCondensedTools } from "../tools/mcp.js";
+import { createMcpHub, pruneCondensedTools } from "../tools/mcp.js";
+import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
 import type { ContextBreakdown } from "../web/types.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
@@ -82,10 +83,26 @@ export async function createFamiliarAgent(
 	console.log("---SYSTEM PROMPT (start)---");
 	console.log(systemPrompt);
 	console.log("---SYSTEM PROMPT (end)---");
-	const mcp = await connectMcpServers(config);
+	setMcpServersPath(config.workspace.dataDir);
+	const mcp = createMcpHub(() => rebuildSessionTools());
 	let defaultModel = createConfiguredModel(config);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+	// a server connecting, dropping or flipping deferred changes every live session's tool list
+	const rebuildSessionTools = async (): Promise<void> => {
+		for (const sessionPromise of sessions.values()) {
+			const session = await sessionPromise;
+			session.agent.state.tools = createFamiliarTools(
+				config,
+				session.mediaSink,
+				() => session.referenceAttachments,
+				memoryService,
+				mcp,
+				() => session.agent,
+			);
+		}
+	};
+	await mcp.sync(mcpServerSpecs(config));
 	// activePromptOptions covers each prompt window; skipAmbientMessages tags message
 	// identities so followUpMessage's fire-and-forget path also opts out.
 	const completedContexts = new Map<string, { tokens: number; breakdown: ContextBreakdown }>();
@@ -460,6 +477,11 @@ export async function createFamiliarAgent(
 
 	return {
 		close: () => mcp.close(),
+		mcp,
+		async toolNames(sessionKey) {
+			const session = await sessions.get(sessionKey);
+			return session?.agent.state.tools.map((tool) => tool.name) ?? [];
+		},
 		getContextBreakdown: (sessionKey, tokens) => {
 			const completed = completedContexts.get(sessionKey);
 			return completed?.tokens === tokens ? completed.breakdown : undefined;
@@ -523,6 +545,8 @@ export async function createFamiliarAgent(
 					nextSession.session.agent.state.thinkingLevel = nextSession.thinkingLevel;
 					nextSession.session.agent.state.tools = nextSession.tools;
 				}
+				setMcpServersPath(config.workspace.dataDir);
+				await mcp.sync(mcpServerSpecs(config));
 				const modelLine =
 					previousModel === formatModel(defaultModel)
 						? `default_model: ${previousModel}`

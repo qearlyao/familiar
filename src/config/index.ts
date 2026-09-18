@@ -290,11 +290,7 @@ function assertValidConfiguredProviderName(providerName: string, path: string): 
 	}
 }
 
-/**
- * Wire style per image provider, keyed by bare provider name or by
- * `provider/model` for a single model that diverges from its provider.
- */
-function readMcpServers(value: Record<string, unknown>): Config["mcp"]["servers"] {
+export function readMcpServers(value: Record<string, unknown>): Config["mcp"]["servers"] {
 	return Object.fromEntries(
 		Object.entries(value).map(([name, raw]) => {
 			const path = `mcp.servers.${name}`;
@@ -318,6 +314,10 @@ function readMcpServers(value: Record<string, unknown>): Config["mcp"]["servers"
 	);
 }
 
+/**
+ * Wire style per image provider, keyed by bare provider name or by
+ * `provider/model` for a single model that diverges from its provider.
+ */
 function readImageGenApis(value: unknown): Record<string, ImageGenApi> {
 	const table = readStringRecord(value, "image_gen.apis");
 	const apis: Record<string, ImageGenApi> = { ...DEFAULT_IMAGE_GEN_APIS };

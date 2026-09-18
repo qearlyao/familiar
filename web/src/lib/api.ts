@@ -722,3 +722,47 @@ export async function setConfig(key: ConfigKey, value: unknown): Promise<ConfigP
 export async function clearConfig(key: ConfigKey): Promise<ConfigPayload> {
   return jsonRequest<ConfigPayload>("/api/web/config", "DELETE", { key }, "config");
 }
+
+export interface McpTool {
+  name: string;
+  description: string;
+  /** fetched in and held by this channel's conversation */
+  loaded: boolean;
+}
+
+export interface McpServer {
+  name: string;
+  source: "config" | "web";
+  transport: "stdio" | "http";
+  where: string;
+  headers: number;
+  deferred: boolean;
+  status: "connected" | "failed";
+  error?: string;
+  tools: McpTool[];
+}
+
+export interface NewMcpServer {
+  name: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+}
+
+const mcpUrl = (path: string, channelKey?: string) =>
+  `/api/web/mcp${path}${channelKey ? `?channelKey=${encodeURIComponent(channelKey)}` : ""}`;
+
+export async function fetchMcpServers(channelKey?: string): Promise<McpServer[]> {
+  return (await getJson<{ servers: McpServer[] }>(mcpUrl("", channelKey), "mcp")).servers;
+}
+
+async function mcpRequest(path: string, method: "POST" | "DELETE", body: unknown, channelKey?: string): Promise<McpServer[]> {
+  return (await jsonRequest<{ servers: McpServer[] }>(mcpUrl(path, channelKey), method, body, "mcp")).servers;
+}
+
+export const addMcpServer = (server: NewMcpServer, channelKey?: string) => mcpRequest("", "POST", server, channelKey);
+export const removeMcpServer = (name: string, channelKey?: string) => mcpRequest("", "DELETE", { name }, channelKey);
+export const setMcpDeferred = (name: string, deferred: boolean, channelKey?: string) => mcpRequest("/deferred", "POST", { name, deferred }, channelKey);
+export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequest("/reconnect", "POST", { name }, channelKey);

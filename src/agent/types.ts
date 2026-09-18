@@ -7,6 +7,7 @@ import type { StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedAttachment, GeneratedMediaSink } from "../media/generated-media.js";
 import type { loadPersona } from "../prompting/persona.js";
 import type { loadFamiliarSkills } from "../prompting/skills.js";
+import type { McpHub } from "../tools/mcp.js";
 import type { ContextBreakdown } from "../web/types.js";
 
 export interface FamiliarAgentReply {
@@ -28,6 +29,9 @@ export interface FamiliarPromptOptions {
 export interface FamiliarAgent {
 	/** disconnect MCP servers */
 	close(): Promise<void>;
+	mcp: McpHub;
+	/** the tools a live session holds right now; empty when it hasn't started */
+	toolNames(sessionKey: string): Promise<string[]>;
 	getContextBreakdown(sessionKey: string, tokens: number): ContextBreakdown | undefined;
 	prompt(
 		sessionKey: string,

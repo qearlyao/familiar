@@ -5,6 +5,7 @@ import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
 import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
+import { withoutSilentMarker } from "@/lib/silentMarker";
 import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
 
 type ImageAttachment = Attachment & { url: string };
@@ -192,18 +193,23 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.role === "user") return <UserTurn message={message} />;
   if (editing) return <EditForm initialText={text} onSave={onEdit} onCancel={() => setEditing(false)} saving={pendingLatestAssistantAction === "edit"} />;
 
-  if (message.silent && !message.steps.some((s) => s.kind === "tool" || s.kind === "error")) {
+  // marker-only silence: whatever steps ran sit above, the quiet note beneath.
+  // silence with words left over falls through and renders muted (see TextStep).
+  if (message.silent && !withoutSilentMarker(text) && !message.steps.some((s) => s.kind === "error")) {
     return (
-      <div className="chat-silent">
-        <span className="chat-speaker">{message.who}</span>
-        <em>stayed quiet for a moment.</em>
-      </div>
+      <>
+        <TurnView message={message} />
+        <div className="chat-silent">
+          <span className="chat-speaker">{message.who}</span>
+          <em>stayed quiet for a moment.</em>
+        </div>
+      </>
     );
   }
 
   const attachments = message.attachments ?? [];
   // A turn that has only tool steps so far (tts/image_gen still running) gets no speaker block of its own.
-  const hasBody = message.steps.some((step) => (step.kind === "text" && step.text.trim()) || step.kind === "error");
+  const hasBody = message.steps.some((step) => (step.kind === "text" && withoutSilentMarker(step.text)) || step.kind === "error");
   const showActions = (onRetry || onDelete || canEdit) && (hasBody || attachments.length > 0);
   if (attachments.length === 0 && !showActions) return <TurnView message={message} />;
   return (

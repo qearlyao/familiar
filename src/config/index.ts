@@ -294,6 +294,30 @@ function assertValidConfiguredProviderName(providerName: string, path: string): 
  * Wire style per image provider, keyed by bare provider name or by
  * `provider/model` for a single model that diverges from its provider.
  */
+function readMcpServers(value: Record<string, unknown>): Config["mcp"]["servers"] {
+	return Object.fromEntries(
+		Object.entries(value).map(([name, raw]) => {
+			const path = `mcp.servers.${name}`;
+			const spec = readConfigTable(raw, path);
+			assertKnownKeys(spec, path, ["command", "args", "env", "url", "headers", "deferred"]);
+			const command = readOptionalConfigString(spec.command, `${path}.command`);
+			const url = readOptionalConfigString(spec.url, `${path}.url`);
+			if (!command === !url) throw new Error(`Config value ${path} needs exactly one of command or url`);
+			return [
+				name,
+				{
+					command,
+					args: readStringArray(spec.args, `${path}.args`),
+					env: readStringRecord(spec.env, `${path}.env`),
+					url,
+					headers: readStringRecord(spec.headers, `${path}.headers`),
+					deferred: readBoolean(spec.deferred, true, `${path}.deferred`),
+				},
+			];
+		}),
+	);
+}
+
 function readImageGenApis(value: unknown): Record<string, ImageGenApi> {
 	const table = readStringRecord(value, "image_gen.apis");
 	const apis: Record<string, ImageGenApi> = { ...DEFAULT_IMAGE_GEN_APIS };
@@ -425,6 +449,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const browser = (parsed.browser ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const heartbeat = (parsed.heartbeat ?? {}) as Record<string, unknown>;
+	const mcp = (parsed.mcp ?? {}) as Record<string, unknown>;
 	const cron = (parsed.cron ?? {}) as Record<string, unknown>;
 	const models = (parsed.models ?? {}) as Record<string, unknown>;
 	const tts = (parsed.tts ?? {}) as Record<string, unknown>;
@@ -680,6 +705,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				readInteger(heartbeat.idle_threshold_minutes, 60, "heartbeat.idle_threshold_minutes", 1) * 60_000,
 			intervalMs: readInteger(heartbeat.interval_minutes, 240, "heartbeat.interval_minutes", 1) * 60_000,
 		},
+		mcp: { servers: readMcpServers(readConfigTable(mcp.servers, "mcp.servers")) },
 		cron: {
 			enabled: readBoolean(cron.enabled, false, "cron.enabled"),
 			pollMs: readIntegerInRange(cron.poll_seconds, 60, "cron.poll_seconds", 1, 3600) * 1000,

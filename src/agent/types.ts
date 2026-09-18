@@ -26,6 +26,8 @@ export interface FamiliarPromptOptions {
 }
 
 export interface FamiliarAgent {
+	/** disconnect MCP servers */
+	close(): Promise<void>;
 	getContextBreakdown(sessionKey: string, tokens: number): ContextBreakdown | undefined;
 	prompt(
 		sessionKey: string,

@@ -22,6 +22,7 @@ import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
+import { connectMcpServers, pruneCondensedTools } from "../tools/mcp.js";
 import type { ContextBreakdown } from "../web/types.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
@@ -70,6 +71,7 @@ export async function createFamiliarAgent(
 	setConfigOverridesPath(config.workspace.dataDir);
 	applyConfigOverridesToConfig(config);
 	const modelRuntime = options.modelRuntime ?? (await createModelRuntime(config));
+	const mcp = await connectMcpServers(config);
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logSkillDiagnostics(skillsResult);
@@ -156,16 +158,27 @@ export async function createFamiliarAgent(
 		const referenceAttachments: StoredAttachment[] = [];
 		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
 		let agent!: Agent;
+		const stub = { state: { messages } } as Agent;
 		agent = new Agent({
 			initialState: {
 				systemPrompt,
 				model,
 				messages,
-				tools: createFamiliarTools(config, mediaSink, () => referenceAttachments, memoryService),
+				tools: createFamiliarTools(
+					config,
+					mediaSink,
+					() => referenceAttachments,
+					memoryService,
+					mcp,
+					() => agent ?? stub,
+				),
 				thinkingLevel,
 			},
 			sessionId,
-			streamFn: (streamModel, context, options) => {
+			// load_tools grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
+			prepareNextTurnWithContext: (turn) => ({ context: { ...turn.context, tools: agent.state.tools.slice() } }),
+			streamFn: (streamModel, rawContext, options) => {
+				const context = { ...rawContext, tools: pruneCondensedTools(rawContext, mcp.deferred) };
 				const stream = modelRuntime.streamSimple(streamModel, context, {
 					...options,
 					env: modelRuntimeEnv(config, streamModel),
@@ -279,6 +292,8 @@ export async function createFamiliarAgent(
 			session.mediaSink,
 			() => session.referenceAttachments,
 			memoryService,
+			mcp,
+			() => session.agent,
 		);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
@@ -322,6 +337,8 @@ export async function createFamiliarAgent(
 						session.mediaSink,
 						() => session.referenceAttachments,
 						memoryService,
+						mcp,
+						() => session.agent,
 					),
 				};
 			}),
@@ -442,6 +459,7 @@ export async function createFamiliarAgent(
 	};
 
 	return {
+		close: () => mcp.close(),
 		getContextBreakdown: (sessionKey, tokens) => {
 			const completed = completedContexts.get(sessionKey);
 			return completed?.tokens === tokens ? completed.breakdown : undefined;

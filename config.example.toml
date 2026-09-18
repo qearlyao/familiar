@@ -81,6 +81,18 @@ enabled = false
 idle_threshold_minutes = 60
 interval_minutes = 240
 
+# MCP servers. Each becomes a set of tools named "<server>__<tool>".
+# deferred = true (default) keeps them out of every request until the agent
+# calls load_tools; set false for small servers you want always in reach.
+# [mcp.servers.filesystem]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/familiar/notes"]
+# env = { }
+# [mcp.servers.linear]
+# url = "https://mcp.linear.app/mcp"
+# headers = { Authorization = "Bearer ${LINEAR_TOKEN}" }
+# deferred = false
+
 [cron]
 enabled = false
 poll_seconds = 60

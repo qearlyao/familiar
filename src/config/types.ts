@@ -73,6 +73,16 @@ export interface TtsVoiceSettings {
 	useSpeakerBoost: boolean;
 }
 
+export interface McpServerConfig {
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+	url?: string;
+	headers?: Record<string, string>;
+	/** stay out of the request until the agent loads them */
+	deferred: boolean;
+}
+
 export interface Config {
 	workspacePath: string;
 	defaultPlatform?: DefaultPlatform;
@@ -129,6 +139,9 @@ export interface Config {
 		enabled: boolean;
 		idleThresholdMs: number;
 		intervalMs: number;
+	};
+	mcp: {
+		servers: Record<string, McpServerConfig>;
 	};
 	cron: {
 		enabled: boolean;

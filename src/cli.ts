@@ -336,6 +336,7 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		hotReload.close();
 		await Promise.all([webDaemon?.stop(), discordDaemon?.stop(), qqDaemon?.stop()]);
 		await agentCore.stop();
+		await familiarAgent.close();
 		memoryService.close();
 		process.exit(exitCode);
 	};

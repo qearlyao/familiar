@@ -3,7 +3,6 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import {
-  fetchAuthMode,
   fetchFiles,
   markFileSeen,
   saveFile,
@@ -87,14 +86,13 @@ function markUnread(marks: ReadonlySet<number>): Components | undefined {
   return Object.fromEntries(MARKABLE.map((tag) => [tag, wrap(tag)])) as Components;
 }
 
-export function FilesPage({ onBack, visible }: { onBack: () => void; visible: boolean }) {
+export function FilesPage({ onBack, visible, personaName: persona }: { onBack: () => void; visible: boolean; personaName: string }) {
   const phone = useMediaQuery(PHONE);
   const [order, setOrder] = useState<WebFileId[]>([]);
   const [shelf, setShelf] = useState<Shelf>({});
   const [openId, setOpenId] = useState<WebFileId>();
   const [editing, setEditing] = useState(false);
   const [seen, setSeen] = useState<WebFileSeen>({});
-  const [persona, setPersona] = useState("they");
   const [note, setNote] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -132,9 +130,6 @@ export function FilesPage({ onBack, visible }: { onBack: () => void; visible: bo
 
   useEffect(() => {
     void reload();
-    fetchAuthMode()
-      .then(({ personaName }) => setPersona(personaName))
-      .catch(() => undefined);
   }, [reload]);
 
   const kept = openId ? shelf[openId] : undefined;

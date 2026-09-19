@@ -1,11 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { mmss } from "@/lib/clock";
 import { IconPause, IconPlay } from "./organicIcons";
-
-function format(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const total = Math.floor(seconds);
-  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
-}
 
 // Bar heights from the mock-up waveform, as fractions of the 34px track.
 const BARS = [
@@ -27,28 +22,8 @@ export function AudioPlayer({ src, name }: { src: string; name?: string }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    const onTime = () => setCurrentTime(el.currentTime);
-    const onMeta = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    el.addEventListener("timeupdate", onTime);
-    el.addEventListener("loadedmetadata", onMeta);
-    el.addEventListener("durationchange", onMeta);
-    el.addEventListener("play", onPlay);
-    el.addEventListener("pause", onPause);
-    el.addEventListener("ended", onPause);
-    return () => {
-      el.removeEventListener("timeupdate", onTime);
-      el.removeEventListener("loadedmetadata", onMeta);
-      el.removeEventListener("durationchange", onMeta);
-      el.removeEventListener("play", onPlay);
-      el.removeEventListener("pause", onPause);
-      el.removeEventListener("ended", onPause);
-    };
-  }, []);
+  const onMeta = (event: React.SyntheticEvent<HTMLAudioElement>) =>
+    setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
 
   const toggle = () => {
     const el = audioRef.current;
@@ -69,7 +44,17 @@ export function AudioPlayer({ src, name }: { src: string; name?: string }) {
 
   return (
     <div className="chat-audio">
-      <audio ref={audioRef} src={src} preload="metadata">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onLoadedMetadata={onMeta}
+        onDurationChange={onMeta}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      >
         <a href={src}>{name ?? "audio"}</a>
       </audio>
       <button type="button" className="chat-audio-play" onClick={toggle} aria-label={playing ? "pause" : "play"}>
@@ -85,7 +70,7 @@ export function AudioPlayer({ src, name }: { src: string; name?: string }) {
           />
         ))}
       </div>
-      <span className="chat-audio-time">{format(playing ? currentTime : duration)}</span>
+      <span className="chat-audio-time">{mmss(playing ? currentTime : duration)}</span>
     </div>
   );
 }

@@ -140,19 +140,18 @@ function ThreadRows({ sessions, activeKey, onSelect }: {
 }
 
 /** Two triggers, one at a time: the header-right pill on desktop (6a), the chevron under their name
-    on a phone (5a). Header mounts both; chat.css hides whichever doesn't match the width. */
-export function SessionPicker({ sessions, activeKey, onSelect, onNewChat, slot }: {
+    on a phone (5a). Header picks which by width and mounts that one. */
+export function SessionPicker({ sessions, activeKey, onSelect, onNewChat, desktop }: {
   sessions: SessionInfo[];
   activeKey: string | undefined;
   onSelect: (key: string) => void;
   /** the thread starts over: `/new` on the session you're already in, not a second one */
   onNewChat: () => void;
-  slot: "persona" | "actions";
+  desktop: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [asking, setAsking] = useState(false);
-  const desktop = slot === "actions";
   // ponytail: refetch on open so the last lines and rings are fresh; props show until it lands
   const [fresh, setFresh] = useState<SessionInfo[] | null>(null);
   const list = fresh ?? sessions;

@@ -195,8 +195,5 @@ export function TextInput({ value, placeholder, allowEmpty = false, pattern, dis
   );
 }
 
-const MODEL_REF = /^[^/\s]+\/[^\s]+$/;
-
-export function ModelRefInput(props: TextInputProps & { allowEmpty: boolean }) {
-  return <TextInput {...props} pattern={MODEL_REF} />;
-}
+/** provider/model, the shape every model reference takes */
+export const MODEL_REF = /^[^/\s]+\/[^\s]+$/;

@@ -1,3 +1,5 @@
+import { mmss } from "./clock.js";
+
 export interface VoiceLine {
   id: string;
   who: "you" | "them";
@@ -29,7 +31,5 @@ export function placeLine(
   return next;
 }
 
-export function clock(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
+/** 04:12 — the call clock keeps its leading zero */
+export const clock = (ms: number) => mmss(ms / 1000).padStart(5, "0");

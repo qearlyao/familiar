@@ -153,8 +153,6 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .session-pill-trigger > svg:last-child { transition: transform 0.16s; }
 .session-pill-trigger[data-state="open"] > svg:last-child { transform: rotate(180deg); }
 /* after both trigger rules so the media queries win on display */
-@media (max-width: 767.98px) { .session-pill-trigger { display: none; } }
-@media (min-width: 768px) { .session-trigger { display: none; } }
 
 .threads {
   z-index: 60; width: 21.5rem; max-height: min(78vh, 35rem); border-radius: 1.5rem; background: #e6dfd3;

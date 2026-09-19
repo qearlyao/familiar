@@ -1,7 +1,7 @@
-export function ErrorNotice({ text }: { text: string }) {
+export function ErrorNotice({ text, label = "lost somewhere between us" }: { text: string; label?: string }) {
   return (
     <div className="chat-error">
-      <span>lost somewhere between us</span>
+      <span>{label}</span>
       <pre>{text}</pre>
     </div>
   );

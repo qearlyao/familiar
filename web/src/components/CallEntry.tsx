@@ -2,14 +2,13 @@ import { useState } from "react";
 import type { Message } from "../types";
 import { IconChevronDown, IconChevronUp, IconHangUp } from "./organicIcons";
 import { clock } from "@/lib/voiceLines";
+import { mmss } from "@/lib/clock";
 import "./call-entry.css";
 
 type Call = NonNullable<Message["call"]>;
 
 const OPENED_LINES = 4;
 
-/** a call's length, 4:12 */
-const length = (ms: number) => clock(ms).replace(/^0(?=\d)/, "");
 
 function Head({ title, meta, open, onToggle }: { title: string; meta: string; open: boolean; onToggle: () => void }) {
   return (
@@ -40,7 +39,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     return (
       <div className="call-entry is-discarded">
         <IconHangUp size={14} />
-        <span>a call, {length(call.durationMs)} · nothing kept</span>
+        <span>a call, {mmss(call.durationMs / 1000)} · nothing kept</span>
       </div>
     );
   }
@@ -49,7 +48,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     const ended = new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
     return (
       <section className="call-entry">
-        <Head title={`you called ${personaName}`} meta={`${length(call.durationMs)} · ended ${ended}`} open={open} onToggle={toggle} />
+        <Head title={`you called ${personaName}`} meta={`${mmss(call.durationMs / 1000)} · ended ${ended}`} open={open} onToggle={toggle} />
         {open && (
           <>
             <p className="call-entry-summary">{call.summary}</p>
@@ -66,7 +65,7 @@ export function CallEntry({ call, ts, personaName }: { call: Call; ts: number; p
     <section className="call-entry">
       <Head
         title={`a call with ${personaName}`}
-        meta={`${length(call.durationMs)} · ${call.lines.length} ${call.lines.length === 1 ? "line" : "lines"}`}
+        meta={`${mmss(call.durationMs / 1000)} · ${call.lines.length} ${call.lines.length === 1 ? "line" : "lines"}`}
         open={open}
         onToggle={toggle}
       />

@@ -7,15 +7,11 @@ const GAP_MS = 30 * 60 * 1000;
 const SUSPEND_FOLLOW_THRESHOLD_PX = 50;
 const RESUME_FOLLOW_THRESHOLD_PX = 10;
 
-function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
 function formatGap(ts: number, prevTs: number): string {
   const now = new Date(ts);
   const prev = new Date(prevTs);
   const time = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
-  if (isSameDay(now, prev)) return time;
+  if (now.toDateString() === prev.toDateString()) return time;
   const today = new Date();
   const sameYear = now.getFullYear() === today.getFullYear();
   const datePart = now

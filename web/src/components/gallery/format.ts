@@ -1,4 +1,5 @@
 import type { GalleryItem } from "@/lib/api";
+import { mmss } from "@/lib/clock";
 
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const TIME_OF_DAY = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
@@ -46,9 +47,7 @@ export function formatBytes(bytes: number | undefined): string | undefined {
 }
 
 export function formatDuration(seconds: number | undefined): string | undefined {
-  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined;
-  const total = Math.round(seconds);
-  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
+  return seconds !== undefined && Number.isFinite(seconds) && seconds > 0 ? mmss(seconds) : undefined;
 }
 
 export function groupByTime(items: GalleryItem[], now: number): TimeGroup[] {

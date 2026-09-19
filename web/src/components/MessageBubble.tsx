@@ -5,6 +5,7 @@ import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
 import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
+import { ErrorNotice } from "./steps/ErrorNotice";
 import { withoutSilentMarker } from "@/lib/silentMarker";
 import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
 
@@ -157,12 +158,7 @@ function SystemRow({ message, text, live }: { message: Message; text: string; li
     case "reset":
       return <div className="chat-page-break">a fresh page</div>;
     case "error":
-      return (
-        <div className="chat-error">
-          <span>something slipped</span>
-          <pre>{text}</pre>
-        </div>
-      );
+      return <ErrorNotice label="something slipped" text={text} />;
     default:
       return text ? <p className="chat-system">{text}</p> : null;
   }

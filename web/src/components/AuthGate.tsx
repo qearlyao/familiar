@@ -66,6 +66,7 @@ export function AuthGate() {
   if (state.status === "chat") {
     return (
       <WebShell
+        personaName={state.personaName}
         authMode={state.mode}
         authDevice={state.device}
         onSignedOut={() => {

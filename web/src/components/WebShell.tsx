@@ -37,6 +37,7 @@ interface RoomProps {
   onOpenSettings: (tab: SettingsTabId) => void;
   /** whether this room is the one on screen — a hidden room stays mounted */
   visible: boolean;
+  personaName: string;
 }
 
 /** one row per room: what the rail/mobile bar draws and what the surface renders.
@@ -144,10 +145,12 @@ export function ShellChrome({
 }
 
 export function WebShell({
+  personaName,
   authMode,
   authDevice,
   onSignedOut,
 }: {
+  personaName: string;
   authMode?: string;
   authDevice?: WebAuthDevice;
   onSignedOut?: () => void;
@@ -229,6 +232,7 @@ export function WebShell({
                 setSettingsTab(tab);
               }}
               visible={selectedPage === id}
+              personaName={personaName}
             />
           </section>
         ) : null,

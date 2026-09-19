@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   deleteSkill,
-  fetchAuthMode,
   fetchSkill,
   fetchSkills,
   importSkillFolder,
@@ -52,10 +51,9 @@ function since(mtimeMs: number): string {
 const words = (content: string) => content.trim().split(/\s+/).filter(Boolean).length;
 const same = (a: Draft, b: Draft) => a.name === b.name && a.description === b.description && a.content === b.content;
 
-export function SkillsPage({ onBack }: { onBack: () => void }) {
+export function SkillsPage({ onBack, personaName: persona }: { onBack: () => void; personaName: string }) {
   const phone = useMediaQuery(PHONE);
   const [skills, setSkills] = useState<WebSkillSummary[]>([]);
-  const [persona, setPersona] = useState("them");
   const [openId, setOpenId] = useState<string>();
   const [draft, setDraft] = useState<Draft>(BLANK);
   const [saved, setSaved] = useState<Draft>(BLANK);
@@ -76,9 +74,6 @@ export function SkillsPage({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     void reload();
-    fetchAuthMode()
-      .then(({ personaName }) => setPersona(personaName))
-      .catch(() => undefined);
   }, [reload]);
 
   useEffect(() => {

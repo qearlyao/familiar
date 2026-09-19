@@ -1,23 +1,11 @@
 import { useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
-import { IconDownload, IconPause, IconPlay, IconX } from "./organicIcons";
+import { IconChevronLeft, IconChevronRight, IconDownload, IconPause, IconPlay, IconX } from "./organicIcons";
 import { focusPanel } from "@/lib/focusPanel";
+import { mmss } from "@/lib/clock";
 
 export type PreviewMedia = { src: string; name: string; kind: "image" | "video" };
-
-function time(value: number) {
-  const seconds = Math.floor(Number.isFinite(value) ? value : 0);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function IconStep({ back }: { back?: boolean }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={back ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} />
-    </svg>
-  );
-}
 
 function IconSound({ muted, size = 17 }: { muted: boolean; size?: number }) {
   return (
@@ -101,8 +89,8 @@ function Stage({ item, onBare }: { item: PreviewMedia; onBare: () => void }) {
               style={{ backgroundSize: `${duration ? (position / duration) * 100 : 0}% 100%` }}
             />
             <span className="viewer-times">
-              <span>{time(position)}</span>
-              <span>{time(duration)}</span>
+              <span>{mmss(position)}</span>
+              <span>{mmss(duration)}</span>
             </span>
           </span>
           <button type="button" className="viewer-ghost" aria-label={muted ? "sound on" : "sound off"} onClick={() => { if (video.current) video.current.muted = !video.current.muted; }}>
@@ -176,13 +164,13 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
           <div className="viewer-body">
             {media.length > 1 && (
               <button type="button" className="viewer-ghost viewer-step" onClick={() => move(-1)} aria-label="previous">
-                <IconStep back />
+                <IconChevronLeft size={20} />
               </button>
             )}
             <Stage key={current.src} item={current} onBare={() => setBare((was) => !was)} />
             {media.length > 1 && (
               <button type="button" className="viewer-ghost viewer-step is-next" onClick={() => move(1)} aria-label="next">
-                <IconStep />
+                <IconChevronRight size={20} />
               </button>
             )}
           </div>

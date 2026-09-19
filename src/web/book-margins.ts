@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import type { Config } from "../config/index.js";
 import type { ChatLogRecord } from "../conversation/chat-log.js";
-import { atomicWriteJson, readFileOrNull } from "../util/fs.js";
+import { atomicWriteJson, createWriteQueue, readFileOrNull } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import { type BookRecord, bookDir, readBookRecord } from "./book-library.js";
 import { HttpError } from "./http.js";
@@ -53,15 +53,12 @@ function bookPage(book: Pick<BookRecord, "chapters">, chapter: number, offset: n
 	return Math.min(pages, Math.floor((before + Math.max(0, offset)) / BOOK_PAGE_CHARS) + 1);
 }
 
-// ponytail: per-book in-process lock; one daemon owns the data dir.
-const locks = new Map<string, Promise<unknown>>();
+// ponytail: per-book in-process queue; one daemon owns the data dir.
+const queues = new Map<string, ReturnType<typeof createWriteQueue>>();
 function withBookLock<T>(id: string, run: () => Promise<T>): Promise<T> {
-	const next = (locks.get(id) ?? Promise.resolve()).then(run, run);
-	locks.set(
-		id,
-		next.catch(() => undefined),
-	);
-	return next;
+	const queue = queues.get(id) ?? createWriteQueue(`marginalia ${id}`);
+	queues.set(id, queue);
+	return queue(run);
 }
 
 function marginsPath(config: Config, id: string): string {

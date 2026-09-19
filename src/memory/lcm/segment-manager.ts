@@ -135,12 +135,9 @@ export class LcmSegmentManager {
 			.immediate(indexDeletes);
 		console.info("memory reset completed", {
 			channelKey: runtime.channelKey,
-			recordId: record.recordId,
 			previousSegmentId,
 			nextSegmentId,
-			retainDepth: this.newSessionRetainDepth(),
-			deletedRecords: indexDeletes.filter((source) => source.corpus === "lcm_record").length,
-			deletedSummaries: indexDeletes.filter((source) => source.corpus === "lcm_summary").length,
+			deleted: indexDeletes.length,
 		});
 	}
 

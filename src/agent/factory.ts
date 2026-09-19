@@ -88,18 +88,20 @@ export async function createFamiliarAgent(
 	let defaultModel = createConfiguredModel(config);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
+		createFamiliarTools(
+			cfg,
+			session.mediaSink,
+			() => session.referenceAttachments,
+			memoryService,
+			mcp,
+			() => session.agent,
+		);
 	// a server connecting, dropping or flipping deferred changes every live session's tool list
 	const rebuildSessionTools = async (): Promise<void> => {
 		for (const sessionPromise of sessions.values()) {
 			const session = await sessionPromise;
-			session.agent.state.tools = createFamiliarTools(
-				config,
-				session.mediaSink,
-				() => session.referenceAttachments,
-				memoryService,
-				mcp,
-				() => session.agent,
-			);
+			session.agent.state.tools = toolsFor(config, session);
 		}
 	};
 	await mcp.sync(mcpServerSpecs(config));
@@ -304,14 +306,7 @@ export async function createFamiliarAgent(
 		session.agent.state.model = session.model;
 		session.mediaSink.drain();
 		setReferenceAttachments(session);
-		session.agent.state.tools = createFamiliarTools(
-			config,
-			session.mediaSink,
-			() => session.referenceAttachments,
-			memoryService,
-			mcp,
-			() => session.agent,
-		);
+		session.agent.state.tools = toolsFor(config, session);
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
@@ -349,14 +344,7 @@ export async function createFamiliarAgent(
 					session,
 					model,
 					thinkingLevel,
-					tools: createFamiliarTools(
-						next.config,
-						session.mediaSink,
-						() => session.referenceAttachments,
-						memoryService,
-						mcp,
-						() => session.agent,
-					),
+					tools: toolsFor(next.config, session),
 				};
 			}),
 		);

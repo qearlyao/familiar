@@ -1,10 +1,7 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import type { Config } from "../config/index.js";
 import { interpolateValue } from "../config/interpolate.js";
 import type { McpServerConfig } from "../config/types.js";
-import { atomicWriteJson, createWriteQueue, isEnoent } from "../util/fs.js";
+import { jsonSettingsStore } from "../util/fs.js";
 
 export type McpSource = "config" | "web";
 
@@ -14,30 +11,18 @@ export type McpSource = "config" | "web";
  */
 export type WebMcpServers = Record<string, Partial<McpServerConfig>>;
 
-let path = resolve(process.cwd(), "data", "settings", "mcp-servers.json");
-let cache: WebMcpServers | undefined;
-const enqueueWrite = createWriteQueue("mcp servers");
+const store = jsonSettingsStore("mcp-servers.json", (raw) => ({
+	servers: (raw as { servers?: WebMcpServers } | undefined)?.servers ?? {},
+}));
 
-export function setMcpServersPath(dataDir: string): void {
-	path = resolve(dataDir, "settings", "mcp-servers.json");
-	cache = undefined;
-}
+export const setMcpServersPath = store.setDataDir;
 
 export function loadWebMcpServers(): WebMcpServers {
-	if (!cache) {
-		try {
-			cache = (JSON.parse(readFileSync(path, "utf8")) as { servers?: WebMcpServers }).servers ?? {};
-		} catch (error) {
-			if (!isEnoent(error)) throw error;
-			cache = {};
-		}
-	}
-	return { ...cache };
+	return { ...store.load().servers };
 }
 
-export async function saveWebMcpServers(servers: WebMcpServers): Promise<void> {
-	cache = servers;
-	await enqueueWrite(() => atomicWriteJson(path, { servers }));
+export function saveWebMcpServers(servers: WebMcpServers): Promise<void> {
+	return store.save({ servers });
 }
 
 export function mcpServerSpecs(config: Config): Record<string, { spec: McpServerConfig; source: McpSource }> {

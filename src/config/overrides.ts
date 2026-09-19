@@ -1,62 +1,25 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { jsonSettingsStore } from "../util/fs.js";
+import { isRecord } from "../util/guards.js";
 
-import { atomicWriteJson, createWriteQueue, isEnoent } from "../util/fs.js";
+const store = jsonSettingsStore(
+	"config-overrides.json",
+	(raw): Record<string, unknown> => (isRecord(raw) ? { ...raw } : {}),
+);
 
-let overridesPath = resolve(process.cwd(), "data", "settings", "config-overrides.json");
-let loaded = false;
-let cache: Record<string, unknown> = {};
-const enqueueWrite = createWriteQueue("config overrides");
-
-function normalize(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-	const input = value as Record<string, unknown>;
-	const out: Record<string, unknown> = {};
-	for (const [key, v] of Object.entries(input)) {
-		out[key] = v;
-	}
-	return out;
-}
-
-function read(path: string): Record<string, unknown> {
-	try {
-		const raw = readFileSync(path, "utf8");
-		return normalize(JSON.parse(raw) as unknown);
-	} catch (error) {
-		if (isEnoent(error)) return {};
-		throw error;
-	}
-}
-
-export function setConfigOverridesPath(dataDir: string): void {
-	overridesPath = resolve(dataDir, "settings", "config-overrides.json");
-	loaded = false;
-	cache = {};
-}
+export const setConfigOverridesPath = store.setDataDir;
 
 export function loadConfigOverrides(): Record<string, unknown> {
-	if (!loaded) {
-		cache = read(overridesPath);
-		loaded = true;
-	}
-	return { ...cache };
+	return { ...store.load() };
 }
 
-async function save(next: Record<string, unknown>): Promise<void> {
-	cache = next;
-	loaded = true;
-	await enqueueWrite(() => atomicWriteJson(overridesPath, next));
-}
-
-export async function setConfigOverride(key: string, value: unknown): Promise<void> {
-	const next = { ...loadConfigOverrides(), [key]: value };
-	await save(next);
+export function setConfigOverride(key: string, value: unknown): Promise<void> {
+	return store.save({ ...store.load(), [key]: value });
 }
 
 export async function clearConfigOverride(key: string): Promise<void> {
-	const current = loadConfigOverrides();
+	const current = store.load();
 	if (!(key in current)) return;
 	const next = { ...current };
 	delete next[key];
-	await save(next);
+	await store.save(next);
 }

@@ -1,12 +1,4 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-import { atomicWriteJson, createWriteQueue, isEnoent } from "../util/fs.js";
-
-let addedModelsPath = resolve(process.cwd(), "data", "settings", "added-models.json");
-let loaded = false;
-let modelsCache: string[] = [];
-const enqueueWrite = createWriteQueue("added models");
+import { jsonSettingsStore } from "../util/fs.js";
 
 interface AddedModelsFile {
 	models: string[];
@@ -28,36 +20,16 @@ function normalizeModels(value: unknown): string[] {
 	return models;
 }
 
-function readAddedModelsFile(path: string): string[] {
-	try {
-		const raw = readFileSync(path, "utf8");
-		return normalizeModels(JSON.parse(raw) as unknown);
-	} catch (error) {
-		if (isEnoent(error)) return [];
-		throw error;
-	}
-}
+const store = jsonSettingsStore("added-models.json", (raw): AddedModelsFile => ({ models: normalizeModels(raw) }));
 
-export function setAddedModelsPath(dataDir: string): void {
-	addedModelsPath = resolve(dataDir, "settings", "added-models.json");
-	loaded = false;
-	modelsCache = [];
-}
+export const setAddedModelsPath = store.setDataDir;
 
 export function loadAddedModels(): string[] {
-	if (!loaded) {
-		modelsCache = readAddedModelsFile(addedModelsPath);
-		loaded = true;
-	}
-	return [...modelsCache];
+	return [...store.load().models];
 }
 
-export async function saveAddedModels(models: string[]): Promise<void> {
-	const nextModels = normalizeModels({ models });
-	modelsCache = nextModels;
-	loaded = true;
-	const file: AddedModelsFile = { models: nextModels };
-	await enqueueWrite(() => atomicWriteJson(addedModelsPath, file));
+export function saveAddedModels(models: string[]): Promise<void> {
+	return store.save({ models: normalizeModels({ models }) });
 }
 
 export async function addModel(model: string): Promise<string[]> {

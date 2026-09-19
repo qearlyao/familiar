@@ -133,7 +133,14 @@ export async function importWebSkillFolder(
 	if (!files.some((file) => file.path === "SKILL.md")) throw new HttpError(400, "the folder needs a SKILL.md");
 	const root = skillsRoot(config);
 	const dir = resolve(root, folder);
-	if (await exists(dir)) throw new HttpError(409, `${folder} is already on the desk`);
+	await mkdir(root, { recursive: true });
+	try {
+		await mkdir(dir);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST")
+			throw new HttpError(409, `${folder} is already on the desk`);
+		throw error;
+	}
 	for (const file of files) {
 		const path = resolve(dir, file.path);
 		const inside = relative(dir, path);
@@ -142,16 +149,6 @@ export async function importWebSkillFolder(
 		await writeFile(path, file.content, "utf8");
 	}
 	return readSkillPayload(root, resolve(dir, "SKILL.md"), discoverWebSkills(root).diagnosticsByPath);
-}
-
-async function exists(path: string): Promise<boolean> {
-	try {
-		await lstat(path);
-		return true;
-	} catch (error) {
-		if (isEnoent(error)) return false;
-		throw error;
-	}
 }
 
 /** A skill is its folder when it lives in one, and the lone file when it doesn't. */

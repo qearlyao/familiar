@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0 - 2026-09-19
+
+### Added
+
+- Connect native MCP servers over stdio or Streamable HTTP through `[mcp.servers]`, with configurable commands, environment variables, URLs, and headers.
+- Load MCP tools on demand with `load_tools` by exact name or search query. Tools are deferred by default; set `deferred = false` to include a server's tools in every request. Loaded tools are restored from conversation history and removed from request context once their load markers and calls are compacted away.
+- Manage MCP servers from a new WebUI settings tab: see each server's status, available tools, and tools loaded in the current chat; change deferred loading; reconnect servers; and add or remove WebUI-managed servers without a restart. WebUI additions and loading preferences live in `data/settings/mcp-servers.json`, with `${NAME}` references resolved from the environment at connect time. Servers defined in `config.toml` remain managed there.
+
+### Changed
+
+- Simplify heartbeat prompts by removing the redundant `idle_minutes` attribute while retaining the readable idle duration.
+- Unify the WebUI palette and display fonts, including dialogs rendered outside the main rooms, and remove unused theme styles and font downloads.
+
+### Fixed
+
+- Render silent WebUI turns consistently after tool use, keeping tool activity visible above the quiet notice and hiding actions for marker-only text.
+- Reject simultaneous skill imports targeting the same folder instead of allowing their files to overwrite each other.
+
+### Maintenance
+
+- Remove unused UI components and consolidate shared clocks, audio handling, diary loading, reader note updates, and error displays across chat and the other rooms.
+- Reuse a shared JSON settings store for config overrides, added models, and MCP servers, and share the write queue used for reader notes.
+
 ## 1.0.3 - 2026-09-17
 
 ### Changed

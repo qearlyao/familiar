@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { fetchAuthMode, keepVoiceCall, setConfig, type VoiceKeep } from "@/lib/api";
+import { keepVoiceCall, setConfig, type VoiceKeep } from "@/lib/api";
 import { useVoiceCall } from "@/lib/useVoiceCall";
 import { clock, type VoiceLine } from "@/lib/voiceLines";
 import { IconArrow, IconHangUp, IconLeave, IconMic, IconMicOff, RailChat } from "./organicIcons";
@@ -158,15 +158,16 @@ export function VoiceCallPage({
   onShow,
   onOpenSettings,
   visible,
+  personaName: name,
 }: {
   onBack: () => void;
   onShow: () => void;
   onOpenSettings: (tab: "voice") => void;
   visible: boolean;
+  personaName: string;
 }) {
   const call = useVoiceCall();
   const { state, config, lines, error, speaking, level, muted, startedAt } = call;
-  const [name, setName] = useState("them");
   const [awake, setAwake] = useState(true);
   const [readBack, setReadBack] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -175,12 +176,6 @@ export function VoiceCallPage({
   const restTimer = useRef<number | undefined>(undefined);
   const live = state === "live";
   const now = useNow(live && visible);
-
-  useEffect(() => {
-    void fetchAuthMode()
-      .then((info) => setName(info.personaName))
-      .catch(() => undefined);
-  }, []);
 
   const said = lines.filter((line) => line.text.trim());
   const keep: VoiceKeep = config?.keep ?? "ask";

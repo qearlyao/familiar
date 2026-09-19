@@ -18,7 +18,7 @@ const DAY_MS = 86_400_000;
 export interface TimeGroup {
   key: string;
   label: string;
-  entries: { item: GalleryItem; index: number }[];
+  entries: GalleryItem[];
 }
 
 function startOfDay(ms: number): number {
@@ -38,14 +38,6 @@ export function formatWhen(ms: number, now: number): string {
   return `${datePart} · ${TIME_OF_DAY.format(d)}`.toLowerCase();
 }
 
-export function formatBytes(bytes: number | undefined): string | undefined {
-  if (bytes === undefined || bytes <= 0) return undefined;
-  if (bytes < 1024) return `${bytes} b`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} kb`;
-  return `${(kb / 1024).toFixed(1)} mb`;
-}
-
 export function formatDuration(seconds: number | undefined): string | undefined {
   return seconds !== undefined && Number.isFinite(seconds) && seconds > 0 ? mmss(seconds) : undefined;
 }
@@ -55,32 +47,32 @@ export function groupByTime(items: GalleryItem[], now: number): TimeGroup[] {
   const groups: TimeGroup[] = [];
   const byKey = new Map<string, TimeGroup>();
 
-  const push = (key: string, label: string, item: GalleryItem, index: number) => {
+  const push = (key: string, label: string, item: GalleryItem) => {
     let group = byKey.get(key);
     if (!group) {
       group = { key, label, entries: [] };
       byKey.set(key, group);
       groups.push(group);
     }
-    group.entries.push({ item, index });
+    group.entries.push(item);
   };
 
-  items.forEach((item, index) => {
+  for (const item of items) {
     const day = startOfDay(item.createdAt);
     if (day >= today) {
-      push("today", "today", item, index);
+      push("today", "today", item);
     } else if (day >= today - DAY_MS) {
-      push("yesterday", "yesterday", item, index);
+      push("yesterday", "yesterday", item);
     } else if (day >= today - 6 * DAY_MS) {
-      push("this-week", "earlier this week", item, index);
+      push("this-week", "earlier this week", item);
     } else {
       const d = new Date(item.createdAt);
       const sameYear = d.getFullYear() === new Date(now).getFullYear();
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       const label = (sameYear ? MONTH : MONTH_YEAR).format(d).toLowerCase();
-      push(key, label, item, index);
+      push(key, label, item);
     }
-  });
+  }
 
   return groups;
 }

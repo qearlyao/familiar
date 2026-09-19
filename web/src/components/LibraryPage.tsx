@@ -150,7 +150,7 @@ function ShelfTile({
   );
 }
 
-export function LibraryPage() {
+export function LibraryPage({ personaName }: { personaName: string }) {
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [notesByBook, setNotesByBook] = useState<Record<string, MarginaliaEntry[]>>({});
   const [loaded, setLoaded] = useState(false);
@@ -225,6 +225,15 @@ export function LibraryPage() {
   const shelfBooks = matching.filter((book) => !book.position);
   const mobileShelfBooks = matching.filter((book, index) => !book.position || index > 0);
   const openBook = books.find((book) => book.id === openBookId);
+  const tile = (book: BookSummary) => (
+    <ShelfTile
+      key={book.id}
+      book={book}
+      notes={notesByBook[book.id] ?? []}
+      onOpen={() => setOpenBookId(book.id)}
+      onRemove={() => void remove(book.id)}
+    />
+  );
 
   return (
     <div
@@ -323,30 +332,14 @@ export function LibraryPage() {
             <section className="library-shelf-section">
               <h2>on the shelf</h2>
               <div className="library-shelf-grid library-shelf-desktop">
-                {shelfBooks.map((book) => (
-                  <ShelfTile
-                    key={book.id}
-                    book={book}
-                    notes={notesByBook[book.id] ?? []}
-                    onOpen={() => setOpenBookId(book.id)}
-                    onRemove={() => void remove(book.id)}
-                  />
-                ))}
+                {shelfBooks.map(tile)}
                 <button type="button" className="library-drop-tile" onClick={() => fileInputRef.current?.click()}>
                   <span><Plus aria-hidden="true" />drop a file</span>
                   <small>epub, text, or markdown</small>
                 </button>
               </div>
               <div className="library-shelf-list library-shelf-mobile">
-                {mobileShelfBooks.map((book) => (
-                  <ShelfTile
-                    key={book.id}
-                    book={book}
-                    notes={notesByBook[book.id] ?? []}
-                    onOpen={() => setOpenBookId(book.id)}
-                    onRemove={() => void remove(book.id)}
-                  />
-                ))}
+                {mobileShelfBooks.map(tile)}
               </div>
             </section>
           </>
@@ -363,6 +356,7 @@ export function LibraryPage() {
 
       {openBook ? (
         <ReaderView
+          personaName={personaName}
           book={openBook}
           onClose={() => {
             setOpenBookId(undefined);

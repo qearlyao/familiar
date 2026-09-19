@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { DiaryCalendar } from "@/components/diaries/DiaryCalendar";
 import { MarkdownView } from "@/components/diaries/MarkdownView";
-import { fetchDiaries, fetchDiary, type DiaryEntry, type DiarySummary } from "@/lib/api";
+import { fetchDiary, type DiaryEntry } from "@/lib/api";
+import { useDiaries } from "@/lib/diaries/useDiaries";
 import { dayStamp, diaryNote, formatDiaryDate } from "@/lib/diaries/format";
-import { cn } from "@/lib/utils";
+import { cn, wordCount } from "@/lib/utils";
 import { IconChevronLeft, IconExpand, IconSearch, IconX } from "./organicIcons";
 import "./diaries/diaries.css";
 
@@ -14,35 +15,20 @@ import "./diaries/diaries.css";
     A phone gets it as a pushed page (1b): no room bar at the bottom, a back arrow to the talk,
     search behind its icon, and the day can take the whole screen when you want to read it. */
 
-const words = (content: string) => content.trim().split(/\s+/).filter(Boolean).length;
-
 export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => void; onBack: () => void }) {
-  const [diaries, setDiaries] = useState<DiarySummary[]>([]);
-  const [date, setDate] = useState<string | undefined>();
-  const [month, setMonth] = useState<string | undefined>();
+  const { diaries, error: listError, loading } = useDiaries();
+  // until a day is picked, the newest written one is open and its month is showing
+  const [pickedDate, setDate] = useState<string | undefined>();
+  const [pickedMonth, setMonth] = useState<string | undefined>();
+  const date = pickedDate ?? diaries[0]?.date;
+  const month = pickedMonth ?? date?.slice(0, 7);
   const [entry, setEntry] = useState<DiaryEntry | undefined>();
   const [query, setQuery] = useState("");
-  const [error, setError] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
+  const [readError, setError] = useState<string | undefined>();
+  const error = readError ?? listError;
   // phone only: the search field folds behind its icon, and the day can take the whole screen
   const [searching, setSearching] = useState(false);
   const [full, setFull] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    fetchDiaries()
-      .then((all) => {
-        if (!live) return;
-        setDiaries(all);
-        setDate(all[0]?.date);
-        setMonth(all[0]?.date.slice(0, 7));
-      })
-      .catch((err: unknown) => live && setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => live && setLoading(false));
-    return () => {
-      live = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!date) return;
@@ -171,7 +157,7 @@ export function DiariesPage({ onBring, onBack }: { onBring: (text: string) => vo
               </div>
             </header>
             <div className="diaries-chips">
-              <span>{words(open.content).toLocaleString()} words</span>
+              <span>{wordCount(open.content).toLocaleString()} words</span>
             </div>
             <div className="diaries-body">
               <MarkdownView content={open.content} title={open.title} />

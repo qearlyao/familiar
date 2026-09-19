@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { fetchDiaries, type DiarySummary } from "@/lib/api";
+import { useState } from "react";
+import { useDiaries } from "@/lib/diaries/useDiaries";
 import { dayStamp, diaryNote } from "@/lib/diaries/format";
 import { cn } from "@/lib/utils";
 import { Shelf } from "../Shelf";
@@ -34,26 +34,10 @@ export function DiaryShelf({
   onInsert: (text: string) => void;
   onOpenArchive: () => void;
 }) {
-  const [written, setWritten] = useState<Map<string, DiarySummary>>(new Map());
-  const [error, setError] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
+  const { diaries, error, loading } = useDiaries(open);
+  const written = new Map(diaries.map((entry) => [entry.date, entry]));
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const days = recentDays();
-
-  useEffect(() => {
-    if (!open) return;
-    let live = true;
-    fetchDiaries()
-      .then((all) => {
-        if (!live) return;
-        setWritten(new Map(all.map((entry) => [entry.date, entry])));
-      })
-      .catch((err: unknown) => live && setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => live && setLoading(false));
-    return () => {
-      live = false;
-    };
-  }, [open]);
 
   const bring = () => {
     const chips = days

@@ -8,10 +8,6 @@ import { formatDuration, formatShortDate, type TimeGroup } from "./format";
 import { InkTexture } from "./InkTexture";
 import { useAudioElement } from "./useAudioElement";
 
-function GroupHeading({ label }: { label: string }) {
-  return <h3 className="makings-group-heading">{label}</h3>;
-}
-
 function ImageTile({ item, onOpen, media, featured = false }: {
   item: GalleryItem; onOpen: () => void; media: PreviewMedia[]; featured?: boolean;
 }) {
@@ -31,20 +27,20 @@ function ImageTile({ item, onOpen, media, featured = false }: {
 export function GalleryGrid({ groups, visible }: {
   groups: TimeGroup[]; visible: boolean;
 }) {
-  const images = groups.flatMap((group) => group.entries.filter(({ item }) => item.kind === "image"));
-  const media: PreviewMedia[] = images.map(({ item }) => ({ src: item.url, name: item.note || item.name, kind: "image" }));
+  const images = groups.flatMap((group) => group.entries.filter((item) => item.kind === "image"));
+  const media: PreviewMedia[] = images.map((item) => ({ src: item.url, name: item.note || item.name, kind: "image" }));
   const [featured, ...earlier] = images;
   const imageGroups = groups.map((group) => ({ ...group,
-    entries: group.entries.filter(({ item }) => item.kind === "image" && item.id !== featured?.item.id),
+    entries: group.entries.filter((item) => item.kind === "image" && item.id !== featured?.id),
   })).filter((group) => group.entries.length);
   const sounds = groups.map((group) => ({ ...group,
-    entries: group.entries.filter(({ item }) => item.kind === "audio"),
+    entries: group.entries.filter((item) => item.kind === "audio"),
   })).filter((group) => group.entries.length);
   const [selectedId, setSelectedId] = useState<string>();
   const { audioRef, pause, toggle, playSource, playing: isPlaying, duration, currentTime, seek, error } = useAudioElement();
   useEffect(() => { if (!visible) pause(); }, [visible, pause]);
   useEffect(() => {
-    if (selectedId && !sounds.some((group) => group.entries.some(({ item }) => item.id === selectedId))) pause();
+    if (selectedId && !sounds.some((group) => group.entries.some((item) => item.id === selectedId))) pause();
   }, [sounds, selectedId, pause]);
 
   const play = (item: GalleryItem) => {
@@ -61,13 +57,13 @@ export function GalleryGrid({ groups, visible }: {
         <h2 id="makings-pictures-title">pictures to look back on</h2>
         <div className="makings-picture-list">
         {featured ? <>
-          <GroupHeading label={groups.find((group) => group.entries.some(({ item }) => item.id === featured.item.id))?.label ?? "latest image"} />
-          <ImageTile item={featured.item} featured media={media} onOpen={pause} />
+          <h3 className="makings-group-heading">{groups.find((group) => group.entries.some((item) => item.id === featured.id))?.label ?? "latest image"}</h3>
+          <ImageTile item={featured} featured media={media} onOpen={pause} />
           {earlier.length > 0 && <div className="makings-earlier">
             {imageGroups.map((group) => <section key={group.key}>
-              <GroupHeading label={group.key === groups[0]?.key ? "a little earlier" : group.label} />
+              <h3 className="makings-group-heading">{group.key === groups[0]?.key ? "a little earlier" : group.label}</h3>
               <div className="makings-thumbnails">
-                {group.entries.map(({ item }) => <ImageTile key={item.id} item={item} media={media} onOpen={pause} />)}
+                {group.entries.map((item) => <ImageTile key={item.id} item={item} media={media} onOpen={pause} />)}
               </div>
             </section>)}
           </div>}
@@ -79,8 +75,8 @@ export function GalleryGrid({ groups, visible }: {
         <audio ref={audioRef} preload="metadata" />
         <div className="makings-sound-list" tabIndex={0} aria-label="recordings">
           {sounds.length ? sounds.map((group) => <section key={group.key}>
-            <GroupHeading label={group.label} />
-            {group.entries.map(({ item }) => {
+            <h3 className="makings-group-heading">{group.label}</h3>
+            {group.entries.map((item) => {
               const active = selectedId === item.id;
               const playing = active && isPlaying;
               return <article key={item.id} className={`makings-recording${active ? " is-active" : ""}`}>

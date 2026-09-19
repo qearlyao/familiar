@@ -18,29 +18,8 @@ function toBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-export interface VoiceCallHook {
-  state: CallState;
-  config: VoiceConfig | undefined;
-  lines: VoiceLine[];
-  error: string | undefined;
-  speaking: boolean;
-  level: number;
-  muted: boolean;
-  /** when the call picked up, for the clock */
-  startedAt: number | undefined;
-  /** how long the last call ran, once it has ended */
-  durationMs: number;
-  start: () => void;
-  stop: () => void;
-  setMuted: (muted: boolean) => void;
-  /** write a line instead of saying it */
-  say: (text: string) => void;
-  /** put an ended call away and go back to idle */
-  reset: () => void;
-}
-
 /** A call is its own conversation on the server: this side carries sound and shows the lines. */
-export function useVoiceCall(): VoiceCallHook {
+export function useVoiceCall() {
   const [state, setState] = useState<CallState>("idle");
   const [config, setConfig] = useState<VoiceConfig>();
   const [lines, setLines] = useState<VoiceLine[]>([]);
@@ -263,5 +242,6 @@ export function useVoiceCall(): VoiceCallHook {
     setState("idle");
   }, []);
 
+  // startedAt: when the call picked up, for the clock · durationMs: how long the last call ran · say: write a line instead of saying it · reset: put an ended call away
   return { state, config, lines, error, speaking, level, muted, startedAt, durationMs, start, stop: end, setMuted, say, reset };
 }

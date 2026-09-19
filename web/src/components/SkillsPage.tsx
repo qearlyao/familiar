@@ -9,7 +9,7 @@ import {
   type WebSkillSummary,
 } from "@/lib/api";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { cn } from "@/lib/utils";
+import { cn, wordCount } from "@/lib/utils";
 import { IconChevronLeft, IconFolderUp, IconInfo, IconPlus } from "./organicIcons";
 import "./skills.css";
 
@@ -48,7 +48,6 @@ function since(mtimeMs: number): string {
   return relative.format(-Math.round(days / 30), "month");
 }
 
-const words = (content: string) => content.trim().split(/\s+/).filter(Boolean).length;
 const same = (a: Draft, b: Draft) => a.name === b.name && a.description === b.description && a.content === b.content;
 
 export function SkillsPage({ onBack, personaName: persona }: { onBack: () => void; personaName: string }) {
@@ -196,7 +195,7 @@ export function SkillsPage({ onBack, personaName: persona }: { onBack: () => voi
   };
 
   const path = `skills/${openId === NEW ? `${draft.name.trim() || "untitled"}.md` : openId}`;
-  const count = `${words(draft.content).toLocaleString()} words`;
+  const count = `${wordCount(draft.content).toLocaleString()} words`;
   const stamp = entry ? `last saved ${since(entry.mtimeMs)}` : undefined;
 
   const saveButton = (

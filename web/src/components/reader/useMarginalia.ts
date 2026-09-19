@@ -52,8 +52,18 @@ export function useMarginalia({
   const [error, setError] = useState<string>();
 
   const fail = (err: unknown) => setError(err instanceof Error ? err.message : String(err));
-  const upsert = (entry: MarginaliaEntry) =>
-    setEntries((prev) => (prev.some((e) => e.id === entry.id) ? prev.map((e) => (e.id === entry.id ? entry : e)) : [...prev, entry]));
+  /** run a server change; an entry that comes back lands in the list, a failure lands in `error` */
+  const mutate = useCallback(async (op: () => Promise<MarginaliaEntry | void>) => {
+    try {
+      const entry = await op();
+      if (entry) setEntries((prev) => (prev.some((e) => e.id === entry.id) ? prev.map((e) => (e.id === entry.id ? entry : e)) : [...prev, entry]));
+      setError(undefined);
+      return entry || undefined;
+    } catch (err) {
+      fail(err);
+      return undefined;
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -138,77 +148,38 @@ export function useMarginalia({
   );
 
   const add = useCallback(
-    async (range: MarginRange) => {
+    (range: MarginRange) => {
       const anchor = anchorFor(range);
-      if (!anchor) return undefined;
-      try {
-        const entry = await createMarginalia(bookId, anchor);
-        upsert(entry);
-        setError(undefined);
-        return entry;
-      } catch (err) {
-        fail(err);
-        return undefined;
-      }
+      return anchor ? mutate(() => createMarginalia(bookId, anchor)) : Promise.resolve(undefined);
     },
-    [anchorFor, bookId],
+    [anchorFor, bookId, mutate],
   );
 
   const discuss = useCallback(
-    async (range: MarginRange) => {
+    (range: MarginRange) => {
       const anchor = anchorFor(range);
-      if (!anchor) return undefined;
-      try {
-        const { entry } = await discussInMargin(bookId, { anchor });
-        upsert(entry);
-        setError(undefined);
-        return entry;
-      } catch (err) {
-        fail(err);
-        return undefined;
-      }
+      return anchor ? mutate(async () => (await discussInMargin(bookId, { anchor })).entry) : Promise.resolve(undefined);
     },
-    [anchorFor, bookId],
+    [anchorFor, bookId, mutate],
   );
 
   const reply = useCallback(
-    async (entryId: string, text: string) => {
-      try {
-        const { entry } = await discussInMargin(bookId, { entryId, text });
-        upsert(entry);
-        setError(undefined);
-        return entry;
-      } catch (err) {
-        fail(err);
-        return undefined;
-      }
-    },
-    [bookId],
+    (entryId: string, text: string) => mutate(async () => (await discussInMargin(bookId, { entryId, text })).entry),
+    [bookId, mutate],
   );
 
   const saveNote = useCallback(
-    async (entryId: string, note: string) => {
-      try {
-        upsert(await updateMarginalia(bookId, entryId, note));
-        setError(undefined);
-      } catch (err) {
-        fail(err);
-      }
-    },
-    [bookId],
+    (entryId: string, note: string) => mutate(() => updateMarginalia(bookId, entryId, note)),
+    [bookId, mutate],
   );
 
   const remove = useCallback(
-    async (entryId: string) => {
-      try {
+    (entryId: string) =>
+      mutate(async () => {
         await deleteMarginalia(bookId, entryId);
         setEntries((prev) => prev.filter((e) => e.id !== entryId));
-        setError(undefined);
-      } catch (err) {
-        fail(err);
-      }
-    },
-    [bookId],
+      }),
+    [bookId, mutate],
   );
 
   return { entries, ranges, entryAt, add, discuss, reply, saveNote, remove, error };

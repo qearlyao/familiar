@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
   BOOK_PAGE_CHARS,
-  fetchAuthMode,
   fetchBook,
   fetchBookChapter,
   saveBookPosition,
@@ -53,9 +52,8 @@ interface NoteTarget {
   layoutId: string;
 }
 
-export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () => void }) {
+export function ReaderView({ book, onClose, personaName }: { book: BookSummary; onClose: () => void; personaName: string }) {
   const [detail, setDetail] = useState<BookDetail>();
-  const [personaName, setPersonaName] = useState("Fern");
   const [chapterData, setChapterData] = useState<BookChapter>();
   const [chapterError, setChapterError] = useState<string>();
   const [seekError, setSeekError] = useState<string>();
@@ -122,11 +120,6 @@ export function ReaderView({ book, onClose }: { book: BookSummary; onClose: () =
     fetchBook(book.id)
       .then((d) => {
         if (!cancelled) setDetail(d);
-      })
-      .catch(() => undefined);
-    fetchAuthMode()
-      .then(({ personaName: name }) => {
-        if (!cancelled) setPersonaName(name);
       })
       .catch(() => undefined);
     const timer = window.setTimeout(

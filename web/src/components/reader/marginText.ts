@@ -1,10 +1,11 @@
 import type { BookChapterInfo, MarginaliaEntry } from "@/lib/api";
 
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+/** "today", "yesterday", "3 days ago", then the date */
 export function noteAge(timestamp: number): string {
   const days = Math.floor((Date.now() - timestamp) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
+  if (days < 7) return relative.format(-Math.max(days, 0), "day");
   return new Date(timestamp).toLocaleDateString([], { month: "short", day: "numeric" }).toLowerCase();
 }
 

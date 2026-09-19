@@ -5,7 +5,7 @@
 }
 .call-entry svg { flex: none; color: #4c3e2c; }
 .call-entry-head { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
-.call-entry-head b { flex: none; font: var(--font-weight-normal) 0.90625rem/1.2 Caprasimo, Georgia, serif; font-weight: var(--font-weight-normal); }
+.call-entry-head b { flex: none; font: var(--font-weight-normal) 0.90625rem/1.2 var(--font-display); }
 .call-entry-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 0.78125rem var(--font-mono); color: #4c3e2c; white-space: nowrap; }
 .call-entry-read {
   flex: none; height: 1.875rem; padding: 0 0.75rem; border: 0; border-radius: 999px; background: rgba(43, 25, 1, 0.09); color: #4c3e2c;

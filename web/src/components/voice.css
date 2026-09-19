@@ -40,7 +40,7 @@
 /* ---------- shared bits ---------- */
 .voice-primary {
   position: relative; height: 3.5rem; padding: 0 1.75rem; border-radius: 62.4375rem; background: #d6bd8a; color: #2b1901;
-  font: var(--font-weight-normal) 1rem Caprasimo, Georgia, serif; display: inline-flex; align-items: center; justify-content: center; gap: 0.6875rem;
+  font: var(--font-weight-normal) 1rem var(--font-display); display: inline-flex; align-items: center; justify-content: center; gap: 0.6875rem;
   transition: background 0.15s;
 }
 .voice-primary:hover { background: #e4ce9f; }
@@ -70,7 +70,7 @@
   position: relative; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 1.25rem;
   padding: 3rem 3.5rem 3.5rem;
 }
-.voice-idle p { margin: 0; font: var(--font-weight-normal) 2.5rem/1.2 Caprasimo, Georgia, serif; letter-spacing: -0.01em; color: #f0eadf; max-width: 22ch; text-wrap: pretty; }
+.voice-idle p { margin: 0; font: var(--font-weight-normal) 2.5rem/1.2 var(--font-display); letter-spacing: -0.01em; color: #f0eadf; max-width: 22ch; text-wrap: pretty; }
 .voice-idle .voice-error { max-width: 60ch; }
 .voice-kicker { font-size: 0.71875rem; letter-spacing: 0.16em; text-transform: uppercase; color: #d6bd8a; }
 .voice-idle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.875rem; }
@@ -79,7 +79,7 @@
   position: relative; flex: 1; background: transparent; color: #f0eadf;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4375rem;
 }
-.voice-connecting b { font: var(--font-weight-normal) 1.3125rem Caprasimo, Georgia, serif; }
+.voice-connecting b { font: var(--font-weight-normal) 1.3125rem var(--font-display); }
 .voice-connecting small { font-size: 0.78125rem; color: #9e927c; }
 
 /* ---------- live ---------- */
@@ -88,7 +88,7 @@
   order: -1; height: 2.5rem; padding: 0 1rem; border-radius: 62.4375rem; background: rgba(240, 234, 223, 0.1);
   display: inline-flex; align-items: center; gap: 0.75rem; transition: opacity 0.6s, background 0.6s;
 }
-.voice-who b { font: var(--font-weight-normal) 0.875rem Caprasimo, Georgia, serif; color: #f0eadf; }
+.voice-who b { font: var(--font-weight-normal) 0.875rem var(--font-display); color: #f0eadf; }
 .voice-who time { font: 0.8125rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #c4b9a7; }
 .voice-back {
   margin-left: auto; height: 2.5rem; padding: 0 1rem; border-radius: 62.4375rem; background: rgba(240, 234, 223, 0.1); color: #e8e1d4;
@@ -106,7 +106,7 @@
   animation: voice-breathe 4.2s ease-in-out infinite; transform: scale(var(--swell, 1)); transition: transform 0.18s ease-out;
 }
 .voice-line {
-  margin: 0; font: var(--font-weight-normal) 3rem/1.18 Caprasimo, Georgia, serif; letter-spacing: -0.02em; color: #f0eadf;
+  margin: 0; font: var(--font-weight-normal) 3rem/1.18 var(--font-display); letter-spacing: -0.02em; color: #f0eadf;
   text-wrap: pretty; transition: font-size 0.5s ease;
 }
 .voice-line[data-who="you"] { color: #d3c9ba; }
@@ -163,13 +163,13 @@
   display: flex; flex-direction: column; gap: 1.25rem; animation: roomin 0.24s ease backwards;
 }
 .voice-keep-card header { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0.4375rem 0.75rem; }
-.voice-keep-card h2 { margin: 0; font: var(--font-weight-normal) 1.25rem/1.2 Caprasimo, Georgia, serif; }
+.voice-keep-card h2 { margin: 0; font: var(--font-weight-normal) 1.25rem/1.2 var(--font-display); }
 .voice-keep-card header time { font: 0.8125rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #6a5b45; }
 .voice-keep-card header p { display: none; grid-column: 1 / -1; margin: 0; font-size: 0.84375rem; line-height: 1.5; color: #6a5b45; }
 .voice-keep-choices { display: flex; align-items: center; gap: 0.625rem; }
 .voice-keep-choices button {
   flex: 1; height: 3.25rem; padding: 0 1.25rem; border-radius: 62.4375rem; color: #2b1901; background: #d3c9ba;
-  font: var(--font-weight-normal) 0.9375rem Caprasimo, Georgia, serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1875rem;
+  font: var(--font-weight-normal) 0.9375rem var(--font-display); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1875rem;
   transition: background 0.15s;
 }
 .voice-keep-choices b { font-weight: var(--font-weight-normal); white-space: nowrap; }
@@ -197,7 +197,7 @@
 /* the shell steps down to make room, so the bar never sits on the room below it */
 body:has(.voice-live-bar) .familiar-shell { padding-top: calc(max(0.875rem, env(safe-area-inset-top)) + 4.5rem); }
 .voice-live-bar .voice-live-dot { width: 0.5625rem; height: 0.5625rem; animation-duration: 1.6s; }
-.voice-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--font-weight-normal) 0.9375rem Caprasimo, Georgia, serif; }
+.voice-live-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--font-weight-normal) 0.9375rem var(--font-display); }
 .voice-live-bar time { margin-left: auto; font: 0.8125rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #d3c9ba; }
 .voice-live-bar button { border: 0; cursor: pointer; font-family: inherit; }
 .voice-live-return { height: 2.375rem; padding: 0 1rem; border-radius: 62.4375rem; background: rgba(231, 224, 213, 0.16); color: #e7e0d5; font-size: 0.8125rem; }
@@ -254,7 +254,7 @@ body:has(.voice-live-bar) .familiar-shell { padding-top: calc(max(0.875rem, env(
 
   .voice-keep { place-items: end stretch; padding: 0; }
   .voice-keep-ended { display: flex; position: absolute; top: max(2.75rem, env(safe-area-inset-top)); left: 1.625rem; right: 1.625rem; flex-direction: column; gap: 0.375rem; }
-  .voice-keep-ended span { font: var(--font-weight-normal) 1.625rem Caprasimo, Georgia, serif; color: #f0eadf; }
+  .voice-keep-ended span { font: var(--font-weight-normal) 1.625rem var(--font-display); color: #f0eadf; }
   .voice-keep-ended small { font-size: 0.8125rem; color: #9e927c; }
   .voice-keep-card { width: 100%; border-radius: 2rem 2rem 0 0; padding: 1.75rem 1.5rem max(1.875rem, env(safe-area-inset-bottom)); }
   .voice-keep-card h2 { font-size: 1.375rem; }

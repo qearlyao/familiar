@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useScreenWakeLock } from "./screenWakeLock";
+
 const RECORDER_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -76,6 +78,9 @@ export function useVoiceRecorder({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingSessionRef = useRef<RecordingSession | null>(null);
   const mountedRef = useRef(true);
+
+  // the take is only handed over on stop, so a screen that sleeps mid-message loses the whole thing
+  useScreenWakeLock(recording);
 
   const clearRecordingSession = () => {
     const session = recordingSessionRef.current;

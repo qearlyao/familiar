@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchVoiceConfig, voiceUrl, type VoiceConfig } from "./api";
 import { createVoicePlayer, startMicCapture, type MicCapture, type VoicePlayer } from "./voiceAudio";
 import { hasSilentMarker, stripStreamingTail } from "./silentMarker";
+import { useScreenWakeLock } from "./screenWakeLock";
 import { placeLine, type VoiceLine } from "./voiceLines";
 import { createSpeechFeed } from "./voiceSpeech";
 
@@ -70,6 +71,9 @@ export function useVoiceCall() {
   }, []);
 
   useEffect(() => teardown, [teardown]);
+
+  // a dark screen tears down the audio graph and the socket with it, so hold the phone awake for the call
+  useScreenWakeLock(state === "connecting" || state === "live");
 
   const end = useCallback(() => {
     if (!socketRef.current && !micRef.current) return;

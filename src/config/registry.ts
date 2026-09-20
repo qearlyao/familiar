@@ -1,8 +1,15 @@
 import { isAllowedModel, parseModelRef, resolveProviderSetting } from "../models/index.js";
-import { readEnum } from "../util/guards.js";
-import { DISCORD_CHANNEL_TRIGGERS, DISCORD_DISPATCH_MODES, TTS_PROVIDERS, VOICE_KEEP_CHOICES } from "./enums.js";
+import { isRecord, readEnum } from "../util/guards.js";
+import {
+	BUILTIN_TOOLS,
+	DISCORD_CHANNEL_TRIGGERS,
+	DISCORD_DISPATCH_MODES,
+	TOOL_REACHES,
+	TTS_PROVIDERS,
+	VOICE_KEEP_CHOICES,
+} from "./enums.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
-import type { Config, TtsProvider, VoiceKeep } from "./types.js";
+import type { Config, ToolReach, TtsProvider, VoiceKeep } from "./types.js";
 
 export type ConfigKey =
 	| "discord.enabled"
@@ -25,6 +32,7 @@ export type ConfigKey =
 	| "image_gen.enabled"
 	| "image_gen.model"
 	| "image_gen.fallback_model"
+	| "tools.reach"
 	| "memory.lcm.enabled"
 	| "memory.lcm.model"
 	| "memory.lcm.contextThreshold"
@@ -46,6 +54,7 @@ export type ConfigKey =
 export interface RegistryApplyContext {
 	config: Config;
 	scheduler: { rearmHeartbeat(): void };
+	agent: { refreshTools(): Promise<void> };
 }
 
 export interface RegistryEntry {
@@ -281,6 +290,25 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			}
 			config.imageGen.fallbackModel = value as string;
 		},
+	},
+	"tools.reach": {
+		read: (config) => config.tools.reach,
+		// pinned is the default, so it is stored as absence
+		validate: (value) => {
+			if (!isRecord(value)) throw new Error("tools.reach must be an object of tool name to reach");
+			const reach: Record<string, ToolReach> = {};
+			for (const [name, state] of Object.entries(value)) {
+				if (!(BUILTIN_TOOLS as readonly string[]).includes(name))
+					throw new Error(`tools.reach: unknown tool ${name}`);
+				const read = readEnum(state, `tools.reach.${name}`, TOOL_REACHES);
+				if (read !== "pinned") reach[name] = read;
+			}
+			return reach;
+		},
+		write: (config, value) => {
+			config.tools.reach = value as Record<string, ToolReach>;
+		},
+		apply: ({ agent }) => agent.refreshTools(),
 	},
 	"memory.lcm.enabled": {
 		read: (config) => config.memory.lcm.enabled,

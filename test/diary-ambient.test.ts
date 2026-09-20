@@ -167,27 +167,6 @@ describe("ambient diary retrieval", () => {
 		assert.deepEqual(provider.queries, ["quiet memory please"]);
 	});
 
-	it("strips injected memory blocks from the next ambient query", async () => {
-		const store = new FakeStore([], new Map());
-		const provider = new FakeEmbeddingProviderFull();
-		const injector = new AmbientDiaryInjector({
-			store: store as any,
-			embeddingProvider: provider,
-			settings: { minQueryLength: 1, throttleSeconds: 0 },
-		});
-		const messages: AgentMessage[] = [
-			{
-				role: "user",
-				content: "wait what did you see?\n\n<injected_memory>\n1. 2026-05-12: secret diary text\n</injected_memory>",
-				timestamp: 0,
-			},
-		];
-
-		await injector.inject(messages, undefined, "session-a");
-
-		assert.deepEqual(provider.queries, ["wait what did you see?"]);
-	});
-
 	it("does not inject a diary when only a distant semantic nearest neighbor matched", async () => {
 		const distant = hit(1, "diary_chunk", "day.md", "memory system sleep-deprived", 0.9, {});
 		const store = new FakeStore([], new Map([["diary_chunk", [distant]]]));

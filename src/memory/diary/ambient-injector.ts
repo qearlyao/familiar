@@ -6,7 +6,6 @@ import { retrieveAmbientDiary } from "./ambient.js";
 
 const INJECTED_MEMORY_OPEN = "<injected_memory>";
 const INJECTED_MEMORY_CLOSE = "</injected_memory>";
-const INJECTED_MEMORY_BLOCK_RE = /<injected_memory\b[^>]*>[\s\S]*?<\/injected_memory>/gi;
 
 export interface AmbientDiarySettings {
 	enabled?: boolean;
@@ -46,6 +45,7 @@ export class AmbientDiaryInjector {
 		signal?: AbortSignal,
 		sessionKey = "default",
 		queryOverride?: string,
+		role: "system" | "user" = "system",
 	): Promise<AgentMessage[]> {
 		if (!(this.settings.enabled ?? true)) return messages;
 		try {
@@ -71,7 +71,7 @@ export class AmbientDiaryInjector {
 			});
 			if (hits.length === 0) return messages;
 			this.lastInjectedAtBySession.set(sessionKey, now);
-			return injectAmbientDiaryRecall(messages, renderAmbientDiaryRecall(hits));
+			return injectAmbientDiaryRecall(messages, renderAmbientDiaryRecall(hits), role, now);
 		} catch (error) {
 			console.error("memory ambient recall failed", error);
 			return messages;
@@ -87,21 +87,17 @@ function nonNegativeNumberOrDefault(value: number | undefined, fallback: number)
 	return value !== undefined && Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-function injectAmbientDiaryRecall(messages: AgentMessage[], recallText: string): AgentMessage[] {
-	const lastUserIndex = findLastUserMessageIndex(messages);
-	if (lastUserIndex < 0) return messages;
-	return messages.map((message, index) =>
-		index === lastUserIndex ? appendTextToUserMessage(message, `\n\n${recallText}`) : message,
-	);
-}
-
-function appendTextToUserMessage(message: AgentMessage, text: string): AgentMessage {
-	if (message.role !== "user") return message;
-	if (typeof message.content === "string") return { ...message, content: `${message.content}${text}` };
-	return {
-		...message,
-		content: [...message.content, { type: "text", text }],
-	};
+// recall trails the turn as its own message, never rewriting what was typed; it is built fresh
+// each request and never persisted, so the transcript stays free of it.
+function injectAmbientDiaryRecall(
+	messages: AgentMessage[],
+	recallText: string,
+	role: "system" | "user",
+	timestamp: number,
+): AgentMessage[] {
+	if (findLastUserMessageIndex(messages) < 0) return messages;
+	const content = role === "system" ? recallText : [{ type: "text" as const, text: recallText }];
+	return [...messages, { role, content, timestamp } as AgentMessage];
 }
 
 function findLastUserMessageIndex(messages: readonly AgentMessage[]): number {
@@ -123,15 +119,11 @@ function lastUserText(messages: readonly AgentMessage[]): string {
 					.filter(isTextPart)
 					.map((item) => item.text)
 					.join("\n");
-	return stripInjectedMemoryBlocks(text).trim();
+	return text.trim();
 }
 
 function isTextPart(item: { type: string; text?: unknown }): item is { type: "text"; text: string } {
 	return item.type === "text" && typeof item.text === "string";
-}
-
-function stripInjectedMemoryBlocks(text: string): string {
-	return text.replace(INJECTED_MEMORY_BLOCK_RE, "").trim();
 }
 
 function debugAmbientQuery(sessionKey: string, query: string): void {
@@ -199,6 +191,5 @@ export const __ambientDiaryInjectorTest = {
 	lastUserText,
 	renderAmbientDiaryRecall,
 	diaryLabel,
-	stripInjectedMemoryBlocks,
 	stripRepeatedDiaryPrefix,
 };

@@ -98,7 +98,7 @@ export async function startWebDaemon(
 		personaName,
 		publish: eventHub.publish,
 	});
-	registerWebConfigRoutes(route, config, agentCore, options.restart);
+	registerWebConfigRoutes(route, config, agentCore, familiarAgent, options.restart);
 	registerWebMcpRoutes(route, config, familiarAgent, getRuntime);
 	registerWebPushRoutes(route, push);
 	registerWebBookRoutes(route, config, { getRuntime, drainJobs: actions.drainJobs });

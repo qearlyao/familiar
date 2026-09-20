@@ -104,6 +104,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			heartbeat: { ...config.heartbeat, ...overrides.heartbeat },
 			cron: { ...config.cron, ...overrides.cron },
 			mcp: { ...config.mcp, ...overrides.mcp },
+			tools: { ...config.tools, ...overrides.tools },
 			models: { ...config.models, ...overrides.models },
 			tts: { ...config.tts, ...overrides.tts },
 			imageGen: { ...config.imageGen, ...overrides.imageGen },

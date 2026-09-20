@@ -263,3 +263,9 @@ export function isThinkingLevel(value: unknown): value is ThinkingLevel {
 export function supportedThinkingLevels(model: Model<any>): ThinkingLevel[] {
 	return getSupportedThinkingLevels(model);
 }
+
+/** whether pi will carry later system messages to this model instead of dropping them */
+export function supportsSystemNotes(model: Model<any>): boolean {
+	const compat = model.compat as { supportsMidConvoSystemMessages?: boolean } | undefined;
+	return compat?.supportsMidConvoSystemMessages === true;
+}

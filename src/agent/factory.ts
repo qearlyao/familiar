@@ -1,4 +1,5 @@
 import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import { createInitialSystemMessage, getCurrentTools, toToolDeclaration } from "@earendil-works/pi-ai";
 import type { AssistantMessage, ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ThinkingLevel } from "../config/index.js";
@@ -17,6 +18,7 @@ import {
 	parseModelRef,
 	resolveModel,
 	supportedThinkingLevels,
+	supportsSystemNotes,
 } from "../models/index.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
@@ -39,7 +41,7 @@ import {
 	userTextMessage,
 } from "./session-helpers.js";
 import { normalizeToolNameStream } from "./tool-name-compat.js";
-import { createFamiliarTools, setReferenceAttachments } from "./tools.js";
+import { createFamiliarTools, deferredToolNames, setReferenceAttachments } from "./tools.js";
 import { loadStoredMessages, writePayloadLog, writeTranscriptLog, writeTranscriptReset } from "./transcript-log.js";
 import type {
 	FamiliarAgent,
@@ -88,6 +90,8 @@ export async function createFamiliarAgent(
 	let defaultModel = createConfiguredModel(config);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+	// built-ins set aside until the next restart; never written anywhere
+	const pausedTools = new Set<string>();
 	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
 		createFamiliarTools(
 			cfg,
@@ -96,6 +100,7 @@ export async function createFamiliarAgent(
 			memoryService,
 			mcp,
 			() => session.agent,
+			pausedTools,
 		);
 	// a server connecting, dropping or flipping deferred changes every live session's tool list
 	const rebuildSessionTools = async (): Promise<void> => {
@@ -190,14 +195,14 @@ export async function createFamiliarAgent(
 					memoryService,
 					mcp,
 					() => agent ?? stub,
+					pausedTools,
 				),
 				thinkingLevel,
 			},
 			sessionId,
 			// load_tools grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
 			prepareNextTurnWithContext: (turn) => ({ context: { ...turn.context, tools: agent.state.tools.slice() } }),
-			streamFn: (streamModel, rawContext, options) => {
-				const context = { ...rawContext, tools: pruneCondensedTools(rawContext, mcp.deferred) };
+			streamFn: (streamModel, context, options) => {
 				const stream = modelRuntime.streamSimple(streamModel, context, {
 					...options,
 					env: modelRuntimeEnv(config, streamModel),
@@ -230,13 +235,17 @@ export async function createFamiliarAgent(
 						});
 					},
 				});
-				return normalizeToolNameStream(stream, context.tools ?? []);
+				return normalizeToolNameStream(stream, getCurrentTools(context.messages));
 			},
+			// the leading system message carries the prompt and tool declarations; keep it out of
+			// LCM's reach and count it through otherContextTokens as before.
 			transformContext: memoryService
-				? (contextMessages, signal) => {
+				? async (contextMessages, signal) => {
+						const head = contextMessages[0]?.role === "system" ? contextMessages[0] : undefined;
+						const body = head ? contextMessages.slice(1) : contextMessages;
 						const activeOptions = activePromptOptions.get(sessionKey);
-						const skipAmbient = activeOptions?.skipAmbient || lastUserMessageSkipsAmbient(contextMessages);
-						return memoryService.transformContext(contextMessages, signal, {
+						const skipAmbient = activeOptions?.skipAmbient || lastUserMessageSkipsAmbient(body);
+						const transformed = await memoryService.transformContext(body, signal, {
 							sessionKey,
 							sessionId,
 							model: agent.state.model,
@@ -248,6 +257,8 @@ export async function createFamiliarAgent(
 							...(activeOptions?.ephemeral ? { skipLcm: true } : {}),
 							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
 						});
+						pruneCondensedTools(agent, transformed, deferredToolNames(config, mcp, pausedTools));
+						return head ? [head, ...transformed] : transformed;
 					}
 				: undefined,
 		});
@@ -302,11 +313,12 @@ export async function createFamiliarAgent(
 		session.agent.abort();
 		session.agent.reset();
 		await writeTranscriptReset(config, session.sessionId);
-		session.agent.state.systemPrompt = systemPrompt;
 		session.agent.state.model = session.model;
 		session.mediaSink.drain();
 		setReferenceAttachments(session);
 		session.agent.state.tools = toolsFor(config, session);
+		const head = createInitialSystemMessage(systemPrompt, session.agent.state.tools.map(toToolDeclaration));
+		session.agent.state.messages = head ? [head] : [];
 		session.agent.state.thinkingLevel = session.thinkingLevel;
 	};
 
@@ -466,6 +478,13 @@ export async function createFamiliarAgent(
 	return {
 		close: () => mcp.close(),
 		mcp,
+		refreshTools: rebuildSessionTools,
+		pausedTools: () => pausedTools,
+		async pauseTool(name, paused) {
+			if (paused) pausedTools.add(name);
+			else pausedTools.delete(name);
+			await rebuildSessionTools();
+		},
 		async toolNames(sessionKey) {
 			const session = await sessions.get(sessionKey);
 			return session?.agent.state.tools.map((tool) => tool.name) ?? [];
@@ -528,7 +547,10 @@ export async function createFamiliarAgent(
 				for (const nextSession of reloadedSessions) {
 					nextSession.session.model = nextSession.model;
 					nextSession.session.thinkingLevel = nextSession.thinkingLevel;
-					nextSession.session.agent.state.systemPrompt = systemPrompt;
+					const messages = nextSession.session.agent.state.messages;
+					const [head, ...rest] = messages;
+					nextSession.session.agent.state.messages =
+						head?.role === "system" ? [{ ...head, content: systemPrompt }, ...rest] : messages;
 					nextSession.session.agent.state.model = nextSession.model;
 					nextSession.session.agent.state.thinkingLevel = nextSession.thinkingLevel;
 					nextSession.session.agent.state.tools = nextSession.tools;
@@ -616,7 +638,15 @@ export async function createFamiliarAgent(
 				sessionKey,
 				options,
 				eventHandler,
-				(session) => session.agent.prompt(input, images),
+				(session) => {
+					if (!options.notes?.length) return session.agent.prompt(input, images);
+					// harness notes ride in ahead of what was typed, in the harness's own voice
+					const timestamp = Date.now();
+					return session.agent.prompt([
+						...options.notes.map((note) => noteForModel(session, { role: "system", content: note, timestamp })),
+						{ role: "user", content: [{ type: "text", text: input }, ...(images ?? [])], timestamp },
+					]);
+				},
 				() => enterPromptOptions(sessionKey, options),
 			);
 		},
@@ -630,12 +660,12 @@ export async function createFamiliarAgent(
 				sessionKey,
 				options,
 				onEvent,
-				(session) => session.agent.prompt(message),
-				() => {
-					const exitPromptOptions = enterPromptOptions(sessionKey, options);
-					if (options.skipAmbient) skipAmbientMessages.add(message);
-					return exitPromptOptions;
+				(session) => {
+					const sent = noteForModel(session, message);
+					if (options.skipAmbient) skipAmbientMessages.add(sent);
+					return session.agent.prompt(sent);
 				},
+				() => enterPromptOptions(sessionKey, options),
 			);
 		},
 		steer(sessionKey: string, input: string): void {
@@ -662,16 +692,26 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<void> {
 			const session = await getSession(sessionKey);
-			if (options.skipAmbient) skipAmbientMessages.add(message);
-			session.agent.followUp(message);
+			const sent = noteForModel(session, message);
+			if (options.skipAmbient) skipAmbientMessages.add(sent);
+			session.agent.followUp(sent);
 		},
 	};
+
+	// a model without mid-conversation system messages would have pi drop them; it hears
+	// harness notes as plain user text instead.
+	function noteForModel(session: FamiliarAgentSession, message: AgentMessage): AgentMessage {
+		if (message.role !== "system" || supportsSystemNotes(session.agent.state.model)) return message;
+		const content =
+			typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
+		return { role: "user", content, timestamp: message.timestamp };
+	}
 
 	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {
 		for (let index = messages.length - 1; index >= 0; index -= 1) {
 			const message = messages[index];
 			if (!message || typeof message !== "object" || !("role" in message)) continue;
-			if (message.role !== "user") continue;
+			if (message.role !== "user" && message.role !== "system") continue;
 			return skipAmbientMessages.has(message);
 		}
 		return false;

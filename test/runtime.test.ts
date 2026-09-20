@@ -89,6 +89,43 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("hands a kept call to the agent as a note, not as typed text", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, { service: "web", scope: "web", channelId: "owner" }),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound(
+				{
+					messageId: "call-1",
+					authorId: "owner",
+					authorName: "qearlyao",
+					text: "(we were on a voice call for a minute)\n[00:01] qearlyao: hi",
+					call: { kept: "transcript", durationMs: 60_000, lines: [{ who: "you", text: "hi", at: 1000 }] },
+				},
+				{ mode: "collect" },
+			);
+			assert.equal(runtime.beginNextJob(), undefined);
+			await runtime.ingestInbound({ messageId: "message-1", authorId: "owner", authorName: "qearlyao", text: "hey" });
+
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			assert.match(dispatch.prompt, /\] hey$/);
+			assert.doesNotMatch(dispatch.prompt, /voice call/);
+			assert.deepEqual(runtime.notesForActiveJob(dispatch.job.jobId), [
+				"(we were on a voice call for a minute)\n[00:01] qearlyao: hi",
+			]);
+			assert.deepEqual(runtime.notesForActiveJob("other"), []);
+		} finally {
+			await runtime.disconnect();
+		}
+	});
+
 	it("includes derived attachment text once in prompt records", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

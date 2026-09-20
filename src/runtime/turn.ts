@@ -28,8 +28,9 @@ export function canceledJobError(): Error {
 	return error;
 }
 
-export function scheduledUserMessage(text: string, timestamp: number): AgentMessage {
-	return { role: "user", content: [{ type: "text", text }], timestamp };
+/** harness text the agent hears in the harness's own voice, not as one of us typing */
+export function scheduledSystemMessage(text: string, timestamp: number): AgentMessage {
+	return { role: "system", content: text, timestamp };
 }
 
 export function heartbeatStillDue(

@@ -87,20 +87,20 @@ const channel: ChatChannelRef = {
 };
 
 describe("MemoryService", () => {
-	it("injects ambient diary recall into the last user message", () => {
+	it("trails ambient diary recall as its own system note", () => {
 		const messages = [
 			{ role: "user" as const, content: "hello", timestamp: 1 },
 			{ role: "assistant" as const, content: [], api: "test", provider: "test", model: "test", usage: zeroUsage(), stopReason: "stop" as const, timestamp: 2 },
 			{ role: "user" as const, content: [{ type: "text" as const, text: "blue lantern" }], timestamp: 3 },
 		];
 
-		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>");
+		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>", "system", 4);
 
-		assert.deepEqual(messages[0], next[0]);
-		const last = next[2];
-		assert.equal(last?.role, "user");
-		assert.equal(Array.isArray(last?.content), true);
-		assert.match(Array.isArray(last?.content) ? (last.content.at(-1) as { text: string }).text : "", /<injected_memory>/);
+		assert.deepEqual(next.slice(0, 3), messages);
+		const last = next[3];
+		assert.equal(last?.role, "system");
+		assert.equal(last?.timestamp, 4);
+		assert.match(typeof last?.content === "string" ? last.content : "", /<injected_memory>/);
 	});
 
 	it("recalls indexed diary chunks through transformContext", async (t) => {
@@ -121,10 +121,14 @@ describe("MemoryService", () => {
 
 		await withEmbeddingFetch([1, 0, 0], async () => {
 			await withMemoryService(config, async (service) => {
-				const [message] = await service.transformContext([
+				const [typed, message] = await service.transformContext([
 					{ role: "user", content: "blue lantern", timestamp: Date.now() },
-				]);
-				assert.equal(message?.role, "user");
+				], undefined, {
+					// a model pi carries later system messages to
+					model: { compat: { supportsMidConvoSystemMessages: true } } as any,
+				});
+				assert.equal(typed?.role === "user" ? typed.content : undefined, "blue lantern");
+				assert.equal(message?.role, "system");
 				assert.match(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
 				assert.match(typeof message?.content === "string" ? message.content : "", /<\/injected_memory>/);
 				assert.match(typeof message?.content === "string" ? message.content : "", /blue lantern/);
@@ -159,13 +163,13 @@ describe("MemoryService", () => {
 		}) as typeof fetch;
 		try {
 			await withMemoryService(config, async (service) => {
-				const [message] = await service.transformContext(
+				const messages = await service.transformContext(
 					[{ role: "user", content: "heartbeat lantern", timestamp: Date.now() }],
 					undefined,
 					{ skipAmbient: true },
 				);
-				assert.equal(message?.role, "user");
-				assert.doesNotMatch(typeof message?.content === "string" ? message.content : "", /<injected_memory>/);
+				assert.equal(messages.length, 1);
+				assert.equal(messages[0]?.role, "user");
 				assert.equal(embeddingCalls, 0);
 			});
 		} finally {

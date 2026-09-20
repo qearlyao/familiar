@@ -433,10 +433,21 @@ export class ConversationRuntime {
 		const slice = this.triggerInboundSlice(job);
 		return {
 			job,
-			prompt: slice.map(formatPromptRecord).join("\n").trim(),
+			// a kept call is not something typed; it reaches the agent through notesForActiveJob
+			prompt: slice
+				.filter((record) => !record.call)
+				.map(formatPromptRecord)
+				.join("\n")
+				.trim(),
 			attachments: slice.flatMap((record) => record.attachments),
 			triggerMessageId: triggerRecord?.messageId,
 		};
+	}
+
+	/** kept voice calls in the active job's slice, for the agent to hear ahead of what was typed */
+	notesForActiveJob(jobId: string): string[] {
+		if (this.activeJob?.jobId !== jobId) return [];
+		return this.triggerInboundSlice(this.activeJob).flatMap((record) => (record.call ? [record.text] : []));
 	}
 
 	ambientQueryForActiveJob(jobId: string): string | undefined {

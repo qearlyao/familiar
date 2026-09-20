@@ -1,5 +1,6 @@
-import type { AgentMessage, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { Context, ImageContent, TextContent, Tool } from "@earendil-works/pi-ai/compat";
+import type { Agent, AgentMessage, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import { getCurrentTools } from "@earendil-works/pi-ai";
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai/compat";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -161,29 +162,23 @@ export function createMcpHub(onChange: () => void | Promise<void> = () => {}): M
 	};
 }
 
-/** names a past tool result brought into the request; how loaded tools survive restarts and reloads */
+/** every tool the transcript's system messages currently declare; how loaded tools survive restarts and reloads */
 export function loadedToolNames(messages: readonly AgentMessage[]): Set<string> {
-	const names = new Set<string>();
-	for (const message of messages) {
-		if (message.role === "toolResult") for (const name of message.addedToolNames ?? []) names.add(name);
-	}
-	return names;
+	return new Set(getCurrentTools(messages).map((tool) => tool.name));
 }
 
-// once LCM condenses away both the load marker and every call, a loaded tool would ratchet into
-// the cached prefix for good; drop it instead so it goes back to being loadable on demand.
-export function pruneCondensedTools(context: Context, deferred: readonly AgentTool<any>[]): Tool[] {
-	const tools = context.tools ?? [];
-	if (deferred.length === 0) return tools;
-	const alive = new Set<string>();
-	for (const message of context.messages) {
-		if (message.role === "toolResult") for (const name of message.addedToolNames ?? []) alive.add(name);
-		else if (message.role === "assistant") {
-			for (const block of message.content) if (block.type === "toolCall") alive.add(block.name);
-		}
-	}
-	const deferredNames = new Set(deferred.map((tool) => tool.name));
-	return tools.filter((tool) => !deferredNames.has(tool.name) || alive.has(tool.name));
+// once LCM condenses away the system message that declared a loaded tool, the request stops
+// offering it; drop it from the loadout too so the transcript announces the removal and
+// load_tools can bring it back on demand.
+export function pruneCondensedTools(
+	agent: Agent,
+	transformed: readonly AgentMessage[],
+	deferredNames: ReadonlySet<string>,
+): void {
+	if (deferredNames.size === 0) return;
+	const declared = loadedToolNames(transformed);
+	const kept = agent.state.tools.filter((tool) => !deferredNames.has(tool.name) || declared.has(tool.name));
+	if (kept.length !== agent.state.tools.length) agent.state.tools = kept;
 }
 
 const loadToolsSchema = Type.Object({
@@ -219,7 +214,6 @@ export function createLoadToolsTool(
 			return {
 				content: [{ type: "text", text: matches.map((tool) => `${tool.name}: ${tool.description}`).join("\n\n") }],
 				details: undefined,
-				addedToolNames: matches.map((tool) => tool.name),
 			};
 		},
 	};

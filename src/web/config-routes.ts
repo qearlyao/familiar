@@ -1,3 +1,5 @@
+import type { FamiliarAgent } from "../agent/factory.js";
+import { BUILTIN_TOOLS } from "../config/enums.js";
 import type { Config } from "../config/index.js";
 import { loadConfigOverrides } from "../config/overrides.js";
 import {
@@ -7,6 +9,7 @@ import {
 	clearConfigChange,
 	commitConfigChange,
 	isConfigKey,
+	type RegistryApplyContext,
 } from "../config/registry.js";
 import type { RestartHandler } from "../lifecycle/control.js";
 import type { AgentCore } from "../runtime/agent-core.js";
@@ -44,8 +47,10 @@ export function registerWebConfigRoutes(
 	route: RegisterWebRoute,
 	config: Config,
 	agentCore: AgentCore,
+	familiarAgent: FamiliarAgent,
 	restart?: RestartHandler,
 ): void {
+	const ctx: RegistryApplyContext = { config, scheduler: agentCore, agent: familiarAgent };
 	route("GET", "/api/web/config", async (_request, response) => {
 		sendJson(response, 200, configPayload(config));
 	});
@@ -55,7 +60,7 @@ export function registerWebConfigRoutes(
 		const entry = CONFIG_REGISTRY[key];
 		try {
 			const validated = entry.validate(value, config);
-			await commitConfigChange(key, validated, { config, scheduler: agentCore });
+			await commitConfigChange(key, validated, ctx);
 			if (key === "discord.enabled" || key === "qq.enabled") await restart?.();
 		} catch (error) {
 			throw new HttpError(400, errorMessage(error));
@@ -66,11 +71,47 @@ export function registerWebConfigRoutes(
 		const body = await readJsonBody(request);
 		const { key } = configChangeFromBody(body);
 		try {
-			await clearConfigChange(key, { config, scheduler: agentCore });
+			await clearConfigChange(key, ctx);
 			if (key === "discord.enabled" || key === "qq.enabled") await restart?.();
 		} catch (error) {
 			throw new HttpError(400, errorMessage(error));
 		}
 		sendJson(response, 200, configPayload(config));
+	});
+
+	// the built-in tools: a lasting reach (pinned / loadable / off) in the overrides layer,
+	// and a rest that ends at the next restart.
+	const toolsPayload = () => {
+		return {
+			tools: BUILTIN_TOOLS.map((name) => ({
+				name,
+				reach: config.tools.reach[name] ?? "pinned",
+				paused: familiarAgent.pausedTools().has(name),
+			})),
+		};
+	};
+	route("GET", "/api/web/tools", async (_request, response) => {
+		sendJson(response, 200, toolsPayload());
+	});
+	route("POST", "/api/web/tools", async (request, response) => {
+		const body = await readJsonBody(request);
+		if (
+			!isRecord(body) ||
+			typeof body.name !== "string" ||
+			!(BUILTIN_TOOLS as readonly string[]).includes(body.name)
+		) {
+			throw new HttpError(400, `name must be one of: ${BUILTIN_TOOLS.join(", ")}`);
+		}
+		try {
+			if (typeof body.paused === "boolean") await familiarAgent.pauseTool(body.name, body.paused);
+			else {
+				const entry = CONFIG_REGISTRY["tools.reach"];
+				const next = entry.validate({ ...config.tools.reach, [body.name]: body.reach }, config);
+				await commitConfigChange("tools.reach", next, ctx);
+			}
+		} catch (error) {
+			throw new HttpError(400, errorMessage(error));
+		}
+		sendJson(response, 200, toolsPayload());
 	});
 }

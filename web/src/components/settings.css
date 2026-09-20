@@ -389,3 +389,9 @@
 .mcp-kv > div { display: flex; gap: 0.375rem; }
 .mcp-kv .pill-input { height: 2rem; }
 .mcp-kv .pill-input:first-child { flex: 0 0 38%; }
+
+/* their own hands: one built-in tool per row */
+.tool-rows { display: flex; flex-direction: column; gap: 0.875rem; }
+.tool-row { display: flex; flex-direction: column; gap: 0.375rem; }
+.tool-row code { font: 0.8125rem var(--font-mono); color: #2b1901; }
+.tool-row.is-off code { color: #6b6144; }

@@ -100,3 +100,16 @@ describe("channel config registry", () => {
 		assert.equal(debounce.validate("4000", config), 4000);
 	});
 });
+
+describe("tools.reach config registry", () => {
+	it("keeps only non-pinned built-ins and rejects unknown names or states", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const reach = CONFIG_REGISTRY["tools.reach"];
+
+		reach.write(config, reach.validate({ bash: "pinned", browser: "loadable", image_gen: "off" }, config));
+		assert.deepEqual(reach.read(config), { browser: "loadable", image_gen: "off" });
+		assert.throws(() => reach.validate({ teapot: "off" }, config), /unknown tool teapot/);
+		assert.throws(() => reach.validate({ bash: "gone" }, config), /tools\.reach\.bash must be one of/);
+		assert.throws(() => reach.validate("bash", config), /must be an object/);
+	});
+});

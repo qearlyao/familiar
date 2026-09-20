@@ -27,28 +27,30 @@ describe("provider payload normalization", () => {
 		assert.equal(__agentTest.isNoisyProviderDebug(["debug note", { provider: "google-vertex" }]), false);
 	});
 
-	it("keeps Anthropic cache_control on stable user text before injected memory", () => {
-		const payload = {
-			messages: [
-				{
-					role: "user",
-					content: [
-						{ type: "text", text: "what did you see?" },
-						{
-							type: "text",
-							text: "<injected_memory>\n1. 2026-05-12: diary\n</injected_memory>",
-							cache_control: { type: "ephemeral" },
-						},
-					],
-				},
+	it("moves Anthropic cache_control off a trailing injected-memory note onto the stable message", () => {
+		const note = {
+			role: "system",
+			content: [
+				{ type: "text", text: "<injected_memory>\n1. 2026-05-12: diary\n</injected_memory>", cache_control: { type: "ephemeral" } },
 			],
 		};
+		const typed = { role: "user", content: [{ type: "text", text: "what did you see?" }] };
+		const plain = { role: "user", content: "what did you see?" };
 
-		const normalized = __agentTest.normalizeProviderPayload(payload, anthropicModel) as typeof payload;
-		const content = normalized.messages[0]?.content;
+		const blocks = __agentTest.normalizeProviderPayload(
+			{ messages: [typed, structuredClone(note)] },
+			anthropicModel,
+		) as { messages: { content: { cache_control?: unknown }[] }[] };
+		assert.deepEqual(blocks.messages[0]?.content[0]?.cache_control, { type: "ephemeral" });
+		assert.equal("cache_control" in (blocks.messages[1]?.content[0] ?? {}), false);
 
-		assert.deepEqual(content?.[0]?.cache_control, { type: "ephemeral" });
-		assert.equal(content?.[1] && "cache_control" in content[1], false);
+		const text = __agentTest.normalizeProviderPayload(
+			{ messages: [plain, structuredClone(note)] },
+			anthropicModel,
+		) as { messages: { content: unknown }[] };
+		assert.deepEqual(text.messages[0]?.content, [
+			{ type: "text", text: "what did you see?", cache_control: { type: "ephemeral" } },
+		]);
 	});
 
 	it("adds OpenRouter routing to Anthropic Messages and OpenAI Completions", () => {

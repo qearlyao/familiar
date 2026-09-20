@@ -13,6 +13,7 @@ export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
 export type TtsProvider = "elevenlabs" | "cartesia";
 export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
+export type ToolReach = "pinned" | "loadable" | "off";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
@@ -180,6 +181,10 @@ export interface Config {
 			voiceId: string;
 			modelId: string;
 		};
+	};
+	tools: {
+		/** built-in tools not named here are pinned */
+		reach: Record<string, ToolReach>;
 	};
 	imageGen: {
 		enabled: boolean;

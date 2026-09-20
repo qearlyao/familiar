@@ -6,6 +6,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../config/index.js";
+import { supportsSystemNotes } from "../models/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
 import type { ContextBreakdown } from "../web/types.js";
@@ -164,7 +165,13 @@ class DefaultMemoryService implements MemoryOperatorService {
 			this.contextTransformer.recordAdditionalContextTokens(sessionKey, options.otherContextTokens ?? 0);
 			return compacted;
 		}
-		const selected = await this.ambientInjector.inject(compacted, signal, sessionKey, options.ambientQuery);
+		const selected = await this.ambientInjector.inject(
+			compacted,
+			signal,
+			sessionKey,
+			options.ambientQuery,
+			options.model && supportsSystemNotes(options.model) ? "system" : "user",
+		);
 		const tokensOf = (list: AgentMessage[]) =>
 			list.reduce((total, message) => total + estimateAgentMessageTokens(message), 0);
 		this.contextTransformer.recordAdditionalContextTokens(

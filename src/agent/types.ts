@@ -22,6 +22,8 @@ export interface FamiliarPromptOptions {
 	/** use this session's model and thinking level instead of its own */
 	settingsFrom?: string;
 	ambientQuery?: string;
+	/** harness text sent ahead of the typed prompt as system notes (a kept voice call) */
+	notes?: string[];
 	referenceAttachments?: StoredAttachment[];
 	onTurnEnd?: () => void | Promise<void>;
 }
@@ -30,6 +32,11 @@ export interface FamiliarAgent {
 	/** disconnect MCP servers */
 	close(): Promise<void>;
 	mcp: McpHub;
+	/** hand every live session its tool list again after reach or pause changes */
+	refreshTools(): Promise<void>;
+	/** built-ins resting until the next restart */
+	pausedTools(): ReadonlySet<string>;
+	pauseTool(name: string, paused: boolean): Promise<void>;
 	/** the tools a live session holds right now; empty when it hasn't started */
 	toolNames(sessionKey: string): Promise<string[]>;
 	getContextBreakdown(sessionKey: string, tokens: number): ContextBreakdown | undefined;

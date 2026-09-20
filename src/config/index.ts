@@ -81,6 +81,7 @@ export type {
 	MemoryEmbeddingFormat,
 	OpenRouterRoutingConfig,
 	ThinkingLevel,
+	ToolReach,
 	TtsProvider,
 	TtsVoiceSettings,
 	VoiceKeep,
@@ -749,6 +750,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				modelId: readOptionalString(ttsCartesia.model_id, "sonic-3.5"),
 			},
 		},
+		tools: { reach: {} },
 		imageGen: {
 			enabled: readBoolean(imageGen.enabled, true, "image_gen.enabled"),
 			model: readConfigString(imageGen.model, "openrouter/google/gemini-2.5-flash-image", "image_gen.model"),

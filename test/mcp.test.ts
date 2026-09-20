@@ -44,53 +44,42 @@ describe("mcp", () => {
 		await assert.rejects(tools.find((tool) => tool.name === "demo__boom")!.execute("2", {}), /nope/);
 	});
 
-	it("load_tools reports addedToolNames and the transcript replays them", async (t) => {
+	it("load_tools hands matches to onLoad and the transcript's declarations replay them", async (t) => {
 		const { client, tools } = await inMemoryTools();
 		t.after(() => client.close());
 		const loaded: string[] = [];
 		const loadTools = createLoadToolsTool(tools, (added) => loaded.push(...added.map((tool) => tool.name)));
-		const byQuery = await loadTools.execute("1", { query: "numbers" });
-		assert.deepEqual(byQuery.addedToolNames, ["demo__add"]);
+		await loadTools.execute("1", { query: "numbers" });
 		assert.deepEqual(loaded, ["demo__add"]);
-		const byName = await loadTools.execute("2", { names: ["demo__boom"] });
-		assert.deepEqual(byName.addedToolNames, ["demo__boom"]);
+		await loadTools.execute("2", { names: ["demo__boom"] });
+		assert.deepEqual(loaded, ["demo__add", "demo__boom"]);
 		const none = await loadTools.execute("3", { query: "teapot" });
-		assert.equal(none.addedToolNames, undefined);
+		assert.deepEqual(none.content, [{ type: "text", text: "nothing matched." }]);
+		assert.deepEqual(loaded, ["demo__add", "demo__boom"]);
 		assert.deepEqual(
 			[
 				...loadedToolNames([
-					{ role: "toolResult", toolCallId: "1", toolName: "load_tools", content: [], isError: false, timestamp: 0, addedToolNames: ["demo__add"] },
+					{ role: "system", content: "", toolsAdded: [{ name: "demo__add", description: "", parameters: {} }], timestamp: 0 },
 					{ role: "user", content: "hi", timestamp: 0 },
+					{ role: "system", content: "", toolsRemoved: [{ name: "demo__add" }], toolsAdded: [{ name: "demo__boom", description: "", parameters: {} }], timestamp: 1 },
 				] as any),
 			],
-			["demo__add"],
+			["demo__boom"],
 		);
 	});
 
-	it("drops a loaded deferred tool once its marker and calls are condensed away", async (t) => {
+	it("drops a loaded deferred tool once the transcript no longer declares it", async (t) => {
 		const { client, tools } = await inMemoryTools();
 		t.after(() => client.close());
 		const base = { name: "bash", description: "", parameters: {} as any };
 		const add = tools.find((tool) => tool.name === "demo__add")!;
-		const marker = {
-			role: "toolResult",
-			toolCallId: "1",
-			toolName: "load_tools",
-			content: [],
-			isError: false,
-			timestamp: 0,
-			addedToolNames: ["demo__add"],
+		const declared = { role: "system", content: "", toolsAdded: [add], timestamp: 0 };
+		const names = (messages: unknown[]) => {
+			const agent = { state: { tools: [base, add] } } as any;
+			pruneCondensedTools(agent, messages as any, new Set(tools.map((tool) => tool.name)));
+			return agent.state.tools.map((tool: { name: string }) => tool.name);
 		};
-		const call = {
-			role: "assistant",
-			content: [{ type: "toolCall", id: "2", name: "demo__add", arguments: {} }],
-			stopReason: "toolUse",
-			timestamp: 0,
-		};
-		const names = (messages: unknown[]) =>
-			pruneCondensedTools({ messages: messages as any, tools: [base, add] }, tools).map((tool) => tool.name);
-		assert.deepEqual(names([marker]), ["bash", "demo__add"]);
-		assert.deepEqual(names([call]), ["bash", "demo__add"]);
+		assert.deepEqual(names([declared]), ["bash", "demo__add"]);
 		assert.deepEqual(names([{ role: "user", content: "summary", timestamp: 0 }]), ["bash"]);
 	});
 

@@ -19,6 +19,7 @@ describe("agent work queue", () => {
 			channelKey: "web-web-owner",
 			hasActiveJob: () => true,
 			ambientQueryForActiveJob: () => "mornig",
+			notesForActiveJob: () => [],
 		} as unknown as ConversationRuntime;
 		const queue = createAgentWorkQueue({ familiarAgent });
 		const modelPrompt = "[qearlyao uid:owner @ 2026-05-09 11:34:16 GMT+8] mornig";

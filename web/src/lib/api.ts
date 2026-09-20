@@ -723,6 +723,23 @@ export async function clearConfig(key: ConfigKey): Promise<ConfigPayload> {
   return jsonRequest<ConfigPayload>("/api/web/config", "DELETE", { key }, "config");
 }
 
+export type ToolReach = "pinned" | "loadable" | "off";
+
+export interface BuiltinTool {
+  name: string;
+  reach: ToolReach;
+  /** resting until the next restart */
+  paused: boolean;
+}
+
+export async function fetchTools(): Promise<BuiltinTool[]> {
+  return (await getJson<{ tools: BuiltinTool[] }>("/api/web/tools", "tools")).tools;
+}
+
+export async function updateTool(change: { name: string; reach?: ToolReach; paused?: boolean }): Promise<BuiltinTool[]> {
+  return (await jsonRequest<{ tools: BuiltinTool[] }>("/api/web/tools", "POST", change, "tools")).tools;
+}
+
 export interface McpTool {
   name: string;
   description: string;

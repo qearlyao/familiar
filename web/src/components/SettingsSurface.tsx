@@ -8,6 +8,7 @@ import { TtsSection, VoiceCallSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
 import { ReachCard, RepliesCard } from "./config/ChannelsSection";
 import { McpSection } from "./config/McpSection";
+import { ToolsSection } from "./config/ToolsSection";
 import { useAgentSettings } from "@/lib/useAgentSettings";
 import { useConfig } from "@/lib/useConfig";
 import { useDevices } from "@/lib/useDevices";
@@ -108,7 +109,12 @@ export function SettingsSurface({
       );
       break;
     case "tools":
-      page = <McpSection mcp={mcp} />;
+      page = (
+        <>
+          <ToolsSection />
+          <McpSection mcp={mcp} />
+        </>
+      );
       break;
     case "devices":
       page = onSignedOut && <DevicesSection state={devices} onSignedOut={onSignedOut} />;

@@ -196,10 +196,10 @@ Provider-specific base URLs and API-key env var names live under
 
 Built-in providers that support OAuth can be authenticated interactively. Run
 `familiar login` to choose a provider and authentication method, or pass a
-provider such as `anthropic` directly:
+provider such as `openrouter` directly:
 
 ```sh
-familiar login anthropic
+familiar login openrouter
 ```
 
 Credentials are stored in the default workspace at `~/.familiar/auth.json`.

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.1 - 2026-09-21
+
+### Added
+
+- Configure built-in tools from WebUI settings as pinned, loadable through `load_tools`, or off, with a temporary pause that lasts until restart.
+- Keep the screen awake during voice calls and voice-message recording on supported browsers, reacquiring the wake lock when the page becomes visible again.
+
+### Changed
+
+- Upgrade the pi dependency set to `0.86.0` and adopt its transcript-based system prompts and tool declarations.
+- Send heartbeat, scheduled-task, kept-call, and ambient diary context as separate system notes where supported. Keep ambient recall ephemeral and separate from typed messages.
+- Redesign WebUI settings with flat panels and ruled rows across model, tools, MCP, memory, voice, channels, and device controls.
+
+### Fixed
+
+- Refine the audio play glyph and reduce the size of the agent voice-message pill.
+- Correct the README login example to use OpenRouter.
+
 ## 1.1.0 - 2026-09-19
 
 ### Added

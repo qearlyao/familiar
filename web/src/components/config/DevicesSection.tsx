@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { logoutAuthSession, revokeAuthDevice, revokeOtherAuthDevices, type WebAuthDevice } from "@/lib/api";
 import type { useDevices } from "@/lib/useDevices";
 import { cn } from "@/lib/utils";
-import { IconX } from "../organicIcons";
+import { Card } from "./inputs";
 
 const day = (date: Date) => new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date).toLowerCase();
 const time = (date: Date) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date).toLowerCase();
@@ -73,81 +73,57 @@ export function DevicesSection({ state, onSignedOut }: { state: ReturnType<typeo
   const signOutOthers = () => void run("others", async () => { await revokeOtherAuthDevices(); setDevices((prev) => prev.filter((d) => d.current)); });
 
   return (
-    <>
-      <div className="device-signout">
-        <p className="settings-note">signing out the others ends every session but this one. they will need the pairing code again.</p>
-        <div className="device-actions">
-          <button type="button" className="pill-button" disabled={Boolean(busyId)} onClick={logOutHere}>
-            log out here
-          </button>
-          <button type="button" className="pill-button is-quiet" disabled={Boolean(busyId) || others.length === 0} onClick={signOutOthers}>
-            sign out the others
-          </button>
-        </div>
-      </div>
-      <div className="settings-column">
-        {sorted.map((device) => (
-          <article key={device.id} className={cn("device-ticket", device.current && "is-current")}>
-            <div>
-              <div className="device-name">
-                <i />
-                <h4>{device.deviceName || "unnamed device"}</h4>
-                {device.current && <em>this one</em>}
-                {device.current ? (
-                  <button
-                    type="button"
-                    className="device-revoke is-logout"
-                    disabled={Boolean(busyId)}
-                    onClick={logOutHere}
-                  >
-                    <span>log out</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="device-revoke"
-                    aria-label={`revoke ${device.deviceName || "device"}`}
-                    title="revoke"
-                    disabled={Boolean(busyId)}
-                    onClick={() => void run(device.id, async () => { await revokeAuthDevice(device.id); setDevices((prev) => prev.filter((d) => d.id !== device.id)); })}
-                  >
-                    <IconX />
-                    <span>revoke</span>
-                  </button>
-                )}
-              </div>
-              <code>
-                {device.lastIp ?? "ip unknown"} · {summarizeUserAgent(device.userAgent)}
-              </code>
-              <span className="device-seen">last seen {when(device.lastSeenAt, (d) => `${day(d)}, ${time(d)}`)}</span>
-              <span>
-                signed in {when(device.createdAt, day)} · expires {when(device.expiresAt, day)}
-              </span>
-            </div>
-            <div className="device-stub">
-              <span>last seen</span>
-              <b>{when(device.lastSeenAt, day)}</b>
-              <code>{when(device.lastSeenAt, time)}</code>
-            </div>
-          </article>
-        ))}
-        {loading && <p className="settings-note">checking devices…</p>}
-        {!loading && sorted.length === 0 && <p className="settings-note">no devices found.</p>}
-      </div>
-      <button
-        type="button"
-        className="pill-button is-quiet is-tail"
-        title="they will need the pairing code again"
-        disabled={Boolean(busyId) || others.length === 0}
-        onClick={signOutOthers}
-      >
-        sign out the others
-      </button>
+    <Card
+      title="signed in"
+      hint="browsers holding a session. signing out the others ends every one but this."
+      action={
+        <button type="button" className="pill-button is-quiet" disabled={Boolean(busyId) || others.length === 0} title="they will need the pairing code again" onClick={signOutOthers}>
+          sign out the others
+        </button>
+      }
+    >
       {error && (
         <p role="alert" className="settings-error">
           {error}
         </p>
       )}
-    </>
+      <div className="settings-rows">
+        {sorted.map((device) => (
+          <div key={device.id} className={cn("settings-row device-row", device.current && "is-current")}>
+            <div className="settings-row-label">
+              <span>
+                <i />
+                {device.deviceName || "unnamed device"}
+                {device.current && <em>this one</em>}
+              </span>
+              <small>
+                {summarizeUserAgent(device.userAgent)} · {device.lastIp ?? "ip unknown"} · last seen {when(device.lastSeenAt, (d) => `${day(d)}, ${time(d)}`)}
+              </small>
+              <small>
+                signed in {when(device.createdAt, day)} · expires {when(device.expiresAt, day)}
+              </small>
+            </div>
+            <div className="settings-row-control">
+              {device.current ? (
+                <button type="button" className="pill-button is-quiet" disabled={Boolean(busyId)} onClick={logOutHere}>
+                  log out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="pill-button is-quiet"
+                  disabled={Boolean(busyId)}
+                  onClick={() => void run(device.id, async () => { await revokeAuthDevice(device.id); setDevices((prev) => prev.filter((d) => d.id !== device.id)); })}
+                >
+                  revoke
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading && <p className="settings-note">checking devices…</p>}
+        {!loading && sorted.length === 0 && <p className="settings-note">no devices found.</p>}
+      </div>
+    </Card>
   );
 }

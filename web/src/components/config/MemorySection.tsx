@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { ConfigKey, ConfigValues } from "@/lib/api";
 import { byGateway } from "@/lib/modelRoutes";
 import { IconChevronDown } from "../organicIcons";
-import { Card, Fine, NumberInput, OnOffToggle, Sentence, Unit } from "./inputs";
+import { Card, NumberInput, OnOffToggle, Row, Rows } from "./inputs";
 
 /** Bring an opened fold into view; when only a note or two sits below it, run on to the end of the page. */
 function revealFold(fold: HTMLElement, body: HTMLElement) {
@@ -18,7 +18,7 @@ function revealFold(fold: HTMLElement, body: HTMLElement) {
   if (top > body.scrollTop) body.scrollTo({ top, behavior: "smooth" });
 }
 
-function Advanced({ children }: { children: ReactNode }) {
+function Advanced({ count, children }: { count: number; children: ReactNode }) {
   return (
     <details
       className="settings-fold"
@@ -29,7 +29,7 @@ function Advanced({ children }: { children: ReactNode }) {
       }}
     >
       <summary>
-        advanced
+        advanced · {count} values
         <IconChevronDown />
       </summary>
       {children}
@@ -58,7 +58,7 @@ export function MemorySection({
   const summaryGroups = byGateway(models);
   const compactionOff = disabled || compactionEnabled !== true;
   const ambientOff = disabled || ambientEnabled !== true;
-  const num = (key: ConfigKey, opts: { step?: number; min?: number; max?: number; scale?: number; inline?: boolean }, off: boolean) => (
+  const num = (key: ConfigKey, opts: { step?: number; min?: number; max?: number; scale?: number }, off: boolean) => (
     <NumberInput value={values?.[key].value as number | undefined} {...opts} disabled={off} onCommit={(v) => onChange(key, v)} />
   );
   const option = (model: string) => (
@@ -73,51 +73,45 @@ export function MemorySection({
         title="compaction"
         hint="how older conversation is condensed into summaries."
         off={compactionEnabled !== true}
-        action={<OnOffToggle enabled={compactionEnabled} disabled={disabled} ariaPrefix="compaction" onChange={(next) => void onChange("memory.lcm.enabled", next)} />}
+        action={<OnOffToggle enabled={compactionEnabled} disabled={disabled} labelled ariaPrefix="compaction" onChange={(next) => void onChange("memory.lcm.enabled", next)} />}
       >
-        <Sentence>
-          keeps the last {num("memory.lcm.freshTailCount", { min: 1, inline: true }, compactionOff)} messages whole, compacts past{" "}
-          <Unit>{num("memory.lcm.contextThreshold", { step: 5, min: 0, max: 100, scale: 100, inline: true }, compactionOff)}%.</Unit>
-        </Sentence>
-        <label className="summary-model">
-          <span>written by</span>
-          <span className="summary-select">
-            <select
-              value={summaryPick}
-              disabled={compactionOff}
-              onChange={(event) => void (event.target.value ? onChange("memory.lcm.model", event.target.value) : onClear("memory.lcm.model"))}
-            >
-              <option value="">follow the conversation model</option>
-              {summaryPick && !models.includes(summaryPick) && option(summaryPick)}
-              {summaryGroups.length > 0
-                ? summaryGroups.map((g) => (
-                    <optgroup key={g.gateway} label={g.gateway}>
-                      {g.models.map(option)}
-                    </optgroup>
-                  ))
-                : models.map(option)}
-            </select>
-            <IconChevronDown />
-          </span>
-        </label>
-        <Advanced>
-          <div className="settings-fines">
-            <Fine label="leaf chunk" hint="max tokens read per leaf summary">
-              {num("memory.lcm.leafChunkTokens", { min: 1 }, compactionOff)}
-            </Fine>
-            <Fine label="leaf target" hint="tokens each leaf summary aims for">
-              {num("memory.lcm.leafTargetTokens", { min: 1 }, compactionOff)}
-            </Fine>
-            <Fine label="condense group" hint="summaries folded into one at the next level">
-              {num("memory.lcm.condenseGroupSize", { min: 1 }, compactionOff)}
-            </Fine>
-            <Fine label="max depth" hint="deepest summary-of-summaries">
-              {num("memory.lcm.maxSummaryDepth", { min: 1 }, compactionOff)}
-            </Fine>
-            <Fine label="kept after /new" hint="-1 keeps everything, 0 keeps every summary">
-              {num("memory.lcm.newSessionRetainDepth", { min: -1 }, compactionOff)}
-            </Fine>
-          </div>
+        <Rows>
+          <Row label="messages kept whole" help="the freshest turns are never summarised.">
+            {num("memory.lcm.freshTailCount", { min: 1 }, compactionOff)}
+          </Row>
+          <Row label="context percent" help="compacts once the window is this full.">
+            {num("memory.lcm.contextThreshold", { step: 5, min: 0, max: 100, scale: 100 }, compactionOff)}
+          </Row>
+          <Row label="summaries written by">
+            <span className="settings-select">
+              <select
+                aria-label="summaries written by"
+                value={summaryPick}
+                disabled={compactionOff}
+                onChange={(event) => void (event.target.value ? onChange("memory.lcm.model", event.target.value) : onClear("memory.lcm.model"))}
+              >
+                <option value="">follow the conversation model</option>
+                {summaryPick && !models.includes(summaryPick) && option(summaryPick)}
+                {summaryGroups.length > 0
+                  ? summaryGroups.map((g) => (
+                      <optgroup key={g.gateway} label={g.gateway}>
+                        {g.models.map(option)}
+                      </optgroup>
+                    ))
+                  : models.map(option)}
+              </select>
+              <IconChevronDown />
+            </span>
+          </Row>
+        </Rows>
+        <Advanced count={5}>
+          <Rows>
+            <Row label="leaf chunk" help="max tokens read per leaf summary.">{num("memory.lcm.leafChunkTokens", { min: 1 }, compactionOff)}</Row>
+            <Row label="leaf target" help="tokens each leaf summary aims for.">{num("memory.lcm.leafTargetTokens", { min: 1 }, compactionOff)}</Row>
+            <Row label="condense group" help="summaries folded into one at the next level.">{num("memory.lcm.condenseGroupSize", { min: 1 }, compactionOff)}</Row>
+            <Row label="max depth" help="deepest summary-of-summaries.">{num("memory.lcm.maxSummaryDepth", { min: 1 }, compactionOff)}</Row>
+            <Row label="kept after /new" help="−1 keeps everything, 0 keeps every summary.">{num("memory.lcm.newSessionRetainDepth", { min: -1 }, compactionOff)}</Row>
+          </Rows>
         </Advanced>
       </Card>
 
@@ -125,33 +119,24 @@ export function MemorySection({
         title="ambient memory"
         hint="how earlier memories return on their own."
         off={ambientEnabled !== true}
-        action={<OnOffToggle enabled={ambientEnabled} disabled={disabled} ariaPrefix="ambient memory" onChange={(next) => void onChange("memory.ambient.enabled", next)} />}
+        action={<OnOffToggle enabled={ambientEnabled} disabled={disabled} labelled ariaPrefix="ambient memory" onChange={(next) => void onChange("memory.ambient.enabled", next)} />}
       >
-        <Sentence>
-          up to {num("memory.ambient.topK", { min: 1, inline: true }, ambientOff)} memories, after {num("memory.ambient.minQueryLength", { min: 0, inline: true }, ambientOff)} characters, every{" "}
-          <Unit>{num("memory.ambient.throttleSeconds", { min: 0, inline: true }, ambientOff)} s</Unit> at most.
-        </Sentence>
-        <Advanced>
-          <p className="settings-subtitle">what pulls a memory back</p>
-          <div className="settings-fines is-tiles">
-            <Fine label="similarity" hint="how close it is to what you said">
-              {num("memory.ambient.weightSimilarity", { step: 0.05, min: 0 }, ambientOff)}
-            </Fine>
-            <Fine label="valence" hint="its emotional charge">
-              {num("memory.ambient.weightValence", { step: 0.05, min: 0 }, ambientOff)}
-            </Fine>
-            <Fine label="recency" hint="how recently it happened">
-              {num("memory.ambient.weightRecency", { step: 0.05, min: 0 }, ambientOff)}
-            </Fine>
-            <Fine label="intensity" hint="how strongly it was felt">
-              {num("memory.ambient.weightIntensity", { step: 0.05, min: 0 }, ambientOff)}
-            </Fine>
-          </div>
-          <p className="settings-note">weights are relative to each other, so only their balance matters.</p>
+        <Rows>
+          <Row label="memories recalled" help="at most, per message.">{num("memory.ambient.topK", { min: 1 }, ambientOff)}</Row>
+          <Row label="minimum query characters">{num("memory.ambient.minQueryLength", { min: 0 }, ambientOff)}</Row>
+          <Row label="throttle seconds" help="at least this long between recalls.">{num("memory.ambient.throttleSeconds", { min: 0 }, ambientOff)}</Row>
+        </Rows>
+        <Advanced count={4}>
+          <p className="settings-subtitle">what pulls a memory back — only the balance between these matters.</p>
+          <Rows>
+            <Row label="similarity" help="how close it is to what you said.">{num("memory.ambient.weightSimilarity", { step: 0.05, min: 0 }, ambientOff)}</Row>
+            <Row label="valence" help="its emotional charge.">{num("memory.ambient.weightValence", { step: 0.05, min: 0 }, ambientOff)}</Row>
+            <Row label="recency" help="how recently it happened.">{num("memory.ambient.weightRecency", { step: 0.05, min: 0 }, ambientOff)}</Row>
+            <Row label="intensity" help="how strongly it was felt.">{num("memory.ambient.weightIntensity", { step: 0.05, min: 0 }, ambientOff)}</Row>
+          </Rows>
         </Advanced>
+        <p className="settings-note">the embedding model lives in config.toml. swapping it invalidates existing memory.</p>
       </Card>
-
-      <p className="settings-note">the embedding model lives in config.toml. swapping it invalidates existing memory.</p>
     </>
   );
 }

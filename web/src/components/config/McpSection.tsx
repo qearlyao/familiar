@@ -5,13 +5,13 @@ import type { useMcp } from "@/lib/useMcp";
 import { cn } from "@/lib/utils";
 import { IconChevronDown, IconPlus } from "../organicIcons";
 import { Sheet } from "../Sheet";
-import { EnumToggle, Field } from "./inputs";
+import { Card, EnumToggle, Field } from "./inputs";
 
 type Mcp = ReturnType<typeof useMcp>;
 
 const REACH_OPTIONS = [
-  { value: "hand", label: "always at hand" },
-  { value: "fetched", label: "fetched when needed" },
+  { value: "hand", label: "at hand" },
+  { value: "fetched", label: "fetched" },
 ] as const;
 
 const KIND_OPTIONS = [
@@ -19,43 +19,34 @@ const KIND_OPTIONS = [
   { value: "url", label: "a url" },
 ] as const;
 
-function ServerCard({ server, mcp }: { server: McpServer; mcp: Mcp }) {
-  // errors land in the page's alert; the card only needs to not throw
+function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
+  // errors land in the page's alert; the row only needs to not throw
   const act = (work: Parameters<Mcp["mutate"]>[0]) => void mcp.mutate(work).catch(() => {});
   const down = server.status === "failed";
-  const remove = server.source === "web" && (
-    <button type="button" className="pill-button is-quiet" disabled={mcp.busy} onClick={() => act((key) => removeMcpServer(server.name, key))}>
-      remove
-    </button>
-  );
   return (
-    <section className={cn("settings-card mcp-server", down && "is-down")}>
-      <div className="mcp-head">
-        <i />
-        <h4>{server.name}</h4>
-        <span className="mcp-chip">{server.transport}</span>
-        {server.source === "config" && <span className="mcp-chip">config.toml</span>}
-        <small>{down ? "couldn't reach it" : `${server.tools.length} tools`}</small>
-      </div>
-      <p className="mcp-where">
-        {server.where}
-        {server.headers > 0 && ` · ${server.headers} header${server.headers === 1 ? "" : "s"}`}
-      </p>
-      {down ? (
-        <>
-          <p className="settings-error">{server.error}</p>
-          <div className="mcp-foot">
-            <span className="settings-note">their tools are out of reach until it answers.</span>
-            {remove}
+    <div className={cn("mcp-server", down && "is-down")}>
+      <div className="mcp-line">
+        <div className="mcp-what">
+          <span className="mcp-name">
+            <i />
+            {server.name}
+            <span className="mcp-chip">{server.transport}</span>
+            {server.source === "config" && <span className="mcp-chip">config.toml</span>}
+          </span>
+          <small className="mcp-where">
+            {server.where}
+            {server.headers > 0 && ` · ${server.headers} header${server.headers === 1 ? "" : "s"}`}
+            {" · "}
+            {down ? "no tools reachable" : `${server.tools.length} tools`}
+          </small>
+          <small className={down ? "settings-error" : "mcp-status"}>{down ? server.error : server.deferred ? "connected · fetched on demand" : "connected · loaded now"}</small>
+        </div>
+        <div className="settings-row-control">
+          {down ? (
             <button type="button" className="pill-button" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
               try again
             </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="settings-row">
-            <span>their tools are</span>
+          ) : (
             <EnumToggle
               value={server.deferred ? "fetched" : "hand"}
               options={REACH_OPTIONS}
@@ -63,33 +54,39 @@ function ServerCard({ server, mcp }: { server: McpServer; mcp: Mcp }) {
               disabled={mcp.busy}
               onChange={(next) => act((key) => setMcpDeferred(server.name, next === "fetched", key))}
             />
-          </div>
-          <div className="mcp-foot">
-            {server.tools.length > 0 && (
-              <details className="settings-fold">
-                <summary>
-                  see all {server.tools.length}
-                  <IconChevronDown />
-                </summary>
-                <div className="mcp-tools">
-                  {server.tools.map((tool) => (
-                    <div key={tool.name} className="mcp-tool" title={tool.description}>
-                      <code>{tool.name}</code>
-                      <span>{tool.description}</span>
-                      {tool.loaded && <em>loaded here</em>}
-                    </div>
-                  ))}
+          )}
+        </div>
+      </div>
+      <div className="mcp-foot">
+        {server.tools.length > 0 && (
+          <details className="settings-fold">
+            <summary>
+              see all {server.tools.length}
+              <IconChevronDown />
+            </summary>
+            <div className="mcp-tools">
+              {server.tools.map((tool) => (
+                <div key={tool.name} className="mcp-tool" title={tool.description}>
+                  <code>{tool.name}</code>
+                  <span>{tool.description}</span>
+                  {tool.loaded && <em>loaded here</em>}
                 </div>
-              </details>
-            )}
-            <button type="button" className="pill-button is-quiet" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
-              reconnect
-            </button>
-            {remove}
-          </div>
-        </>
-      )}
-    </section>
+              ))}
+            </div>
+          </details>
+        )}
+        {!down && (
+          <button type="button" className="pill-button is-quiet" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
+            reconnect
+          </button>
+        )}
+        {server.source === "web" && (
+          <button type="button" className="pill-button is-quiet" disabled={mcp.busy} onClick={() => act((key) => removeMcpServer(server.name, key))}>
+            remove
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -149,7 +146,7 @@ function AddServerForm({ mcp, onDone }: { mcp: Mcp; onDone: () => void }) {
   return (
     <form className="mcp-form" onSubmit={(event) => void submit(event)}>
       <div className="mcp-form-head">
-        <h4>lend them a server</h4>
+        <h4>add a server</h4>
         <p>connects right away; nothing needs a restart.</p>
       </div>
       <Field label="name">
@@ -194,13 +191,13 @@ function AddServer({ mcp }: { mcp: Mcp }) {
       onOpenChange={setOpen}
       className="mcp-add-panel"
       trigger={
-        <Dialog.Trigger className="mcp-add">
+        <Dialog.Trigger className="pill-button is-quiet mcp-add">
           <IconPlus />
-          <span>lend them a server</span>
+          add a server
         </Dialog.Trigger>
       }
     >
-      <Dialog.Title className="sr-only">lend them a server</Dialog.Title>
+      <Dialog.Title className="sr-only">add a server</Dialog.Title>
       <i className="mcp-add-grab" />
       {/* keyed on open so each opening starts from a blank form */}
       <AddServerForm key={String(open)} mcp={mcp} onDone={() => setOpen(false)} />
@@ -209,10 +206,18 @@ function AddServer({ mcp }: { mcp: Mcp }) {
 }
 
 export function McpSection({ mcp }: { mcp: Mcp }) {
+  const connected = mcp.servers?.filter((server) => server.status === "connected") ?? [];
+  const handy = connected.filter((server) => !server.deferred).length;
   return (
-    <>
-      {mcp.servers?.map((server) => <ServerCard key={server.name} server={server} mcp={mcp} />)}
-      {mcp.servers && <AddServer mcp={mcp} />}
-    </>
+    <Card
+      title="mcp servers"
+      hint={mcp.servers ? `${handy} at hand · ${connected.length - handy} fetched on demand` : "counting them…"}
+      action={<AddServer mcp={mcp} />}
+    >
+      <div className="settings-rows">
+        {mcp.servers?.map((server) => <ServerRow key={server.name} server={server} mcp={mcp} />)}
+        {mcp.servers?.length === 0 && <p className="settings-note">none yet — lend them one.</p>}
+      </div>
+    </Card>
   );
 }

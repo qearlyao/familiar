@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NOTIFICATIONS_CHANGED_EVENT, notificationState, setNotificationsEnabled, type NotificationState } from "@/lib/notifications";
-import { OnOffToggle } from "./inputs";
+import { OnOffToggle, Row } from "./inputs";
 
 const blocked: Partial<Record<NotificationState, string>> = {
   denied: "blocked for this site — allow them in the browser first",
@@ -22,34 +22,24 @@ export function NotificationsRow() {
   }, []);
   if (!state) return null;
   return (
-    <>
-      <div className="settings-row">
-        <span>notify this device</span>
-        {blocked[state] ? (
-          <small>{blocked[state]}</small>
-        ) : (
-          <OnOffToggle
-            enabled={state === "on"}
-            disabled={busy}
-            ariaPrefix="notifications"
-            onChange={(next) => {
-              setBusy(true);
-              setError(undefined);
-              void setNotificationsEnabled(next)
-                .then(setState, (cause: unknown) => {
-                  setError(cause instanceof Error ? cause.message : String(cause));
-                  return notificationState().then(setState);
-                })
-                .finally(() => setBusy(false));
-            }}
-          />
-        )}
-      </div>
-      {error && (
-        <p role="alert" className="settings-error">
-          that didn't take — {error}
-        </p>
+    <Row label="notify this device" help={error ? `that didn't take — ${error}` : blocked[state]}>
+      {!blocked[state] && (
+        <OnOffToggle
+          enabled={state === "on"}
+          disabled={busy}
+          ariaPrefix="notifications"
+          onChange={(next) => {
+            setBusy(true);
+            setError(undefined);
+            void setNotificationsEnabled(next)
+              .then(setState, (cause: unknown) => {
+                setError(cause instanceof Error ? cause.message : String(cause));
+                return notificationState().then(setState);
+              })
+              .finally(() => setBusy(false));
+          }}
+        />
       )}
-    </>
+    </Row>
   );
 }

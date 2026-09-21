@@ -26,19 +26,31 @@ export function EnumToggle<T extends string>({
   );
 }
 
+/** The knob. `labelled` also says the word, for the switch that sits at the head of a panel. */
 export function OnOffToggle({
   enabled,
   disabled,
+  labelled,
   ariaPrefix,
   onChange,
 }: {
   enabled: boolean | undefined;
   disabled: boolean;
+  labelled?: boolean;
   ariaPrefix: string;
   onChange: (next: boolean) => void;
 }) {
   return (
-    <button type="button" role="switch" className="switch" aria-checked={enabled === true} aria-label={ariaPrefix} disabled={disabled || enabled === undefined} onClick={() => onChange(!enabled)}>
+    <button
+      type="button"
+      role="switch"
+      className={labelled ? "switch-word" : "switch"}
+      aria-checked={enabled === true}
+      aria-label={ariaPrefix}
+      disabled={disabled || enabled === undefined}
+      onClick={() => onChange(!enabled)}
+    >
+      {labelled && <span>{enabled ? "on" : "off"}</span>}
       <i />
     </button>
   );
@@ -58,7 +70,7 @@ export function MinuteInput({ valueMs, disabled, onCommit }: { valueMs: number |
     },
     onCommit,
   );
-  return <input {...field.inputProps} type="number" inputMode="numeric" disabled={disabled || field.busy} min={1} className="pill-input is-inline" />;
+  return <input {...field.inputProps} type="number" inputMode="numeric" disabled={disabled || field.busy} min={1} className="pill-input is-number" />;
 }
 
 export function NumberInput({
@@ -67,7 +79,6 @@ export function NumberInput({
   min,
   max,
   scale = 1,
-  inline = false,
   disabled,
   onCommit,
 }: {
@@ -77,7 +88,6 @@ export function NumberInput({
   max?: number;
   /** display = stored × scale (e.g. 100 to show a fraction as a percent) */
   scale?: number;
-  inline?: boolean;
   disabled: boolean;
   onCommit: (v: number) => Promise<void>;
 }) {
@@ -103,25 +113,15 @@ export function NumberInput({
       step={step}
       min={min}
       max={max}
-      className={cn("pill-input", inline && "is-inline")}
+      className="pill-input is-number"
     />
   );
 }
 
-/** A prose line with inline controls: "wakes after [45] min of quiet". */
-export function Sentence({ children }: { children: ReactNode }) {
-  return <p className="settings-sentence">{children}</p>;
-}
-
-/** An inline box and its unit, kept on one line so "[75]%" never wraps apart. */
-export function Unit({ children }: { children: ReactNode }) {
-  return <span className="settings-unit">{children}</span>;
-}
-
 /** One small card on a settings page: a Caprasimo title, whatever sits at the right of it, then the controls. */
-export function Card({ title, hint, action, off, bare, children }: { title: string; hint?: string; action?: ReactNode; off?: boolean; bare?: boolean; children?: ReactNode }) {
+export function Card({ title, hint, action, off, wide, children }: { title: string; hint?: string; action?: ReactNode; off?: boolean; wide?: boolean; children?: ReactNode }) {
   return (
-    <section className={cn("settings-card", off && "is-off", bare && "is-bare")}>
+    <section className={cn("settings-card", off && "is-off", wide && "is-wide")}>
       <div className="settings-card-head">
         <div>
           <h4>{title}</h4>
@@ -134,6 +134,24 @@ export function Card({ title, hint, action, off, bare, children }: { title: stri
   );
 }
 
+/** One setting on its own line under a rule: what it is on the left, its one value hard right. */
+export function Row({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+  return (
+    <div className="settings-row">
+      <div className="settings-row-label">
+        <span>{label}</span>
+        {help && <small>{help}</small>}
+      </div>
+      <div className="settings-row-control">{children}</div>
+    </div>
+  );
+}
+
+/** The rows of a panel, ruled apart. */
+export function Rows({ children }: { children: ReactNode }) {
+  return <div className="settings-rows">{children}</div>;
+}
+
 /** A label over its control. A div, not a label: a label around a pill group would press its first pill. */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -141,19 +159,6 @@ export function Field({ label, children }: { label: string; children: ReactNode 
       <span>{label}</span>
       {children}
     </div>
-  );
-}
-
-/** A tuning number under an "advanced" fold: a label pill on desktop (hint in the tooltip), a labelled row on phones. */
-export function Fine({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
-  return (
-    <label className="settings-fine" title={hint}>
-      <span>
-        {label}
-        <small>{hint}</small>
-      </span>
-      {children}
-    </label>
   );
 }
 

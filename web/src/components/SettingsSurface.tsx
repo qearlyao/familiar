@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { ModelSection } from "./config/ModelSection";
-import { ThinkingSection } from "./config/ThinkingSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
@@ -43,8 +42,6 @@ export function SettingsSurface({
   const showDevices = authMode === "bearer" && !!onSignedOut;
   const devices = useDevices(showDevices, authDevice);
   const mcp = useMcp(channelKey);
-  const handy = mcp.servers?.filter((server) => server.status === "connected" && !server.deferred).length ?? 0;
-  const fetched = mcp.servers?.filter((server) => server.status === "connected" && server.deferred).length ?? 0;
   const values = config.data?.values;
   const ready = Boolean(agent.data) && Boolean(config.data);
   const busy = agent.isLoading || agent.isMutating || config.isLoading || config.isMutating;
@@ -54,12 +51,12 @@ export function SettingsSurface({
   const here = channelLabel ?? "this channel";
 
   const tabs: { id: SettingsTabId; label: string; sub: string }[] = [
-    { id: "mind", label: "how they think", sub: agent.data ? modelLeaf(agent.data.model.value) : "…" },
-    { id: "reach", label: "how they reach you", sub: values ? `heartbeat ${values["heartbeat.enabled"].value ? "on" : "off"}` : "…" },
-    { id: "voice", label: "voice and pictures", sub: values ? (values["tts.provider"].value === "cartesia" ? "cartesia" : "11labs") : "…" },
+    { id: "mind", label: "model & memory", sub: agent.data ? modelLeaf(agent.data.model.value) : "…" },
+    { id: "reach", label: "channels", sub: values ? `heartbeat ${values["heartbeat.enabled"].value ? "on" : "off"}` : "…" },
+    { id: "voice", label: "voice & images", sub: values ? (values["tts.provider"].value === "cartesia" ? "cartesia" : "11labs") : "…" },
     {
       id: "tools",
-      label: "what they can use",
+      label: "tools",
       sub: mcp.servers ? `${mcp.servers.length} servers · ${mcp.servers.reduce((sum, server) => sum + server.tools.length, 0)} tools` : "…",
     },
     ...(showDevices ? [{ id: "devices" as const, label: "devices", sub: `${devices.devices.length} signed in` }] : []),
@@ -74,25 +71,23 @@ export function SettingsSurface({
             models={agent.models}
             added={agent.addedModels}
             current={agent.data?.model.value}
+            thinking={agent.data?.thinking.value}
+            supportedThinking={agent.data?.supportedThinking ?? []}
             disabled={disabled}
             onChange={(model) => void agent.setModel(model)}
+            onThinking={(level) => void agent.setThinking(level)}
             onAdd={agent.addModel}
             onRemove={agent.removeModel}
           />
-          <div className="settings-column">
-            <ThinkingSection current={agent.data?.thinking.value} supported={agent.data?.supportedThinking ?? []} disabled={disabled} onChange={(level) => void agent.setThinking(level)} />
-            <MemorySection values={values} models={agent.models} disabled={disabled} onChange={config.setConfig} onClear={config.clearConfig} />
-          </div>
+          <MemorySection values={values} models={agent.models} disabled={disabled} onChange={config.setConfig} onClear={config.clearConfig} />
         </>
       );
       break;
     case "reach":
       page = (
         <>
-          <div className="settings-column">
-            <HeartbeatSection values={values} disabled={disabled} onChange={config.setConfig} />
-            <ReachCard values={values} disabled={disabled} onChange={config.setConfig} />
-          </div>
+          <HeartbeatSection values={values} disabled={disabled} onChange={config.setConfig} />
+          <ReachCard values={values} disabled={disabled} onChange={config.setConfig} />
           <RepliesCard values={values} disabled={disabled} onChange={config.setConfig} />
         </>
       );
@@ -100,10 +95,8 @@ export function SettingsSurface({
     case "voice":
       page = (
         <>
-          <div className="settings-column">
-            <TtsSection values={values} disabled={disabled} onChange={config.setConfig} />
-            <VoiceCallSection values={values} disabled={disabled} onChange={config.setConfig} />
-          </div>
+          <TtsSection values={values} disabled={disabled} onChange={config.setConfig} />
+          <VoiceCallSection values={values} disabled={disabled} onChange={config.setConfig} />
           <ImageGenSection values={values} disabled={disabled} onChange={config.setConfig} />
         </>
       );
@@ -156,17 +149,6 @@ export function SettingsSurface({
               <code>{here}</code>
             </span>
             {overridden ? `model and thinking here apply to ${here} only — nothing here touches your other channels.` : `pick a model or thinking level and it applies to ${here} only.`}
-          </p>
-        )}
-        {tab === "tools" && mcp.servers && mcp.servers.length > 0 && (
-          <p className="settings-source">
-            <span>
-              how tools reach them
-              <code>
-                {handy} at hand · {fetched} fetched
-              </code>
-            </span>
-            at hand rides in every message; fetched waits until they ask.
           </p>
         )}
         {error && (

@@ -163,7 +163,7 @@ export const IconLeave = glyph(
   </>,
 );
 export const IconStop = glyph(<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none" />);
-export const IconPlay = glyph(<path d="M8 5.5v13l10-6.5z" fill="currentColor" stroke="none" />);
+export const IconPlay = glyph(<path d="M9.6 7.4v9.2l7.7-4.6z" fill="currentColor" strokeWidth={3.2} />);
 export const IconPause = glyph(
   <>
     <rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor" stroke="none" />

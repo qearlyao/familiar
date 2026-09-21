@@ -58,7 +58,7 @@ export function AudioPlayer({ src, name }: { src: string; name?: string }) {
         <a href={src}>{name ?? "audio"}</a>
       </audio>
       <button type="button" className="chat-audio-play" onClick={toggle} aria-label={playing ? "pause" : "play"}>
-        {playing ? <IconPause size={15} /> : <IconPlay size={15} />}
+        {playing ? <IconPause size={17} /> : <IconPlay size={19} />}
       </button>
       <div className="chat-audio-wave" style={{ width }}>
         <input type="range" aria-label="seek" min={0} max={duration || 0} step={0.1} value={currentTime} onChange={(event) => seek(Number(event.target.value))} />

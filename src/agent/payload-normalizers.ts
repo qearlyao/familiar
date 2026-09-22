@@ -3,29 +3,34 @@ import type { OpenRouterRoutingConfig } from "../config/index.js";
 import { addOpenRouterRouting } from "../models/openrouter-routing.js";
 import { isRecord } from "../util/guards.js";
 
-// a mid-conversation system note is only accepted directly after a user turn; a harness note
-// that opens a turn (a heartbeat or cron injection, which trail the last assistant reply) has
-// no user turn to sit behind, so it goes on the wire as user text instead of being rejected.
-// Runs of notes settle the same way: the first one moves, the rest then follow a user message.
-function keepAnthropicSystemNotesAfterUserTurns(payload: unknown, model: Model<any>): unknown {
+// a mid-conversation system note is only accepted directly after a user turn, and never behind
+// another note, so a run of notes folds into one message. A note that opens a turn (a heartbeat
+// or cron injection, which trail the last assistant reply) has no user turn to sit behind, so it
+// goes on the wire as user text instead of being rejected.
+function settleAnthropicSystemNotes(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "anthropic-messages") return payload;
 	if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
 	const messages = payload.messages;
 	for (let index = 0; index < messages.length; index += 1) {
-		const message = messages[index];
-		if (!isRecord(message) || message.role !== "system") continue;
-		const blocks = systemNoteBlocks(message);
+		const blocks = systemNoteBlocks(messages[index]);
 		if (!blocks) continue;
+		const merged = [...blocks];
+		let end = index + 1;
+		for (let next = systemNoteBlocks(messages[end]); next; next = systemNoteBlocks(messages[end])) {
+			merged.push(...next);
+			end += 1;
+		}
 		const previous = messages[index - 1];
-		if (isRecord(previous) && previous.role === "user") continue;
-		messages[index] = { role: "user", content: blocks };
+		const role = isRecord(previous) && previous.role === "user" ? "system" : "user";
+		messages.splice(index, end - index, { role, content: merged });
 	}
 	return payload;
 }
 
-// the directive-only form (empty content beside an output_config) is accepted anywhere, so it
-// is left alone and skipped over when looking for the message the cache breakpoint belongs on.
-function systemNoteBlocks(message: Record<string, unknown>): unknown[] | undefined {
+// the text a note carries; the directive-only form (empty content beside an output_config) is
+// accepted anywhere, so it stays put and is skipped over when placing the cache breakpoint.
+function systemNoteBlocks(message: unknown): unknown[] | undefined {
+	if (!isRecord(message) || message.role !== "system") return undefined;
 	const content = message.content;
 	if (typeof content === "string") return content.trim().length > 0 ? [{ type: "text", text: content }] : undefined;
 	if (!Array.isArray(content) || content.length === 0) return undefined;
@@ -36,9 +41,9 @@ function isDirectiveOnlyMessage(message: unknown): boolean {
 	return isRecord(message) && message.role === "system" && !systemNoteBlocks(message);
 }
 
-// ambient recall trails the request as a note that is gone next turn; the cache breakpoint pi
-// puts on the last message would then never be hit, so it moves back onto the stable message
-// before it.
+// ambient recall trails the request as a note that is gone next turn, and any harness note it
+// folded into goes with it; the cache breakpoint pi puts on the last message would then never be
+// hit, so it moves back onto the stable message before it.
 function moveAnthropicCacheControlBeforeInjectedMemory(payload: unknown, model: Model<any>): unknown {
 	if (model.api !== "anthropic-messages") return payload;
 	if (!isRecord(payload) || !Array.isArray(payload.messages)) return payload;
@@ -50,8 +55,8 @@ function moveAnthropicCacheControlBeforeInjectedMemory(payload: unknown, model: 
 	if (!isRecord(lastMessage) || !isRecord(stableMessage)) return payload;
 	if (lastMessage.role !== "system" && lastMessage.role !== "user") return payload;
 	const content = lastMessage.content;
-	if (!Array.isArray(content) || content.length !== 1) return payload;
-	const injectedBlock = content[0];
+	if (!Array.isArray(content)) return payload;
+	const injectedBlock = content.at(-1);
 	if (!isInjectedMemoryTextBlock(injectedBlock)) return payload;
 	const cacheControl = injectedBlock.cache_control;
 	if (!cacheControl) return payload;
@@ -75,6 +80,6 @@ export function normalizeProviderPayload(
 	model: Model<any>,
 	routing?: OpenRouterRoutingConfig,
 ): unknown {
-	const placed = keepAnthropicSystemNotesAfterUserTurns(payload, model);
-	return addOpenRouterRouting(moveAnthropicCacheControlBeforeInjectedMemory(placed, model), model, routing);
+	const settled = settleAnthropicSystemNotes(payload, model);
+	return addOpenRouterRouting(moveAnthropicCacheControlBeforeInjectedMemory(settled, model), model, routing);
 }

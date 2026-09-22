@@ -640,7 +640,8 @@ export async function createFamiliarAgent(
 				eventHandler,
 				(session) => {
 					if (!options.notes?.length) return session.agent.prompt(input, images);
-					// harness notes ride in ahead of what was typed, in the harness's own voice
+					// harness notes lead the turn in the transcript, in the harness's own voice; pi holds a
+					// note back to the far side of the message it precedes, so the model hears it after
 					const timestamp = Date.now();
 					return session.agent.prompt([
 						...options.notes.map((note) => noteForModel(session, { role: "system", content: note, timestamp })),

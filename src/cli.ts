@@ -30,7 +30,7 @@ import {
 import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
-import { createModelRuntime } from "./models/runtime.js";
+import { createModelRuntime, refreshModelCatalogs } from "./models/runtime.js";
 import { startQqDaemon } from "./qq/daemon.js";
 import { createAgentCore } from "./runtime/agent-core.js";
 import { startWebDaemon } from "./web/daemon.js";
@@ -376,6 +376,7 @@ function usage(): string {
 		"  familiar run [workspace]",
 		"  familiar login [provider]",
 		"  familiar logout [provider]",
+		"  familiar update --models [workspace]",
 		"  familiar memory [workspace] <subcommand>",
 		"  familiar install-service [workspace]",
 		"  familiar uninstall-service [workspace]",
@@ -423,6 +424,15 @@ async function main(): Promise<void> {
 		const config = await loadConfig(workspacePath);
 		await ensureWorkspaceDirs(configuredWorkspaceDirs(config));
 		await runMemoryOperator(config, args);
+		return;
+	}
+	if (command === "update") {
+		if (workspace !== "--models" || rest.length > 1) throw new Error("Usage: familiar update --models [workspace]");
+		const workspacePath = resolveWorkspaceInput(rest[0]);
+		loadWorkspaceEnv(resolve(workspacePath, ".env"), false);
+		const runtime = await createModelRuntime(await loadConfig(workspacePath));
+		await refreshModelCatalogs(runtime);
+		console.log("Refreshed catalogs for configured providers. Restart Familiar to load the updated catalog.");
 		return;
 	}
 	if (command === "install-service") {

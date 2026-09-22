@@ -94,7 +94,7 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		if (!settings.enabled) throw new Error("LCM is disabled");
 		const ref = parseModelRef(settings.model);
 		if (!ref) throw new Error(`Invalid memory.lcm.model: ${settings.model}`);
-		const base = resolveModel(ref, this.config) as Model<Api>;
+		const base = resolveModel(ref, this.config, this.modelRuntime) as Model<Api>;
 		const model = {
 			...base,
 			...(settings.baseUrl ? { baseUrl: settings.baseUrl } : {}),

@@ -1,3 +1,4 @@
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { FamiliarAgent } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
 import { addModel, loadAddedModels, removeModel } from "../models/added-models.js";
@@ -17,6 +18,7 @@ interface RegisterWebAgentRoutesOptions {
 	route: RegisterWebRoute;
 	config: Config;
 	familiarAgent: FamiliarAgent;
+	modelRuntime?: ModelRuntime;
 	getRuntime: RuntimeResolver;
 	personaName: string;
 	publish: WebEventHub["publish"];
@@ -64,7 +66,7 @@ export function registerWebAgentRoutes(options: RegisterWebAgentRoutesOptions): 
 		}
 		const parsed = parseRequestedModel(body.model);
 		try {
-			resolveModel(parsed.ref, config);
+			resolveModel(parsed.ref, config, options.modelRuntime);
 		} catch (error) {
 			throw new HttpError(400, errorMessage(error));
 		}

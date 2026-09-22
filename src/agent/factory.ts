@@ -87,7 +87,7 @@ export async function createFamiliarAgent(
 	console.log("---SYSTEM PROMPT (end)---");
 	setMcpServersPath(config.workspace.dataDir);
 	const mcp = createMcpHub(() => rebuildSessionTools());
-	let defaultModel = createConfiguredModel(config);
+	let defaultModel = createConfiguredModel(config, modelRuntime);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
 	// built-ins set aside until the next restart; never written anywhere
@@ -134,7 +134,7 @@ export async function createFamiliarAgent(
 		const ref = parseModelRef(modelName);
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
 		if (override.value) assertModelAllowed(config, ref);
-		const model = override.value ? resolveModel(ref, config) : defaultModel;
+		const model = override.value ? resolveModel(ref, config, modelRuntime) : defaultModel;
 		return { model, source: override.source };
 	};
 
@@ -156,7 +156,7 @@ export async function createFamiliarAgent(
 		const ref = parseModelRef(modelName);
 		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
 		if (override.value) assertModelAllowed(nextConfig, ref);
-		const model = override.value ? resolveModel(ref, nextConfig) : nextDefaultModel;
+		const model = override.value ? resolveModel(ref, nextConfig, modelRuntime) : nextDefaultModel;
 		return { model, source: override.source };
 	};
 
@@ -334,7 +334,7 @@ export async function createFamiliarAgent(
 			nextConfig.memory.diariesDir,
 			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
 		);
-		const nextDefaultModel = createConfiguredModel(nextConfig);
+		const nextDefaultModel = createConfiguredModel(nextConfig, modelRuntime);
 		await assertModelCanAuthenticateWithRuntime(nextConfig, modelRuntime, nextDefaultModel);
 		return {
 			config: nextConfig,
@@ -587,7 +587,7 @@ export async function createFamiliarAgent(
 			const ref = parseModelRef(input);
 			if (!ref) throw new Error("Usage: /model provider/model-id");
 			assertModelAllowed(config, ref);
-			const nextModel = resolveModel(ref, config);
+			const nextModel = resolveModel(ref, config, modelRuntime);
 			await assertModelCanAuthenticateWithRuntime(config, modelRuntime, nextModel);
 			const previousThinking = settings.getChannelThinkingLevel(
 				settingsKey(sessionKey),

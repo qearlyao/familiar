@@ -23,6 +23,10 @@ const model: Model<"openai-completions"> = {
 };
 
 describe("thinking levels", () => {
+	it("clamps off to the lowest supported effort for always-on thinking", () => {
+		const alwaysOn = { ...model, thinkingLevelMap: { off: null, minimal: null } };
+		assert.equal(clampConfiguredThinkingLevel(alwaysOn, "off"), "low");
+	});
 	it("follows upstream extended-level mappings", () => {
 		assert.equal(isThinkingLevel("max"), true);
 		assert.deepEqual(supportedThinkingLevels(model), ["off", "minimal", "low", "medium", "high", "max"]);

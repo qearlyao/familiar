@@ -91,6 +91,7 @@ export async function startWebDaemon(
 		familiarAgent,
 	});
 	registerWebAgentRoutes({
+		modelRuntime: options.modelRuntime,
 		route,
 		config,
 		familiarAgent,

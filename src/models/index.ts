@@ -8,6 +8,7 @@ import {
 	getSupportedThinkingLevels,
 	type Model,
 } from "@earendil-works/pi-ai/compat";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
@@ -19,6 +20,10 @@ export interface ModelRef {
 }
 
 export const PROVIDER_DEFAULTS: Record<string, { api: string; baseUrl: string }> = {
+	openrouter: {
+		api: "openai-completions",
+		baseUrl: "https://openrouter.ai/api/v1",
+	},
 	anthropic: {
 		api: "anthropic-messages",
 		baseUrl: "https://api.anthropic.com",
@@ -119,11 +124,9 @@ function synthesizeConfiguredModel(
 }
 
 function createFallbackModel(ref: ModelRef): Model<any> {
-	const builtInModel = isBuiltInProvider(ref.provider) ? (getModels(ref.provider) as Model<any>[])[0] : undefined;
-	if (builtInModel) return { ...builtInModel, id: ref.id, name: ref.id };
 	const defaults = PROVIDER_DEFAULTS[ref.provider];
 	if (!defaults) {
-		throw new Error(`Unsupported model provider: ${ref.provider}`);
+		throw new Error(`Unknown model: ${ref.key}. Run familiar update --models or configure its provider explicitly.`);
 	}
 	return synthesizeConfiguredModel(ref, defaults.api, defaults.baseUrl);
 }
@@ -183,8 +186,8 @@ function resolveConfiguredProviderModel(
 	);
 }
 
-export function resolveModel(ref: ModelRef, config?: Config): Model<any> {
-	const builtInModel = findBuiltInModel(ref);
+export function resolveModel(ref: ModelRef, config?: Config, runtime?: ModelRuntime): Model<any> {
+	const builtInModel = runtime ? runtime.getModel(ref.provider, ref.id) : findBuiltInModel(ref);
 	if (builtInModel) return config ? applyConfiguredBaseUrl(config, builtInModel) : builtInModel;
 	const providerConfig = config?.models.providers[ref.provider];
 	if (config && providerConfig) return resolveConfiguredProviderModel(config, ref, providerConfig);
@@ -192,10 +195,10 @@ export function resolveModel(ref: ModelRef, config?: Config): Model<any> {
 	return config ? applyConfiguredBaseUrl(config, model) : model;
 }
 
-export function createConfiguredModel(config: Config): Model<any> {
+export function createConfiguredModel(config: Config, runtime?: ModelRuntime): Model<any> {
 	const ref = parseModelRef(config.agent.model);
 	if (!ref) throw new Error(`Invalid agent.model: ${config.agent.model}`);
-	return resolveModel(ref, config);
+	return resolveModel(ref, config, runtime);
 }
 
 export function resolveProviderSetting(
@@ -252,7 +255,6 @@ export function isAllowedModel(config: Config, ref: ModelRef): boolean {
 }
 
 export function clampConfiguredThinkingLevel(model: Model<any>, level: ThinkingLevel): ThinkingLevel {
-	if (level === "off") return "off";
 	return clampThinkingLevel(model, level) as ThinkingLevel;
 }
 

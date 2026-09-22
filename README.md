@@ -204,6 +204,17 @@ familiar login openrouter
 
 Credentials are stored in the default workspace at `~/.familiar/auth.json`.
 
+Refresh pi's built-in model catalog without upgrading Familiar:
+
+```sh
+familiar update --models [workspace]
+```
+
+Pi refreshes providers with configured credentials. The catalog is cached in the
+workspace data directory. Restart Familiar after
+refreshing to use the new model metadata, including supported thinking levels.
+The model picker still follows your allowlist and manually added models.
+
 Models sent through OpenRouter can prioritize specific upstream providers. This
 works for built-in `openrouter/...` models and for any model whose configured
 base URL is an OpenRouter endpoint:

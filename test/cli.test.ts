@@ -20,6 +20,7 @@ describe("CLI init", () => {
 		assert.match(stdout, /familiar --version/);
 		assert.match(stdout, /familiar login \[provider\]/);
 		assert.match(stdout, /familiar logout \[provider\]/);
+		assert.match(stdout, /familiar update --models \[workspace\]/);
 	});
 
 	it("prints the package version", async () => {

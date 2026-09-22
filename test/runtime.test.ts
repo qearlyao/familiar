@@ -126,6 +126,57 @@ describe("ConversationRuntime", () => {
 		}
 	});
 
+	it("hands a waiting kept call to a scheduled turn and does not repeat it", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const config = await configWithDataDir(t, dataDir);
+		const channel = { service: "web", scope: "web", channelId: "owner" } as const;
+		const call = "(we were on a voice call for a minute)\n[00:01] qearlyao: hi";
+		const runtime = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, channel),
+			ownerId: "owner",
+		});
+
+		try {
+			await runtime.armAfterCurrentTail();
+			await runtime.ingestInbound(
+				{
+					messageId: "call-1",
+					authorId: "owner",
+					authorName: "qearlyao",
+					text: call,
+					call: { kept: "transcript", durationMs: 60_000, lines: [{ who: "you", text: "hi", at: 1000 }] },
+				},
+				{ mode: "collect" },
+			);
+
+			const pending = runtime.pendingCallNotes();
+			assert.ok(pending);
+			assert.deepEqual(pending.texts, [call]);
+			await runtime.noteCallsDelivered(pending.throughRecordId);
+			assert.equal(runtime.pendingCallNotes(), undefined);
+
+			// the next typed message must not carry the call the heartbeat already heard
+			await runtime.ingestInbound({ messageId: "message-1", authorId: "owner", authorName: "qearlyao", text: "hey" });
+			const dispatch = runtime.beginNextJob();
+			assert.ok(dispatch);
+			assert.deepEqual(runtime.notesForActiveJob(dispatch.job.jobId), []);
+		} finally {
+			await runtime.disconnect();
+		}
+
+		const reopened = await ConversationRuntime.connect({
+			channelKey: "web-web-owner",
+			log: createChatLog(config, channel),
+			ownerId: "owner",
+		});
+		try {
+			assert.equal(reopened.pendingCallNotes(), undefined);
+		} finally {
+			await reopened.disconnect();
+		}
+	});
+
 	it("includes derived attachment text once in prompt records", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

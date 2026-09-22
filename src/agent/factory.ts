@@ -18,7 +18,6 @@ import {
 	parseModelRef,
 	resolveModel,
 	supportedThinkingLevels,
-	supportsSystemNotes,
 } from "../models/index.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
@@ -34,6 +33,7 @@ import {
 	deriveSessionId,
 	formatModel,
 	getLastAssistantText,
+	harnessNoteMessage,
 	installProviderDebugFilter,
 	isNoisyProviderDebug,
 	logUsage,
@@ -639,13 +639,12 @@ export async function createFamiliarAgent(
 				options,
 				eventHandler,
 				(session) => {
-					if (!options.notes?.length) return session.agent.prompt(input, images);
-					// harness notes ride in ahead of what was typed, in the harness's own voice
-					const timestamp = Date.now();
-					return session.agent.prompt([
-						...options.notes.map((note) => noteForModel(session, { role: "system", content: note, timestamp })),
-						{ role: "user", content: [{ type: "text", text: input }, ...(images ?? [])], timestamp },
-					]);
+					const typed: AgentMessage = {
+						role: "user",
+						content: [{ type: "text", text: input }, ...(images ?? [])],
+						timestamp: Date.now(),
+					};
+					return session.agent.prompt(withNotes(session, typed, options.notes));
 				},
 				() => enterPromptOptions(sessionKey, options),
 			);
@@ -661,9 +660,8 @@ export async function createFamiliarAgent(
 				options,
 				onEvent,
 				(session) => {
-					const sent = noteForModel(session, message);
-					if (options.skipAmbient) skipAmbientMessages.add(sent);
-					return session.agent.prompt(sent);
+					if (options.skipAmbient) skipAmbientMessages.add(message);
+					return session.agent.prompt(withNotes(session, message, options.notes));
 				},
 				() => enterPromptOptions(sessionKey, options),
 			);
@@ -692,19 +690,18 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<void> {
 			const session = await getSession(sessionKey);
-			const sent = noteForModel(session, message);
-			if (options.skipAmbient) skipAmbientMessages.add(sent);
-			session.agent.followUp(sent);
+			if (options.skipAmbient) skipAmbientMessages.add(message);
+			for (const queued of withNotes(session, message, options.notes)) session.agent.followUp(queued);
 		},
 	};
 
-	// a model without mid-conversation system messages would have pi drop them; it hears
-	// harness notes as plain user text instead.
-	function noteForModel(session: FamiliarAgentSession, message: AgentMessage): AgentMessage {
-		if (message.role !== "system" || supportsSystemNotes(session.agent.state.model)) return message;
-		const content =
-			typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
-		return { role: "user", content, timestamp: message.timestamp };
+	// harness notes lead the turn in the transcript, in the harness's own voice; pi holds a note back
+	// to the far side of the message it precedes, so the model hears it after. A model without
+	// mid-conversation system messages would have pi drop one, so it hears the same text as user text.
+	function withNotes(session: FamiliarAgentSession, message: AgentMessage, notes?: string[]): AgentMessage[] {
+		if (!notes?.length) return [message];
+		const timestamp = message.timestamp ?? Date.now();
+		return [...notes.map((text) => harnessNoteMessage(session.agent.state.model, text, timestamp)), message];
 	}
 
 	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {

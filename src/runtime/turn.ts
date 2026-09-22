@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgentReply } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
@@ -26,11 +26,6 @@ export function canceledJobError(): Error {
 	const error = new Error("Job was canceled before completion.");
 	error.name = "CanceledJobError";
 	return error;
-}
-
-/** harness text the agent hears in the harness's own voice, not as one of us typing */
-export function scheduledSystemMessage(text: string, timestamp: number): AgentMessage {
-	return { role: "system", content: text, timestamp };
 }
 
 export function heartbeatStillDue(

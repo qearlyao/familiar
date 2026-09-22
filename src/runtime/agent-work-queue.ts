@@ -62,9 +62,16 @@ export function createAgentWorkQueue(deps: { familiarAgent: FamiliarAgent }) {
 		return enqueueAgentWork(async () => {
 			const message = await buildMessage();
 			if (message === HEARTBEAT_SKIPPED || message === CRON_SKIPPED) return message;
+			// a scheduled turn has no slice of its own, so a call kept since the last turn rides along with it
+			const pending = runtime.pendingCallNotes();
 			activeAgentOwner = runtime.channelKey;
 			try {
-				return await deps.familiarAgent.promptMessage(runtime.channelKey, message, onEvent, options);
+				const reply = await deps.familiarAgent.promptMessage(runtime.channelKey, message, onEvent, {
+					...options,
+					notes: pending?.texts,
+				});
+				if (pending) await runtime.noteCallsDelivered(pending.throughRecordId);
+				return reply;
 			} finally {
 				if (activeAgentOwner === runtime.channelKey) activeAgentOwner = undefined;
 			}

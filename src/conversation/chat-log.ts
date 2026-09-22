@@ -213,6 +213,12 @@ export interface CallDiscardedChatRecord extends ChatRecordBase {
 	durationMs: number;
 }
 
+/** the kept call a turn has already heard, so a later turn does not hear it twice */
+export interface CallNotedChatRecord extends ChatRecordBase {
+	type: "call_noted";
+	throughRecordId: number;
+}
+
 export type ChatLogRecord =
 	| InboundChatRecord
 	| ControlChatRecord
@@ -227,7 +233,8 @@ export type ChatLogRecord =
 	| AssistantRetryChatRecord
 	| MessageDeleteChatRecord
 	| MessageEditChatRecord
-	| CallDiscardedChatRecord;
+	| CallDiscardedChatRecord
+	| CallNotedChatRecord;
 
 export function hiddenWebMessageIds(records: readonly ChatLogRecord[]): Set<string> {
 	return new Set(

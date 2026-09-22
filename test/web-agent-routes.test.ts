@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 import { resolve } from "node:path";
-import { Readable } from "node:stream";
 import { describe, it } from "node:test";
 
 import type { FamiliarAgent } from "../src/agent/factory.js";
@@ -9,24 +8,7 @@ import { setAddedModelsPath } from "../src/models/added-models.js";
 import { registerWebAgentRoutes } from "../src/web/agent-routes.js";
 import type { RegisterWebRoute, WebRoute } from "../src/web/routes.js";
 import type { WebStreamEvent } from "../src/web/types.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
-
-class FakeResponse {
-	statusCode?: number;
-	body = "";
-
-	writeHead(statusCode: number): void {
-		this.statusCode = statusCode;
-	}
-
-	end(chunk?: string | Buffer): void {
-		if (chunk) this.body += chunk.toString();
-	}
-}
-
-function jsonRequest(body: unknown): IncomingMessage {
-	return Readable.from([JSON.stringify(body)]) as unknown as IncomingMessage;
-}
+import { configWithDataDir, createTempDataDir, FakeResponse, jsonRequest } from "./helpers.js";
 
 function registerAgentModelRoutes(config: Parameters<typeof registerWebAgentRoutes>[0]["config"]): Map<string, WebRoute> {
 	const routes = new Map<string, WebRoute>();

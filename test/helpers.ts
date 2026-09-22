@@ -1,6 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import type { IncomingMessage } from "node:http";
 import { resolve } from "node:path";
+import { Readable } from "node:stream";
 
 import { type Config, loadConfig } from "../src/config/index.js";
 
@@ -128,4 +130,44 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			},
 		};
 	});
+}
+
+/** A JSON request body as the web route handlers read it. */
+export function jsonRequest(body: unknown, method = "POST"): IncomingMessage {
+	const request = Readable.from([JSON.stringify(body)]) as Readable & { headers: Record<string, string>; method: string };
+	request.headers = { "content-type": "application/json" };
+	request.method = method;
+	return request as unknown as IncomingMessage;
+}
+
+/** Just enough of a ServerResponse to capture what a route or static handler sends. */
+export class FakeResponse {
+	statusCode?: number;
+	headers?: Record<string, string>;
+	body = "";
+
+	writeHead(statusCode: number, headers?: Record<string, string>): void {
+		this.statusCode = statusCode;
+		this.headers = headers;
+	}
+
+	write(chunk: string | Buffer): void {
+		this.body += chunk.toString();
+	}
+
+	end(chunk?: string | Buffer): void {
+		if (chunk) this.write(chunk);
+	}
+
+	on(): this {
+		return this;
+	}
+
+	once(): this {
+		return this;
+	}
+
+	emit(): boolean {
+		return true;
+	}
 }

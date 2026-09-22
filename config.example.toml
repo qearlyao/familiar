@@ -94,7 +94,6 @@ interval_minutes = 240
 # deferred = false
 
 [cron]
-enabled = false
 poll_seconds = 60
 
 # [[cron.jobs]]

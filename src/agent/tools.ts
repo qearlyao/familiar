@@ -8,6 +8,7 @@ import { createImageGenTool } from "../media/image-gen.js";
 import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
 import { createBrowserTools } from "../tools/browser-tools.js";
+import { createCronTool } from "../tools/cron.js";
 import { createLoadToolsTool, loadedToolNames, type McpHub } from "../tools/mcp.js";
 import { createWebTools } from "../web-tools/index.js";
 import { BASH_DESCRIPTION, EDIT_DESCRIPTION, READ_DESCRIPTION, WRITE_DESCRIPTION } from "./tool-descriptions.js";
@@ -40,6 +41,7 @@ export function createFamiliarTools(
 		readTool,
 		writeTool,
 		editTool,
+		createCronTool(config),
 		createTtsTool(config, mediaSink),
 		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
 		...createWebTools(),

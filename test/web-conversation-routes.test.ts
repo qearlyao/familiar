@@ -11,26 +11,7 @@ import { registerWebConversationRoutes } from "../src/web/conversation-routes.js
 import { lastSaid } from "../src/web/payloads.js";
 import type { RegisterWebRoute, WebRoute } from "../src/web/routes.js";
 import type { WebAuth } from "../src/web/auth.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
-
-class FakeResponse {
-	statusCode?: number;
-	body = "";
-
-	writeHead(statusCode: number): void {
-		this.statusCode = statusCode;
-	}
-
-	end(chunk?: string | Buffer): void {
-		if (chunk) this.body += chunk.toString();
-	}
-}
-
-function jsonRequest(body: unknown): IncomingMessage {
-	const request = Readable.from([JSON.stringify(body)]) as Readable & { headers: Record<string, string> };
-	request.headers = { "content-type": "application/json" };
-	return request as unknown as IncomingMessage;
-}
+import { configWithDataDir, createTempDataDir, FakeResponse, jsonRequest } from "./helpers.js";
 
 function multipartRequest(fields: Record<string, string>): IncomingMessage {
 	const boundary = "familiar-test-boundary";

@@ -1,4 +1,5 @@
-import { readEnum } from "../util/guards.js";
+import { daysInMonth } from "../runtime/scheduler.js";
+import { isRecord, readEnum } from "../util/guards.js";
 import { CRON_DELIVERY_MODES, CRON_FREQUENCIES } from "./enums.js";
 import {
 	assertKnownKeys,
@@ -11,6 +12,21 @@ import {
 } from "./readers.js";
 import type { Config } from "./types.js";
 
+/** which frequencies each optional schedule field means anything for */
+const CRON_FIELD_FREQUENCIES: Record<string, readonly string[]> = {
+	runAt: ["once"],
+	time: ["daily", "weekly", "monthly"],
+	minute: ["hourly"],
+	weekday: ["weekly"],
+	day: ["monthly"],
+};
+
+const listFrequencies = new Intl.ListFormat("en", { type: "disjunction" });
+
+/** config.toml spells two fields in snake_case; the override file and the cron tool use Config's camelCase */
+export type CronJobSpelling = "toml" | "camel";
+const TOML_SPELLING: Record<string, string> = { runAt: "run_at", deliveryMode: "delivery_mode" };
+
 function assertCronTime(value: string | undefined, path: string): void {
 	if (value === undefined) return;
 	if (!/^([01]?\d|2[0-3]):([0-5]\d)$/.test(value)) {
@@ -20,8 +36,16 @@ function assertCronTime(value: string | undefined, path: string): void {
 
 function assertCronRunAt(value: string | undefined, path: string): void {
 	if (value === undefined) return;
-	if (Number.isFinite(Date.parse(value))) return;
-	if (/^\d{4}-\d{2}-\d{2}[ T]([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.test(value)) return;
+	const match =
+		/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])[ T]([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/.exec(
+			value,
+		);
+	if (
+		match &&
+		Number(match[3]) <= daysInMonth(Number(match[1]), Number(match[2]) - 1) &&
+		Number.isFinite(Date.parse(value.replace(" ", "T")))
+	)
+		return;
 	throw new Error(`Config value ${path} must be an ISO timestamp or YYYY-MM-DD HH:MM local time`);
 }
 
@@ -46,73 +70,71 @@ export function readPromptOverrides(
 	};
 }
 
-export function readCronJobs(cron: Record<string, unknown>): Config["cron"]["jobs"] {
-	const rawJobs = cron.jobs;
+export function readCronJobs(rawJobs: unknown, path: string, spelling: CronJobSpelling): Config["cron"]["jobs"] {
 	if (rawJobs === undefined) return [];
-	if (!Array.isArray(rawJobs)) throw new Error("Config value cron.jobs must be an array");
+	if (!Array.isArray(rawJobs)) throw new Error(`Config value ${path} must be an array`);
 	const seen = new Set<string>();
 	return rawJobs.map((rawJob, index) => {
-		if (!rawJob || typeof rawJob !== "object" || Array.isArray(rawJob)) {
-			throw new Error(`Config value cron.jobs[${index}] must be a table`);
-		}
-		const job = rawJob as Record<string, unknown>;
-		const prefix = `cron.jobs[${index}]`;
-		assertKnownKeys(job, prefix, [
-			"id",
-			"enabled",
-			"frequency",
-			"delivery_mode",
-			"prompt",
-			"run_at",
-			"time",
-			"minute",
-			"weekday",
-			"day",
-		]);
-		const id = readString(job.id, `${prefix}.id`);
-		if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
-			throw new Error(
-				`Config value ${prefix}.id may only contain letters, numbers, dot, underscore, equals, or dash`,
-			);
-		}
-		if (seen.has(id)) throw new Error(`Duplicate cron job id: ${id}`);
-		seen.add(id);
-		const frequency = readEnum(
-			readConfigString(job.frequency, "once", `${prefix}.frequency`),
-			`${prefix}.frequency`,
-			CRON_FREQUENCIES,
-		);
-		const runAt = readOptionalConfigString(job.run_at, `${prefix}.run_at`);
-		const time = readOptionalConfigString(job.time, `${prefix}.time`);
-		assertCronRunAt(runAt, `${prefix}.run_at`);
-		assertCronTime(time, `${prefix}.time`);
-		if (frequency === "once" && !runAt) throw new Error(`Config value ${prefix}.run_at is required for once jobs`);
-		if (frequency === "once" && time) throw new Error(`Config value ${prefix}.time is only valid for repeating jobs`);
-		if (frequency !== "once" && runAt) throw new Error(`Config value ${prefix}.run_at is only valid for once jobs`);
-		if (frequency !== "once" && frequency !== "hourly" && !time) {
-			throw new Error(`Config value ${prefix}.time is required for ${frequency} jobs`);
-		}
-		return {
-			id,
-			enabled: readBoolean(job.enabled, true, `${prefix}.enabled`),
-			frequency,
-			deliveryMode: readEnum(
-				readConfigString(job.delivery_mode, "queue", `${prefix}.delivery_mode`),
-				`${prefix}.delivery_mode`,
-				CRON_DELIVERY_MODES,
-			),
-			prompt: readString(job.prompt, `${prefix}.prompt`),
-			...(runAt ? { runAt } : {}),
-			...(time ? { time } : {}),
-			...(job.minute !== undefined
-				? { minute: readOptionalIntegerInRange(job.minute, `${prefix}.minute`, 0, 59) }
-				: {}),
-			...(job.weekday !== undefined
-				? { weekday: readOptionalIntegerInRange(job.weekday, `${prefix}.weekday`, 0, 6) }
-				: {}),
-			...(job.day !== undefined ? { day: readOptionalIntegerInRange(job.day, `${prefix}.day`, 1, 31) } : {}),
-		};
+		const job = readCronJob(rawJob, `${path}[${index}]`, spelling);
+		if (seen.has(job.id)) throw new Error(`Duplicate cron job id: ${job.id}`);
+		seen.add(job.id);
+		return job;
 	});
+}
+
+export function readCronJob(
+	rawJob: unknown,
+	prefix: string,
+	spelling: CronJobSpelling,
+): Config["cron"]["jobs"][number] {
+	if (!isRecord(rawJob)) throw new Error(`Config value ${prefix} must be a table`);
+	const job = rawJob;
+	const key = (field: string) => (spelling === "toml" ? (TOML_SPELLING[field] ?? field) : field);
+	const at = (field: string) => `${prefix}.${key(field)}`;
+	assertKnownKeys(
+		job,
+		prefix,
+		["id", "enabled", "frequency", "deliveryMode", "prompt", "runAt", "time", "minute", "weekday", "day"].map(key),
+	);
+	const id = readString(job.id, at("id"));
+	if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
+		throw new Error(`Config value ${at("id")} may only contain letters, numbers, dot, underscore, equals, or dash`);
+	}
+	const frequency = readEnum(
+		readConfigString(job.frequency, "once", at("frequency")),
+		at("frequency"),
+		CRON_FREQUENCIES,
+	);
+	const runAt = readOptionalConfigString(job[key("runAt")], at("runAt"));
+	const time = readOptionalConfigString(job.time, at("time"));
+	assertCronRunAt(runAt, at("runAt"));
+	assertCronTime(time, at("time"));
+	// rejected rather than ignored at fire time, where "wednesdays at 9" would quietly run daily
+	for (const [field, allowed] of Object.entries(CRON_FIELD_FREQUENCIES)) {
+		if (job[key(field)] !== undefined && !allowed.includes(frequency)) {
+			throw new Error(`Config value ${at(field)} is only valid for ${listFrequencies.format(allowed)} jobs`);
+		}
+	}
+	if (frequency === "once" && !runAt) throw new Error(`Config value ${at("runAt")} is required for once jobs`);
+	if (frequency !== "once" && frequency !== "hourly" && !time) {
+		throw new Error(`Config value ${at("time")} is required for ${frequency} jobs`);
+	}
+	return {
+		id,
+		enabled: readBoolean(job.enabled, true, at("enabled")),
+		frequency,
+		deliveryMode: readEnum(
+			readConfigString(job[key("deliveryMode")], "queue", at("deliveryMode")),
+			at("deliveryMode"),
+			CRON_DELIVERY_MODES,
+		),
+		prompt: readString(job.prompt, at("prompt")),
+		...(runAt ? { runAt } : {}),
+		...(time ? { time } : {}),
+		...(job.minute !== undefined ? { minute: readOptionalIntegerInRange(job.minute, at("minute"), 0, 59) } : {}),
+		...(job.weekday !== undefined ? { weekday: readOptionalIntegerInRange(job.weekday, at("weekday"), 0, 6) } : {}),
+		...(job.day !== undefined ? { day: readOptionalIntegerInRange(job.day, at("day"), 1, 31) } : {}),
+	};
 }
 
 export function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {

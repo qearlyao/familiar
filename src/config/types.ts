@@ -147,7 +147,6 @@ export interface Config {
 		servers: Record<string, McpServerConfig>;
 	};
 	cron: {
-		enabled: boolean;
 		pollMs: number;
 		jobs: Array<{
 			id: string;

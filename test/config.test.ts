@@ -179,11 +179,7 @@ describe("loadConfig tts", () => {
 			idleThresholdMs: 60 * 60_000,
 			intervalMs: 240 * 60_000,
 		});
-		assert.deepEqual(config.cron, {
-			enabled: false,
-			pollMs: 60_000,
-			jobs: [],
-		});
+		assert.deepEqual(config.cron, { pollMs: 60_000, jobs: [] });
 		assert.deepEqual(config.browser, {
 			enabled: false,
 			backend: "opencli",
@@ -780,7 +776,6 @@ interval_minutes = 90
 			t,
 			minimalConfigToml(`
 [cron]
-enabled = true
 poll_seconds = 30
 
 [[cron.jobs]]
@@ -803,7 +798,6 @@ prompt = "Remember this once."
 		const config = await loadConfig(workspacePath);
 
 		assert.deepEqual(config.cron, {
-			enabled: true,
 			pollMs: 30_000,
 			jobs: [
 				{
@@ -832,7 +826,6 @@ prompt = "Remember this once."
 			t,
 			minimalConfigToml(`
 [cron]
-enabled = true
 
 [[cron.jobs]]
 id = "bad job"
@@ -851,7 +844,6 @@ prompt = "Bad id."
 			t,
 			minimalConfigToml(`
 [cron]
-enabled = true
 
 [[cron.jobs]]
 id = "one-shot"
@@ -871,7 +863,6 @@ prompt = "Conflicting schedule."
 			t,
 			minimalConfigToml(`
 [cron]
-enabled = true
 
 [[cron.jobs]]
 id = "daily-review"

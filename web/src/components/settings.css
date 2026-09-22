@@ -1,5 +1,5 @@
 /* ---------- settings ----------
-   Five pages under a row of tabs, each tab carrying where its page stands. A page is a grid of flat
+   Settings pages under a row of tabs, each tab carrying where its page stands. A page is a grid of flat
    panels — never a card inside a card — and a panel is a head plus a stack of ruled rows: what the setting
    is on the left, its control hard right. Palette and type are the redesign's: Grotto Olive answers,
    Sun Worn marks what is chosen, and the panels sit pale on a Marble Haze ground. Caprasimo is for
@@ -380,3 +380,13 @@
   .mcp-kv .pill-input { height: 2.75rem; }
   .mcp-add-grab { flex: none; display: block; width: 2.75rem; height: 0.3125rem; margin: 0 auto; border-radius: 62.4375rem; background: var(--edge); }
 }
+
+.cron-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; }
+.cron-toolbar > p, .cron-toolbar > strong { margin-right: auto; }
+.cron-job { padding: 1rem 0; border-top: 1px solid var(--rule); overflow-wrap: anywhere; }
+.cron-prompt { white-space: pre-wrap; margin: 0.6rem 0; }
+.cron-form { margin-top: 1rem; }
+.cron-form fieldset { border: 0; padding: 0; margin: 1rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; }
+.cron-form .pill-input { width: 100%; }
+.cron-form .settings-field:has(textarea) { grid-column: 1 / -1; }
+.cron-form textarea.pill-input { resize: vertical; border-radius: 0.75rem; height: auto; min-height: 6rem; }

@@ -5,38 +5,7 @@ import { join, resolve } from "node:path";
 
 import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/media/generated-media.js";
 import { serveAttachment, serveStatic } from "../src/web/static.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
-
-class FakeResponse {
-	statusCode?: number;
-	headers?: Record<string, string>;
-	body = "";
-
-	writeHead(statusCode: number, headers: Record<string, string>): void {
-		this.statusCode = statusCode;
-		this.headers = headers;
-	}
-
-	write(chunk: string | Buffer): void {
-		this.body += chunk.toString();
-	}
-
-	end(chunk?: string | Buffer): void {
-		if (chunk) this.write(chunk);
-	}
-
-	on(): this {
-		return this;
-	}
-
-	once(): this {
-		return this;
-	}
-
-	emit(): boolean {
-		return true;
-	}
-}
+import { configWithDataDir, createTempDataDir, FakeResponse } from "./helpers.js";
 
 describe("serveStatic", () => {
 	it("serves the WebUI index from the built assets", async () => {

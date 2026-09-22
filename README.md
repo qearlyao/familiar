@@ -103,9 +103,9 @@ with sample content.
   <details>
   <summary>how it works</summary>
 
-  `[[cron.jobs]]` entries in the config schedule prompts into the owner DM
-  context. A job can start its own turn when due (`queue`) or append to
-  in-progress work and fall back to a scheduled turn when idle
+  The built-in `cron` tool and the Settings → cron jobs panel schedule prompts
+  into the default conversation. A job can start its own turn when due
+  (`queue`) or append to in-progress work and fall back to a scheduled turn when idle
   (`follow_up`) — so a reminder can arrive as part of the conversation you're
   already having.
   </details>
@@ -403,10 +403,25 @@ Familiar stores browser screenshots under the active workspace data directory:
 
 ## Cron Jobs
 
-Cron jobs are disabled by default. Add `[[cron.jobs]]` entries to schedule
-in-band reminders into the owner DM context. `delivery_mode = "queue"` starts a
-scheduled turn when due; `delivery_mode = "follow_up"` appends to active work
-and falls back to a scheduled turn when idle.
+Manage schedules in **Settings → cron jobs**, or ask the agent to use its
+built-in `cron` tool to list, create, update, and delete jobs. A job runs when
+its own `enabled` flag is set, which defaults to true; `update` with just an id
+and `enabled: false` parks a job without deleting it.
+
+Changes take effect on the next poll without a restart and persist in
+`data/settings/config-overrides.json`, replacing the `[[cron.jobs]]` list from
+`config.toml`. Times use the server timezone shown in the panel; one-time jobs
+also accept ISO timestamps with an explicit offset, and must be in the future.
+Repeating jobs catch up their latest due slot, and one that waited out downtime
+arrives carrying `missed="4h 20m"` so the agent knows it is late. An update
+patches the stored job, except that changing `frequency` resets the schedule
+fields, since the old ones are invalid or dead under the new frequency.
+Deleting or disabling a job skips queued work but cannot interrupt an already
+running turn. At most 20 jobs can exist at once.
+
+Jobs deliver prompts into the default conversation. `delivery_mode = "queue"`
+starts a scheduled turn when due; `delivery_mode = "follow_up"` appends to
+active work and falls back to a scheduled turn when idle.
 
 ## Discord Dispatch
 

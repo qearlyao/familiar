@@ -83,6 +83,7 @@ export const BUILTIN_TOOLS = [
 	"read",
 	"write",
 	"edit",
+	"cron",
 	"tts",
 	"image_gen",
 	"search_web",

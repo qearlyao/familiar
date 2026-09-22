@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ModelSection } from "./config/ModelSection";
+import { CronSection } from "./config/CronSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
 import { MemorySection } from "./config/MemorySection";
@@ -17,7 +18,7 @@ import type { WebAuthDevice } from "@/lib/api";
 import { IconX } from "./organicIcons";
 import "./settings.css";
 
-export type SettingsTabId = "mind" | "reach" | "voice" | "tools" | "devices";
+export type SettingsTabId = "mind" | "cron" | "reach" | "voice" | "tools" | "devices";
 
 export function SettingsSurface({
   channelKey,
@@ -53,6 +54,7 @@ export function SettingsSurface({
   const tabs: { id: SettingsTabId; label: string; sub: string }[] = [
     { id: "mind", label: "model & memory", sub: agent.data ? modelLeaf(agent.data.model.value) : "…" },
     { id: "reach", label: "channels", sub: values ? `heartbeat ${values["heartbeat.enabled"].value ? "on" : "off"}` : "…" },
+    { id: "cron", label: "cron jobs", sub: "scheduled prompts" },
     { id: "voice", label: "voice & images", sub: values ? (values["tts.provider"].value === "cartesia" ? "cartesia" : "11labs") : "…" },
     {
       id: "tools",
@@ -91,6 +93,9 @@ export function SettingsSurface({
           <RepliesCard values={values} disabled={disabled} onChange={config.setConfig} />
         </>
       );
+      break;
+    case "cron":
+      page = <CronSection />;
       break;
     case "voice":
       page = (

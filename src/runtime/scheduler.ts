@@ -25,7 +25,6 @@ export interface CronJobConfig {
 export interface CronJobState {
 	lastFiredSlot?: string;
 	lastFiredAt?: string;
-	completed?: boolean;
 }
 
 export interface SchedulerState {
@@ -107,7 +106,7 @@ function parseLocalDateTime(value: string): Date {
 	);
 }
 
-function daysInMonth(year: number, month: number): number {
+export function daysInMonth(year: number, month: number): number {
 	return new Date(year, month + 1, 0).getDate();
 }
 
@@ -158,7 +157,6 @@ export function dueCronSlot(
 	now: Date | number,
 ): string | undefined {
 	if (!job.enabled) return undefined;
-	if (state?.completed) return undefined;
 	const nowDate = toDate(now);
 	const scheduled = latestScheduledDate(job, nowDate);
 	if (!scheduled) return undefined;
@@ -166,13 +164,25 @@ export function dueCronSlot(
 	return state?.lastFiredSlot === slot ? undefined : slot;
 }
 
+/** How late this fire is, when late enough to mean the box was down rather than merely busy.
+    A job that has never run is catching up on its own creation, not missed. */
+function missedBy(job: CronJobConfig, state: CronJobState | undefined, now: Date, graceMs: number): string | undefined {
+	const scheduled = state?.lastFiredAt ? latestScheduledDate(job, now) : undefined;
+	if (!scheduled) return undefined;
+	const lateMs = now.getTime() - scheduled.getTime();
+	return lateMs > graceMs ? formatIdleDuration(lateMs) : undefined;
+}
+
 export function buildCronInjectionText(options: {
 	job: CronJobConfig;
 	now: Date | number | string;
 	slot: string;
+	state?: CronJobState;
+	graceMs: number;
 }): string {
 	const nowDate = toDate(options.now);
-	return `<cron id="${options.job.id}" frequency="${options.job.frequency}" delivery="${options.job.deliveryMode}" local_time="${formatLocalTimestamp(nowDate)}" slot="${options.slot}">\n${options.job.prompt}\n</cron>`;
+	const missed = missedBy(options.job, options.state, nowDate, options.graceMs);
+	return `<cron id="${options.job.id}" frequency="${options.job.frequency}" delivery="${options.job.deliveryMode}" local_time="${formatLocalTimestamp(nowDate)}" slot="${options.slot}"${missed ? ` missed="${missed}"` : ""}>\n${options.job.prompt}\n</cron>`;
 }
 
 export function schedulerStatePath(dataDir: string): string {

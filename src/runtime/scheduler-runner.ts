@@ -157,21 +157,13 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		}
 	};
 
+	// a fire later than this past its slot means downtime, not a tick that ran long behind other jobs
+	const graceMs = Math.max(config.cron.pollMs, 5 * 60_000);
+
 	const markCronSlotStarted = async (job: CronJobConfig, slot: string): Promise<void> => {
 		schedulerState.cron[job.id] = {
 			lastFiredSlot: slot,
 			lastFiredAt: new Date().toISOString(),
-			...(schedulerState.cron[job.id]?.completed ? { completed: true } : {}),
-		};
-		await saveScheduler();
-	};
-
-	const completeCronSlot = async (job: CronJobConfig, slot: string): Promise<void> => {
-		schedulerState.cron[job.id] = {
-			...schedulerState.cron[job.id],
-			lastFiredSlot: slot,
-			lastFiredAt: schedulerState.cron[job.id]?.lastFiredAt ?? new Date().toISOString(),
-			...(job.frequency === "once" ? { completed: true } : {}),
 		};
 		await saveScheduler();
 	};
@@ -185,7 +177,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		});
 		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
 			const now = Date.now();
-			const text = buildCronInjectionText({ job, slot, now });
+			const text = buildCronInjectionText({ job, slot, now, state: schedulerState.cron[job.id], graceMs });
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_started",
 				jobId: job.id,
@@ -196,7 +188,6 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			await familiarAgent.followUpMessage(runtime.channelKey, userTextMessage(text, now), {
 				skipAmbient: true,
 			});
-			await completeCronSlot(job, slot);
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_completed",
 				jobId: job.id,
@@ -212,9 +203,15 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			agentWork.promptScheduledMessage(
 				runtime,
 				async () => {
-					const jobState = schedulerState.cron[job.id];
-					if (jobState?.completed || jobState?.lastFiredSlot === slot) return CRON_SKIPPED;
+					// identity, not id: manageCron swaps the object on every edit, so a job that was
+					// changed, disabled, or deleted while this was queued is no longer in the list
+					if (
+						!config.cron.jobs.includes(job) ||
+						dueCronSlot(job, schedulerState.cron[job.id], Date.now()) !== slot
+					)
+						return CRON_SKIPPED;
 					const now = Date.now();
+					const priorState = schedulerState.cron[job.id];
 					await appendSchedulerLog(config.workspace.dataDir, {
 						type: "cron_started",
 						jobId: job.id,
@@ -222,7 +219,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						deliveryMode: job.deliveryMode,
 					});
 					await markCronSlotStarted(job, slot);
-					return userTextMessage(buildCronInjectionText({ job, slot, now }), now);
+					return userTextMessage(buildCronInjectionText({ job, slot, now, state: priorState, graceMs }), now);
 				},
 				onEvent,
 				{ skipAmbient: true },
@@ -234,7 +231,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 				jobId: job.id,
 				slot,
 				deliveryMode: job.deliveryMode,
-				detail: "already completed before prompt",
+				detail: "job changed, disabled, removed, or slot already started before prompt",
 			});
 			return;
 		}
@@ -250,7 +247,6 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			silent: parsedReply.silent,
 			jobId: jobKey,
 		});
-		await completeCronSlot(job, slot);
 		await appendSchedulerLog(config.workspace.dataDir, {
 			type: "cron_completed",
 			jobId: job.id,
@@ -259,12 +255,25 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		});
 	};
 
+	// a deleted job's run record would otherwise outlive it forever, and a job recreated under the
+	// same id would inherit it and skip the slot it had already fired
+	const pruneCronState = async (): Promise<void> => {
+		const live = new Set(config.cron.jobs.map((job) => job.id));
+		const stale = Object.keys(schedulerState.cron).filter((id) => !live.has(id));
+		if (stale.length === 0) return;
+		for (const id of stale) delete schedulerState.cron[id];
+		await saveScheduler();
+	};
+
 	const tickCron = async (): Promise<void> => {
-		if (!config.cron.enabled || cronRunning) return;
+		if (cronRunning) return;
 		cronRunning = true;
 		try {
+			await pruneCronState();
+			if (!config.cron.jobs.some((job) => job.enabled)) return;
 			const session = await resolveDefaultSession();
 			for (const job of config.cron.jobs) {
+				if (!config.cron.jobs.includes(job)) continue;
 				const slot = dueCronSlot(job, schedulerState.cron[job.id], Date.now());
 				if (!slot) continue;
 				try {
@@ -308,13 +317,12 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			rearmHeartbeat();
 			tickHeartbeat();
 		}
-		if (config.cron.enabled && config.cron.jobs.some((job) => job.enabled)) {
-			const runCronTick = () => {
-				void tickCron().catch((error) => console.error("Cron tick failed", error));
-			};
-			cronTimer = setInterval(runCronTick, config.cron.pollMs);
-			runCronTick();
-		}
+		const runCronTick = () => {
+			void tickCron().catch((error) => console.error("Cron tick failed", error));
+		};
+		// Keep polling even with no jobs so ones added at runtime are picked up.
+		cronTimer = setInterval(runCronTick, config.cron.pollMs);
+		runCronTick();
 	};
 
 	const stop = (): void => {

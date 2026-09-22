@@ -1,4 +1,5 @@
 import type { FamiliarAgent } from "../agent/factory.js";
+import { cronPayload, manageCron } from "../config/cron.js";
 import { BUILTIN_TOOLS } from "../config/enums.js";
 import type { Config } from "../config/index.js";
 import { loadConfigOverrides } from "../config/overrides.js";
@@ -50,6 +51,17 @@ export function registerWebConfigRoutes(
 	familiarAgent: FamiliarAgent,
 	restart?: RestartHandler,
 ): void {
+	route("GET", "/api/web/cron", async (_request, response) => {
+		sendJson(response, 200, await cronPayload(config));
+	});
+	route("POST", "/api/web/cron", async (request, response) => {
+		const body = await readJsonBody(request);
+		try {
+			sendJson(response, 200, await manageCron(config, body));
+		} catch (error) {
+			throw new HttpError(400, errorMessage(error));
+		}
+	});
 	const ctx: RegistryApplyContext = { config, scheduler: agentCore, agent: familiarAgent };
 	route("GET", "/api/web/config", async (_request, response) => {
 		sendJson(response, 200, configPayload(config));

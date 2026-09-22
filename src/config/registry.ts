@@ -9,6 +9,7 @@ import {
 	VOICE_KEEP_CHOICES,
 } from "./enums.js";
 import { clearConfigOverride, loadConfigOverrides, setConfigOverride } from "./overrides.js";
+import { readCronJobs } from "./sections.js";
 import type { Config, ToolReach, TtsProvider, VoiceKeep } from "./types.js";
 
 export type ConfigKey =
@@ -465,11 +466,13 @@ export function applyConfigOverridesToConfig(config: Config): void {
 	snapshotConfigDefaults(config);
 	const overrides = loadConfigOverrides();
 	for (const [key, value] of Object.entries(overrides)) {
-		if (!isConfigKey(key)) continue;
-		const entry = CONFIG_REGISTRY[key];
 		try {
-			const validated = entry.validate(value, config);
-			entry.write(config, validated);
+			// cron owns its own queued route rather than a registry key, but its override still loads here
+			if (key === "cron") config.cron.jobs = readCronJobs(value, "cron", "camel");
+			else if (isConfigKey(key)) {
+				const entry = CONFIG_REGISTRY[key];
+				entry.write(config, entry.validate(value, config));
+			}
 		} catch (error) {
 			console.warn(`Skipping invalid config override ${key}:`, error);
 		}

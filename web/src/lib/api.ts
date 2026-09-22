@@ -786,3 +786,17 @@ export const removeMcpServer = (name: string, channelKey?: string) => mcpRequest
 export const setMcpDeferred = (name: string, deferred: boolean, channelKey?: string) => mcpRequest("/deferred", "POST", { name, deferred }, channelKey);
 export const setMcpEnabled = (name: string, enabled: boolean, channelKey?: string) => mcpRequest("/enabled", "POST", { name, enabled }, channelKey);
 export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequest("/reconnect", "POST", { name }, channelKey);
+
+export type CronJob = import("../../../src/runtime/scheduler.js").CronJobConfig;
+export type CronPayload = Awaited<ReturnType<typeof import("../../../src/config/cron.js").cronPayload>>;
+export type CronChange =
+  | { action: "create" | "update"; id: string; job: Partial<Omit<CronJob, "id">> }
+  | { action: "delete"; id: string };
+
+export function fetchCron(): Promise<CronPayload> {
+  return getJson<CronPayload>("/api/web/cron", "cron");
+}
+
+export function updateCron(change: CronChange): Promise<CronPayload> {
+  return jsonRequest<CronPayload>("/api/web/cron", "POST", change, "cron");
+}

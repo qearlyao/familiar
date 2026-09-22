@@ -511,6 +511,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const ownerId = readOptionalConfigString(discord.owner_id, "discord.owner_id");
 	if (token && !ownerId) throw new Error("Config value discord.owner_id is required when DISCORD_TOKEN is set");
 	assertKnownKeys(qq, "qq", ["enabled", "ws_url", "owner_id", "allowed_groups"]);
+	assertKnownKeys(cron, "cron", ["poll_seconds", "jobs"]);
 	const qqWsUrl = readOptionalConfigString(qq.ws_url, "qq.ws_url");
 	const qqOwnerId = readOptionalConfigString(qq.owner_id, "qq.owner_id");
 	if (qqWsUrl && !qqOwnerId) throw new Error("Config value qq.owner_id is required when qq.ws_url is set");
@@ -709,9 +710,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		mcp: { servers: readMcpServers(readConfigTable(mcp.servers, "mcp.servers")) },
 		cron: {
-			enabled: readBoolean(cron.enabled, false, "cron.enabled"),
 			pollMs: readIntegerInRange(cron.poll_seconds, 60, "cron.poll_seconds", 1, 3600) * 1000,
-			jobs: readCronJobs(cron),
+			jobs: readCronJobs(cron.jobs, "cron.jobs", "toml"),
 		},
 		models: {
 			allow: modelAllow,

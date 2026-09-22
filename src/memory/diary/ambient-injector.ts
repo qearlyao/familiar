@@ -1,4 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Model } from "@earendil-works/pi-ai/compat";
+import { harnessNoteMessage } from "../../agent/session-helpers.js";
 import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { positiveIntegerOrDefault } from "../util.js";
@@ -45,7 +47,7 @@ export class AmbientDiaryInjector {
 		signal?: AbortSignal,
 		sessionKey = "default",
 		queryOverride?: string,
-		role: "system" | "user" = "system",
+		model?: Model<any>,
 	): Promise<AgentMessage[]> {
 		if (!(this.settings.enabled ?? true)) return messages;
 		try {
@@ -71,7 +73,7 @@ export class AmbientDiaryInjector {
 			});
 			if (hits.length === 0) return messages;
 			this.lastInjectedAtBySession.set(sessionKey, now);
-			return injectAmbientDiaryRecall(messages, renderAmbientDiaryRecall(hits), role, now);
+			return injectAmbientDiaryRecall(messages, renderAmbientDiaryRecall(hits), model, now);
 		} catch (error) {
 			console.error("memory ambient recall failed", error);
 			return messages;
@@ -92,12 +94,11 @@ function nonNegativeNumberOrDefault(value: number | undefined, fallback: number)
 function injectAmbientDiaryRecall(
 	messages: AgentMessage[],
 	recallText: string,
-	role: "system" | "user",
+	model: Model<any> | undefined,
 	timestamp: number,
 ): AgentMessage[] {
 	if (findLastUserMessageIndex(messages) < 0) return messages;
-	const content = role === "system" ? recallText : [{ type: "text" as const, text: recallText }];
-	return [...messages, { role, content, timestamp } as AgentMessage];
+	return [...messages, harnessNoteMessage(model, recallText, timestamp)];
 }
 
 function findLastUserMessageIndex(messages: readonly AgentMessage[]): number {

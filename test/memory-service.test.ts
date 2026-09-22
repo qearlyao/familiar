@@ -94,13 +94,21 @@ describe("MemoryService", () => {
 			{ role: "user" as const, content: [{ type: "text" as const, text: "blue lantern" }], timestamp: 3 },
 		];
 
-		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>", "system", 4);
+		const recall = "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>";
+		const takesNotes = { compat: { supportsMidConvoSystemMessages: true } } as any;
+
+		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, recall, takesNotes, 4);
 
 		assert.deepEqual(next.slice(0, 3), messages);
 		const last = next[3];
 		assert.equal(last?.role, "system");
 		assert.equal(last?.timestamp, 4);
 		assert.match(typeof last?.content === "string" ? last.content : "", /<injected_memory>/);
+
+		// a model pi marks as dropping later system messages hears the same recall as user text
+		const plain = __memoryServiceTest.injectAmbientDiaryRecall(messages, recall, { compat: {} } as any, 4)[3];
+		assert.equal(plain?.role, "user");
+		assert.deepEqual(plain?.content, [{ type: "text", text: recall }]);
 	});
 
 	it("recalls indexed diary chunks through transformContext", async (t) => {

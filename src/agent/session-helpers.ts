@@ -3,7 +3,13 @@ import { createHash } from "node:crypto";
 import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import type { Config } from "../config/index.js";
-import { assertModelCanAuthenticate, isAllowedModel, type ModelRef, resolveModelApiKey } from "../models/index.js";
+import {
+	assertModelCanAuthenticate,
+	isAllowedModel,
+	type ModelRef,
+	resolveModelApiKey,
+	supportsSystemNotes,
+} from "../models/index.js";
 
 const NOISY_GOOGLE_VERTEX_AUTH_DEBUG =
 	"The user provided project/location will take precedence over the API key from the environment variables.";
@@ -99,4 +105,12 @@ export function userTextMessage(text: string, timestamp = Date.now()): AgentMess
 		content: [{ type: "text", text }],
 		timestamp,
 	};
+}
+
+// harness text the agent hears in the harness's own voice, not as one of us typing. A model pi
+// marks as lacking mid-conversation system messages would have them dropped, so it hears the same
+// text as plain user text; so does a turn with no model to ask.
+export function harnessNoteMessage(model: Model<any> | undefined, text: string, timestamp = Date.now()): AgentMessage {
+	if (!model || !supportsSystemNotes(model)) return userTextMessage(text, timestamp);
+	return { role: "system", content: text, timestamp };
 }

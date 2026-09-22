@@ -6,7 +6,6 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../config/index.js";
-import { supportsSystemNotes } from "../models/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
 import type { ContextBreakdown } from "../web/types.js";
@@ -170,7 +169,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 			signal,
 			sessionKey,
 			options.ambientQuery,
-			options.model && supportsSystemNotes(options.model) ? "system" : "user",
+			options.model,
 		);
 		const tokensOf = (list: AgentMessage[]) =>
 			list.reduce((total, message) => total + estimateAgentMessageTokens(message), 0);

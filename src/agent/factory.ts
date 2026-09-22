@@ -18,7 +18,6 @@ import {
 	parseModelRef,
 	resolveModel,
 	supportedThinkingLevels,
-	supportsSystemNotes,
 } from "../models/index.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
@@ -34,6 +33,7 @@ import {
 	deriveSessionId,
 	formatModel,
 	getLastAssistantText,
+	harnessNoteMessage,
 	installProviderDebugFilter,
 	isNoisyProviderDebug,
 	logUsage,
@@ -701,12 +701,7 @@ export async function createFamiliarAgent(
 	function withNotes(session: FamiliarAgentSession, message: AgentMessage, notes?: string[]): AgentMessage[] {
 		if (!notes?.length) return [message];
 		const timestamp = message.timestamp ?? Date.now();
-		const asSystem = supportsSystemNotes(session.agent.state.model);
-		const spoken = notes.map(
-			(text): AgentMessage =>
-				asSystem ? { role: "system", content: text, timestamp } : userTextMessage(text, timestamp),
-		);
-		return [...spoken, message];
+		return [...notes.map((text) => harnessNoteMessage(session.agent.state.model, text, timestamp)), message];
 	}
 
 	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {

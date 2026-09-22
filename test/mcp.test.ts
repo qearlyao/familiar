@@ -108,7 +108,7 @@ deferred = false
 	it("layers web servers over config.toml and syncs the hub without reconnecting on a deferred flip", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, {
-			mcp: { servers: { fs: { command: "/nonexistent-mcp-server", deferred: true } } },
+			mcp: { servers: { fs: { command: "/nonexistent-mcp-server", deferred: true, enabled: true } } },
 		});
 		setMcpServersPath(dataDir);
 		await saveWebMcpServers({
@@ -122,6 +122,7 @@ deferred = false
 		assert.equal(specs.fs.spec.deferred, false);
 		assert.equal(specs.remote.source, "web");
 		assert.equal(specs.remote.spec.headers?.Authorization, "Bearer sekrit");
+		assert.equal(specs.remote.spec.enabled, true);
 
 		let changes = 0;
 		const hub = createMcpHub(() => {
@@ -135,8 +136,15 @@ deferred = false
 		await hub.sync({ fs: { ...specs.fs, spec: { ...specs.fs.spec, deferred: true } } });
 		assert.equal(hub.servers()[0].error, failed.error);
 		assert.equal(hub.servers()[0].spec.deferred, true);
+		// switched off it stays listed, holds no tools and opens nothing
+		await hub.sync({ fs: { ...specs.fs, spec: { ...specs.fs.spec, enabled: false } } });
+		assert.equal(hub.servers()[0].spec.enabled, false);
+		assert.deepEqual(hub.tools, []);
+		assert.deepEqual(hub.deferred, []);
+		await hub.sync({ fs: { ...specs.fs, spec: { ...specs.fs.spec, enabled: true } } });
+		assert.equal(hub.servers()[0].status, "failed");
 		await hub.sync({});
 		assert.deepEqual(hub.servers(), []);
-		assert.equal(changes, 3);
+		assert.equal(changes, 5);
 	});
 });

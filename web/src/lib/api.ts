@@ -754,6 +754,8 @@ export interface McpServer {
   where: string;
   headers: number;
   deferred: boolean;
+  /** off keeps it listed here but closed and toolless */
+  enabled: boolean;
   status: "connected" | "failed";
   error?: string;
   tools: McpTool[];
@@ -782,4 +784,5 @@ async function mcpRequest(path: string, method: "POST" | "DELETE", body: unknown
 export const addMcpServer = (server: NewMcpServer, channelKey?: string) => mcpRequest("", "POST", server, channelKey);
 export const removeMcpServer = (name: string, channelKey?: string) => mcpRequest("", "DELETE", { name }, channelKey);
 export const setMcpDeferred = (name: string, deferred: boolean, channelKey?: string) => mcpRequest("/deferred", "POST", { name, deferred }, channelKey);
+export const setMcpEnabled = (name: string, enabled: boolean, channelKey?: string) => mcpRequest("/enabled", "POST", { name, enabled }, channelKey);
 export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequest("/reconnect", "POST", { name }, channelKey);

@@ -82,6 +82,8 @@ export interface McpServerConfig {
 	headers?: Record<string, string>;
 	/** stay out of the request until the agent loads them */
 	deferred: boolean;
+	/** set aside without being taken away: nothing connects while it's off */
+	enabled: boolean;
 }
 
 export interface Config {

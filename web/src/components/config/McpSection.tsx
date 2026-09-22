@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Dialog } from "radix-ui";
-import { addMcpServer, reconnectMcpServer, removeMcpServer, setMcpDeferred, type McpServer } from "@/lib/api";
+import { addMcpServer, reconnectMcpServer, removeMcpServer, setMcpDeferred, setMcpEnabled, type McpServer } from "@/lib/api";
 import type { useMcp } from "@/lib/useMcp";
 import { cn } from "@/lib/utils";
 import { IconChevronDown, IconPlus } from "../organicIcons";
 import { Sheet } from "../Sheet";
-import { Card, EnumToggle, Field } from "./inputs";
+import { Card, EnumToggle, Field, OnOffToggle } from "./inputs";
 
 type Mcp = ReturnType<typeof useMcp>;
 
@@ -22,13 +22,19 @@ const KIND_OPTIONS = [
 function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
   // errors land in the page's alert; the row only needs to not throw
   const act = (work: Parameters<Mcp["mutate"]>[0]) => void mcp.mutate(work).catch(() => {});
-  const down = server.status === "failed";
+  const off = !server.enabled;
+  const down = server.enabled && server.status === "failed";
   return (
-    <div className={cn("mcp-server", down && "is-down")}>
+    <div className={cn("mcp-server", down && "is-down", off && "is-off")}>
       <div className="mcp-line">
         <div className="mcp-what">
           <span className="mcp-name">
-            <i />
+            <OnOffToggle
+              enabled={server.enabled}
+              disabled={mcp.busy}
+              ariaPrefix={`keep ${server.name} on`}
+              onChange={(next) => act((key) => setMcpEnabled(server.name, next, key))}
+            />
             {server.name}
             <span className="mcp-chip">{server.transport}</span>
             {server.source === "config" && <span className="mcp-chip">config.toml</span>}
@@ -36,25 +42,27 @@ function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
           <small className="mcp-where">
             {server.where}
             {server.headers > 0 && ` · ${server.headers} header${server.headers === 1 ? "" : "s"}`}
-            {" · "}
-            {down ? "no tools reachable" : `${server.tools.length} tools`}
+            {!off && ` · ${down ? "no tools reachable" : `${server.tools.length} tools`}`}
           </small>
-          <small className={down ? "settings-error" : "mcp-status"}>{down ? server.error : server.deferred ? "connected · fetched on demand" : "connected · loaded now"}</small>
+          <small className={down ? "settings-error" : "mcp-status"}>
+            {off ? "resting — nothing of its is in his reach" : down ? server.error : server.deferred ? "connected · fetched on demand" : "connected · loaded now"}
+          </small>
         </div>
         <div className="settings-row-control">
-          {down ? (
-            <button type="button" className="pill-button" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
-              try again
-            </button>
-          ) : (
-            <EnumToggle
-              value={server.deferred ? "fetched" : "hand"}
-              options={REACH_OPTIONS}
-              ariaPrefix={`how ${server.name} reaches them`}
-              disabled={mcp.busy}
-              onChange={(next) => act((key) => setMcpDeferred(server.name, next === "fetched", key))}
-            />
-          )}
+          {!off &&
+            (down ? (
+              <button type="button" className="pill-button" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
+                try again
+              </button>
+            ) : (
+              <EnumToggle
+                value={server.deferred ? "fetched" : "hand"}
+                options={REACH_OPTIONS}
+                ariaPrefix={`how ${server.name} reaches them`}
+                disabled={mcp.busy}
+                onChange={(next) => act((key) => setMcpDeferred(server.name, next === "fetched", key))}
+              />
+            ))}
         </div>
       </div>
       <div className="mcp-foot">
@@ -75,7 +83,7 @@ function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
             </div>
           </details>
         )}
-        {!down && (
+        {!down && !off && (
           <button type="button" className="pill-button is-quiet" disabled={mcp.busy} onClick={() => act((key) => reconnectMcpServer(server.name, key))}>
             reconnect
           </button>
@@ -208,10 +216,11 @@ function AddServer({ mcp }: { mcp: Mcp }) {
 export function McpSection({ mcp }: { mcp: Mcp }) {
   const connected = mcp.servers?.filter((server) => server.status === "connected") ?? [];
   const handy = connected.filter((server) => !server.deferred).length;
+  const resting = mcp.servers?.filter((server) => !server.enabled).length ?? 0;
   return (
     <Card
       title="mcp servers"
-      hint={mcp.servers ? `${handy} at hand · ${connected.length - handy} fetched on demand` : "counting them…"}
+      hint={mcp.servers ? `${handy} at hand · ${connected.length - handy} fetched on demand${resting ? ` · ${resting} resting` : ""}` : "counting them…"}
       action={<AddServer mcp={mcp} />}
     >
       <div className="settings-rows">

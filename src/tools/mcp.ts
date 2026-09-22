@@ -99,12 +99,15 @@ export function createMcpHub(onChange: () => void | Promise<void> = () => {}): M
 	const states = new Map<string, McpServerState & { client?: Client }>();
 	const serial = createWriteQueue("mcp");
 	const pick = (deferred: boolean) =>
-		[...states.values()].flatMap((state) => (state.spec.deferred === deferred ? state.tools : []));
+		[...states.values()].flatMap((state) =>
+			state.spec.enabled && state.spec.deferred === deferred ? state.tools : [],
+		);
 
 	const connect = async (name: string, spec: McpServerConfig, source: McpSource): Promise<void> => {
 		await states.get(name)?.client?.close();
 		const state: McpServerState & { client?: Client } = { name, source, spec, status: "failed", tools: [] };
 		states.set(name, state);
+		if (!spec.enabled) return;
 		try {
 			const { client, tools } = await connectMcpClient(name, openTransport(spec));
 			Object.assign(state, { client, tools, status: "connected" });

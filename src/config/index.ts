@@ -309,6 +309,7 @@ export function readMcpServers(value: Record<string, unknown>): Config["mcp"]["s
 					url,
 					headers: readStringRecord(spec.headers, `${path}.headers`),
 					deferred: readBoolean(spec.deferred, true, `${path}.deferred`),
+					enabled: true,
 				},
 			];
 		}),

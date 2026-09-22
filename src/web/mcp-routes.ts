@@ -36,6 +36,7 @@ export function registerWebMcpRoutes(
 					where: spec.url ?? [spec.command, ...(spec.args ?? [])].join(" "),
 					headers: Object.keys(spec.headers ?? {}).length,
 					deferred: server.spec.deferred,
+					enabled: server.spec.enabled,
 					status: server.status,
 					error: server.error,
 					tools: server.tools.map((tool) => ({
@@ -87,16 +88,19 @@ export function registerWebMcpRoutes(
 		sendJson(response, 200, await payload(url));
 	});
 
-	route("POST", "/api/web/mcp/deferred", async (request, response, url) => {
-		const body = await readJsonBody(request);
-		const name = serverName(body);
-		const { deferred } = body as { deferred: unknown };
-		if (typeof deferred !== "boolean") throw new HttpError(400, "deferred must be a boolean");
-		const web = loadWebMcpServers();
-		if (!web[name] && !config.mcp.servers[name]) throw new HttpError(404, `no mcp server named ${name}`);
-		await save({ ...web, [name]: { ...web[name], deferred } });
-		sendJson(response, 200, await payload(url));
-	});
+	// deferred and enabled are the two flips a config.toml server can keep here
+	for (const flag of ["deferred", "enabled"] as const) {
+		route("POST", `/api/web/mcp/${flag}`, async (request, response, url) => {
+			const body = await readJsonBody(request);
+			const name = serverName(body);
+			const value = (body as Record<string, unknown>)[flag];
+			if (typeof value !== "boolean") throw new HttpError(400, `${flag} must be a boolean`);
+			const web = loadWebMcpServers();
+			if (!web[name] && !config.mcp.servers[name]) throw new HttpError(404, `no mcp server named ${name}`);
+			await save({ ...web, [name]: { ...web[name], [flag]: value } });
+			sendJson(response, 200, await payload(url));
+		});
+	}
 
 	route("POST", "/api/web/mcp/reconnect", async (request, response, url) => {
 		const name = serverName(await readJsonBody(request));

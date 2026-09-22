@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.0 - 2026-09-23
+
+### Added
+
+- Manage cron jobs from the built-in `cron` tool and the WebUI, including create, update, delete, enable/disable, one-time, hourly, daily, weekly, and monthly schedules.
+- Report delayed cron fires as missed and keep runtime changes synchronized without a restart.
+- Let MCP servers rest from the WebUI while retaining their configuration for quick reactivation.
+- Rebuild the Makings room and restore its phone carousel, with new ink textures and bounded audio waveforms.
+
+### Changed
+
+- Refresh model catalogs and Claude OAuth request headers.
+- Redesign the cron jobs settings panel with sentence-style schedules, inline status, and responsive dialogs.
+- Remove the global `cron.enabled` switch; each job now controls whether it runs, and cron polling continues so jobs added at runtime are picked up.
+
+### Breaking
+
+- Remove `cron.enabled` from configuration. Remove it from existing `config.toml` files; individual `cron.jobs[].enabled` values now control scheduling.
+
 ## 1.1.2 - 2026-09-22
 
 ### Added

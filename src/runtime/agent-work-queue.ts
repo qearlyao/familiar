@@ -68,7 +68,7 @@ export function createAgentWorkQueue(deps: { familiarAgent: FamiliarAgent }) {
 			try {
 				const reply = await deps.familiarAgent.promptMessage(runtime.channelKey, message, onEvent, {
 					...options,
-					...(pending ? { notes: pending.texts } : {}),
+					notes: pending?.texts,
 				});
 				if (pending) await runtime.noteCallsDelivered(pending.throughRecordId);
 				return reply;

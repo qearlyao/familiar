@@ -452,26 +452,32 @@ export class ConversationRuntime {
 	/** kept voice calls in the active job's slice, for the agent to hear ahead of what was typed */
 	notesForActiveJob(jobId: string): string[] {
 		if (this.activeJob?.jobId !== jobId) return [];
-		return this.triggerInboundSlice(this.activeJob).flatMap((record) =>
-			record.call && record.recordId > this.lastNotedCallRecordId ? [record.text] : [],
-		);
+		return this.unheardKeptCalls(this.activeJob.triggerRecordId).map((record) => record.text);
 	}
 
 	/** kept calls nobody has read out yet, for a scheduled turn that has no slice of its own */
 	pendingCallNotes(): { texts: string[]; throughRecordId: number } | undefined {
-		const boundary = Math.max(this.lastCompletedTriggerRecordId, this.lastNotedCallRecordId);
-		const pending = this.records.filter(
-			(record): record is InboundChatRecord =>
-				record.type === "inbound" && record.recordId > boundary && !!record.call,
-		);
+		const pending = this.unheardKeptCalls();
 		const last = pending.at(-1);
 		if (!last) return undefined;
 		return { texts: pending.map((record) => record.text), throughRecordId: last.recordId };
 	}
 
+	// a kept call is unheard until the turn that carried it finishes, or until a scheduled turn
+	// says it read it out; both marks move forward only, so the search stops at the older of them.
+	private unheardKeptCalls(upTo = Number.POSITIVE_INFINITY): InboundChatRecord[] {
+		const boundary = Math.max(this.lastCompletedTriggerRecordId, this.lastNotedCallRecordId);
+		const unheard: InboundChatRecord[] = [];
+		for (let index = this.records.length - 1; index >= 0; index--) {
+			const record = this.records[index];
+			if (!record || record.recordId <= boundary) break;
+			if (record.type === "inbound" && record.call && record.recordId <= upTo) unheard.unshift(record);
+		}
+		return unheard;
+	}
+
 	/** mark kept calls as heard, so the next typed message does not carry them a second time */
 	async noteCallsDelivered(throughRecordId: number): Promise<void> {
-		if (throughRecordId <= this.lastNotedCallRecordId) return;
 		await this.appendRecord({
 			type: "call_noted",
 			...buildRecordBase(this.channel, this.nextRecordId),

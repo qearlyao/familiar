@@ -639,12 +639,10 @@ export async function createFamiliarAgent(
 				options,
 				eventHandler,
 				(session) => {
-					if (!options.notes?.length) return session.agent.prompt(input, images);
-					const timestamp = Date.now();
 					const typed: AgentMessage = {
 						role: "user",
 						content: [{ type: "text", text: input }, ...(images ?? [])],
-						timestamp,
+						timestamp: Date.now(),
 					};
 					return session.agent.prompt(withNotes(session, typed, options.notes));
 				},
@@ -693,23 +691,22 @@ export async function createFamiliarAgent(
 		): Promise<void> {
 			const session = await getSession(sessionKey);
 			if (options.skipAmbient) skipAmbientMessages.add(message);
-			session.agent.followUp(message);
+			for (const queued of withNotes(session, message, options.notes)) session.agent.followUp(queued);
 		},
 	};
 
 	// harness notes lead the turn in the transcript, in the harness's own voice; pi holds a note back
-	// to the far side of the message it precedes, so the model hears it after.
+	// to the far side of the message it precedes, so the model hears it after. A model without
+	// mid-conversation system messages would have pi drop one, so it hears the same text as user text.
 	function withNotes(session: FamiliarAgentSession, message: AgentMessage, notes?: string[]): AgentMessage[] {
 		if (!notes?.length) return [message];
 		const timestamp = message.timestamp ?? Date.now();
-		return [...notes.map((note) => noteForModel(session, note, timestamp)), message];
-	}
-
-	// a model without mid-conversation system messages would have pi drop a note; it hears the
-	// same text as plain user text instead.
-	function noteForModel(session: FamiliarAgentSession, text: string, timestamp: number): AgentMessage {
-		if (supportsSystemNotes(session.agent.state.model)) return { role: "system", content: text, timestamp };
-		return { role: "user", content: [{ type: "text", text }], timestamp };
+		const asSystem = supportsSystemNotes(session.agent.state.model);
+		const spoken = notes.map(
+			(text): AgentMessage =>
+				asSystem ? { role: "system", content: text, timestamp } : userTextMessage(text, timestamp),
+		);
+		return [...spoken, message];
 	}
 
 	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {

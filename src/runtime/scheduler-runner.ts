@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
+import { userTextMessage } from "../agent/session-helpers.js";
 import type { Config } from "../config/index.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
@@ -15,7 +16,7 @@ import {
 	type SchedulerState,
 	saveSchedulerState,
 } from "./scheduler.js";
-import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn, scheduledUserMessage } from "./turn.js";
+import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn } from "./turn.js";
 
 type SchedulerAgentWork = {
 	promptScheduledMessage(
@@ -125,7 +126,9 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						await heartbeatRuntime.noteHeartbeat(
 							`heartbeat stirred after ${formatIdleDuration(queuedNow - latestUserInteractionAt)}`,
 						);
-						return scheduledUserMessage(text, queuedNow);
+						// a scheduled turn opens with nothing behind it, and a system note needs a user turn
+						// to sit behind, so harness text reaches the agent as user text
+						return userTextMessage(text, queuedNow);
 					},
 					onEvent,
 					{ skipAmbient: true },
@@ -190,7 +193,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 				deliveryMode: job.deliveryMode,
 			});
 			await markCronSlotStarted(job, slot);
-			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), {
+			await familiarAgent.followUpMessage(runtime.channelKey, userTextMessage(text, now), {
 				skipAmbient: true,
 			});
 			await completeCronSlot(job, slot);
@@ -219,7 +222,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						deliveryMode: job.deliveryMode,
 					});
 					await markCronSlotStarted(job, slot);
-					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
+					return userTextMessage(buildCronInjectionText({ job, slot, now }), now);
 				},
 				onEvent,
 				{ skipAmbient: true },

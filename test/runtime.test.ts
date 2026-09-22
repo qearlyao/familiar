@@ -151,8 +151,9 @@ describe("ConversationRuntime", () => {
 			);
 
 			const pending = runtime.pendingCallNotes();
-			assert.deepEqual(pending?.texts, [call]);
-			await runtime.noteCallsDelivered(pending?.throughRecordId ?? 0);
+			assert.ok(pending);
+			assert.deepEqual(pending.texts, [call]);
+			await runtime.noteCallsDelivered(pending.throughRecordId);
 			assert.equal(runtime.pendingCallNotes(), undefined);
 
 			// the next typed message must not carry the call the heartbeat already heard

@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgentReply } from "../agent/factory.js";
 import type { Config } from "../config/index.js";
@@ -26,12 +26,6 @@ export function canceledJobError(): Error {
 	const error = new Error("Job was canceled before completion.");
 	error.name = "CanceledJobError";
 	return error;
-}
-
-// a scheduled turn has no user message to sit behind, and Anthropic takes a system note only
-// directly after a user turn, so heartbeat and cron text reaches the agent as user text.
-export function scheduledUserMessage(text: string, timestamp: number): AgentMessage {
-	return { role: "user", content: [{ type: "text", text }], timestamp };
 }
 
 export function heartbeatStillDue(

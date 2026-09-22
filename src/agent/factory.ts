@@ -644,7 +644,7 @@ export async function createFamiliarAgent(
 					// note back to the far side of the message it precedes, so the model hears it after
 					const timestamp = Date.now();
 					return session.agent.prompt([
-						...options.notes.map((note) => noteForModel(session, { role: "system", content: note, timestamp })),
+						...options.notes.map((note) => noteForModel(session, note, timestamp)),
 						{ role: "user", content: [{ type: "text", text: input }, ...(images ?? [])], timestamp },
 					]);
 				},
@@ -662,9 +662,8 @@ export async function createFamiliarAgent(
 				options,
 				onEvent,
 				(session) => {
-					const sent = noteForModel(session, message);
-					if (options.skipAmbient) skipAmbientMessages.add(sent);
-					return session.agent.prompt(sent);
+					if (options.skipAmbient) skipAmbientMessages.add(message);
+					return session.agent.prompt(message);
 				},
 				() => enterPromptOptions(sessionKey, options),
 			);
@@ -693,19 +692,16 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<void> {
 			const session = await getSession(sessionKey);
-			const sent = noteForModel(session, message);
-			if (options.skipAmbient) skipAmbientMessages.add(sent);
-			session.agent.followUp(sent);
+			if (options.skipAmbient) skipAmbientMessages.add(message);
+			session.agent.followUp(message);
 		},
 	};
 
-	// a model without mid-conversation system messages would have pi drop them; it hears
-	// harness notes as plain user text instead.
-	function noteForModel(session: FamiliarAgentSession, message: AgentMessage): AgentMessage {
-		if (message.role !== "system" || supportsSystemNotes(session.agent.state.model)) return message;
-		const content =
-			typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
-		return { role: "user", content, timestamp: message.timestamp };
+	// a model without mid-conversation system messages would have pi drop a note; it hears the
+	// same text as plain user text instead.
+	function noteForModel(session: FamiliarAgentSession, text: string, timestamp: number): AgentMessage {
+		if (supportsSystemNotes(session.agent.state.model)) return { role: "system", content: text, timestamp };
+		return { role: "user", content: [{ type: "text", text }], timestamp };
 	}
 
 	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {

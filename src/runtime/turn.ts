@@ -28,9 +28,10 @@ export function canceledJobError(): Error {
 	return error;
 }
 
-/** harness text the agent hears in the harness's own voice, not as one of us typing */
-export function scheduledSystemMessage(text: string, timestamp: number): AgentMessage {
-	return { role: "system", content: text, timestamp };
+// a scheduled turn has no user message to sit behind, and Anthropic takes a system note only
+// directly after a user turn, so heartbeat and cron text reaches the agent as user text.
+export function scheduledUserMessage(text: string, timestamp: number): AgentMessage {
+	return { role: "user", content: [{ type: "text", text }], timestamp };
 }
 
 export function heartbeatStillDue(

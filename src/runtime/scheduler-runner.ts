@@ -15,7 +15,7 @@ import {
 	type SchedulerState,
 	saveSchedulerState,
 } from "./scheduler.js";
-import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn, scheduledSystemMessage } from "./turn.js";
+import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn, scheduledUserMessage } from "./turn.js";
 
 type SchedulerAgentWork = {
 	promptScheduledMessage(
@@ -125,7 +125,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						await heartbeatRuntime.noteHeartbeat(
 							`heartbeat stirred after ${formatIdleDuration(queuedNow - latestUserInteractionAt)}`,
 						);
-						return scheduledSystemMessage(text, queuedNow);
+						return scheduledUserMessage(text, queuedNow);
 					},
 					onEvent,
 					{ skipAmbient: true },
@@ -190,7 +190,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 				deliveryMode: job.deliveryMode,
 			});
 			await markCronSlotStarted(job, slot);
-			await familiarAgent.followUpMessage(runtime.channelKey, scheduledSystemMessage(text, now), {
+			await familiarAgent.followUpMessage(runtime.channelKey, scheduledUserMessage(text, now), {
 				skipAmbient: true,
 			});
 			await completeCronSlot(job, slot);
@@ -219,7 +219,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						deliveryMode: job.deliveryMode,
 					});
 					await markCronSlotStarted(job, slot);
-					return scheduledSystemMessage(buildCronInjectionText({ job, slot, now }), now);
+					return scheduledUserMessage(buildCronInjectionText({ job, slot, now }), now);
 				},
 				onEvent,
 				{ skipAmbient: true },

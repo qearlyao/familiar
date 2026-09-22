@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.2 - 2026-09-22
+
+### Added
+
+- Let heartbeat and scheduled turns receive kept voice calls that have not yet reached the main conversation. Record delivery so later typed messages do not repeat those call notes, including after a restart.
+
+### Changed
+
+- Send heartbeat and cron prompts as user turns again, while keeping call and ambient diary notes as system messages where supported.
+
+### Fixed
+
+- Prevent Anthropic request errors from misplaced system notes by combining consecutive notes and using user text when no preceding user turn is available.
+- Keep Anthropic prompt-cache breakpoints on stable content when ambient recall is combined with other notes or followed by an effort directive.
+- Preserve notes passed to follow-up messages instead of dropping them.
+
 ## 1.1.1 - 2026-09-21
 
 ### Added

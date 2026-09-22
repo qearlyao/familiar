@@ -125,6 +125,7 @@ export class ConversationRuntime {
 	private activeJob: QueuedJob | undefined;
 	private lastQueuedTriggerRecordId = 0;
 	private lastCompletedTriggerRecordId = 0;
+	private lastNotedCallRecordId = 0;
 	private queuedTriggerByJobId = new Map<string, number>();
 	private listeners = new Set<RuntimeRecordListener>();
 	private agentEventListeners = new Set<RuntimeAgentEventListener>();
@@ -180,6 +181,7 @@ export class ConversationRuntime {
 	private rebuildPendingJobs(): void {
 		this.lastQueuedTriggerRecordId = 0;
 		this.lastCompletedTriggerRecordId = 0;
+		this.lastNotedCallRecordId = 0;
 		this.queuedTriggerByJobId.clear();
 		const terminalJobIds = new Set<string>();
 		const queuedJobs: QueuedJob[] = [];
@@ -206,6 +208,9 @@ export class ConversationRuntime {
 		}
 		if (record.type === "assistant_retry") {
 			this.queuedTriggerByJobId.set(record.jobId, record.triggerRecordId);
+		}
+		if (record.type === "call_noted") {
+			this.lastNotedCallRecordId = Math.max(this.lastNotedCallRecordId, record.throughRecordId);
 		}
 		if (record.type === "job_completed") {
 			this.lastCompletedTriggerRecordId = Math.max(this.lastCompletedTriggerRecordId, record.triggerRecordId);
@@ -447,7 +452,31 @@ export class ConversationRuntime {
 	/** kept voice calls in the active job's slice, for the agent to hear ahead of what was typed */
 	notesForActiveJob(jobId: string): string[] {
 		if (this.activeJob?.jobId !== jobId) return [];
-		return this.triggerInboundSlice(this.activeJob).flatMap((record) => (record.call ? [record.text] : []));
+		return this.triggerInboundSlice(this.activeJob).flatMap((record) =>
+			record.call && record.recordId > this.lastNotedCallRecordId ? [record.text] : [],
+		);
+	}
+
+	/** kept calls nobody has read out yet, for a scheduled turn that has no slice of its own */
+	pendingCallNotes(): { texts: string[]; throughRecordId: number } | undefined {
+		const boundary = Math.max(this.lastCompletedTriggerRecordId, this.lastNotedCallRecordId);
+		const pending = this.records.filter(
+			(record): record is InboundChatRecord =>
+				record.type === "inbound" && record.recordId > boundary && !!record.call,
+		);
+		const last = pending.at(-1);
+		if (!last) return undefined;
+		return { texts: pending.map((record) => record.text), throughRecordId: last.recordId };
+	}
+
+	/** mark kept calls as heard, so the next typed message does not carry them a second time */
+	async noteCallsDelivered(throughRecordId: number): Promise<void> {
+		if (throughRecordId <= this.lastNotedCallRecordId) return;
+		await this.appendRecord({
+			type: "call_noted",
+			...buildRecordBase(this.channel, this.nextRecordId),
+			throughRecordId,
+		});
 	}
 
 	ambientQueryForActiveJob(jobId: string): string | undefined {

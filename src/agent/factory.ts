@@ -640,13 +640,13 @@ export async function createFamiliarAgent(
 				eventHandler,
 				(session) => {
 					if (!options.notes?.length) return session.agent.prompt(input, images);
-					// harness notes lead the turn in the transcript, in the harness's own voice; pi holds a
-					// note back to the far side of the message it precedes, so the model hears it after
 					const timestamp = Date.now();
-					return session.agent.prompt([
-						...options.notes.map((note) => noteForModel(session, note, timestamp)),
-						{ role: "user", content: [{ type: "text", text: input }, ...(images ?? [])], timestamp },
-					]);
+					const typed: AgentMessage = {
+						role: "user",
+						content: [{ type: "text", text: input }, ...(images ?? [])],
+						timestamp,
+					};
+					return session.agent.prompt(withNotes(session, typed, options.notes));
 				},
 				() => enterPromptOptions(sessionKey, options),
 			);
@@ -663,7 +663,7 @@ export async function createFamiliarAgent(
 				onEvent,
 				(session) => {
 					if (options.skipAmbient) skipAmbientMessages.add(message);
-					return session.agent.prompt(message);
+					return session.agent.prompt(withNotes(session, message, options.notes));
 				},
 				() => enterPromptOptions(sessionKey, options),
 			);
@@ -696,6 +696,14 @@ export async function createFamiliarAgent(
 			session.agent.followUp(message);
 		},
 	};
+
+	// harness notes lead the turn in the transcript, in the harness's own voice; pi holds a note back
+	// to the far side of the message it precedes, so the model hears it after.
+	function withNotes(session: FamiliarAgentSession, message: AgentMessage, notes?: string[]): AgentMessage[] {
+		if (!notes?.length) return [message];
+		const timestamp = message.timestamp ?? Date.now();
+		return [...notes.map((note) => noteForModel(session, note, timestamp)), message];
+	}
 
 	// a model without mid-conversation system messages would have pi drop a note; it hears the
 	// same text as plain user text instead.

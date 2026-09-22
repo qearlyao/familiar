@@ -53,6 +53,54 @@ describe("provider payload normalization", () => {
 		]);
 	});
 
+	it("moves a system note that no user turn precedes onto the user role", () => {
+		const heartbeat = { role: "system", content: "<heartbeat>\nnobody has spoken in a while\n</heartbeat>" };
+		const effort = { role: "system", content: [], output_config: { effort: "high" } };
+		const assistant = { role: "assistant", content: [{ type: "text", text: "hello" }] };
+		const typed = { role: "user", content: [{ type: "text", text: "typed prompt" }] };
+		const note = { role: "system", content: [{ type: "text", text: "a call was kept" }] };
+
+		const opened = __agentTest.normalizeProviderPayload(
+			{ messages: [typed, assistant, structuredClone(heartbeat), structuredClone(effort)] },
+			anthropicModel,
+		) as { messages: { role: string; content: unknown }[] };
+		assert.deepEqual(opened.messages[2], {
+			role: "user",
+			content: [{ type: "text", text: "<heartbeat>\nnobody has spoken in a while\n</heartbeat>" }],
+		});
+		assert.deepEqual(opened.messages[3], effort);
+
+		// a note behind a user turn is legal; a second one behind it is not, so it moves instead
+		const trailing = __agentTest.normalizeProviderPayload(
+			{ messages: [assistant, typed, structuredClone(note), structuredClone(note)] },
+			anthropicModel,
+		) as { messages: { role: string }[] };
+		assert.deepEqual(
+			trailing.messages.map((message) => message.role),
+			["assistant", "user", "system", "user"],
+		);
+
+		const other = { messages: [structuredClone(heartbeat)] };
+		assert.equal(__agentTest.normalizeProviderPayload(other, { ...anthropicModel, api: "openai-responses" }), other);
+		assert.equal(other.messages[0]?.role, "system");
+	});
+
+	it("moves Anthropic cache_control past a trailing effort directive", () => {
+		const typed = { role: "user", content: [{ type: "text", text: "what did you see?" }] };
+		const note = {
+			role: "system",
+			content: [{ type: "text", text: "<injected_memory>\n1. 2026-05-12: diary\n</injected_memory>", cache_control: { type: "ephemeral" } }],
+		};
+		const effort = { role: "system", content: [], output_config: { effort: "high" } };
+
+		const payload = __agentTest.normalizeProviderPayload(
+			{ messages: [typed, note, effort] },
+			anthropicModel,
+		) as { messages: { content: { cache_control?: unknown }[] }[] };
+		assert.deepEqual(payload.messages[0]?.content[0]?.cache_control, { type: "ephemeral" });
+		assert.equal("cache_control" in (payload.messages[1]?.content[0] ?? {}), false);
+	});
+
 	it("adds OpenRouter routing to Anthropic Messages and OpenAI Completions", () => {
 		const routing = { order: ["anthropic"], allowFallbacks: true };
 		const openRouterModel = { ...anthropicModel, baseUrl: "https://openrouter.ai/api/" };

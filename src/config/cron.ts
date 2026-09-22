@@ -38,7 +38,6 @@ export async function cronPayload(config: Config) {
 		jobs: config.cron.jobs,
 		state: state.cron,
 		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-		pollSeconds: config.cron.pollMs / 1000,
 	};
 }
 

@@ -381,12 +381,22 @@
   .mcp-add-grab { flex: none; display: block; width: 2.75rem; height: 0.3125rem; margin: 0 auto; border-radius: 62.4375rem; background: var(--edge); }
 }
 
-.cron-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; }
-.cron-toolbar > p, .cron-toolbar > strong { margin-right: auto; }
-.cron-job { padding: 1rem 0; border-top: 1px solid var(--rule); overflow-wrap: anywhere; }
-.cron-prompt { white-space: pre-wrap; margin: 0.6rem 0; }
-.cron-form { margin-top: 1rem; }
-.cron-form fieldset { border: 0; padding: 0; margin: 1rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; }
-.cron-form .pill-input { width: 100%; }
-.cron-form .settings-field:has(textarea) { grid-column: 1 / -1; }
-.cron-form textarea.pill-input { resize: vertical; border-radius: 0.75rem; height: auto; min-height: 6rem; }
+.cron-job { gap: 0.5rem; }
+.cron-when { font: var(--font-weight-normal) 1rem/1.3 var(--font-display); color: var(--ink); }
+/* the prompt reads as a note, three lines at most; edit shows the rest */
+.cron-prompt {
+  margin: 0; padding: 0.625rem 0.875rem; border-radius: 0.875rem; background: var(--well); font-size: 0.84375rem; line-height: 1.5; color: var(--strong);
+  white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+.cron-last { margin-right: auto; }
+@media (min-width: 701px) { .cron-sheet.is-sheet { width: min(30rem, calc(100vw - 2rem)); } }
+.cron-fields { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.cron-fields .seg { flex-wrap: wrap; }
+.cron-at { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.cron-at .pill-input:not(.is-number) { width: 12rem; }
+.cron-textarea { height: auto; min-height: 6rem; padding: 0.625rem 0.875rem; border-radius: 0.875rem; font: 0.875rem/1.5 var(--font-sans); resize: vertical; }
+@media (max-width: 700px) {
+  .cron-last { flex-basis: 100%; }
+  .cron-at .pill-input:not(.is-number) { width: 100%; }
+  .cron-at > .settings-field { flex: 1; }
+}

@@ -47,7 +47,7 @@ describe("cron management", () => {
     assert.deepEqual(reloaded.cron, config.cron);
     assert.deepEqual(reloaded.cron.jobs, [{ ...daily, enabled: false, prompt: "Changed" }]);
     const listed = await tool.execute("list", { action: "list" });
-    assert.doesNotMatch(JSON.stringify(listed.content), /"timezone"|"pollSeconds"/);
+    assert.doesNotMatch(JSON.stringify(listed.content), /"timezone"/);
     assert.throws(() => readCronJobs([daily, daily], "cron", "camel"), /Duplicate/);
     assert.throws(() => readCronJobs([{ id: "once", prompt: "p", frequency: "once" }], "cron", "camel"), /runAt is required/);
     assert.throws(() => readCronJobs([{ ...daily, minute: 60 }], "cron", "camel"), /minute/);

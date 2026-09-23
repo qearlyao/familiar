@@ -178,7 +178,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		});
 		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
 			const now = Date.now();
-			const text = buildCronInjectionText({ job, slot, now, state: schedulerState.cron[job.name], graceMs });
+			const text = buildCronInjectionText({ job, now, state: schedulerState.cron[job.name], graceMs });
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_started",
 				jobId: job.name,
@@ -222,7 +222,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 					});
 					await markCronSlotStarted(job, slot);
 					await runtime.noteRuntimeEvent("cron", job.name);
-					return userTextMessage(buildCronInjectionText({ job, slot, now, state: priorState, graceMs }), now);
+					return userTextMessage(buildCronInjectionText({ job, now, state: priorState, graceMs }), now);
 				},
 				onEvent,
 				{ skipAmbient: true },

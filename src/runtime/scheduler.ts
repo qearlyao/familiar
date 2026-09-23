@@ -176,13 +176,12 @@ function missedBy(job: CronJobConfig, state: CronJobState | undefined, now: Date
 export function buildCronInjectionText(options: {
 	job: CronJobConfig;
 	now: Date | number | string;
-	slot: string;
 	state?: CronJobState;
 	graceMs: number;
 }): string {
 	const nowDate = toDate(options.now);
 	const missed = missedBy(options.job, options.state, nowDate, options.graceMs);
-	return `<cron name="${options.job.name}" frequency="${options.job.frequency}" delivery="${options.job.deliveryMode}" local_time="${formatLocalTimestamp(nowDate)}" slot="${options.slot}"${missed ? ` missed="${missed}"` : ""}>\n${options.job.prompt}\n</cron>`;
+	return `<cron name="${options.job.name}" local_time="${formatLocalTimestamp(nowDate)}"${missed ? ` missed="${missed}"` : ""}>\n${options.job.prompt}\n</cron>`;
 }
 
 export function schedulerStatePath(dataDir: string): string {

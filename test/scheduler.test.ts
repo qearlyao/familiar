@@ -220,17 +220,16 @@ describe("scheduler helpers", () => {
 			time: "09:00",
 			prompt: "Review priorities.",
 		};
-		const slot = "daily-review:daily:2026-05-13T09:00";
-		const text = buildCronInjectionText({ job, slot, now: "2026-05-13T09:00:00", graceMs: 300_000 });
+		const text = buildCronInjectionText({ job, now: "2026-05-13T09:00:00", graceMs: 300_000 });
 
-		assert.match(text, /^<cron name="daily-review" frequency="daily" delivery="queue" /);
+		assert.match(text, /^<cron name="daily-review" local_time="[^"]+">\n/);
 		assert.match(text, /Review priorities/);
 		assert.doesNotMatch(text, /uid:/);
 		assert.doesNotMatch(text, /author/i);
 		assert.doesNotMatch(text, /missed/);
 
 		// fired hours past its slot because the box was down, not because the tick ran long
-		const late = { job, slot, now: "2026-05-13T13:20:00", graceMs: 300_000 };
+		const late = { job, now: "2026-05-13T13:20:00", graceMs: 300_000 };
 		assert.match(buildCronInjectionText({ ...late, state: { lastFiredAt: "2026-05-12T09:00:00Z" } }), / missed="4h 20m">/);
 		// within grace, and a job that has never run is catching up on its own creation
 		assert.doesNotMatch(buildCronInjectionText({ ...late, now: "2026-05-13T09:04:00", state: { lastFiredAt: "x" } }), /missed/);

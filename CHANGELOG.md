@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.2 - 2026-09-24
+
+### Changed
+
+- Identify recalled diary entries as the agent's own diaries in ambient memory context.
+
+### Fixed
+
+- Let the configured LCM summary model fall outside `models.allow` while still validating its provider settings.
+- Log unexpected Web API errors on the server and return a generic error to clients; keep validation errors specific.
+
 ## 1.2.1 - 2026-09-23
 
 ### Changed

@@ -138,7 +138,7 @@ function debugAmbientQuery(sessionKey: string, query: string): void {
 }
 
 function renderAmbientDiaryRecall(hits: Awaited<ReturnType<typeof retrieveAmbientDiary>>): string {
-	const lines = [INJECTED_MEMORY_OPEN];
+	const lines = [INJECTED_MEMORY_OPEN, "<!-- these surfaced from your own diaries -->"];
 	for (const [index, hit] of hits.entries()) {
 		const date = typeof hit.chunk.metadata?.date === "string" ? hit.chunk.metadata.date : undefined;
 		const heading = typeof hit.chunk.metadata?.heading === "string" ? hit.chunk.metadata.heading : undefined;

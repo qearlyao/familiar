@@ -33,10 +33,12 @@ function validateOneJob(value: unknown, stored: CronJob | undefined): CronJob {
 }
 
 export async function cronPayload(config: Config) {
-	const state = await loadSchedulerState(config.workspace.dataDir);
+	const { cron } = await loadSchedulerState(config.workspace.dataDir);
+	const live = new Set(config.cron.jobs.map((job) => job.name));
 	return {
 		jobs: config.cron.jobs,
-		state: state.cron,
+		// the scheduler prunes a deleted job's record on its next tick; until then it isn't anyone's
+		state: Object.fromEntries(Object.entries(cron).filter(([name]) => live.has(name))),
 		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 	};
 }

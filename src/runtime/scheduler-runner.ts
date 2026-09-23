@@ -2,6 +2,7 @@ import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
 import { userTextMessage } from "../agent/session-helpers.js";
+import { manageCron } from "../config/cron.js";
 import type { Config } from "../config/index.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
@@ -167,6 +168,12 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			lastFiredAt: new Date().toISOString(),
 		};
 		await saveScheduler();
+		// a once job is spent the moment it starts; parking it keeps the list from filling with dead jobs
+		if (job.frequency === "once") {
+			await manageCron(config, { action: "update", name: job.name, job: { enabled: false } }).catch((error) =>
+				console.error(`Cron job ${job.name} could not be parked`, error),
+			);
+		}
 	};
 
 	const runCronJob = async (job: CronJobConfig, slot: string, runtime: ConversationRuntime): Promise<void> => {

@@ -142,6 +142,8 @@ describe("cron management", () => {
         gone: { lastFiredSlot: "gone:daily:2026-09-20T10:00", lastFiredAt: "2026-09-20T10:00:02.000Z" },
       },
     });
+    // the list never shows a record whose job is gone, even before the scheduler's next tick
+    assert.deepEqual(Object.keys((await manageCron(config, { action: "list" })).state), ["daily"]);
 
     const runner = createSchedulerRunner({
       config,
@@ -228,6 +230,36 @@ describe("cron management", () => {
     const lastFiredSlot = dueCronSlot(job, undefined, now);
     assert.equal(dueCronSlot(job, { lastFiredSlot }, now), undefined);
     assert.ok(dueCronSlot({ ...job, runAt: "2026-09-02 10:00" }, { lastFiredSlot }, now));
+  });
+
+  it("parks a once job as soon as it fires", { timeout: 3000 }, async (t) => {
+    const dataDir = await createTempDataDir(t);
+    const runAt = new Date(Date.now() - 60_000).toISOString();
+    const once: CronJobConfig = { name: "once", enabled: true, frequency: "once", deliveryMode: "queue", prompt: "Now", runAt };
+    const config = await configWithDataDir(t, dataDir, { heartbeat: { enabled: false }, cron: { jobs: [once], pollMs: 5 } });
+    setConfigOverridesPath(dataDir);
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => { finish = resolve; });
+    const runner = createSchedulerRunner({
+      config,
+      familiarAgent: {},
+      resolveDefaultSession: async () => ({ runtime: { noteRuntimeEvent: async () => {} } }),
+      delivery: {},
+      agentWork: {
+        activeOwner: undefined,
+        promptScheduledMessage: async (_runtime: unknown, buildMessage: () => Promise<unknown>) => {
+          await buildMessage();
+          finish();
+          return CRON_SKIPPED;
+        },
+      },
+    } as unknown as SchedulerRunnerDeps);
+    t.after(() => runner.stop());
+    await runner.start();
+    await finished;
+    runner.stop();
+    assert.equal(config.cron.jobs[0]?.enabled, false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
   it("starts polling with no jobs and skips a job deleted while queued", { timeout: 3000 }, async (t) => {

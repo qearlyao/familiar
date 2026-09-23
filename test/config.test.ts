@@ -1335,7 +1335,7 @@ base_url = "https://summary.example.test"
 		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.base_url/);
 	});
 
-	it("requires memory lcm model to be allowlisted when models.allow is set", async (t) => {
+	it("allows a configured LCM model outside the chat model list", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
 			t,
@@ -1348,7 +1348,20 @@ model = "google/gemini-3-flash-preview"
 `),
 		);
 
-		await assert.rejects(() => loadConfig(workspacePath), /memory\.lcm\.model is not in models\.allow/);
+		const config = await loadConfig(workspacePath);
+		assert.equal(config.memory.lcm.model, "google/gemini-3-flash-preview");
+		assert.deepEqual(config.models.allow, ["anthropic/claude-sonnet-4-5"]);
+
+		const inheritedPath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[models]
+allow = ["google/gemini-3-flash-preview"]
+`),
+		);
+		const inherited = await loadConfig(inheritedPath);
+		assert.equal(inherited.memory.lcm.model, inherited.agent.model);
+		assert.ok(!inherited.models.allow.includes(inherited.agent.model));
 	});
 
 	it("skips memory lcm model validation when lcm is disabled", async (t) => {

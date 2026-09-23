@@ -602,9 +602,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	if (memoryLcmEnabled) {
 		const memoryLcmModel = readConfigString(memoryLcm.model, agentModel, "memory.lcm.model");
 		memoryLcmRef = parseProviderModelRef(memoryLcmModel, "memory.lcm.model");
-		if (modelAllow.length > 0 && !modelAllow.includes(memoryLcmRef.key)) {
-			throw new Error(`Config value memory.lcm.model is not in models.allow: ${memoryLcmRef.key}`);
-		}
 		memoryLcmBaseUrl = resolveProviderSetting(modelBaseUrls, memoryLcmRef.provider, memoryLcmRef.modelId);
 		memoryLcmApiKeyEnv = resolveProviderSetting(modelApiKeyEnvs, memoryLcmRef.provider, memoryLcmRef.modelId);
 		memoryLcmFreshTailMaxTokens = readOptionalInteger(

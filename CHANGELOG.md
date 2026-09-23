@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.1 - 2026-09-23
+
+### Changed
+
+- Identify cron jobs by name in configuration, the built-in `cron` tool, and the WebUI. Cron fires now appear as labeled events in WebUI chat.
+- Disable one-time cron jobs after they fire and remove deleted jobs from the run history shown in settings.
+
+### Fixed
+
+- Keep identical results from parallel tool calls distinct in conversation memory, so neither result is lost.
+
+### Breaking
+
+- Rename `id` to `name` in existing `[[cron.jobs]]` entries and saved cron overrides. For the `cron` tool, put `name` inside `job` when creating a job and beside `action` when updating or deleting one.
+- Cron run-state slot keys have changed. An enabled recurring job may fire once more after upgrading.
+
 ## 1.2.0 - 2026-09-23
 
 ### Added

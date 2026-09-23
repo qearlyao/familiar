@@ -73,11 +73,20 @@ export function createAgentMessageFingerprint(message: AgentMessage, _index: num
 }
 
 export function createRawContextItems(messages: readonly AgentMessage[]): LcmContextRawItem[] {
-	return messages.map((message, index) => ({
-		id: createAgentMessageFingerprint(message, index),
-		message,
-		tokens: estimateAgentMessageTokens(message),
-	}));
+	// parallel tool calls failing the same way in the same millisecond fingerprint alike; a repeat
+	// takes its occurrence as a suffix so it isn't merged away, and first occurrences keep the ids
+	// summaries already recorded
+	const seen = new Map<string, number>();
+	return messages.map((message, index) => {
+		const fingerprint = createAgentMessageFingerprint(message, index);
+		const repeat = seen.get(fingerprint) ?? 0;
+		seen.set(fingerprint, repeat + 1);
+		return {
+			id: repeat ? `${fingerprint}:${repeat}` : fingerprint,
+			message,
+			tokens: estimateAgentMessageTokens(message),
+		};
+	});
 }
 
 export function renderLcmRecordPartsForSummary(parts: readonly LcmRecordPart[]): string {

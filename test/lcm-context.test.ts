@@ -157,6 +157,22 @@ describe("LCM context helpers", () => {
 		);
 	});
 
+	it("keeps twin tool results from parallel calls apart", () => {
+		const twin = (toolCallId: string) =>
+			({
+				role: "toolResult",
+				toolCallId,
+				toolName: "cron",
+				content: [{ type: "text", text: "Cron job not found: nope" }],
+				isError: true,
+				timestamp: 7,
+			}) as AgentMessage;
+		const ids = createRawContextItems([twin("a"), twin("b")]).map((item) => item.id);
+
+		assert.equal(new Set(ids).size, 2);
+		assert.equal(ids[0], createAgentMessageFingerprint(twin("a"), 0));
+	});
+
 	it("prompt-aware candidate selection preserves tool_call and tool_result pair integrity", () => {
 		const toolCall = record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]");
 		const toolResult = record(2, "tool", "[tool_result: read -> unrelated weather output]");

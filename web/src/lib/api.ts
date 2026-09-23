@@ -787,7 +787,7 @@ export const setMcpDeferred = (name: string, deferred: boolean, channelKey?: str
 export const setMcpEnabled = (name: string, enabled: boolean, channelKey?: string) => mcpRequest("/enabled", "POST", { name, enabled }, channelKey);
 export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequest("/reconnect", "POST", { name }, channelKey);
 
-export type CronJob = import("../../../src/runtime/scheduler.js").CronJobConfig;
+export type CronJob = import("../../../src/config/types.js").CronJobConfig;
 export type CronPayload = Awaited<ReturnType<typeof import("../../../src/config/cron.js").cronPayload>>;
 export type CronChange =
   | { action: "create"; job: CronJob }

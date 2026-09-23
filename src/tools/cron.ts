@@ -65,6 +65,7 @@ export function createCronTool(config: Config): AgentTool<typeof schema> {
 			const snapshot = await manageCron(config, input);
 			// echo the stored job back so the model sees the defaults it left out; the rest is an ack
 			const name = input.name ?? input.job?.name;
+			// timezone left out: user messages already carry it
 			const result =
 				input.action === "list"
 					? { jobs: snapshot.jobs, state: snapshot.state }

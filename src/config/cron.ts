@@ -4,9 +4,7 @@ import { isRecord } from "../util/guards.js";
 import { setConfigOverride } from "./overrides.js";
 import { assertKnownKeys } from "./readers.js";
 import { readCronJob } from "./sections.js";
-import type { Config } from "./types.js";
-
-type CronJob = Config["cron"]["jobs"][number];
+import type { Config, CronJobConfig } from "./types.js";
 
 /** a wall, not a tuning knob: past this many, something has gone wrong rather than gotten busy */
 const MAX_CRON_JOBS = 20;
@@ -14,7 +12,7 @@ const MAX_CRON_JOBS = 20;
 /** update patches the stored job, so a caller can flip one field without resending the rest.
     A frequency change replaces the schedule outright: the old frequency's fields are invalid
     or dead under the new one. */
-function mergeOntoStored(stored: CronJob, patch: Record<string, unknown>): Record<string, unknown> {
+function mergeOntoStored(stored: CronJobConfig, patch: Record<string, unknown>): Record<string, unknown> {
 	const base =
 		patch.frequency === undefined || patch.frequency === stored.frequency
 			? stored
@@ -22,7 +20,7 @@ function mergeOntoStored(stored: CronJob, patch: Record<string, unknown>): Recor
 	return { ...base, ...patch };
 }
 
-function validateOneJob(value: unknown, stored: CronJob | undefined): CronJob {
+function validateOneJob(value: unknown, stored: CronJobConfig | undefined): CronJobConfig {
 	const job = readCronJob(value, "job", "camel");
 	// a once job that is already due would fire the moment it is saved — unless its time is
 	// untouched, in which case whatever was going to happen already has
@@ -56,7 +54,7 @@ export async function manageCron(config: Config, input: unknown) {
 		throw new Error("action must be list, create, update, or delete");
 	}
 	let name: string;
-	let job: CronJob | undefined;
+	let job: CronJobConfig | undefined;
 	if (action === "create") {
 		const draft = input.job;
 		if (!isRecord(draft)) throw new Error("create needs a job");

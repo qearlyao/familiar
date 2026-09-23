@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { CronJobConfig } from "../src/config/types.js";
 import {
 	buildCronInjectionText,
 	buildHeartbeatInjectionText,
@@ -8,7 +9,6 @@ import {
 	formatIdleDuration,
 	formatLocalTimestamp,
 	isHeartbeatDue,
-	type CronJobConfig,
 } from "../src/runtime/scheduler.js";
 
 describe("scheduler helpers", () => {
@@ -246,11 +246,11 @@ describe("scheduler helpers", () => {
 			prompt: "Review priorities.",
 		};
 		const slot = dueCronSlot(daily, undefined, new Date(2026, 4, 13, 9, 5));
-		assert.equal(slot, "daily-review:daily:2026-05-13T09:00");
+		assert.equal(slot, "daily:2026-05-13T09:00");
 		assert.equal(dueCronSlot(daily, { lastFiredSlot: slot }, new Date(2026, 4, 13, 9, 10)), undefined);
 		assert.equal(
 			dueCronSlot(daily, { lastFiredSlot: slot }, new Date(2026, 4, 14, 9, 0)),
-			"daily-review:daily:2026-05-14T09:00",
+			"daily:2026-05-14T09:00",
 		);
 	});
 
@@ -283,7 +283,7 @@ describe("scheduler helpers", () => {
 				undefined,
 				new Date(2026, 4, 13, 10, 14),
 			),
-			"hourly:hourly:2026-05-13T09:15",
+			"hourly:2026-05-13T09:15",
 		);
 		assert.equal(
 			dueCronSlot(
@@ -299,7 +299,7 @@ describe("scheduler helpers", () => {
 				undefined,
 				new Date(2026, 4, 13, 9, 30),
 			),
-			"weekly:weekly:2026-05-13T09:30",
+			"weekly:2026-05-13T09:30",
 		);
 		assert.equal(
 			dueCronSlot(
@@ -315,7 +315,7 @@ describe("scheduler helpers", () => {
 				undefined,
 				new Date(2026, 3, 30, 20, 0),
 			),
-			"monthly:monthly:2026-04-30T20:00",
+			"monthly:2026-04-30T20:00",
 		);
 	});
 });

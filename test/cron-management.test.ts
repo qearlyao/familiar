@@ -11,7 +11,8 @@ import { readCronJobs } from "../src/config/sections.js";
 import { setConfigOverridesPath } from "../src/config/overrides.js";
 import { applyConfigOverridesToConfig } from "../src/config/registry.js";
 import { createCronTool } from "../src/tools/cron.js";
-import { dueCronSlot, loadSchedulerState, saveSchedulerState, type CronJobConfig } from "../src/runtime/scheduler.js";
+import type { CronJobConfig } from "../src/config/types.js";
+import { dueCronSlot, loadSchedulerState, saveSchedulerState } from "../src/runtime/scheduler.js";
 import { createSchedulerRunner, type SchedulerRunnerDeps } from "../src/runtime/scheduler-runner.js";
 import { CRON_SKIPPED } from "../src/runtime/turn.js";
 import { configWithDataDir, createTempDataDir, FakeResponse, jsonRequest } from "./helpers.js";
@@ -138,8 +139,8 @@ describe("cron management", () => {
     await manageCron(config, req("create", { ...daily, enabled: false }));
     await saveSchedulerState(dataDir, {
       cron: {
-        daily: { lastFiredSlot: "daily:daily:2026-09-21T09:00", lastFiredAt: "2026-09-21T13:04:11.000Z" },
-        gone: { lastFiredSlot: "gone:daily:2026-09-20T10:00", lastFiredAt: "2026-09-20T10:00:02.000Z" },
+        daily: { lastFiredSlot: "daily:2026-09-21T09:00", lastFiredAt: "2026-09-21T13:04:11.000Z" },
+        gone: { lastFiredSlot: "daily:2026-09-20T10:00", lastFiredAt: "2026-09-20T10:00:02.000Z" },
       },
     });
     // the list never shows a record whose job is gone, even before the scheduler's next tick
@@ -179,7 +180,7 @@ describe("cron management", () => {
     assert.equal(config.cron.jobs.length, 20);
   });
 
-  it("returns concise mutations and omits timezone from the agent list", async (t) => {
+  it("returns concise mutations", async (t) => {
     const dataDir = await createTempDataDir(t);
     const config = await configWithDataDir(t, dataDir);
     setConfigOverridesPath(dataDir);
@@ -195,9 +196,6 @@ describe("cron management", () => {
     assert.deepEqual(await call(req("update", updated)), updated);
     assert.deepEqual(await call(req("update", { ...updated, enabled: true })), { ...updated, enabled: true });
     assert.deepEqual(await call({ action: "delete", name: daily.name }), { deleted: daily.name });
-    const snapshot = await manageCron(config, { action: "list" });
-    assert.equal(typeof snapshot.timezone, "string");
-    assert.deepEqual(await call({ action: "list" }), { jobs: snapshot.jobs, state: snapshot.state });
   });
 
   it("exposes CRUD behind web authentication and returns validation errors", async (t) => {

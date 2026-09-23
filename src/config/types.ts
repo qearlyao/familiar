@@ -8,6 +8,18 @@ export type DiscordDispatchMode = "steer" | "queue" | "collect";
 export type DiscordChannelTrigger = "mention" | "always";
 export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
+export interface CronJobConfig {
+	name: string;
+	enabled: boolean;
+	frequency: CronFrequency;
+	deliveryMode: CronDeliveryMode;
+	prompt: string;
+	runAt?: string;
+	time?: string;
+	minute?: number;
+	weekday?: number;
+	day?: number;
+}
 export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 /** what a finished voice call leaves in the chat, or "ask" to decide each time */
 export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
@@ -148,18 +160,7 @@ export interface Config {
 	};
 	cron: {
 		pollMs: number;
-		jobs: Array<{
-			name: string;
-			enabled: boolean;
-			frequency: CronFrequency;
-			deliveryMode: CronDeliveryMode;
-			prompt: string;
-			runAt?: string;
-			time?: string;
-			minute?: number;
-			weekday?: number;
-			day?: number;
-		}>;
+		jobs: CronJobConfig[];
 	};
 	models: {
 		allow: string[];

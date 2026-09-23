@@ -4,16 +4,17 @@ import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from ".
 import { userTextMessage } from "../agent/session-helpers.js";
 import { manageCron } from "../config/cron.js";
 import type { Config } from "../config/index.js";
+import type { CronJobConfig } from "../config/types.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 import {
 	appendSchedulerLog,
 	buildCronInjectionText,
 	buildHeartbeatInjectionText,
-	type CronJobConfig,
 	dueCronSlot,
 	formatIdleDuration,
 	loadSchedulerState,
+	type SchedulerLogEvent,
 	type SchedulerState,
 	saveSchedulerState,
 } from "./scheduler.js";
@@ -177,33 +178,26 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 	};
 
 	const runCronJob = async (job: CronJobConfig, slot: string, runtime: ConversationRuntime): Promise<void> => {
-		await appendSchedulerLog(config.workspace.dataDir, {
-			type: "cron_due",
-			jobId: job.name,
-			slot,
-			deliveryMode: job.deliveryMode,
-		});
-		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
+		const log = (type: SchedulerLogEvent["type"], detail?: string) =>
+			appendSchedulerLog(config.workspace.dataDir, {
+				type,
+				jobId: job.name,
+				slot,
+				deliveryMode: job.deliveryMode,
+				detail,
+			});
+		const begin = async (): Promise<AgentMessage> => {
 			const now = Date.now();
 			const text = buildCronInjectionText({ job, now, state: schedulerState.cron[job.name], graceMs });
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_started",
-				jobId: job.name,
-				slot,
-				deliveryMode: job.deliveryMode,
-			});
+			await log("cron_started");
 			await markCronSlotStarted(job, slot);
 			await runtime.noteRuntimeEvent("cron", job.name);
-			await familiarAgent.followUpMessage(runtime.channelKey, userTextMessage(text, now), {
-				skipAmbient: true,
-			});
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_completed",
-				jobId: job.name,
-				slot,
-				deliveryMode: job.deliveryMode,
-				detail: "queued as follow-up",
-			});
+			return userTextMessage(text, now);
+		};
+		await log("cron_due");
+		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
+			await familiarAgent.followUpMessage(runtime.channelKey, await begin(), { skipAmbient: true });
+			await log("cron_completed", "queued as follow-up");
 			return;
 		}
 
@@ -219,30 +213,14 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						dueCronSlot(job, schedulerState.cron[job.name], Date.now()) !== slot
 					)
 						return CRON_SKIPPED;
-					const now = Date.now();
-					const priorState = schedulerState.cron[job.name];
-					await appendSchedulerLog(config.workspace.dataDir, {
-						type: "cron_started",
-						jobId: job.name,
-						slot,
-						deliveryMode: job.deliveryMode,
-					});
-					await markCronSlotStarted(job, slot);
-					await runtime.noteRuntimeEvent("cron", job.name);
-					return userTextMessage(buildCronInjectionText({ job, now, state: priorState, graceMs }), now);
+					return begin();
 				},
 				onEvent,
 				{ skipAmbient: true },
 			),
 		);
 		if (!turn) {
-			await appendSchedulerLog(config.workspace.dataDir, {
-				type: "cron_skipped",
-				jobId: job.name,
-				slot,
-				deliveryMode: job.deliveryMode,
-				detail: "job changed, disabled, removed, or slot already started before prompt",
-			});
+			await log("cron_skipped", "job changed, disabled, removed, or slot already started before prompt");
 			return;
 		}
 		const { reply, parsedReply, modelError, summary, assistantMessageId } = turn;
@@ -257,12 +235,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			silent: parsedReply.silent,
 			jobId: jobKey,
 		});
-		await appendSchedulerLog(config.workspace.dataDir, {
-			type: "cron_completed",
-			jobId: job.name,
-			slot,
-			deliveryMode: job.deliveryMode,
-		});
+		await log("cron_completed");
 	};
 
 	// a deleted job's run record would otherwise outlive it forever, and a job recreated under the

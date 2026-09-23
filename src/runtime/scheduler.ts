@@ -1,26 +1,11 @@
 import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import type { CronDeliveryMode, CronJobConfig } from "../config/types.js";
 import { readFileOrNull } from "../util/fs.js";
 import { formatLocalTimestamp, toDate } from "../util/time.js";
 
 export { formatLocalTimestamp } from "../util/time.js";
-
-export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
-export type CronDeliveryMode = "queue" | "follow_up";
-
-export interface CronJobConfig {
-	name: string;
-	enabled: boolean;
-	frequency: CronFrequency;
-	deliveryMode: CronDeliveryMode;
-	prompt: string;
-	runAt?: string;
-	time?: string;
-	minute?: number;
-	weekday?: number;
-	day?: number;
-}
 
 export interface CronJobState {
 	lastFiredSlot?: string;
@@ -117,7 +102,7 @@ function scheduledDate(year: number, month: number, day: number, time: { hour: n
 }
 
 function cronSlotKey(job: CronJobConfig, date: Date): string {
-	return `${job.name}:${job.frequency}:${localDateKey(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+	return `${job.frequency}:${localDateKey(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 function latestScheduledDate(job: CronJobConfig, now: Date): Date | undefined {

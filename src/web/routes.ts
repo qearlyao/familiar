@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Config } from "../config/index.js";
 import type { WebAuth } from "./auth.js";
 import { serveBookAsset } from "./book-routes.js";
-import { errorMessage } from "./errors.js";
 import { HttpError, sendJson } from "./http.js";
 import { serveAttachment } from "./static.js";
 
@@ -44,9 +43,12 @@ export function createWebRouteRegistry(
 			sendJson(response, 404, { error: "not found" });
 			return true;
 		} catch (error) {
-			const status = error instanceof HttpError ? error.status : 500;
-			const message = errorMessage(error);
-			sendJson(response, status, { error: message });
+			if (error instanceof HttpError) {
+				sendJson(response, error.status, { error: error.message });
+			} else {
+				console.error(`Web API ${request.method} ${url.pathname} failed`, error);
+				sendJson(response, 500, { error: "Internal server error" });
+			}
 			return true;
 		}
 	};

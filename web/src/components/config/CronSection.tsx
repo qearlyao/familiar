@@ -36,8 +36,8 @@ function schedule(job: CronJob): string {
 
 /** a new frequency starts from its own schedule fields; the old ones mean nothing under it */
 function withFrequency(job: CronJob, frequency: Frequency): CronJob {
-  const { id, prompt, enabled, deliveryMode } = job;
-  const base = { id, prompt, enabled, deliveryMode, frequency };
+  const { name, prompt, enabled, deliveryMode } = job;
+  const base = { name, prompt, enabled, deliveryMode, frequency };
   switch (frequency) {
     case "once": return { ...base, runAt: "" };
     case "hourly": return { ...base, minute: 0 };
@@ -47,7 +47,7 @@ function withFrequency(job: CronJob, frequency: Frequency): CronJob {
   }
 }
 
-const blankJob = (): CronJob => ({ id: "", enabled: true, frequency: "daily", deliveryMode: "queue", prompt: "", time: "09:00" });
+const blankJob = (): CronJob => ({ name: "", enabled: true, frequency: "daily", deliveryMode: "queue", prompt: "", time: "09:00" });
 
 function JobRow({ job, lastFiredAt, busy, onChange, onEdit }: {
   job: CronJob;
@@ -61,9 +61,9 @@ function JobRow({ job, lastFiredAt, busy, onChange, onEdit }: {
     <div className={cn("mcp-server cron-job", !job.enabled && "is-off")}>
       <div className="mcp-what">
         <span className="mcp-name">
-          <OnOffToggle enabled={job.enabled} disabled={busy} ariaPrefix={`keep ${job.id} on`} onChange={(enabled) => onChange({ action: "update", id: job.id, job: { enabled } })} />
+          <OnOffToggle enabled={job.enabled} disabled={busy} ariaPrefix={`keep ${job.name} on`} onChange={(enabled) => onChange({ action: "update", name: job.name, job: { enabled } })} />
           <span className="cron-when">{schedule(job)}</span>
-          <span className="mcp-chip">{job.id}</span>
+          <span className="mcp-chip">{job.name}</span>
         </span>
       </div>
       <p className="cron-prompt">{job.prompt}</p>
@@ -77,7 +77,7 @@ function JobRow({ job, lastFiredAt, busy, onChange, onEdit }: {
           type="button"
           className="pill-button is-quiet"
           disabled={busy}
-          onClick={() => window.confirm(`remove “${job.id}”?`) && onChange({ action: "delete", id: job.id })}
+          onClick={() => window.confirm(`remove “${job.name}”?`) && onChange({ action: "delete", name: job.name })}
         >
           remove
         </button>
@@ -96,16 +96,21 @@ function JobForm({ initial, isNew, busy, error, onSave }: {
   const [job, setJob] = useState(initial);
   const edit = (patch: Partial<CronJob>) => setJob((current) => ({ ...current, ...patch }));
   const timed = job.frequency === "daily" || job.frequency === "weekly" || job.frequency === "monthly";
+  // split so safari shows the time as its own field; its datetime picker only picks the day
+  const [runDate = "", runClock = ""] = (job.runAt ?? "").split(/[T ]/);
+  // ponytail: the agent may write seconds and an offset; the wall clock is kept and a save reads it as
+  // server time, which only shifts the job if that offset isn't the server's
+  const runTime = runClock.slice(0, 5);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSave({ ...job, id: job.id.trim() });
+    onSave({ ...job, name: job.name.trim() });
   };
 
   return (
     <form className="mcp-form" onSubmit={submit}>
       <div className="mcp-form-head">
         <Dialog.Title asChild>
-          <h4>{isNew ? "a new job" : `edit ${initial.id}`}</h4>
+          <h4>{isNew ? "a new job" : `edit ${initial.name}`}</h4>
         </Dialog.Title>
         <p>it arrives in your default conversation as a message from you.</p>
       </div>
@@ -130,9 +135,14 @@ function JobForm({ initial, isNew, busy, error, onSave }: {
         )}
         <div className="cron-at">
           {job.frequency === "once" && (
-            <Field label="at">
-              <input className="pill-input" type="datetime-local" required value={job.runAt ?? ""} onChange={(e) => edit({ runAt: e.target.value })} />
-            </Field>
+            <>
+              <Field label="on">
+                <input className="pill-input" type="date" required value={runDate} onChange={(e) => edit({ runAt: `${e.target.value}T${runTime}` })} />
+              </Field>
+              <Field label="at">
+                <input className="pill-input" type="time" required value={runTime} onChange={(e) => edit({ runAt: `${runDate}T${e.target.value}` })} />
+              </Field>
+            </>
           )}
           {job.frequency === "hourly" && (
             <Field label="at minute">
@@ -164,8 +174,8 @@ function JobForm({ initial, isNew, busy, error, onSave }: {
               placeholder="morning-hello"
               spellCheck={false}
               autoCapitalize="off"
-              value={job.id}
-              onChange={(e) => edit({ id: e.target.value })}
+              value={job.name}
+              onChange={(e) => edit({ name: e.target.value })}
             />
           </Field>
         )}
@@ -181,7 +191,7 @@ function JobForm({ initial, isNew, busy, error, onSave }: {
 export function CronSection() {
   const [data, setData] = useState<CronPayload>();
   const [draft, setDraft] = useState<CronJob>();
-  const isNew = !draft?.id;
+  const isNew = !draft?.name;
   const { error, isLoading, isMutating, run } = useRequestState();
   const busy = isLoading || isMutating;
   useEffect(() => {
@@ -189,8 +199,8 @@ export function CronSection() {
     return () => window.clearTimeout(id);
   }, [run]);
   const change = (input: CronChange) => run(() => updateCron(input), { apply: setData });
-  const save = async ({ id, ...job }: CronJob) => {
-    if (await change({ action: isNew ? "create" : "update", id, job })) setDraft(undefined);
+  const save = async (job: CronJob) => {
+    if (await change(isNew ? { action: "create", job } : { action: "update", name: job.name, job })) setDraft(undefined);
   };
 
   const on = data?.jobs.filter((job) => job.enabled).length ?? 0;
@@ -213,7 +223,7 @@ export function CronSection() {
           }
         >
           <i className="mcp-add-grab" />
-          {draft && <JobForm key={draft.id || "new"} initial={draft} isNew={isNew} busy={busy} error={error} onSave={(job) => void save(job)} />}
+          {draft && <JobForm key={draft.name || "new"} initial={draft} isNew={isNew} busy={busy} error={error} onSave={(job) => void save(job)} />}
         </Sheet>
       }
     >
@@ -221,9 +231,9 @@ export function CronSection() {
       <div className="settings-rows">
         {data?.jobs.map((job) => (
           <JobRow
-            key={job.id}
+            key={job.name}
             job={job}
-            lastFiredAt={data.state[job.id]?.lastFiredAt}
+            lastFiredAt={data.state[job.name]?.lastFiredAt}
             busy={busy}
             onChange={(input) => void change(input)}
             onEdit={() => setDraft(job)}

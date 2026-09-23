@@ -444,7 +444,12 @@ export function webMessageFromRecord(
 			role: "system",
 			who: "system",
 			text: record.type === "runtime" ? record.detail || record.event : record.message,
-			notice: record.type === "error" ? "error" : record.event === "heartbeat" ? "heartbeat" : undefined,
+			notice:
+				record.type === "error"
+					? "error"
+					: record.event === "heartbeat" || record.event === "cron"
+						? record.event
+						: undefined,
 			ts: toUnixMs(record.ts),
 		};
 	}

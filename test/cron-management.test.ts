@@ -16,10 +16,11 @@ import { createSchedulerRunner, type SchedulerRunnerDeps } from "../src/runtime/
 import { CRON_SKIPPED } from "../src/runtime/turn.js";
 import { configWithDataDir, createTempDataDir, FakeResponse, jsonRequest } from "./helpers.js";
 
-/** the request shape: id at the top level, the job's fields beside it */
-const req = <T extends { id: string }>(action: "create" | "update", { id, ...job }: T) => ({ action, id, job });
+/** the request shape: create carries the name inside job; update names its target beside job */
+const req = <T extends { name: string }>(action: "create" | "update", job: T) =>
+  action === "create" ? { action, job } : { action, name: job.name, job };
 
-const daily: CronJobConfig = { id: "daily", enabled: true, frequency: "daily", deliveryMode: "queue", prompt: "Check in", time: "09:00" };
+const daily: CronJobConfig = { name: "daily", enabled: true, frequency: "daily", deliveryMode: "queue", prompt: "Check in", time: "09:00" };
 
 describe("cron management", () => {
   it("shares tool CRUD, validation, concurrent writes and persisted overrides", async (t) => {
@@ -29,18 +30,18 @@ describe("cron management", () => {
     const tool = createCronTool(config);
     await tool.execute("create", req("create", daily));
     await Promise.all([
-      manageCron(config, req("create", { ...daily, id: "second" })),
-      manageCron(config, req("create", { ...daily, id: "third" })),
+      manageCron(config, req("create", { ...daily, name: "second" })),
+      manageCron(config, req("create", { ...daily, name: "third" })),
     ]);
-    assert.deepEqual(config.cron.jobs.map((job) => job.id), ["daily", "second", "third"]);
+    assert.deepEqual(config.cron.jobs.map((job) => job.name), ["daily", "second", "third"]);
     await assert.rejects(manageCron(config, req("create", daily)), /already exists/);
     await assert.rejects(manageCron(config, req("update", { ...daily, time: "25:00" })), /HH:MM/);
-    await assert.rejects(manageCron(config, req("update", { ...daily, id: "missing" })), /not found/);
-    await assert.rejects(manageCron(config, { action: "delete" }), /id must be a string/);
-    await assert.rejects(manageCron(config, { action: "park", id: "daily" }), /action must be/);
+    await assert.rejects(manageCron(config, req("update", { ...daily, name: "missing" })), /not found/);
+    await assert.rejects(manageCron(config, { action: "delete" }), /delete needs name/);
+    await assert.rejects(manageCron(config, { action: "park", name: "daily" }), /action must be/);
     await manageCron(config, req("update", { ...daily, enabled: false, prompt: "Changed" }));
-    await manageCron(config, { action: "delete", id: "second" });
-    await manageCron(config, { action: "delete", id: "third" });
+    await manageCron(config, { action: "delete", name: "second" });
+    await manageCron(config, { action: "delete", name: "third" });
     const reloaded = await configWithDataDir(t, dataDir);
     setConfigOverridesPath(dataDir);
     applyConfigOverridesToConfig(reloaded);
@@ -49,14 +50,14 @@ describe("cron management", () => {
     const listed = await tool.execute("list", { action: "list" });
     assert.doesNotMatch(JSON.stringify(listed.content), /"timezone"/);
     assert.throws(() => readCronJobs([daily, daily], "cron", "camel"), /Duplicate/);
-    assert.throws(() => readCronJobs([{ id: "once", prompt: "p", frequency: "once" }], "cron", "camel"), /runAt is required/);
+    assert.throws(() => readCronJobs([{ name: "once", prompt: "p", frequency: "once" }], "cron", "camel"), /runAt is required/);
     assert.throws(() => readCronJobs([{ ...daily, minute: 60 }], "cron", "camel"), /minute/);
     // Date.parse rolls impossible days over rather than rejecting them, so the day must be checked
     for (const runAt of ["2026-99-01 09:00", "2026-02-30 09:00", "2026-04-31 09:00", "2026-01-01 25:00", "tomorrow", "1"]) {
-      assert.throws(() => readCronJobs([{ id: "once", prompt: "Remind me", frequency: "once", runAt }], "cron", "camel"), /runAt/);
+      assert.throws(() => readCronJobs([{ name: "once", prompt: "Remind me", frequency: "once", runAt }], "cron", "camel"), /runAt/);
     }
-    assert.equal(readCronJobs([{ id: "once", prompt: "Remind me", frequency: "once", runAt: "2026-09-23T09:00:00+08:00" }], "cron", "camel").length, 1);
-    await assert.rejects(manageCron(config, req("create", { id: "past", prompt: "Late", frequency: "once", runAt: "2020-01-01 09:00" })), /in the past/);
+    assert.equal(readCronJobs([{ name: "once", prompt: "Remind me", frequency: "once", runAt: "2026-09-23T09:00:00+08:00" }], "cron", "camel").length, 1);
+    await assert.rejects(manageCron(config, req("create", { name: "past", prompt: "Late", frequency: "once", runAt: "2020-01-01 09:00" })), /in the past/);
   });
 
   it("patches a stored job on update and resets the schedule when frequency changes", async (t) => {
@@ -66,21 +67,26 @@ describe("cron management", () => {
     const stored = async () => (await manageCron(config, { action: "list" })).jobs[0];
     await manageCron(config, req("create", daily));
 
-    // id plus the one field that changes
-    await manageCron(config, req("update", { id: daily.id, enabled: false }));
+    // name plus the one field that changes
+    await manageCron(config, { action: "update", name: daily.name, job: { enabled: false } });
     assert.deepEqual(await stored(), { ...daily, enabled: false });
-    await manageCron(config, req("update", { id: daily.id, prompt: "Changed" }));
+    await manageCron(config, req("update", { name: daily.name, prompt: "Changed" }));
     assert.deepEqual(await stored(), { ...daily, enabled: false, prompt: "Changed" });
 
     // same frequency keeps the schedule; changing it drops fields the new frequency cannot use
-    await manageCron(config, req("update", { id: daily.id, time: "07:30" }));
+    await manageCron(config, req("update", { name: daily.name, time: "07:30" }));
     assert.equal((await stored()).time, "07:30");
-    await manageCron(config, req("update", { id: daily.id, frequency: "hourly", minute: 15 }));
-    assert.deepEqual(await stored(), { id: daily.id, enabled: false, prompt: "Changed", deliveryMode: "queue", frequency: "hourly", minute: 15 });
+    await manageCron(config, req("update", { name: daily.name, frequency: "hourly", minute: 15 }));
+    assert.deepEqual(await stored(), { name: daily.name, enabled: false, prompt: "Changed", deliveryMode: "queue", frequency: "hourly", minute: 15 });
 
     // a create still has to be whole, and says which field is missing rather than blaming run_at
-    await assert.rejects(manageCron(config, req("create", { id: "partial", prompt: "No frequency" })), /needs job\.frequency and job\.prompt/);
-    await assert.rejects(manageCron(config, req("update", { id: "missing", enabled: false })), /not found/);
+    await assert.rejects(manageCron(config, req("create", { name: "partial", prompt: "No frequency" })), /needs job\.name, job\.frequency, and job\.prompt/);
+    await assert.rejects(manageCron(config, req("update", { name: "missing", enabled: false })), /not found/);
+
+    // the name lives in job on create, beside it on update, and never changes: run history is keyed by it
+    await assert.rejects(manageCron(config, { action: "create", name: "top", job: { ...daily, name: "top" } }), /inside job/);
+    await assert.rejects(manageCron(config, req("create", daily)), /already exists: daily; use update/);
+    await assert.rejects(manageCron(config, { action: "update", name: daily.name, job: { name: "renamed" } }), /can't rename/);
   });
 
   it("rejects schedule fields the frequency cannot use, naming them as the caller typed them", async (t) => {
@@ -99,7 +105,7 @@ describe("cron management", () => {
     for (const [fields, message] of cases) {
       // compared whole: the agent sent one camelCase job, so naming cron.jobs[0].run_at would point at a
       // field it never typed
-      const thrown = await manageCron(config, req("create", { id: "j", prompt: "p", ...fields })).then(
+      const thrown = await manageCron(config, req("create", { name: "j", prompt: "p", ...fields })).then(
         () => undefined,
         (error: Error) => error.message,
       );
@@ -112,17 +118,17 @@ describe("cron management", () => {
     const dataDir = await createTempDataDir(t);
     const config = await configWithDataDir(t, dataDir);
     setConfigOverridesPath(dataDir);
-    const future = { id: "once", prompt: "Remind me", frequency: "once", runAt: "2099-01-01 09:00" };
+    const future = { name: "once", prompt: "Remind me", frequency: "once", runAt: "2099-01-01 09:00" };
     await manageCron(config, req("create", future));
     // pretend it has since fired: its run_at is now in the past, but nothing new can be scheduled by
     // touching another field, so parking or renaming it must still work
     config.cron.jobs = [{ ...config.cron.jobs[0], runAt: "2020-01-01 09:00" }];
-    await manageCron(config, req("update", { id: "once", enabled: false }));
+    await manageCron(config, req("update", { name: "once", enabled: false }));
     assert.equal(config.cron.jobs[0].enabled, false);
     // a parked job cannot fire, so moving its run_at into the past is harmless; waking it is not
-    await manageCron(config, req("update", { id: "once", runAt: "2021-01-01 09:00" }));
+    await manageCron(config, req("update", { name: "once", runAt: "2021-01-01 09:00" }));
     assert.equal(config.cron.jobs[0].runAt, "2021-01-01 09:00");
-    await assert.rejects(manageCron(config, req("update", { id: "once", enabled: true, runAt: "2022-01-01 09:00" })), /in the past/);
+    await assert.rejects(manageCron(config, req("update", { name: "once", enabled: true, runAt: "2022-01-01 09:00" })), /in the past/);
   });
 
   it("drops the run record of a job that no longer exists", { timeout: 3000 }, async (t) => {
@@ -160,14 +166,14 @@ describe("cron management", () => {
     const dataDir = await createTempDataDir(t);
     const config = await configWithDataDir(t, dataDir);
     setConfigOverridesPath(dataDir);
-    for (let index = 1; index < 20; index++) await manageCron(config, req("create", { ...daily, id: `job-${index}` }));
+    for (let index = 1; index < 20; index++) await manageCron(config, req("create", { ...daily, name: `job-${index}` }));
     await manageCron(config, req("create", daily));
     assert.equal(config.cron.jobs.length, 20);
-    await assert.rejects(manageCron(config, req("create", { ...daily, id: "overflow" })), /limit reached: 20/);
+    await assert.rejects(manageCron(config, req("create", { ...daily, name: "overflow" })), /limit reached: 20/);
     // the cap blocks new jobs, never edits or removals of the ones already there
     await manageCron(config, req("update", { ...daily, prompt: "Still editable" }));
-    await manageCron(config, { action: "delete", id: "job-1" });
-    await manageCron(config, req("create", { ...daily, id: "overflow" }));
+    await manageCron(config, { action: "delete", name: "job-1" });
+    await manageCron(config, req("create", { ...daily, name: "overflow" }));
     assert.equal(config.cron.jobs.length, 20);
   });
 
@@ -181,12 +187,12 @@ describe("cron management", () => {
       assert.deepEqual(result.content, [{ type: "text", text: JSON.stringify(result.details) }]);
       return result.details;
     };
-    await manageCron(config, req("create", { ...daily, id: "unrelated" }));
-    assert.deepEqual(await call(req("create", { id: daily.id, prompt: daily.prompt, frequency: daily.frequency, time: daily.time })), daily);
+    await manageCron(config, req("create", { ...daily, name: "unrelated" }));
+    assert.deepEqual(await call(req("create", { name: daily.name, prompt: daily.prompt, frequency: daily.frequency, time: daily.time })), daily);
     const updated = { ...daily, prompt: "Updated reminder", enabled: false };
     assert.deepEqual(await call(req("update", updated)), updated);
     assert.deepEqual(await call(req("update", { ...updated, enabled: true })), { ...updated, enabled: true });
-    assert.deepEqual(await call({ action: "delete", id: daily.id }), { deleted: daily.id });
+    assert.deepEqual(await call({ action: "delete", name: daily.name }), { deleted: daily.name });
     const snapshot = await manageCron(config, { action: "list" });
     assert.equal(typeof snapshot.timezone, "string");
     assert.deepEqual(await call({ action: "list" }), { jobs: snapshot.jobs, state: snapshot.state });
@@ -208,11 +214,11 @@ describe("cron management", () => {
     assert.equal(config.cron.jobs.length, 0);
     authorized = true;
     assert.equal((await request("POST", req("create", daily))).statusCode, 200);
-    assert.equal(JSON.parse((await request("GET")).body).jobs[0].id, daily.id);
-    const invalid = await request("POST", req("create", { ...daily, id: "bad", time: "99:99" }));
+    assert.equal(JSON.parse((await request("GET")).body).jobs[0].name, daily.name);
+    const invalid = await request("POST", req("create", { ...daily, name: "bad", time: "99:99" }));
     assert.equal(invalid.statusCode, 400);
     assert.match(invalid.body, /HH:MM/);
-    assert.equal((await request("POST", { action: "delete", id: daily.id })).statusCode, 200);
+    assert.equal((await request("POST", { action: "delete", name: daily.name })).statusCode, 200);
     assert.equal(JSON.parse((await request("GET")).body).jobs.length, 0);
   });
 
@@ -239,7 +245,7 @@ describe("cron management", () => {
       agentWork: {
         activeOwner: undefined,
         promptScheduledMessage: async (_runtime: unknown, buildMessage: () => Promise<unknown>) => {
-          await manageCron(config, { action: "delete", id: daily.id });
+          await manageCron(config, { action: "delete", name: daily.name });
           queuedResult = await buildMessage();
           finish();
           return CRON_SKIPPED;

@@ -123,7 +123,8 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 						schedulerState.heartbeat = { lastFiredAt: new Date(queuedNow).toISOString() };
 						await saveScheduler();
 						const text = buildHeartbeatInjectionText({ now: queuedNow, idleSince: latestUserInteractionAt });
-						await heartbeatRuntime.noteHeartbeat(
+						await heartbeatRuntime.noteRuntimeEvent(
+							"heartbeat",
 							`heartbeat stirred after ${formatIdleDuration(queuedNow - latestUserInteractionAt)}`,
 						);
 						// a scheduled turn opens with nothing behind it, and a system note needs a user turn
@@ -149,7 +150,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			await runtime?.noteHeartbeatFailure(message);
+			await runtime?.noteRuntimeEvent("heartbeat_failed", message);
 			await runtime?.appendError(`Heartbeat failed: ${message}`);
 			console.error("Heartbeat failed", error);
 		} finally {
@@ -161,7 +162,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 	const graceMs = Math.max(config.cron.pollMs, 5 * 60_000);
 
 	const markCronSlotStarted = async (job: CronJobConfig, slot: string): Promise<void> => {
-		schedulerState.cron[job.id] = {
+		schedulerState.cron[job.name] = {
 			lastFiredSlot: slot,
 			lastFiredAt: new Date().toISOString(),
 		};
@@ -171,26 +172,27 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 	const runCronJob = async (job: CronJobConfig, slot: string, runtime: ConversationRuntime): Promise<void> => {
 		await appendSchedulerLog(config.workspace.dataDir, {
 			type: "cron_due",
-			jobId: job.id,
+			jobId: job.name,
 			slot,
 			deliveryMode: job.deliveryMode,
 		});
 		if (job.deliveryMode === "follow_up" && agentWork.activeOwner === runtime.channelKey) {
 			const now = Date.now();
-			const text = buildCronInjectionText({ job, slot, now, state: schedulerState.cron[job.id], graceMs });
+			const text = buildCronInjectionText({ job, slot, now, state: schedulerState.cron[job.name], graceMs });
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_started",
-				jobId: job.id,
+				jobId: job.name,
 				slot,
 				deliveryMode: job.deliveryMode,
 			});
 			await markCronSlotStarted(job, slot);
+			await runtime.noteRuntimeEvent("cron", job.name);
 			await familiarAgent.followUpMessage(runtime.channelKey, userTextMessage(text, now), {
 				skipAmbient: true,
 			});
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_completed",
-				jobId: job.id,
+				jobId: job.name,
 				slot,
 				deliveryMode: job.deliveryMode,
 				detail: "queued as follow-up",
@@ -198,27 +200,28 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			return;
 		}
 
-		const jobKey = `cron:${job.id}`;
+		const jobKey = `cron:${job.name}`;
 		const turn = await runAgentTurn(jobKey, runtime, (onEvent) =>
 			agentWork.promptScheduledMessage(
 				runtime,
 				async () => {
-					// identity, not id: manageCron swaps the object on every edit, so a job that was
+					// identity, not name: manageCron swaps the object on every edit, so a job that was
 					// changed, disabled, or deleted while this was queued is no longer in the list
 					if (
 						!config.cron.jobs.includes(job) ||
-						dueCronSlot(job, schedulerState.cron[job.id], Date.now()) !== slot
+						dueCronSlot(job, schedulerState.cron[job.name], Date.now()) !== slot
 					)
 						return CRON_SKIPPED;
 					const now = Date.now();
-					const priorState = schedulerState.cron[job.id];
+					const priorState = schedulerState.cron[job.name];
 					await appendSchedulerLog(config.workspace.dataDir, {
 						type: "cron_started",
-						jobId: job.id,
+						jobId: job.name,
 						slot,
 						deliveryMode: job.deliveryMode,
 					});
 					await markCronSlotStarted(job, slot);
+					await runtime.noteRuntimeEvent("cron", job.name);
 					return userTextMessage(buildCronInjectionText({ job, slot, now, state: priorState, graceMs }), now);
 				},
 				onEvent,
@@ -228,7 +231,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		if (!turn) {
 			await appendSchedulerLog(config.workspace.dataDir, {
 				type: "cron_skipped",
-				jobId: job.id,
+				jobId: job.name,
 				slot,
 				deliveryMode: job.deliveryMode,
 				detail: "job changed, disabled, removed, or slot already started before prompt",
@@ -249,19 +252,19 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 		});
 		await appendSchedulerLog(config.workspace.dataDir, {
 			type: "cron_completed",
-			jobId: job.id,
+			jobId: job.name,
 			slot,
 			deliveryMode: job.deliveryMode,
 		});
 	};
 
 	// a deleted job's run record would otherwise outlive it forever, and a job recreated under the
-	// same id would inherit it and skip the slot it had already fired
+	// same name would inherit it and skip the slot it had already fired
 	const pruneCronState = async (): Promise<void> => {
-		const live = new Set(config.cron.jobs.map((job) => job.id));
-		const stale = Object.keys(schedulerState.cron).filter((id) => !live.has(id));
+		const live = new Set(config.cron.jobs.map((job) => job.name));
+		const stale = Object.keys(schedulerState.cron).filter((name) => !live.has(name));
 		if (stale.length === 0) return;
-		for (const id of stale) delete schedulerState.cron[id];
+		for (const name of stale) delete schedulerState.cron[name];
 		await saveScheduler();
 	};
 
@@ -274,7 +277,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			const session = await resolveDefaultSession();
 			for (const job of config.cron.jobs) {
 				if (!config.cron.jobs.includes(job)) continue;
-				const slot = dueCronSlot(job, schedulerState.cron[job.id], Date.now());
+				const slot = dueCronSlot(job, schedulerState.cron[job.name], Date.now());
 				if (!slot) continue;
 				try {
 					await runCronJob(job, slot, session.runtime);
@@ -282,13 +285,13 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 					const message = error instanceof Error ? error.message : String(error);
 					await appendSchedulerLog(config.workspace.dataDir, {
 						type: "cron_failed",
-						jobId: job.id,
+						jobId: job.name,
 						slot,
 						deliveryMode: job.deliveryMode,
 						detail: message,
 					});
-					await session.runtime.appendError(`Cron job ${job.id} failed: ${message}`);
-					console.error(`Cron job ${job.id} failed`, error);
+					await session.runtime.appendError(`Cron job ${job.name} failed: ${message}`);
+					console.error(`Cron job ${job.name} failed`, error);
 				}
 			}
 		} finally {

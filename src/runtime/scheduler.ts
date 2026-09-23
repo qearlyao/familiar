@@ -10,7 +10,7 @@ export type CronFrequency = "once" | "hourly" | "daily" | "weekly" | "monthly";
 export type CronDeliveryMode = "queue" | "follow_up";
 
 export interface CronJobConfig {
-	id: string;
+	name: string;
 	enabled: boolean;
 	frequency: CronFrequency;
 	deliveryMode: CronDeliveryMode;
@@ -117,7 +117,7 @@ function scheduledDate(year: number, month: number, day: number, time: { hour: n
 }
 
 function cronSlotKey(job: CronJobConfig, date: Date): string {
-	return `${job.id}:${job.frequency}:${localDateKey(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+	return `${job.name}:${job.frequency}:${localDateKey(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 function latestScheduledDate(job: CronJobConfig, now: Date): Date | undefined {
@@ -182,7 +182,7 @@ export function buildCronInjectionText(options: {
 }): string {
 	const nowDate = toDate(options.now);
 	const missed = missedBy(options.job, options.state, nowDate, options.graceMs);
-	return `<cron id="${options.job.id}" frequency="${options.job.frequency}" delivery="${options.job.deliveryMode}" local_time="${formatLocalTimestamp(nowDate)}" slot="${options.slot}"${missed ? ` missed="${missed}"` : ""}>\n${options.job.prompt}\n</cron>`;
+	return `<cron name="${options.job.name}" frequency="${options.job.frequency}" delivery="${options.job.deliveryMode}" local_time="${formatLocalTimestamp(nowDate)}" slot="${options.slot}"${missed ? ` missed="${missed}"` : ""}>\n${options.job.prompt}\n</cron>`;
 }
 
 export function schedulerStatePath(dataDir: string): string {

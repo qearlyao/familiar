@@ -213,7 +213,7 @@ describe("scheduler helpers", () => {
 
 	it("builds cron envelopes without user identity fields", () => {
 		const job: CronJobConfig = {
-			id: "daily-review",
+			name: "daily-review",
 			enabled: true,
 			frequency: "daily",
 			deliveryMode: "queue",
@@ -223,7 +223,7 @@ describe("scheduler helpers", () => {
 		const slot = "daily-review:daily:2026-05-13T09:00";
 		const text = buildCronInjectionText({ job, slot, now: "2026-05-13T09:00:00", graceMs: 300_000 });
 
-		assert.match(text, /^<cron id="daily-review" frequency="daily" delivery="queue" /);
+		assert.match(text, /^<cron name="daily-review" frequency="daily" delivery="queue" /);
 		assert.match(text, /Review priorities/);
 		assert.doesNotMatch(text, /uid:/);
 		assert.doesNotMatch(text, /author/i);
@@ -239,7 +239,7 @@ describe("scheduler helpers", () => {
 
 	it("computes due cron slots and suppresses repeats by slot", () => {
 		const daily: CronJobConfig = {
-			id: "daily-review",
+			name: "daily-review",
 			enabled: true,
 			frequency: "daily",
 			deliveryMode: "queue",
@@ -259,7 +259,7 @@ describe("scheduler helpers", () => {
 		assert.equal(
 			dueCronSlot(
 				{
-					id: "once",
+					name: "once",
 					enabled: true,
 					frequency: "once",
 					deliveryMode: "queue",
@@ -274,7 +274,7 @@ describe("scheduler helpers", () => {
 		assert.equal(
 			dueCronSlot(
 				{
-					id: "hourly",
+					name: "hourly",
 					enabled: true,
 					frequency: "hourly",
 					deliveryMode: "follow_up",
@@ -289,7 +289,7 @@ describe("scheduler helpers", () => {
 		assert.equal(
 			dueCronSlot(
 				{
-					id: "weekly",
+					name: "weekly",
 					enabled: true,
 					frequency: "weekly",
 					deliveryMode: "queue",
@@ -305,7 +305,7 @@ describe("scheduler helpers", () => {
 		assert.equal(
 			dueCronSlot(
 				{
-					id: "monthly",
+					name: "monthly",
 					enabled: true,
 					frequency: "monthly",
 					deliveryMode: "queue",

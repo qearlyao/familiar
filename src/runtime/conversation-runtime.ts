@@ -241,20 +241,12 @@ export class ConversationRuntime {
 		});
 	}
 
-	async noteHeartbeat(detail: string): Promise<void> {
+	/** the web chat draws heartbeat and cron as pills; a cron's detail is its job name */
+	async noteRuntimeEvent(event: "heartbeat" | "heartbeat_failed" | "cron", detail: string): Promise<void> {
 		await this.appendRecord({
 			type: "runtime",
 			...buildRecordBase(this.channel, this.nextRecordId),
-			event: "heartbeat",
-			detail,
-		});
-	}
-
-	async noteHeartbeatFailure(detail: string): Promise<void> {
-		await this.appendRecord({
-			type: "runtime",
-			...buildRecordBase(this.channel, this.nextRecordId),
-			event: "heartbeat_failed",
+			event,
 			detail,
 		});
 	}

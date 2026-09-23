@@ -18,7 +18,7 @@ function mergeOntoStored(stored: CronJob, patch: Record<string, unknown>): Recor
 	const base =
 		patch.frequency === undefined || patch.frequency === stored.frequency
 			? stored
-			: { id: stored.id, prompt: stored.prompt, enabled: stored.enabled, deliveryMode: stored.deliveryMode };
+			: { name: stored.name, prompt: stored.prompt, enabled: stored.enabled, deliveryMode: stored.deliveryMode };
 	return { ...base, ...patch };
 }
 
@@ -27,7 +27,7 @@ function validateOneJob(value: unknown, stored: CronJob | undefined): CronJob {
 	// a once job that is already due would fire the moment it is saved — unless its time is
 	// untouched, in which case whatever was going to happen already has
 	if (job.frequency === "once" && job.runAt !== stored?.runAt && dueCronSlot(job, undefined, Date.now())) {
-		throw new Error(`runAt is in the past: ${job.id}`);
+		throw new Error(`runAt is in the past: ${job.name}`);
 	}
 	return job;
 }
@@ -46,47 +46,60 @@ const enqueue = createWriteQueue("cron settings");
 /** Serialize read/modify/write across the agent and Web UI so concurrent additions survive. */
 export async function manageCron(config: Config, input: unknown) {
 	if (!isRecord(input)) throw new Error("cron request must be an object");
-	assertKnownKeys(input, "cron request", ["action", "job", "id"]);
+	assertKnownKeys(input, "cron request", ["action", "job", "name"]);
 	const { action } = input;
 	if (action === "list") return cronPayload(config);
 	// validate before taking the queue so a bad request never logs as a failed write
 	if (action !== "create" && action !== "update" && action !== "delete") {
 		throw new Error("action must be list, create, update, or delete");
 	}
-	const { id } = input;
-	if (typeof id !== "string") throw new Error("id must be a string");
+	let name: string;
 	let job: CronJob | undefined;
-	if (action !== "delete") {
-		const patch = input.job;
-		if (!isRecord(patch)) throw new Error(`${action} needs a job`);
-		if (patch.id !== undefined) throw new Error("id goes at the top level, not inside job");
-		// only update may go partial; without this, a create missing frequency silently becomes a once
-		// job and complains about runAt instead of the field that was actually left out
-		if (action === "create" && (patch.frequency === undefined || patch.prompt === undefined)) {
-			throw new Error("create needs job.frequency and job.prompt");
+	if (action === "create") {
+		const draft = input.job;
+		if (!isRecord(draft)) throw new Error("create needs a job");
+		if (input.name !== undefined) throw new Error("create takes the name inside job, not beside action");
+		// without this, a create missing frequency silently becomes a once job and complains about
+		// runAt instead of the field that was actually left out
+		if (draft.name === undefined || draft.frequency === undefined || draft.prompt === undefined) {
+			throw new Error("create needs job.name, job.frequency, and job.prompt");
 		}
-		const stored = action === "update" ? config.cron.jobs.find((existing) => existing.id === id) : undefined;
-		// a partial patch aimed at nothing would otherwise be validated as a whole job and complain
-		// about the fields it was never going to carry
-		if (action === "update" && !stored) throw new Error(`Cron job not found: ${id}`);
-		job = validateOneJob({ ...(stored ? mergeOntoStored(stored, patch) : patch), id }, stored);
+		job = validateOneJob(draft, undefined);
+		name = job.name;
+	} else {
+		if (typeof input.name !== "string") throw new Error(`${action} needs name beside action: the job to ${action}`);
+		name = input.name;
+		if (action === "update") {
+			const patch = input.job;
+			if (!isRecord(patch)) throw new Error("update needs a job");
+			// run history is keyed by name, so a rename would forget what already fired and fire it again
+			if (patch.name !== undefined && patch.name !== name) {
+				const renamed = String(patch.name);
+				throw new Error(`can't rename a job ("${name}" → "${renamed}"); delete it and create "${renamed}"`);
+			}
+			const stored = config.cron.jobs.find((existing) => existing.name === name);
+			// a partial patch aimed at nothing would otherwise be validated as a whole job and complain
+			// about the fields it was never going to carry
+			if (!stored) throw new Error(`Cron job not found: ${name}`);
+			job = validateOneJob(mergeOntoStored(stored, patch), stored);
+		}
 	}
 	await enqueue(async () => {
-		const index = config.cron.jobs.findIndex((existing) => existing.id === id);
-		if (action === "create" ? index !== -1 : index === -1) {
-			throw new Error(`Cron job ${action === "create" ? "already exists" : "not found"}: ${id}`);
-		}
+		const index = config.cron.jobs.findIndex((existing) => existing.name === name);
+		if (action === "create" && index !== -1)
+			throw new Error(`Cron job already exists: ${name}; use update to change it`);
+		if (action !== "create" && index === -1) throw new Error(`Cron job not found: ${name}`);
 		if (action === "create" && config.cron.jobs.length >= MAX_CRON_JOBS) {
 			throw new Error(`Cron job limit reached: ${MAX_CRON_JOBS}`);
 		}
 		const jobs = !job
-			? config.cron.jobs.filter((existing) => existing.id !== id)
+			? config.cron.jobs.filter((existing) => existing.name !== name)
 			: action === "create"
 				? [...config.cron.jobs, job]
 				: config.cron.jobs.with(index, job);
 		await setConfigOverride("cron", jobs);
 		config.cron.jobs = jobs;
-		console.info("Cron settings updated", { action, id, jobs: jobs.length });
+		console.info("Cron settings updated", { action, name, jobs: jobs.length });
 	});
 	return cronPayload(config);
 }

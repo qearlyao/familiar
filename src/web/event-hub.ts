@@ -207,7 +207,10 @@ export function createWebEventHub(
 				}
 				publish(completion);
 			}
-			if (record.type === "call_discarded" || (record.type === "runtime" && record.event === "heartbeat")) {
+			if (
+				record.type === "call_discarded" ||
+				(record.type === "runtime" && (record.event === "heartbeat" || record.event === "cron"))
+			) {
 				const mark = webMessageFromRecord(config, record, personaName);
 				if (mark) {
 					const { channelKey } = runtime;
@@ -221,6 +224,8 @@ export function createWebEventHub(
 						notice: mark.notice,
 						ts: mark.ts,
 					});
+					// the cron pill names its job, so the text has to arrive live, not only on reload
+					if (mark.text) publishDelta(channelKey, mark.id, "text", mark.text, mark.ts);
 					publish({ type: "message_completed", channelKey, messageId: mark.id, ts: mark.ts });
 				}
 			}

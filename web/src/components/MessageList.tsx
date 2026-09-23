@@ -118,7 +118,7 @@ export function MessageList({
           const showGap = prev != null && m.ts - prev.ts >= GAP_MS;
           const latest = i === latestAssistantIndex;
           const last = messages.length - 1;
-          const live = m.notice === "heartbeat" && (i === last || (i === last - 1 && streaming));
+          const live = (m.notice === "heartbeat" || m.notice === "cron") && (i === last || (i === last - 1 && streaming));
           return (
             <div key={m.id} className="chat-turn-group">
               {showGap && <div className="chat-time-divider">{formatGap(m.ts, prev.ts)}</div>}

@@ -379,6 +379,18 @@ describe("web history", () => {
 		assert.equal(textStep?.kind === "text" ? textStep.text : "", "[[FAMILIAR_SILENT]]");
 	});
 
+	it("marks a cron fire as a pill naming its job", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const records: ChatLogRecord[] = [
+			{ type: "runtime", ...base(1, "2026-05-26T00:00:00.000Z"), event: "cron", detail: "sleep-check" },
+		];
+
+		const [message] = webMessagesFromRecords(config, records, "Ghost");
+
+		assert.equal(message?.notice, "cron");
+		assert.equal(message?.text, "sleep-check");
+	});
+
 	it("renders a model error as a raw error step instead of plain dialogue text", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const records: ChatLogRecord[] = [

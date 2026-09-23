@@ -178,6 +178,12 @@ export const IconFern = glyph(
     <path d="M12 9c0-3 1-5 3-6" />
   </>,
 );
+export const IconClock = glyph(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </>,
+);
 export const IconCheck = glyph(<path d="M5 12l5 5L20 7" />);
 export const IconDownload = glyph(
   <>

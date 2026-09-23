@@ -76,8 +76,8 @@ export function readCronJobs(rawJobs: unknown, path: string, spelling: CronJobSp
 	const seen = new Set<string>();
 	return rawJobs.map((rawJob, index) => {
 		const job = readCronJob(rawJob, `${path}[${index}]`, spelling);
-		if (seen.has(job.id)) throw new Error(`Duplicate cron job id: ${job.id}`);
-		seen.add(job.id);
+		if (seen.has(job.name)) throw new Error(`Duplicate cron job name: ${job.name}`);
+		seen.add(job.name);
 		return job;
 	});
 }
@@ -94,11 +94,11 @@ export function readCronJob(
 	assertKnownKeys(
 		job,
 		prefix,
-		["id", "enabled", "frequency", "deliveryMode", "prompt", "runAt", "time", "minute", "weekday", "day"].map(key),
+		["name", "enabled", "frequency", "deliveryMode", "prompt", "runAt", "time", "minute", "weekday", "day"].map(key),
 	);
-	const id = readString(job.id, at("id"));
-	if (!/^[A-Za-z0-9._=-]+$/.test(id)) {
-		throw new Error(`Config value ${at("id")} may only contain letters, numbers, dot, underscore, equals, or dash`);
+	const name = readString(job.name, at("name"));
+	if (!/^[A-Za-z0-9._=-]+$/.test(name)) {
+		throw new Error(`Config value ${at("name")} may only contain letters, numbers, dot, underscore, equals, or dash`);
 	}
 	const frequency = readEnum(
 		readConfigString(job.frequency, "once", at("frequency")),
@@ -120,7 +120,7 @@ export function readCronJob(
 		throw new Error(`Config value ${at("time")} is required for ${frequency} jobs`);
 	}
 	return {
-		id,
+		name,
 		enabled: readBoolean(job.enabled, true, at("enabled")),
 		frequency,
 		deliveryMode: readEnum(

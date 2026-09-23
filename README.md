@@ -416,8 +416,9 @@ Familiar stores browser screenshots under the active workspace data directory:
 
 Manage schedules in **Settings → cron jobs**, or ask the agent to use its
 built-in `cron` tool to list, create, update, and delete jobs. A job runs when
-its own `enabled` flag is set, which defaults to true; `update` with just an id
-and `enabled: false` parks a job without deleting it.
+its own `enabled` flag is set, which defaults to true; `update` with just a name
+and `enabled: false` parks a job without deleting it. A job's name is fixed once
+created, since its run history is kept under it; delete and recreate to rename.
 
 Changes take effect on the next poll without a restart and persist in
 `data/settings/config-overrides.json`, replacing the `[[cron.jobs]]` list from

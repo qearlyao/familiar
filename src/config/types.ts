@@ -149,7 +149,7 @@ export interface Config {
 	cron: {
 		pollMs: number;
 		jobs: Array<{
-			id: string;
+			name: string;
 			enabled: boolean;
 			frequency: CronFrequency;
 			deliveryMode: CronDeliveryMode;

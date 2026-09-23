@@ -7,7 +7,7 @@ import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 import { ErrorNotice } from "./steps/ErrorNotice";
 import { withoutSilentMarker } from "@/lib/silentMarker";
-import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
+import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
 
 type ImageAttachment = Attachment & { url: string };
 
@@ -149,10 +149,11 @@ function EditForm({ initialText, onSave, onCancel, saving }: { initialText: stri
 function SystemRow({ message, text, live }: { message: Message; text: string; live?: boolean }) {
   switch (message.notice) {
     case "heartbeat":
+    case "cron":
       return (
         <div className={live ? "chat-notice-pill is-live" : "chat-notice-pill"}>
-          <IconFern size={12} />
-          heartbeat
+          {message.notice === "cron" ? <IconClock size={12} /> : <IconFern size={12} />}
+          {message.notice === "cron" ? `cron · ${text}` : "heartbeat"}
         </div>
       );
     case "reset":
@@ -177,7 +178,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDelete?: () => void;
   onEdit?: (text: string) => Promise<void>;
   pendingLatestAssistantAction?: "retry" | "delete" | "edit";
-  /** a heartbeat pill still breathes while he's waking */
+  /** a heartbeat or cron pill still breathes while he's waking */
   live?: boolean;
 }) {
   const [editing, setEditing] = useState(false);

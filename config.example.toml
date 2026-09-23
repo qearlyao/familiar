@@ -97,7 +97,7 @@ interval_minutes = 240
 poll_seconds = 60
 
 # [[cron.jobs]]
-# id = "daily-review"
+# name = "daily-review"
 # enabled = true
 # frequency = "daily" # once | hourly | daily | weekly | monthly
 # delivery_mode = "queue" # queue | follow_up

@@ -790,8 +790,9 @@ export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequ
 export type CronJob = import("../../../src/runtime/scheduler.js").CronJobConfig;
 export type CronPayload = Awaited<ReturnType<typeof import("../../../src/config/cron.js").cronPayload>>;
 export type CronChange =
-  | { action: "create" | "update"; id: string; job: Partial<Omit<CronJob, "id">> }
-  | { action: "delete"; id: string };
+  | { action: "create"; job: CronJob }
+  | { action: "update"; name: string; job: Partial<CronJob> }
+  | { action: "delete"; name: string };
 
 export function fetchCron(): Promise<CronPayload> {
   return getJson<CronPayload>("/api/web/cron", "cron");

@@ -779,14 +779,14 @@ interval_minutes = 90
 poll_seconds = 30
 
 [[cron.jobs]]
-id = "daily-review"
+name = "daily-review"
 frequency = "daily"
 delivery_mode = "queue"
 time = "09:00"
 prompt = "Review today's priorities."
 
 [[cron.jobs]]
-id = "one-shot"
+name = "one-shot"
 enabled = false
 frequency = "once"
 delivery_mode = "follow_up"
@@ -801,7 +801,7 @@ prompt = "Remember this once."
 			pollMs: 30_000,
 			jobs: [
 				{
-					id: "daily-review",
+					name: "daily-review",
 					enabled: true,
 					frequency: "daily",
 					deliveryMode: "queue",
@@ -809,7 +809,7 @@ prompt = "Remember this once."
 					prompt: "Review today's priorities.",
 				},
 				{
-					id: "one-shot",
+					name: "one-shot",
 					enabled: false,
 					frequency: "once",
 					deliveryMode: "follow_up",
@@ -828,14 +828,14 @@ prompt = "Remember this once."
 [cron]
 
 [[cron.jobs]]
-id = "bad job"
+name = "bad job"
 frequency = "daily"
 time = "09:00"
-prompt = "Bad id."
+prompt = "Bad name."
 `),
 		);
 
-		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.id/);
+		await assert.rejects(() => loadConfig(workspacePath), /cron\.jobs\[0\]\.name/);
 	});
 
 	it("rejects once cron jobs with repeating time", async (t) => {
@@ -846,7 +846,7 @@ prompt = "Bad id."
 [cron]
 
 [[cron.jobs]]
-id = "one-shot"
+name = "one-shot"
 frequency = "once"
 run_at = "2026-05-13 23:00"
 time = "09:00"
@@ -865,7 +865,7 @@ prompt = "Conflicting schedule."
 [cron]
 
 [[cron.jobs]]
-id = "daily-review"
+name = "daily-review"
 frequency = "daily"
 time = "25:00"
 prompt = "Bad time."

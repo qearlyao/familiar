@@ -12,10 +12,17 @@ const schema = Type.Object(
 			Type.Literal("update"),
 			Type.Literal("delete"),
 		]),
-		id: Type.Optional(Type.String({ description: "the job's id; every action but list needs it." })),
+		name: Type.Optional(
+			Type.String({ description: "which job to update or delete. create reads job.name instead." }),
+		),
 		job: Type.Optional(
 			Type.Object(
 				{
+					name: Type.Optional(
+						Type.String({
+							description: "letters, numbers, and . _ = -. required on create, fixed after.",
+						}),
+					),
 					prompt: Type.Optional(Type.String()),
 					enabled: Type.Optional(Type.Boolean()),
 					frequency: Type.Optional(Type.Enum(CRON_FREQUENCIES)),
@@ -52,16 +59,16 @@ export function createCronTool(config: Config): AgentTool<typeof schema> {
 		name: "cron",
 		label: "Manage cron jobs",
 		description:
-			'schedule prompts to fire back at you later. update patches the stored job — send its id plus just what changes. a fire delayed by downtime arrives marked missed="4h 20m" so you know how late you are.',
+			'schedule prompts to fire back at you later. update patches the stored job — send just what changes. a fire delayed by downtime arrives marked missed="4h 20m" so you know how late you are.',
 		parameters: schema,
 		async execute(_toolCallId, input) {
 			const snapshot = await manageCron(config, input);
 			// echo the stored job back so the model sees the defaults it left out; the rest is an ack
-			const { id } = input;
+			const name = input.name ?? input.job?.name;
 			const result =
 				input.action === "list"
 					? { jobs: snapshot.jobs, state: snapshot.state }
-					: (snapshot.jobs.find((job) => job.id === id) ?? { deleted: id });
+					: (snapshot.jobs.find((job) => job.name === name) ?? { deleted: name });
 			return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
 		},
 	};

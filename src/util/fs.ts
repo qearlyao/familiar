@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 
 let tempFileCounter = 0;
+
+/** a path the agent names: `~/...` from home, absolute as given, anything else from the workspace */
+export function resolveAgentPath(workspacePath: string, raw: string): string {
+	return raw === "~" || raw.startsWith("~/") ? resolve(homedir(), raw.slice(2)) : resolve(workspacePath, raw);
+}
 
 export function isEnoent(error: unknown): boolean {
 	return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";

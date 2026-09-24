@@ -10,8 +10,9 @@ import { type Static, Type } from "typebox";
 
 import type { Config } from "../config/index.js";
 import type { GeneratedMediaSink } from "../media/generated-media.js";
-import { ensureBrowserScreenshotsDir } from "../media/generated-media.js";
+import { attachedNotice, ensureBrowserScreenshotsDir } from "../media/generated-media.js";
 import { isRecord } from "../util/guards.js";
+import { imageMimeTypeFromPath } from "../util/image-mime.js";
 import {
 	type BrowserHarnessTarget,
 	clearBrowserHarnessTargetCache,
@@ -835,7 +836,7 @@ async function maybeAttachScreenshot(
 		id,
 		name,
 		kind: "image",
-		mimeType: extension.toLowerCase() === ".jpg" || extension.toLowerCase() === ".jpeg" ? "image/jpeg" : "image/png",
+		mimeType: imageMimeTypeFromPath(sourcePath) ?? "image/png",
 		size: fileStat.size,
 		localPath: sourcePath,
 		source: "generated",
@@ -883,7 +884,7 @@ export function createBrowserTools(
 				const attachment = await maybeAttachScreenshot(input, config, mediaSink, result);
 				const formatted = formatBrowserResult(result, maxChars, input);
 				const text = attachment.attachmentName
-					? `${formatted.text}\n\nGenerated screenshot attachment: ${attachment.attachmentName}`
+					? `${formatted.text}\n\n${attachedNotice("Screenshot", attachment.attachmentName)}`
 					: formatted.text;
 				return {
 					content: [{ type: "text", text }],

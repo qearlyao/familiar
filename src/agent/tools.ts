@@ -5,6 +5,7 @@ import type { Config, ToolReach } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedMediaSink } from "../media/generated-media.js";
 import { createImageGenTool } from "../media/image-gen.js";
+import { createSendFileTool } from "../media/send-file.js";
 import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
 import { createBrowserTools } from "../tools/browser-tools.js";
@@ -44,6 +45,7 @@ export function createFamiliarTools(
 		createCronTool(config),
 		createTtsTool(config, mediaSink),
 		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
+		createSendFileTool(config, mediaSink),
 		...createWebTools(),
 		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),

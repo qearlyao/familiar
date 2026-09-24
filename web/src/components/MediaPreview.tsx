@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
-import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
-import { IconChevronLeft, IconChevronRight, IconDownload, IconPause, IconPlay, IconX } from "./organicIcons";
-import { focusPanel } from "@/lib/focusPanel";
+import { IconChevronLeft, IconChevronRight, IconPause, IconPlay } from "./organicIcons";
+import { ViewerDialog } from "./ViewerDialog";
 import { mmss } from "@/lib/clock";
 
 export type PreviewMedia = { src: string; name: string; kind: "image" | "video" };
@@ -107,15 +106,14 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
 }) {
   const [selected, setSelected] = useState(src);
   const [bare, setBare] = useState(false);
-  const closedByKey = useRef(false);
   const media = items?.length ? items : [{ src, name: alt, kind }];
   const index = Math.max(0, media.findIndex((item) => item.src === selected));
   const current = media[index];
   const move = (delta: number) => setSelected(media[(index + delta + media.length) % media.length].src);
 
   return (
-    <Dialog.Root onOpenChange={(open) => { if (open) { setSelected(src); setBare(false); } onOpenChange?.(open); }}>
-      <Dialog.Trigger asChild>
+    <ViewerDialog
+      trigger={
         <button type="button" aria-label={`open ${alt}`} className={cn("media-preview-trigger inline-block w-fit max-w-full rounded-md text-left outline-none transition-opacity hover:opacity-90 sm:max-w-[24rem]", className)}>
           {kind === "image" ? (
             <img src={src} alt={alt} loading="lazy" className={cn("h-auto max-h-72 max-w-full rounded-md", imageClassName)} />
@@ -127,69 +125,46 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
             </>
           )}
         </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="viewer-overlay" />
-        <Dialog.Content
-          className="viewer chat-theme"
-          data-bare={bare || undefined}
-          aria-describedby={undefined}
-          onOpenAutoFocus={focusPanel}
-          onCloseAutoFocus={(event) => {
-            if (!closedByKey.current) event.preventDefault();
-            closedByKey.current = false;
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") closedByKey.current = true;
-            if (event.target instanceof HTMLInputElement) return;
-            if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
-            if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
-          }}
-        >
-          <header className="viewer-head">
-            <Dialog.Close className="viewer-ghost viewer-close-top" aria-label={closeLabel}><IconX size={18} /></Dialog.Close>
-            <span className="viewer-title">
-              <Dialog.Title title={current.name}>{current.name}</Dialog.Title>
-              <p>{current.kind === "video" ? "a clip" : "a picture"}{media.length > 1 ? ` · ${index + 1} of ${media.length}` : ""}</p>
-            </span>
-          </header>
+      }
+      title={current.name}
+      subtitle={`${current.kind === "video" ? "a clip" : "a picture"}${media.length > 1 ? ` · ${index + 1} of ${media.length}` : ""}`}
+      download={{ href: current.src, name: current.name }}
+      bare={bare}
+      closeLabel={closeLabel}
+      onOpenChange={(open) => { if (open) { setSelected(src); setBare(false); } onOpenChange?.(open); }}
+      onKeyDown={(event) => {
+        if (event.target instanceof HTMLInputElement) return;
+        if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
+        if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
+      }}
+    >
+      <div className="viewer-body">
+        {media.length > 1 && (
+          <button type="button" className="viewer-ghost viewer-step" onClick={() => move(-1)} aria-label="previous">
+            <IconChevronLeft size={20} />
+          </button>
+        )}
+        <Stage key={current.src} item={current} onBare={() => setBare((was) => !was)} />
+        {media.length > 1 && (
+          <button type="button" className="viewer-ghost viewer-step is-next" onClick={() => move(1)} aria-label="next">
+            <IconChevronRight size={20} />
+          </button>
+        )}
+      </div>
 
-          <div className="viewer-actions">
-            <a className="viewer-accent" href={current.src} download={current.name} title="download the original">
-              <IconDownload size={16} /> download
-            </a>
-            <Dialog.Close className="viewer-ghost viewer-close-side" aria-label="close"><IconX size={18} /></Dialog.Close>
-          </div>
+      {bare && (
+        <button type="button" className="viewer-hint" onClick={() => setBare(false)}>tap once to bring it all back</button>
+      )}
 
-          <div className="viewer-body">
-            {media.length > 1 && (
-              <button type="button" className="viewer-ghost viewer-step" onClick={() => move(-1)} aria-label="previous">
-                <IconChevronLeft size={20} />
-              </button>
-            )}
-            <Stage key={current.src} item={current} onBare={() => setBare((was) => !was)} />
-            {media.length > 1 && (
-              <button type="button" className="viewer-ghost viewer-step is-next" onClick={() => move(1)} aria-label="next">
-                <IconChevronRight size={20} />
-              </button>
-            )}
-          </div>
-
-          {bare && (
-            <button type="button" className="viewer-hint" onClick={() => setBare(false)}>tap once to bring it all back</button>
-          )}
-
-          {media.length > 1 && (
-            <nav className="viewer-strip" aria-label="everything sent together">
-              {media.map((item, itemIndex) => (
-                <button key={item.src} type="button" aria-label={`view ${item.name}`} aria-current={itemIndex === index ? "true" : undefined} onClick={() => setSelected(item.src)}>
-                  {item.kind === "image" ? <img src={item.src} alt="" loading="lazy" /> : <><video src={item.src} preload="metadata" muted playsInline aria-hidden="true" /><IconPlay size={14} /></>}
-                </button>
-              ))}
-            </nav>
-          )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {media.length > 1 && (
+        <nav className="viewer-strip" aria-label="everything sent together">
+          {media.map((item, itemIndex) => (
+            <button key={item.src} type="button" aria-label={`view ${item.name}`} aria-current={itemIndex === index ? "true" : undefined} onClick={() => setSelected(item.src)}>
+              {item.kind === "image" ? <img src={item.src} alt="" loading="lazy" /> : <><video src={item.src} preload="metadata" muted playsInline aria-hidden="true" /><IconPlay size={14} /></>}
+            </button>
+          ))}
+        </nav>
+      )}
+    </ViewerDialog>
   );
 }

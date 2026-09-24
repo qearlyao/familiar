@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { extname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { Message, MessageCreateOptions } from "discord.js";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { normalizeOutboundText } from "../runtime/silent-marker.js";
+import { mimeTypeForPath } from "../util/mime.js";
 import type { DiscordChatChannel } from "./channel.js";
 import { chunkDiscord } from "./chunking.js";
 
@@ -27,10 +27,6 @@ async function delayBetweenBurstChunks(config: Config, channel: DiscordChatChann
 	await delay(NEWLINE_BURST_DELAY_MS);
 }
 
-function fallbackMimeType(name: string): string {
-	return extname(name).toLowerCase() === ".mp3" ? "audio/mpeg" : "application/octet-stream";
-}
-
 export async function buildDiscordAttachmentFiles(attachments: StoredAttachment[]): Promise<DiscordAttachmentFile[]> {
 	const files: DiscordAttachmentFile[] = [];
 	for (const attachment of attachments) {
@@ -39,7 +35,7 @@ export async function buildDiscordAttachmentFiles(attachments: StoredAttachment[
 		files.push({
 			name: attachment.name,
 			data,
-			contentType: attachment.mimeType || fallbackMimeType(attachment.name),
+			contentType: attachment.mimeType || mimeTypeForPath(attachment.name),
 		});
 	}
 	return files;

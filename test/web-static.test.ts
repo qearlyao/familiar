@@ -73,6 +73,23 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
+	it("serves sent pages and pdfs inline for the viewer", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const dir = join(generatedAttachmentsDir(config), "file_one");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "page.html"), "<p>hi</p>", "utf8");
+		await writeFile(join(dir, "paper.pdf"), "%PDF-1.4", "utf8");
+		const page = new FakeResponse();
+		const paper = new FakeResponse();
+
+		await serveAttachment(config, page as any, "/api/web/attachments/file_one/page.html");
+		await serveAttachment(config, paper as any, "/api/web/attachments/file_one/paper.pdf");
+
+		assert.equal(page.headers?.["content-type"], "text/html; charset=utf-8");
+		assert.equal(page.headers?.["content-disposition"], undefined);
+		assert.equal(paper.headers?.["content-type"], "application/pdf");
+	});
+
 	it("rejects traversal attempts", async (t) => {
 		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));

@@ -19,7 +19,8 @@ interface PushFile {
 export interface WebPushService {
 	publicKey(): string;
 	subscriptionCount(): number;
-	subscribe(subscription: PushSubscription, subject?: string): Promise<void>;
+	/** `replaces` is the endpoint this device held before, retired in the same write. */
+	subscribe(subscription: PushSubscription, subject?: string, replaces?: string): Promise<void>;
 	unsubscribe(endpoint: string): Promise<void>;
 	notify(payload: { title: string; body: string; tag: string }): void;
 }
@@ -27,6 +28,11 @@ export interface WebPushService {
 // Fallback for non-https (dev) origins only — APNs rejects reserved-TLD contacts,
 // but Apple endpoints can only ever be subscribed from a real https origin.
 const VAPID_SUBJECT = "mailto:operator@web-push.invalid";
+
+// Apple keeps accepting pushes to endpoints a device has quietly dropped, so 404/410 pruning
+// never catches them — a reinstalled home-screen app can't name its old endpoint either.
+// ponytail: newest-N cap, not per-device identity; raise it if one install has more devices.
+const MAX_SUBSCRIPTIONS = 10;
 
 export function toPushSubscription(value: unknown): PushSubscription | null {
 	if (
@@ -91,9 +97,11 @@ export async function createWebPushService(config: Config): Promise<WebPushServi
 	return {
 		publicKey: () => state.vapid.publicKey,
 		subscriptionCount: () => state.subscriptions.length,
-		async subscribe(subscription, subject): Promise<void> {
+		async subscribe(subscription, subject, replaces): Promise<void> {
 			drop(subscription.endpoint);
+			if (replaces) drop(replaces);
 			state.subscriptions.push({ ...subscription, subject });
+			state.subscriptions = state.subscriptions.slice(-MAX_SUBSCRIPTIONS);
 			await persist();
 		},
 		async unsubscribe(endpoint): Promise<void> {

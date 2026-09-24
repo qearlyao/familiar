@@ -3,12 +3,12 @@
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-async function syncSubscription(subscription) {
+async function syncSubscription(subscription, replaces) {
   const response = await fetch("/api/web/push/subscriptions", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(subscription.toJSON()),
+    body: JSON.stringify({ ...subscription.toJSON(), replaces }),
   });
   if (!response.ok) throw new Error(`push subscription sync failed: ${response.status}`);
 }
@@ -16,7 +16,7 @@ async function syncSubscription(subscription) {
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(
     (async () => {
-      if (event.newSubscription) await syncSubscription(event.newSubscription);
+      if (event.newSubscription) await syncSubscription(event.newSubscription, event.oldSubscription?.endpoint);
     })().catch((error) => console.error("push subscription change failed:", error)),
   );
 });

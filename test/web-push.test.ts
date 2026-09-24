@@ -40,6 +40,21 @@ describe("web push service", () => {
 		assert.equal(reloaded.subscriptionCount(), 1);
 	});
 
+	it("retires the replaced endpoint and keeps only the newest subscriptions", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const service = await createWebPushService(await configWithDataDir(t, dataDir));
+
+		await service.subscribe(subscription("https://push.example/old"));
+		await service.subscribe(subscription("https://push.example/new"), undefined, "https://push.example/old");
+		assert.equal(service.subscriptionCount(), 1);
+
+		for (let i = 0; i < 12; i += 1) await service.subscribe(subscription(`https://push.example/${i}`));
+		assert.equal(service.subscriptionCount(), 10);
+		const stored = JSON.parse(await readFile(resolve(dataDir, "settings", "web-push.json"), "utf8"));
+		assert.equal(stored.subscriptions.at(-1).endpoint, "https://push.example/11");
+		assert.equal(stored.subscriptions[0].endpoint, "https://push.example/2");
+	});
+
 	it("regenerates keys when the store file is unreadable", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

@@ -2,6 +2,7 @@ import { fetchPushKey, removePushSubscription, savePushSubscription } from "./ap
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 const DESIRED_KEY = "familiar.notifications.enabled";
+const ENDPOINT_KEY = "familiar.notifications.endpoint";
 export const NOTIFICATIONS_CHANGED_EVENT = "familiar:notifications-changed";
 
 const supported = (): boolean =>
@@ -63,12 +64,20 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/** Saves the subscription and retires the endpoint this installation held before it. */
+async function saveSubscription(subscription: PushSubscription): Promise<void> {
+  const previous = localStorage.getItem(ENDPOINT_KEY);
+  const replaces = previous && previous !== subscription.endpoint ? previous : undefined;
+  await savePushSubscription({ ...subscription.toJSON(), replaces });
+  localStorage.setItem(ENDPOINT_KEY, subscription.endpoint);
+}
+
 async function reconcileSubscription(registration: ServiceWorkerRegistration): Promise<void> {
   const subscription = await registration.pushManager.getSubscription();
   if (Notification.permission !== "granted") return;
   if (subscription && localStorage.getItem(DESIRED_KEY) !== "off") {
     localStorage.setItem(DESIRED_KEY, "on");
-    await savePushSubscription(subscription.toJSON());
+    await saveSubscription(subscription);
     return;
   }
   if (localStorage.getItem(DESIRED_KEY) === "off") return;
@@ -77,7 +86,7 @@ async function reconcileSubscription(registration: ServiceWorkerRegistration): P
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(key),
   });
-  await savePushSubscription(renewed.toJSON());
+  await saveSubscription(renewed);
 }
 
 /** Call from a user gesture (the settings toggle) — Safari requires one to prompt. */
@@ -93,6 +102,7 @@ export async function setNotificationsEnabled(on: boolean): Promise<Notification
       });
       await subscription.unsubscribe();
     }
+    localStorage.removeItem(ENDPOINT_KEY);
     return notificationState();
   }
   // Permission prompt first — it must stay inside the click's user activation.
@@ -111,7 +121,7 @@ export async function setNotificationsEnabled(on: boolean): Promise<Notification
     }),
   ]).finally(() => clearTimeout(timer));
   try {
-    await savePushSubscription(subscription.toJSON());
+    await saveSubscription(subscription);
     localStorage.setItem(DESIRED_KEY, "on");
   } catch (error) {
     await subscription.unsubscribe();

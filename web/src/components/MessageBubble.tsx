@@ -3,6 +3,7 @@ import type { Attachment, Message } from "../types";
 import { cn } from "@/lib/utils";
 import { renderInlineText } from "@/lib/renderInlineText";
 import { AudioPlayer } from "./AudioPlayer";
+import { FileAttachmentCard } from "./FilePreview";
 import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 import { ErrorNotice } from "./steps/ErrorNotice";
@@ -63,11 +64,7 @@ function AttachmentItem({ attachment, media }: { attachment: Attachment; media: 
       />
     );
   }
-  return (
-    <a href={attachment.url} download={attachment.name} className="chat-file-link">
-      {attachment.name}
-    </a>
-  );
+  return <FileAttachmentCard attachment={attachment} url={attachment.url} />;
 }
 
 function Attachments({ attachments }: { attachments: Attachment[] }) {

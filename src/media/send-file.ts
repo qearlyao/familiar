@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, extname, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
+import { mimeTypeForPath } from "../util/mime.js";
 import { MAX_SENT_FILE_BYTES } from "./attachment-limits.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
@@ -28,35 +29,6 @@ type SendFileToolInput = Static<typeof sendFileSchema>;
 
 interface SendFileToolDetails {
 	localPath: string;
-}
-
-const FILE_MIME_TYPES: Record<string, string> = {
-	".html": "text/html",
-	".htm": "text/html",
-	".svg": "image/svg+xml",
-	".png": "image/png",
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".gif": "image/gif",
-	".webp": "image/webp",
-	".pdf": "application/pdf",
-	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	".csv": "text/csv",
-	".json": "application/json",
-	".md": "text/markdown",
-	".txt": "text/plain",
-	".zip": "application/zip",
-	".mp3": "audio/mpeg",
-	".wav": "audio/wav",
-	".ogg": "audio/ogg",
-	".mp4": "video/mp4",
-	".webm": "video/webm",
-};
-
-export function sentFileMimeType(name: string): string {
-	return FILE_MIME_TYPES[extname(name).toLowerCase()] ?? "application/octet-stream";
 }
 
 function attachmentKind(mimeType: string): NonNullable<StoredAttachment["kind"]> {
@@ -109,7 +81,7 @@ export function createSendFileTool(
 			await mkdir(dir, { recursive: true });
 			const localPath = resolve(dir, name);
 			await copyFile(sourcePath, localPath);
-			const mimeType = sentFileMimeType(name);
+			const mimeType = mimeTypeForPath(name);
 			mediaSink.add({
 				id,
 				name,

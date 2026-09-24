@@ -88,15 +88,16 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["x-content-type-options"], "nosniff");
 	});
 
-	it("keeps passive files inline", async (t) => {
+	it("keeps passive files inline, pdfs included", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const dir = generatedAttachmentsDir(config);
 		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "voice.mp3"), "audio", "utf8");
+		await writeFile(join(dir, "paper.pdf"), "%PDF-1.4", "utf8");
 		const response = new FakeResponse();
 
-		await serveAttachment(config, response as any, "/api/web/attachments/voice.mp3");
+		await serveAttachment(config, response as any, "/api/web/attachments/paper.pdf");
 
+		assert.equal(response.headers?.["content-type"], "application/pdf");
 		assert.equal(response.headers?.["content-disposition"], undefined);
 	});
 

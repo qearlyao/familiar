@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Config } from "../config/index.js";
 import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../media/generated-media.js";
+import { contentTypeForPath } from "../util/mime.js";
 import { sendText } from "./http.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -14,27 +15,6 @@ const DIST_DIR = resolve(PROJECT_ROOT, "web/dist");
 // Only successful realpaths are cached: the attachment root dirs are created
 // lazily on first write, so a missing root must stay retryable.
 const rootRealPathCache = new Map<string, string>();
-
-function mimeType(path: string): string {
-	const extension = extname(path).toLowerCase();
-	if (extension === ".html") return "text/html; charset=utf-8";
-	if (extension === ".js") return "text/javascript; charset=utf-8";
-	if (extension === ".css") return "text/css; charset=utf-8";
-	if (extension === ".svg") return "image/svg+xml";
-	if (extension === ".webmanifest") return "application/manifest+json";
-	if (extension === ".png") return "image/png";
-	if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
-	if (extension === ".gif") return "image/gif";
-	if (extension === ".webp") return "image/webp";
-	if (extension === ".avif") return "image/avif";
-	if (extension === ".bmp") return "image/bmp";
-	if (extension === ".tif" || extension === ".tiff") return "image/tiff";
-	if (extension === ".ico") return "image/x-icon";
-	if (extension === ".mp3") return "audio/mpeg";
-	if (extension === ".opus" || extension === ".ogg") return "audio/ogg";
-	if (extension === ".wav") return "audio/wav";
-	return "application/octet-stream";
-}
 
 export async function serveStatic(response: ServerResponse, requestPath: string): Promise<boolean> {
 	if (!existsSync(DIST_DIR)) return false;
@@ -53,7 +33,7 @@ export async function serveStatic(response: ServerResponse, requestPath: string)
 		? "public, max-age=31536000, immutable"
 		: "no-cache";
 	const stream = createReadStream(filePath);
-	response.writeHead(200, { "content-type": mimeType(filePath), "cache-control": cacheControl });
+	response.writeHead(200, { "content-type": contentTypeForPath(filePath), "cache-control": cacheControl });
 	stream.pipe(response);
 	return true;
 }
@@ -83,7 +63,7 @@ const ACTIVE_EXTENSIONS = new Set([".html", ".htm", ".xhtml", ".svg", ".xml", ".
 
 function privateFileHeaders(filePath: string): Record<string, string> {
 	const headers: Record<string, string> = {
-		"content-type": mimeType(filePath),
+		"content-type": contentTypeForPath(filePath),
 		"x-content-type-options": "nosniff",
 		"cache-control": "private, max-age=31536000, immutable",
 	};

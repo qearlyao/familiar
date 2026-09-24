@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
 import { createGeneratedMediaSink, generatedAttachmentsDir, publicAttachmentPath } from "../src/media/generated-media.js";
-import { createSendFileTool, sentFileMimeType } from "../src/media/send-file.js";
+import { createSendFileTool } from "../src/media/send-file.js";
+import { contentTypeForPath, mimeTypeForPath } from "../src/util/mime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function setup(t: Parameters<typeof configWithDataDir>[0]) {
@@ -57,8 +58,10 @@ describe("send_file tool", () => {
 		assert.deepEqual(sink.drain(), []);
 	});
 
-	it("maps unknown extensions to octet-stream", () => {
-		assert.equal(sentFileMimeType("page.HTML"), "text/html");
-		assert.equal(sentFileMimeType("blob.bin"), "application/octet-stream");
+	it("maps extensions to content types", () => {
+		assert.equal(mimeTypeForPath("page.HTML"), "text/html");
+		assert.equal(contentTypeForPath("page.html"), "text/html; charset=utf-8");
+		assert.equal(contentTypeForPath("paper.pdf"), "application/pdf");
+		assert.equal(mimeTypeForPath("blob.bin"), "application/octet-stream");
 	});
 });

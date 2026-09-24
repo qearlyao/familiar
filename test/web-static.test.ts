@@ -73,32 +73,21 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
-	it("serves sent html as a sandboxed download", async (t) => {
+	it("serves sent pages and pdfs inline for the viewer", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const dir = join(generatedAttachmentsDir(config), "file_one");
 		await mkdir(dir, { recursive: true });
-		await writeFile(join(dir, "page.html"), "<script>alert(1)</script>", "utf8");
-		const response = new FakeResponse();
-
-		await serveAttachment(config, response as any, "/api/web/attachments/file_one/page.html");
-
-		assert.equal(response.statusCode, 200);
-		assert.equal(response.headers?.["content-disposition"], "attachment");
-		assert.equal(response.headers?.["content-security-policy"], "sandbox");
-		assert.equal(response.headers?.["x-content-type-options"], "nosniff");
-	});
-
-	it("keeps passive files inline, pdfs included", async (t) => {
-		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const dir = generatedAttachmentsDir(config);
-		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "page.html"), "<p>hi</p>", "utf8");
 		await writeFile(join(dir, "paper.pdf"), "%PDF-1.4", "utf8");
-		const response = new FakeResponse();
+		const page = new FakeResponse();
+		const paper = new FakeResponse();
 
-		await serveAttachment(config, response as any, "/api/web/attachments/paper.pdf");
+		await serveAttachment(config, page as any, "/api/web/attachments/file_one/page.html");
+		await serveAttachment(config, paper as any, "/api/web/attachments/file_one/paper.pdf");
 
-		assert.equal(response.headers?.["content-type"], "application/pdf");
-		assert.equal(response.headers?.["content-disposition"], undefined);
+		assert.equal(page.headers?.["content-type"], "text/html; charset=utf-8");
+		assert.equal(page.headers?.["content-disposition"], undefined);
+		assert.equal(paper.headers?.["content-type"], "application/pdf");
 	});
 
 	it("rejects traversal attempts", async (t) => {

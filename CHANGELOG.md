@@ -5,11 +5,7 @@
 ### Added
 
 - Add a built-in `send_file` tool so the agent can send any file it made (HTML, SVG, PDF, slides, documents) as an attachment on its reply in the WebUI, Discord, and QQ.
-- Show sent files as cards in WebUI chat. HTML pages open in a sandboxed viewer with scripts running in an opaque origin, PDFs open in the browser's viewer, and other files download under their own names.
-
-### Security
-
-- Serve HTML, SVG, XML, and script attachments as sandboxed downloads with `nosniff`, so agent-written pages never run in the WebUI origin.
+- Show sent files as cards in WebUI chat. HTML pages and PDFs open in a full-screen viewer, and other files download under their own names.
 
 ## 1.2.2 - 2026-09-24
 

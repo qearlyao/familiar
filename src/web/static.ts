@@ -1,7 +1,7 @@
 import { createReadStream, existsSync } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Config } from "../config/index.js";
@@ -57,39 +57,24 @@ function parseRangeHeader(rangeHeader: string | undefined, size: number): { star
 	return { start, end: Math.min(end, size - 1) };
 }
 
-// a private file is data, never a page: anything the browser would run (html, svg, xml)
-// downloads instead of rendering in this origin, where it would ride the owner's session.
-const ACTIVE_EXTENSIONS = new Set([".html", ".htm", ".xhtml", ".svg", ".xml", ".js", ".mjs"]);
-
-function privateFileHeaders(filePath: string): Record<string, string> {
-	const headers: Record<string, string> = {
-		"content-type": contentTypeForPath(filePath),
-		"x-content-type-options": "nosniff",
-		"cache-control": "private, max-age=31536000, immutable",
-	};
-	if (ACTIVE_EXTENSIONS.has(extname(filePath).toLowerCase())) {
-		headers["content-disposition"] = "attachment";
-		headers["content-security-policy"] = "sandbox";
-	}
-	return headers;
-}
-
 export function servePrivateFile(response: ServerResponse, filePath: string, size: number, rangeHeader?: string): void {
 	const range = parseRangeHeader(rangeHeader, size);
 	if (range) {
 		response.writeHead(206, {
-			...privateFileHeaders(filePath),
+			"content-type": contentTypeForPath(filePath),
 			"content-length": String(range.end - range.start + 1),
 			"content-range": `bytes ${range.start}-${range.end}/${size}`,
 			"accept-ranges": "bytes",
+			"cache-control": "private, max-age=31536000, immutable",
 		});
 		createReadStream(filePath, { start: range.start, end: range.end }).pipe(response);
 		return;
 	}
 	response.writeHead(200, {
-		...privateFileHeaders(filePath),
+		"content-type": contentTypeForPath(filePath),
 		"content-length": String(size),
 		"accept-ranges": "bytes",
+		"cache-control": "private, max-age=31536000, immutable",
 	});
 	createReadStream(filePath).pipe(response);
 }

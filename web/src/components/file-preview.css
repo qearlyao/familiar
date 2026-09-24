@@ -19,4 +19,3 @@
 .file-viewer-page {
   position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 1rem; background: #fff;
 }
-.file-viewer-wait { margin: 0; font-size: 0.875rem; color: rgba(231, 224, 213, 0.7); }

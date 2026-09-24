@@ -59,7 +59,7 @@ export function createSendFileTool(
 		name: "send_file",
 		label: "send_file",
 		description:
-			"send a file you made or found to them as an attachment on your reply — html pages, svg, pdf, slides, documents, spreadsheets, archives, anything. write the file first, then send its path. the file is copied, so later edits need another send.",
+			"attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits.",
 		parameters: sendFileSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: SendFileToolInput) {

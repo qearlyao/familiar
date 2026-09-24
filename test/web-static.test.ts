@@ -73,6 +73,33 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
+	it("serves sent html as a sandboxed download", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const dir = join(generatedAttachmentsDir(config), "file_one");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "page.html"), "<script>alert(1)</script>", "utf8");
+		const response = new FakeResponse();
+
+		await serveAttachment(config, response as any, "/api/web/attachments/file_one/page.html");
+
+		assert.equal(response.statusCode, 200);
+		assert.equal(response.headers?.["content-disposition"], "attachment");
+		assert.equal(response.headers?.["content-security-policy"], "sandbox");
+		assert.equal(response.headers?.["x-content-type-options"], "nosniff");
+	});
+
+	it("keeps passive files inline", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const dir = generatedAttachmentsDir(config);
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "voice.mp3"), "audio", "utf8");
+		const response = new FakeResponse();
+
+		await serveAttachment(config, response as any, "/api/web/attachments/voice.mp3");
+
+		assert.equal(response.headers?.["content-disposition"], undefined);
+	});
+
 	it("rejects traversal attempts", async (t) => {
 		const root = await createTempDataDir(t);
 		t.after(() => rm(root, { recursive: true, force: true }));

@@ -64,7 +64,7 @@ function AttachmentItem({ attachment, media }: { attachment: Attachment; media: 
     );
   }
   return (
-    <a href={attachment.url} className="chat-file-link">
+    <a href={attachment.url} download={attachment.name} className="chat-file-link">
       {attachment.name}
     </a>
   );

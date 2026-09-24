@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add a built-in `send_file` tool so the agent can send any file it made (HTML, SVG, PDF, slides, documents) as an attachment on its reply in the WebUI, Discord, and QQ.
+
+### Security
+
+- Serve HTML, SVG, XML, and script attachments as sandboxed downloads with `nosniff`, so agent-written pages never run in the WebUI origin.
+
 ## 1.2.2 - 2026-09-24
 
 ### Changed

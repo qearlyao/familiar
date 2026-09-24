@@ -86,6 +86,7 @@ export const BUILTIN_TOOLS = [
 	"cron",
 	"tts",
 	"image_gen",
+	"send_file",
 	"search_web",
 	"fetch_web",
 	"browser",

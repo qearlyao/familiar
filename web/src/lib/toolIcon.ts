@@ -5,6 +5,7 @@ import {
   FileText,
   Globe,
   Image as ImageIcon,
+  Paperclip,
   Pencil,
   Terminal,
   Volume2,
@@ -26,6 +27,7 @@ const RULES: IconRule[] = [
   { match: (n) => /^(tts|speak|voice)/.test(n), icon: Volume2 },
   { match: (n) => /^(image|meme|picture|photo)/.test(n), icon: ImageIcon },
   { match: (n) => /^skill/.test(n), icon: Compass },
+  { match: (n) => /^send_file/.test(n), icon: Paperclip },
 ];
 
 export function iconForTool(name: string): LucideIcon {

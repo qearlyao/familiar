@@ -29,7 +29,7 @@ import { promptImagesFromAttachments } from "./inbound-attachments.js";
 
 registerImageApis();
 
-const IMAGE_GEN_NOTICE_PREFIX = "Generated image attachment:";
+const IMAGE_GEN_NOTICE_PREFIX = "Image attached to your reply:";
 const OPENROUTER_IMAGE_BASE_URL = "https://openrouter.ai/api/v1";
 
 const imageGenSchema = Type.Object(

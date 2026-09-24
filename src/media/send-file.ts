@@ -11,7 +11,7 @@ import { MAX_SENT_FILE_BYTES } from "./attachment-limits.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
 
-const SEND_FILE_NOTICE_PREFIX = "Sent file attachment:";
+const SEND_FILE_NOTICE_PREFIX = "File attached to your reply:";
 
 const sendFileSchema = Type.Object(
 	{
@@ -59,7 +59,7 @@ export function createSendFileTool(
 		name: "send_file",
 		label: "send_file",
 		description:
-			"send a file you made or found to them as an attachment on your reply — html pages, svg, pdf, slides, documents, spreadsheets, archives, anything. write the file first, then send its path. the file is copied, so later edits need another send.",
+			"attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits. tts, image_gen, and browser screenshots attach themselves — never resend those.",
 		parameters: sendFileSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: SendFileToolInput) {

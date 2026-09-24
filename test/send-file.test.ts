@@ -34,7 +34,7 @@ describe("send_file tool", () => {
 		assert.ok(attachment?.localPath?.startsWith(generatedAttachmentsDir(config)));
 		assert.equal(await readFile(attachment!.localPath!, "utf8"), "slides");
 		assert.match(publicAttachmentPath(config, attachment!.localPath!), /^\/api\/web\/attachments\/file_[^/]+\/deck\.pptx$/);
-		assert.deepEqual(result.content, [{ type: "text", text: "Sent file attachment: deck.pptx" }]);
+		assert.deepEqual(result.content, [{ type: "text", text: "File attached to your reply: deck.pptx" }]);
 	});
 
 	it("renames with a single safe path segment", async (t) => {

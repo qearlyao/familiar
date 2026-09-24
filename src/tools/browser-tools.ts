@@ -883,7 +883,7 @@ export function createBrowserTools(
 				const attachment = await maybeAttachScreenshot(input, config, mediaSink, result);
 				const formatted = formatBrowserResult(result, maxChars, input);
 				const text = attachment.attachmentName
-					? `${formatted.text}\n\nGenerated screenshot attachment: ${attachment.attachmentName}`
+					? `${formatted.text}\n\nScreenshot attached to your reply: ${attachment.attachmentName}`
 					: formatted.text;
 				return {
 					content: [{ type: "text", text }],

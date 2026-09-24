@@ -185,7 +185,7 @@ describe("image_gen tool", () => {
 			assert.ok(attachments[0]?.localPath?.startsWith(generatedAttachmentsDir(config)));
 			assert.equal(await readFile(attachments[0]?.localPath ?? "", "utf8"), "fake-png");
 			assert.match(toolText(result), /Done\./);
-			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
 			assert.deepEqual(Object.keys(result.details).sort(), ["id", "localPath", "model", "stopReason", "textOutput"]);
 			assert.equal(result.details.model, "custom/gemini-image");
 			assert.equal(result.details.textOutput, "Done.");
@@ -279,7 +279,7 @@ describe("image_gen tool", () => {
 			assert.equal(attachments[0]?.mimeType, "image/png");
 			assert.equal(result.details.id, attachments[0]?.id);
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
 		});
 	});
@@ -316,7 +316,7 @@ describe("image_gen tool", () => {
 			assert.equal(attachments[0]?.mimeType, "image/png");
 			assert.equal(result.details.id, attachments[0]?.id);
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
 			assert.doesNotMatch(toolText(result), /data:image/);
 		});
 	});
@@ -366,7 +366,7 @@ describe("image_gen tool", () => {
 			assert.equal(result.details.id, attachments[0]?.id);
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
 			assert.deepEqual(await readFile(attachments[0]?.localPath ?? ""), imageBytes);
-			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
 			assert.doesNotMatch(toolText(result), /oss\.filenest/);
 		} finally {
 			globalThis.fetch = previousFetch;
@@ -474,7 +474,7 @@ describe("image_gen tool", () => {
 			assert.equal(attachments[0]?.mimeType, "image/png");
 			assert.equal(result.details.id, attachments[0]?.id);
 			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Generated image attachment: image_gen_/);
+			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
 			assert.doesNotMatch(toolText(result), /iVBOR/);
 		});
 	});

@@ -102,10 +102,14 @@ export async function setNotificationsEnabled(on: boolean): Promise<Notification
   // A subscription made under a previous server key makes subscribe() throw — drop it first.
   const stale = await registration.pushManager.getSubscription();
   if (stale) await stale.unsubscribe();
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(key),
-  });
+  // iOS never settles subscribe() while the device can't reach Apple's push service — don't freeze the switch on it.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const subscription = await Promise.race([
+    registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) }),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("this device isn't reaching its push service")), 20_000);
+    }),
+  ]).finally(() => clearTimeout(timer));
   try {
     await savePushSubscription(subscription.toJSON());
     localStorage.setItem(DESIRED_KEY, "on");

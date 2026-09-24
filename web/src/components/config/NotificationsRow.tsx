@@ -4,7 +4,9 @@ import { OnOffToggle, Row } from "./inputs";
 
 const blocked: Partial<Record<NotificationState, string>> = {
   denied: "blocked for this site — allow them in the browser first",
-  unsupported: "on iphone or ipad, add the app to your home screen first",
+  unsupported: window.isSecureContext
+    ? "on iphone or ipad, add the app to your home screen first"
+    : "notifications need an https address — plain http can't carry them",
 };
 
 /** "notify this device", as one row among the ways they reach you. */

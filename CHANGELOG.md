@@ -1,11 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-09-24
 
 ### Added
 
 - Add a built-in `send_file` tool so the agent can send any file it made (HTML, SVG, PDF, slides, documents) as an attachment on its reply in the WebUI and Discord. QQ still delivers only images and audio.
 - Show sent files as cards in WebUI chat. HTML pages and PDFs open in a full-screen viewer, and other files download under their own names.
+
+### Changed
+
+- Refine LCM summarization across leaf and condensed levels, with a separate `memory.lcm.condensed_target_tokens` setting for merged summaries.
+
+### Fixed
+
+- Stop stale Web push subscriptions from accumulating when a device changes endpoints.
+- Let the Web push toggle recover when iOS leaves subscription requests pending, and explain when plain HTTP prevents notifications.
 
 ## 1.2.2 - 2026-09-24
 

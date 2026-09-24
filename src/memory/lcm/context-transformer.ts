@@ -7,6 +7,7 @@ import { condense } from "./condense.js";
 import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
+	estimateTextTokens,
 	type LcmContextRawItem,
 	renderLcmRecordPartsForSummary,
 	resolveFreshTailStartIndex,
@@ -36,6 +37,7 @@ export interface LcmContextTransformerOptions {
 		freshTailMaxTokens?: number;
 		leafChunkTokens: number;
 		leafTargetTokens: number;
+		condensedTargetTokens: number;
 		condenseGroupSize: number;
 		maxSummaryDepth: number;
 		maxRounds: number;
@@ -266,11 +268,12 @@ export class LcmContextTransformer {
 			if (chunkItems.length === 0) return;
 			const previousSummary = findPreviousSummaryText(state.items, startIndex);
 			const text = renderLcmSummaryInput(chunkItems);
+			const mode = candidate.reasons.includes("context_threshold") ? "aggressive" : "normal";
 			const summaryText = await this.summarizer.summarizeLeaf(
 				{
 					text,
-					targetTokens: this.settings.leafTargetTokens,
-					mode: candidate.reasons.includes("context_threshold") ? "aggressive" : "normal",
+					targetTokens: resolveLeafTargetTokens(this.settings.leafTargetTokens, estimateTextTokens(text), mode),
+					mode,
 					previousSummary,
 				},
 				input.signal,
@@ -354,19 +357,27 @@ export class LcmContextTransformer {
 		sessionKey: string;
 		signal?: AbortSignal;
 	}): Promise<StoredLcmSummary[]> {
-		const candidateIds = contiguousRuntimeSummaryCandidateIds(input.state.items, 1, this.settings.condenseGroupSize);
-		if (candidateIds.length === 0) return [];
-		const created = await condense({
-			segmentId: this.segmentManager.activeSegmentId(input.sessionKey),
-			depth: 1,
-			store: this.lcmStore,
-			summarizer: this.summarizer,
-			config: this.settings,
-			candidateIds,
-			indexer: this.indexer,
-			signal: input.signal,
-		});
-		applyCondensedRuntimeSummaries(input.state, created, input.sessionKey);
+		const created: StoredLcmSummary[] = [];
+		for (let depth = 1; depth < this.settings.maxSummaryDepth; depth += 1) {
+			for (const candidateIds of contiguousRuntimeSummaryRuns(
+				input.state.items,
+				depth,
+				this.settings.condenseGroupSize,
+			)) {
+				const condensed = await condense({
+					segmentId: this.segmentManager.activeSegmentId(input.sessionKey),
+					depth,
+					store: this.lcmStore,
+					summarizer: this.summarizer,
+					config: this.settings,
+					candidateIds,
+					indexer: this.indexer,
+					signal: input.signal,
+				});
+				applyCondensedRuntimeSummaries(input.state, condensed, input.sessionKey);
+				created.push(...condensed);
+			}
+		}
 		return created;
 	}
 
@@ -584,6 +595,16 @@ function countContiguousRawSources(
 	return count;
 }
 
+/** Scale the leaf target to the chunk so small chunks still compress (lossless-claw's resolveTargetTokens). */
+function resolveLeafTargetTokens(target: number, inputTokens: number, mode: "normal" | "aggressive"): number {
+	const cap = mode === "aggressive" ? Math.max(1, Math.floor(target * 0.55)) : target;
+	const scaled =
+		mode === "aggressive"
+			? Math.max(96, Math.floor(inputTokens * 0.2))
+			: Math.max(192, Math.floor(inputTokens * 0.35));
+	return Math.min(cap, scaled);
+}
+
 function findPreviousSummaryText(items: readonly LcmContextItem[], beforeIndex: number): string | undefined {
 	for (let index = beforeIndex - 1; index >= 0; index -= 1) {
 		const item = items[index];
@@ -631,25 +652,19 @@ function applyCondensedRuntimeSummaries(
 	}
 }
 
-function contiguousRuntimeSummaryCandidateIds(
-	items: readonly LcmContextItem[],
-	depth: number,
-	groupSize: number,
-): number[] {
-	const ids: number[] = [];
-	for (let index = 0; index < items.length; index += 1) {
-		const group = items.slice(index, index + groupSize);
-		if (
-			group.length === groupSize &&
-			group.every(
-				(item): item is CompactedLcmItem & { persistedSummaryId: number } =>
-					item.type === "summary" && item.depth === depth && item.persistedSummaryId !== undefined,
-			)
-		) {
-			ids.push(...group.map((item) => item.persistedSummaryId));
+/** Runs of adjacent persisted summaries at one depth, so a condensed group never spans a gap. */
+function contiguousRuntimeSummaryRuns(items: readonly LcmContextItem[], depth: number, minLength: number): number[][] {
+	const runs: number[][] = [];
+	let run: number[] = [];
+	for (const item of [...items, undefined]) {
+		if (item?.type === "summary" && item.depth === depth && item.persistedSummaryId !== undefined) {
+			run.push(item.persistedSummaryId);
+			continue;
 		}
+		if (run.length >= minLength) runs.push(run);
+		run = [];
 	}
-	return ids;
+	return runs;
 }
 
 function formatSummaryTimeRange(summary: StoredLcmSummary): string {
@@ -774,7 +789,7 @@ function renderLcmSummaryInput(items: readonly RawLcmItem[]): string {
 function renderMessageForSummary(message: AgentMessage): string {
 	const role = (message as { role?: string }).role ?? "message";
 	const timestamp = (message as { timestamp?: number }).timestamp;
-	const date = typeof timestamp === "number" && Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : "";
+	const date = typeof timestamp === "number" && Number.isFinite(timestamp) ? formatLocalTimestamp(timestamp) : "";
 	const text = extractTextFromMessage(message).trim();
 	if (!text) return "";
 	return [`[${role}${date ? ` ${date}` : ""}]`, text].join("\n");

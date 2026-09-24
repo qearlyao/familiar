@@ -642,6 +642,7 @@ export type ConfigKey =
   | "memory.lcm.freshTailCount"
   | "memory.lcm.leafChunkTokens"
   | "memory.lcm.leafTargetTokens"
+  | "memory.lcm.condensedTargetTokens"
   | "memory.lcm.condenseGroupSize"
   | "memory.lcm.maxSummaryDepth"
   | "memory.lcm.newSessionRetainDepth"
@@ -692,6 +693,7 @@ export interface ConfigPayload {
     "memory.lcm.freshTailCount": ConfigValue<number>;
     "memory.lcm.leafChunkTokens": ConfigValue<number>;
     "memory.lcm.leafTargetTokens": ConfigValue<number>;
+    "memory.lcm.condensedTargetTokens": ConfigValue<number>;
     "memory.lcm.condenseGroupSize": ConfigValue<number>;
     "memory.lcm.maxSummaryDepth": ConfigValue<number>;
     "memory.lcm.newSessionRetainDepth": ConfigValue<number>;

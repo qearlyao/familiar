@@ -18,7 +18,7 @@ export type LcmSummaryMode = "normal" | "aggressive";
 
 export interface LcmSummarizer {
 	summarizeLeaf(input: LcmLeafSummaryInput, signal?: AbortSignal): Promise<string>;
-	summarizeCondensed?(input: LcmCondensedSummaryInput, signal?: AbortSignal): Promise<string>;
+	summarizeCondensed(input: LcmCondensedSummaryInput, signal?: AbortSignal): Promise<string>;
 }
 
 export interface LcmLeafSummaryInput {
@@ -33,6 +33,7 @@ export interface LcmCondensedSummaryInput {
 	targetTokens: number;
 	depth: number;
 	childSummaryCount: number;
+	previousSummary?: string;
 }
 
 export type LcmCompleteFn = (
@@ -204,6 +205,7 @@ export function buildLeafSummaryPrompt(params: {
 			"- Plain text. No preamble, no headings, no markdown.",
 			"- Concise and specific. Emotionally accurate but understated — don't dramatize, don't flatten.",
 			"- Don't infer beyond what the segment supports.",
+			"- previous_context is only there for orientation — it's already remembered. Summarize the conversation_segment alone; don't carry previous_context forward.",
 			"- Name significant topics, people, and moments clearly — vague pronouns and stripped proper nouns make later search miss them.",
 			"- Mention files, commands, or implementation details only when they're load-bearing for something the user is actively doing.",
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
@@ -219,6 +221,7 @@ export function buildCondensedSummaryPrompt(params: {
 	targetTokens: number;
 	depth: number;
 	childSummaryCount: number;
+	previousSummary?: string;
 	customInstructions?: string;
 }): string {
 	if (params.depth <= 2) return buildSessionSummaryPrompt(params);
@@ -230,25 +233,33 @@ function buildSessionSummaryPrompt(params: {
 	text: string;
 	targetTokens: number;
 	childSummaryCount: number;
+	previousSummary?: string;
 	customInstructions?: string;
 }): string {
 	const instructionBlock = additionalInstructions(params.customInstructions);
+	const previousContext = params.previousSummary?.trim();
 	return [
-		"You're merging several recent memory notes into one session-level continuity memory. Focus on what's new, changed, resolved, or still active across them.",
+		"You're merging several recent memory notes into one session-level continuity memory.",
 		instructionBlock,
+		previousContext
+			? `The agent already remembers the session before these notes. Don't repeat what's unchanged there — focus on what's new, changed, resolved, or still active:\n\n<previous_context>\n${previousContext}\n</previous_context>`
+			: "Focus on what's new, changed, resolved, or still active across them.",
 		[
 			"Keep:",
 			"- The user's preferences, boundaries, emotional state, and what's actually been moving in the relationship.",
 			"- Active plans, promises, requests, open loops, decisions.",
 			"- Specific phrasing or moments when they were the thing that mattered — a line that landed, a tone shift, an inside reference.",
 			"- Work or project detail when it stays relevant going forward.",
+			"- What changed — a plan, a decision, a feeling — with what it was before and what replaced it.",
 			"",
 			"Drop:",
+			"- Context unchanged from previous_context.",
 			"- Turn-by-turn narration, repeated reassurance, resolved small talk.",
 			"- Tool or process detail unless it shapes what the user does next.",
 			"- Intermediate phrasing that's been superseded by later wording.",
 			"",
 			"Plain text. Brief structure (short labels, light grouping) is fine if it helps the agent scan it later.",
+			"Keep it in order, with a light timeline — when things happened, to the hour or part of day (a late night, Tuesday morning). Time is how the agent finds its way back.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,
@@ -273,12 +284,14 @@ function buildTrajectorySummaryPrompt(params: {
 			"- Important changes in the user's plans, relationships, work, or self-understanding.",
 			"- Current unresolved needs, promises, risks, and active projects.",
 			"- Moments singular enough to matter at trajectory scale — a turning point, a first time, a hard line drawn.",
+			"- How things evolved — what changed, what it replaced, and why.",
 			"",
 			"Drop:",
 			"- Session-local operational detail and one-off mood shifts.",
 			"- Intermediate states superseded by later outcomes.",
 			"",
 			"Plain text with concise labels if useful.",
+			"Include a timeline with dates (and rough time of day where it matters) for the turning points.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,
@@ -308,6 +321,7 @@ function buildDurableSummaryPrompt(params: {
 			"- Specific names, paths, or identifiers unless they remain essential.",
 			"",
 			"Plain text. Be compact and careful.",
+			"Include a brief timeline with dates or date ranges for the major chapters.",
 			`Input contains ${params.childSummaryCount} child summaries.`,
 			'- End with exactly: "Compressed away: <comma-separated list of what was dropped or generalized>".',
 			`Target length: about ${Math.max(1, Math.floor(params.targetTokens))} tokens.`,
@@ -333,11 +347,19 @@ export function capSummaryText(text: string, targetTokens: number): string {
 	const normalized = text.trim() || fallbackSummary("");
 	const maxChars = Math.max(200, Math.floor(Math.max(1, targetTokens) * 4));
 	if (normalized.length <= maxChars) return normalized;
-	const clipped = normalized
-		.slice(0, maxChars)
+	// Clip the body, not the footer — the footer is the list of what to look up.
+	const footerStart = normalized.lastIndexOf("\nCompressed away:");
+	const body = footerStart >= 0 ? normalized.slice(0, footerStart) : normalized;
+	const footer =
+		footerStart >= 0
+			? `${normalized.slice(footerStart + 1, footerStart + 1 + Math.floor(maxChars / 2)).trim()}, overflow beyond summary cap`
+			: "Compressed away: overflow beyond summary cap";
+	const budget = Math.max(0, maxChars - footer.length - 1);
+	const clipped = body
+		.slice(0, budget)
 		.replace(/\s+\S*$/, "")
 		.trim();
-	return `${clipped || normalized.slice(0, maxChars).trim()}\nCompressed away: overflow beyond summary cap`;
+	return `${clipped || body.slice(0, budget).trim()}\n${footer}`;
 }
 
 function fallbackSummary(text: string): string {

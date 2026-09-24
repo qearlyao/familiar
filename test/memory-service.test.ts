@@ -12,7 +12,7 @@ import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
-import { contentText, renderMessages, withMemoryService, zeroUsage } from "./memory-fakes.js";
+import { condenseViaLeaf, contentText, renderMessages, withMemoryService, zeroUsage } from "./memory-fakes.js";
 
 async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 	const dataDir = await createTempDataDir(t);
@@ -578,6 +578,7 @@ describe("MemoryService", () => {
 		};
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				calls += 1;
 				assert.match(input.text, /old detail alpha/);
@@ -651,6 +652,7 @@ describe("MemoryService", () => {
 		await withEmbeddingFetch([1, 0, 0], async () => {
 			await withMemoryService(config, {
 				summarizer: {
+					summarizeCondensed: condenseViaLeaf,
 					async summarizeLeaf() {
 						throw new Error("budget guard should not need summarization");
 					},
@@ -682,6 +684,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nDeferred hot-cache pressure was compacted.\nExpand for details about: old chat wording";
@@ -724,6 +727,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nCold-cache pressure was compacted.\nExpand for details about: old chat wording";
@@ -783,6 +787,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nCritical overflow was compacted.\nExpand for details about: old chat wording";
@@ -828,6 +833,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nRestarted cold-cache debt was compacted.\nExpand for details about: old chat wording";
@@ -1079,6 +1085,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nCold-turn combined debt was compacted.\nExpand for details about: old chat wording";
@@ -1206,6 +1213,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "compact";
@@ -1272,6 +1280,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nCold-cache debt was compacted.\nExpand for details about: old chat wording";
@@ -1355,6 +1364,7 @@ describe("MemoryService", () => {
 			let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return "Files: none\nForced deferred debt was compacted.\nExpand for details about: old chat wording";
@@ -1410,6 +1420,7 @@ describe("MemoryService", () => {
 		let now = 100_000;
 		let calls = 0;
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf() {
 				calls += 1;
 				return `compact ${calls}`;
@@ -1613,6 +1624,7 @@ describe("MemoryService", () => {
 		};
 		let renderedInput = "";
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				renderedInput = input.text;
 				return "Files: none\nTool interaction was compacted.\nExpand for details about: tool call and result";
@@ -1682,6 +1694,7 @@ describe("MemoryService", () => {
 		};
 		let renderedInput = "";
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				renderedInput = input.text;
 				return "Files: none\nProvider signature metadata was stripped.\nExpand for details about: visible summary content";
@@ -1762,6 +1775,7 @@ describe("MemoryService", () => {
 		};
 		let summarizedInput = "";
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				summarizedInput = input.text;
 				return "Files: none\nPrompt-aware unrelated details were compacted.\nExpand for details about: evicted range";
@@ -1805,6 +1819,7 @@ describe("MemoryService", () => {
 		};
 		let summarizedInput = "";
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				summarizedInput = input.text;
 				return "Files: none\nOldest-first details were compacted.\nExpand for details about: evicted range";
@@ -2030,6 +2045,7 @@ function promptAwareMessages() {
 
 function fixedSummary(text: string): LcmSummarizer {
 	return {
+		summarizeCondensed: condenseViaLeaf,
 		async summarizeLeaf() {
 			return `Files: none\n${text}\nExpand for details about: old chat wording`;
 		},

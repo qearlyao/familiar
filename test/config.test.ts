@@ -687,6 +687,7 @@ api_key_env = "ALT_GEMINI_KEY"
 			freshTailCount: 64,
 			leafChunkTokens: 20000,
 			leafTargetTokens: 2400,
+			condensedTargetTokens: 2000,
 			promptAwareEvictionEnabled: true,
 			condenseGroupSize: 4,
 			maxSummaryDepth: 2,
@@ -910,6 +911,7 @@ fresh_tail_count = 5
 fresh_tail_max_tokens = 1200
 leaf_chunk_tokens = 16000
 leaf_target_tokens = 700
+condensed_target_tokens = 1800
 prompt_aware_eviction_enabled = false
 condense_group_size = 3
 max_summary_depth = 5
@@ -955,6 +957,7 @@ system_prompt_path = "prompts/lcm-system.md"
 			freshTailMaxTokens: 1200,
 			leafChunkTokens: 16000,
 			leafTargetTokens: 700,
+			condensedTargetTokens: 1800,
 			promptAwareEvictionEnabled: false,
 			condenseGroupSize: 3,
 			maxSummaryDepth: 5,

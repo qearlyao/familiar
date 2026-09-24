@@ -10,7 +10,17 @@ import {
 	type MemoryOperatorService,
 	type MemoryServiceOptions,
 } from "../src/memory/service.js";
+import type { LcmCondensedSummaryInput, LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import type { LcmRecordKind, LcmSourceProvenance, StoredLcmRecord } from "../src/memory/lcm/types.js";
+
+/** For fakes that only care about leaves: condensed calls go through summarizeLeaf. */
+export function condenseViaLeaf(
+	this: LcmSummarizer,
+	input: LcmCondensedSummaryInput,
+	signal?: AbortSignal,
+): Promise<string> {
+	return this.summarizeLeaf(input, signal);
+}
 
 export const testLcmSource: LcmSourceProvenance = {
 	sourceType: "chat",

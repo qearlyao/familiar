@@ -104,11 +104,12 @@ export function MemorySection({
             </span>
           </Row>
         </Rows>
-        <Advanced count={5}>
+        <Advanced count={6}>
           <Rows>
             <Row label="leaf chunk" help="max tokens read per leaf summary.">{num("memory.lcm.leafChunkTokens", { min: 1 }, compactionOff)}</Row>
             <Row label="leaf target" help="tokens each leaf summary aims for.">{num("memory.lcm.leafTargetTokens", { min: 1 }, compactionOff)}</Row>
-            <Row label="condense group" help="summaries folded into one at the next level.">{num("memory.lcm.condenseGroupSize", { min: 1 }, compactionOff)}</Row>
+            <Row label="condensed target" help="tokens each merged summary aims for.">{num("memory.lcm.condensedTargetTokens", { min: 1 }, compactionOff)}</Row>
+            <Row label="condense group" help="fewest summaries folded into one at the next level.">{num("memory.lcm.condenseGroupSize", { min: 1 }, compactionOff)}</Row>
             <Row label="max depth" help="deepest summary-of-summaries.">{num("memory.lcm.maxSummaryDepth", { min: 1 }, compactionOff)}</Row>
             <Row label="kept after /new" help="−1 keeps everything, 0 keeps every summary.">{num("memory.lcm.newSessionRetainDepth", { min: -1 }, compactionOff)}</Row>
           </Rows>

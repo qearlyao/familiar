@@ -270,6 +270,7 @@ export interface Config {
 			freshTailMaxTokens?: number;
 			leafChunkTokens: number;
 			leafTargetTokens: number;
+			condensedTargetTokens: number;
 			promptAwareEvictionEnabled: boolean;
 			condenseGroupSize: number;
 			maxSummaryDepth: number;

@@ -15,11 +15,14 @@ it("counts only selected context, separates fresh messages, and clears unavailab
 	const store = new LcmStore({ path: resolve(dir, "lcm.sqlite") });
 	t.after(() => store.close());
 	const settings = { ...config.memory.lcm, enabled: true, freshTailCount: 1, leafChunkTokens: 1_000_000, maxRounds: 0 };
+	const unexpectedSummary = async (): Promise<string> => {
+		throw new Error("unexpected summary");
+	};
 	const transformer = new LcmContextTransformer({
 		settings,
 		lcmStore: store,
 		indexer: {} as ChunkIndexer,
-		summarizer: { summarizeLeaf: async () => { throw new Error("unexpected summary"); } },
+		summarizer: { summarizeLeaf: unexpectedSummary, summarizeCondensed: unexpectedSummary },
 		segmentManager: { activeSegmentId: () => "room:seg-1" } as unknown as LcmSegmentManager,
 	});
 	const messages = [

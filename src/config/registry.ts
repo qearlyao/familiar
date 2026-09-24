@@ -40,6 +40,7 @@ export type ConfigKey =
 	| "memory.lcm.freshTailCount"
 	| "memory.lcm.leafChunkTokens"
 	| "memory.lcm.leafTargetTokens"
+	| "memory.lcm.condensedTargetTokens"
 	| "memory.lcm.condenseGroupSize"
 	| "memory.lcm.maxSummaryDepth"
 	| "memory.lcm.newSessionRetainDepth"
@@ -362,6 +363,13 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 		validate: (value) => requirePositiveInt(value, "memory.lcm.leafTargetTokens"),
 		write: (config, value) => {
 			config.memory.lcm.leafTargetTokens = value as number;
+		},
+	},
+	"memory.lcm.condensedTargetTokens": {
+		read: (config) => config.memory.lcm.condensedTargetTokens,
+		validate: (value) => requirePositiveInt(value, "memory.lcm.condensedTargetTokens"),
+		write: (config, value) => {
+			config.memory.lcm.condensedTargetTokens = value as number;
 		},
 	},
 	"memory.lcm.condenseGroupSize": {

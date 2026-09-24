@@ -1,3 +1,4 @@
+import { formatLocalTimestamp } from "../../util/time.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { estimateTextTokens, selectRetainedSummaries } from "./context.js";
 import { indexLcmSummaries } from "./indexer.js";
@@ -8,7 +9,8 @@ import type { StoredLcmSummary } from "./types.js";
 export interface LcmCondenseConfig {
 	condenseGroupSize: number;
 	maxSummaryDepth: number;
-	leafTargetTokens: number;
+	condensedTargetTokens: number;
+	leafChunkTokens: number;
 }
 
 export interface LcmCondenseOptions {
@@ -39,19 +41,24 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 		.sort(compareCoverage);
 
 	const created: StoredLcmSummary[] = [];
-	for (let index = 0; index + groupSize <= children.length; index += groupSize) {
-		const group = children.slice(index, index + groupSize);
+	const minTokens = Math.max(input.config.condensedTargetTokens, Math.floor(input.config.leafChunkTokens * 0.1));
+	for (const group of groupChildren(children, groupSize, minTokens)) {
 		const coversFromRecordId = minNullable(group.map((summary) => summary.coversFromRecordId));
 		const coversToRecordId = maxNullable(group.map((summary) => summary.coversToRecordId));
 		const text = capSummaryText(
 			await summarizeCondensedGroup({
 				group,
-				targetTokens: input.config.leafTargetTokens,
+				targetTokens: input.config.condensedTargetTokens,
 				depth: input.depth + 1,
+				// Like lossless-claw, only the first condensed level reads the note before it.
+				previousSummary:
+					input.depth === 1
+						? precedingSessionSummaryText(input.store, input.segmentId, coversFromRecordId)
+						: undefined,
 				summarizer: input.summarizer,
 				signal: input.signal,
 			}),
-			input.config.leafTargetTokens,
+			input.config.condensedTargetTokens,
 		);
 		const id = input.store.insertSummary({
 			segmentId: input.segmentId,
@@ -84,20 +91,32 @@ export async function condense(input: LcmCondenseOptions): Promise<StoredLcmSumm
 		}
 	}
 
-	if (created.length > 0 && input.depth + 1 < maxDepth) {
-		created.push(
-			...(await condense({
-				...input,
-				depth: input.depth + 1,
-				candidateIds: created.map((summary) => summary.id),
-			})),
-		);
-	}
 	return created;
 }
 
 export function renderCondensedSummariesForContext(summaries: readonly StoredLcmSummary[]): StoredLcmSummary[] {
 	return selectRetainedSummaries(summaries);
+}
+
+/** Group size is a floor: a group closes once it also carries enough text to be worth condensing (lossless-claw's condensedMinChunkTokens). */
+function groupChildren(
+	children: readonly StoredLcmSummary[],
+	groupSize: number,
+	minTokens: number,
+): StoredLcmSummary[][] {
+	const groups: StoredLcmSummary[][] = [];
+	let group: StoredLcmSummary[] = [];
+	let tokens = 0;
+	for (const child of children) {
+		group.push(child);
+		tokens += estimateTextTokens(child.text);
+		if (group.length >= groupSize && tokens >= minTokens) {
+			groups.push(group);
+			group = [];
+			tokens = 0;
+		}
+	}
+	return groups;
 }
 
 function compareCoverage(a: StoredLcmSummary, b: StoredLcmSummary): number {
@@ -112,26 +131,17 @@ async function summarizeCondensedGroup(input: {
 	group: StoredLcmSummary[];
 	targetTokens: number;
 	depth: number;
+	previousSummary?: string;
 	summarizer: LcmSummarizer;
 	signal?: AbortSignal;
 }): Promise<string> {
-	const text = renderCondensedSummaryInput(input.group);
-	if (input.summarizer.summarizeCondensed) {
-		return input.summarizer.summarizeCondensed(
-			{
-				text,
-				targetTokens: input.targetTokens,
-				depth: input.depth,
-				childSummaryCount: input.group.length,
-			},
-			input.signal,
-		);
-	}
-	return input.summarizer.summarizeLeaf(
+	return input.summarizer.summarizeCondensed(
 		{
-			text,
+			text: renderCondensedSummaryInput(input.group),
 			targetTokens: input.targetTokens,
-			mode: "normal",
+			depth: input.depth,
+			childSummaryCount: input.group.length,
+			previousSummary: input.previousSummary,
 		},
 		input.signal,
 	);
@@ -154,15 +164,34 @@ function renderCondensedSummaryInput(group: readonly StoredLcmSummary[]): string
 		.join("\n\n");
 }
 
+function precedingSessionSummaryText(
+	store: LcmStore,
+	segmentId: string,
+	beforeRecordId: number | null,
+): string | undefined {
+	if (beforeRecordId === null) return undefined;
+	return store
+		.listSummaries(segmentId)
+		.filter(
+			(summary) =>
+				summary.depth === 2 &&
+				summary.status === "ready" &&
+				summary.coversToRecordId !== null &&
+				summary.coversToRecordId < beforeRecordId,
+		)
+		.sort(compareCoverage)
+		.at(-1)?.text;
+}
+
 function formatSummaryTimeRange(summary: StoredLcmSummary): string {
-	const from = metadataString(summary.metadata?.coverageFromHappenedAt ?? summary.metadata?.timestamp);
-	const to = metadataString(summary.metadata?.coverageToHappenedAt ?? summary.metadata?.timestamp);
+	const from = metadataTime(summary.metadata?.coverageFromHappenedAt ?? summary.metadata?.timestamp);
+	const to = metadataTime(summary.metadata?.coverageToHappenedAt ?? summary.metadata?.timestamp);
 	if (!from && !to) return "";
 	return `[time_range ${from ?? "unknown"} - ${to ?? "unknown"}]`;
 }
 
-function metadataString(value: unknown): string | null {
-	return typeof value === "string" && value.trim() ? value.trim() : null;
+function metadataTime(value: unknown): string | null {
+	return typeof value === "string" && value.trim() ? formatLocalTimestamp(value.trim()) : null;
 }
 
 function minNullable(values: Array<number | null>): number | null {

@@ -6,13 +6,15 @@ import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
+import { formatLocalTimestamp } from "../src/util/time.js";
 import { condense, renderCondensedSummariesForContext } from "../src/memory/lcm/condense.js";
+import { estimateTextTokens } from "../src/memory/lcm/context.js";
 import { LcmContextTransformer } from "../src/memory/lcm/context-transformer.js";
 import { LcmSegmentManager } from "../src/memory/lcm/segment-manager.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import type { LcmSummaryParentSnapshot } from "../src/memory/lcm/types.js";
-import { renderMessages, testLcmSource as source } from "./memory-fakes.js";
+import { condenseViaLeaf, renderMessages, testLcmSource as source } from "./memory-fakes.js";
 
 async function tempDbPath(t: { after(fn: () => Promise<void>): void }): Promise<string> {
 	const dir = await mkdtemp(resolve(tmpdir(), "familiar-lcm-condense-"));
@@ -64,7 +66,7 @@ describe("LCM condense", () => {
 				depth: 1,
 				store,
 				summarizer,
-				config: { condenseGroupSize: 4, maxSummaryDepth: 4, leafTargetTokens: 100 },
+				config: { condenseGroupSize: 4, maxSummaryDepth: 4, condensedTargetTokens: 1, leafChunkTokens: 1 },
 			});
 
 			assert.equal(created.length, 1);
@@ -110,19 +112,112 @@ describe("LCM condense", () => {
 				},
 			};
 
-			const created = await condense({
-				segmentId,
-				depth: 1,
-				store,
-				summarizer,
-				config: { condenseGroupSize: 4, maxSummaryDepth: 3, leafTargetTokens: 100 },
-			});
+			const config = { condenseGroupSize: 4, maxSummaryDepth: 3, condensedTargetTokens: 1, leafChunkTokens: 1 };
+			const created = await condense({ segmentId, depth: 1, store, summarizer, config });
+			created.push(...(await condense({ segmentId, depth: 2, store, summarizer, config })));
 
 			assert.equal(created.filter((summary) => summary.depth === 2).length, 4);
 			const depthThree = created.filter((summary) => summary.depth === 3);
 			assert.equal(depthThree.length, 1);
 			assert.equal(depthThree[0]?.parents.length, 4);
 			assert.match(depthThree[0]?.text ?? "", /depth 3/);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("keeps growing a group past the group size until it clears the minimum token floor", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
+		try {
+			const segmentId = "seg-condense-floor";
+			const leafText = (index: number) => `small leaf ${index}`;
+			for (let index = 0; index < 5; index += 1) {
+				const recordId = store.insertRecord({
+					segmentId,
+					kind: "user",
+					text: `floor source ${index}`,
+					happenedAt: `2026-05-10T01:0${index}:00.000Z`,
+					source,
+				});
+				store.insertSummary({
+					segmentId,
+					depth: 1,
+					status: "ready",
+					text: leafText(index),
+					coversFromRecordId: recordId,
+					coversToRecordId: recordId,
+					source,
+				});
+			}
+			const created = await condense({
+				segmentId,
+				depth: 1,
+				store,
+				summarizer: {
+					async summarizeLeaf() {
+						throw new Error("expected summarizeCondensed");
+					},
+					async summarizeCondensed(input) {
+						return `condensed ${input.childSummaryCount}`;
+					},
+				},
+				// Two leaves fall just short of the floor; three clear it.
+				config: {
+					condenseGroupSize: 2,
+					maxSummaryDepth: 2,
+					condensedTargetTokens: estimateTextTokens(leafText(0)) * 2 + 1,
+					leafChunkTokens: 1,
+				},
+			});
+
+			assert.equal(created.length, 1);
+			assert.equal(created[0]?.parents.length, 3);
+		} finally {
+			store.close();
+		}
+	});
+
+	it("hands the preceding depth-2 summary to the next first-level condensation", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
+		try {
+			const segmentId = "seg-condense-previous";
+			for (let index = 0; index < 4; index += 1) {
+				const recordId = store.insertRecord({
+					segmentId,
+					kind: "user",
+					text: `previous source ${index}`,
+					happenedAt: `2026-05-10T01:0${index}:00.000Z`,
+					source,
+				});
+				store.insertSummary({
+					segmentId,
+					depth: 1,
+					status: "ready",
+					text: `leaf ${index}`,
+					coversFromRecordId: recordId,
+					coversToRecordId: recordId,
+					source,
+				});
+			}
+			const previousSeen: Array<string | undefined> = [];
+			const created = await condense({
+				segmentId,
+				depth: 1,
+				store,
+				summarizer: {
+					async summarizeLeaf() {
+						throw new Error("expected summarizeCondensed");
+					},
+					async summarizeCondensed(input) {
+						previousSeen.push(input.previousSummary);
+						return `session ${previousSeen.length}`;
+					},
+				},
+				config: { condenseGroupSize: 2, maxSummaryDepth: 3, condensedTargetTokens: 1, leafChunkTokens: 1 },
+			});
+
+			assert.equal(created.length, 2);
+			assert.deepEqual(previousSeen, [undefined, "session 1"]);
 		} finally {
 			store.close();
 		}
@@ -158,15 +253,17 @@ describe("LCM condense", () => {
 				depth: 1,
 				store,
 				summarizer: {
+					summarizeCondensed: condenseViaLeaf,
 					async summarizeLeaf(input) {
 						condensedInput = input.text;
 						return "condensed timed summaries";
 					},
 				},
-				config: { condenseGroupSize: 4, maxSummaryDepth: 2, leafTargetTokens: 100 },
+				config: { condenseGroupSize: 4, maxSummaryDepth: 2, condensedTargetTokens: 1, leafChunkTokens: 1 },
 			});
 
-			assert.match(condensedInput, /\[time_range 2026-05-10T01:00:00\.000Z - 2026-05-10T01:00:00\.000Z\]/);
+			const local = formatLocalTimestamp("2026-05-10T01:00:00.000Z");
+			assert.ok(condensedInput.includes(`[time_range ${local} - ${local}]`));
 		} finally {
 			store.close();
 		}
@@ -272,6 +369,7 @@ describe("LCM condense", () => {
 			newSessionRetainDepth: () => 2,
 		});
 		const summarizer: LcmSummarizer = {
+			summarizeCondensed: condenseViaLeaf,
 			async summarizeLeaf(input) {
 				if (input.text.includes("<summary")) return "runtime depth two summary";
 				return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;
@@ -285,6 +383,7 @@ describe("LCM condense", () => {
 				freshTailCount: 1,
 				leafChunkTokens: 6,
 				leafTargetTokens: 8,
+				condensedTargetTokens: 8,
 				condenseGroupSize: 4,
 				maxSummaryDepth: 4,
 				maxRounds: 1,
@@ -326,6 +425,64 @@ describe("LCM condense", () => {
 		}
 	});
 
+	it("context transformer condenses depth-2 summaries from separate rounds into depth 3", async (t) => {
+		const store = new LcmStore({ path: await tempDbPath(t) });
+		const segmentManager = new LcmSegmentManager({
+			lcmStore: store,
+			memoryStore: nullMemoryStore(),
+			indexer: nullIndexer(),
+			newSessionRetainDepth: () => 2,
+		});
+		let now = 100_000;
+		const transformer = new LcmContextTransformer({
+			settings: {
+				enabled: true,
+				contextThreshold: 0.75,
+				freshTailCount: 1,
+				leafChunkTokens: 6,
+				leafTargetTokens: 8,
+				condensedTargetTokens: 8,
+				condenseGroupSize: 2,
+				maxSummaryDepth: 3,
+				maxRounds: 1,
+				cacheTtlMs: 300_000,
+				cacheTouchSlackMs: 30_000,
+				criticalOverflowTokens: 8000,
+				promptAwareEvictionEnabled: true,
+			},
+			lcmStore: store,
+			indexer: nullIndexer(),
+			summarizer: {
+				async summarizeLeaf(input) {
+					return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;
+				},
+				async summarizeCondensed(input) {
+					return `depth ${input.depth} summary`;
+				},
+			},
+			segmentManager,
+			now: () => now,
+		});
+		try {
+			const messages: AgentMessage[] = [];
+			for (let index = 0; index < 5; index += 1) {
+				now += 300_000;
+				messages.push({ role: "user", content: `old detail ${index} ${"x".repeat(40)}`, timestamp: index + 1 });
+				await transformer.transformLcmContext([...messages], undefined, {
+					sessionKey: "room-deep",
+					sessionId: "session-runtime",
+					model: { contextWindow: 10_000 } as any,
+				});
+			}
+
+			const summaries = store.listSummaries("room-deep:seg-1");
+			assert.equal(summaries.filter((summary) => summary.depth === 2).length, 2);
+			assert.equal(summaries.filter((summary) => summary.depth === 3).length, 1);
+		} finally {
+			store.close();
+		}
+	});
+
 	it("does not persist runtime condensed summaries when live parents are not contiguous", async (t) => {
 		const store = new LcmStore({ path: await tempDbPath(t) });
 		const segmentManager = new LcmSegmentManager({
@@ -343,6 +500,7 @@ describe("LCM condense", () => {
 				freshTailCount: 1,
 				leafChunkTokens: 6,
 				leafTargetTokens: 8,
+				condensedTargetTokens: 8,
 				condenseGroupSize: 4,
 				maxSummaryDepth: 4,
 				maxRounds: 1,
@@ -354,6 +512,7 @@ describe("LCM condense", () => {
 			lcmStore: store,
 			indexer: nullIndexer(),
 			summarizer: {
+				summarizeCondensed: condenseViaLeaf,
 				async summarizeLeaf(input) {
 					if (input.text.includes("<summary")) {
 						condensedCalls += 1;
@@ -420,6 +579,7 @@ describe("LCM condense", () => {
 					freshTailCount: 1,
 					leafChunkTokens: 6,
 					leafTargetTokens: 8,
+					condensedTargetTokens: 8,
 					condenseGroupSize: 4,
 					maxSummaryDepth: 4,
 					maxRounds: 1,
@@ -431,6 +591,7 @@ describe("LCM condense", () => {
 				lcmStore: store,
 				indexer: nullIndexer(),
 				summarizer: {
+					summarizeCondensed: condenseViaLeaf,
 					async summarizeLeaf(input) {
 						if (input.text.includes("<summary")) return "condensed coverage survives restart";
 						return `leaf summary for ${input.text.match(/old detail \d/)?.[0] ?? "old detail"}`;

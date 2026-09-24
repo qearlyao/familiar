@@ -55,6 +55,27 @@ describe("LCM context helpers", () => {
 		assert.match(capped, /Compressed away: overflow beyond summary cap/);
 	});
 
+	it("keeps the model's footer when capping an oversized summary", () => {
+		const capped = capSummaryText(`${"important detail ".repeat(200)}\nCompressed away: the long walk, the playlist`, 20);
+		assert.ok(capped.length <= 200);
+		assert.match(capped, /\nCompressed away: the long walk, the playlist, overflow beyond summary cap$/);
+	});
+
+	it("gives the first condensed level previous_context and every level a timeline", () => {
+		const d2 = buildCondensedSummaryPrompt({
+			text: "<summary>notes</summary>",
+			targetTokens: 120,
+			depth: 2,
+			childSummaryCount: 4,
+			previousSummary: "the session before",
+		});
+		assert.match(d2, /<previous_context>\nthe session before\n<\/previous_context>/);
+		assert.match(d2, /timeline/);
+		for (const depth of [3, 4]) {
+			assert.match(buildCondensedSummaryPrompt({ text: "x", targetTokens: 120, depth, childSummaryCount: 4 }), /timeline/);
+		}
+	});
+
 	it("applies configured OpenRouter routing to LCM completions", async (t) => {
 		await withEnv("OPENROUTER_API_KEY", "openrouter-test", async () => {
 			const dataDir = await createTempDataDir(t);

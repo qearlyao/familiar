@@ -1,8 +1,8 @@
 {
 	"permissions": {
-		"defaultMode": "bypassPermissions",
-		"skipDangerousModePermissionPrompt": true
+		"defaultMode": "bypassPermissions"
 	},
+	"skipDangerousModePermissionPrompt": true,
 	"hooks": {
 		"SessionStart": [
 			{

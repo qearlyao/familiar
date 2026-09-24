@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { lstat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -20,16 +19,16 @@ import { DEFAULT_IMAGE_GEN_API } from "../config/enums.js";
 import type { Config, ImageGenApi } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { type ModelRef, parseModelRef } from "../models/index.js";
+import { resolveAgentPath } from "../util/fs.js";
 import { imageMimeTypeFromPath, sniffImageMimeType } from "../util/image-mime.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
-import { ensureGeneratedAttachmentsDir } from "./generated-media.js";
+import { attachedNotice, ensureGeneratedAttachmentsDir } from "./generated-media.js";
 import { registerImageApis } from "./image-apis/index.js";
 import { ensureInlineImageDerivative } from "./image-derivatives.js";
 import { promptImagesFromAttachments } from "./inbound-attachments.js";
 
 registerImageApis();
 
-const IMAGE_GEN_NOTICE_PREFIX = "Image attached to your reply:";
 const OPENROUTER_IMAGE_BASE_URL = "https://openrouter.ai/api/v1";
 
 const imageGenSchema = Type.Object(
@@ -92,10 +91,6 @@ interface TextImageRecoveryOptions {
 }
 
 const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
-
-function formatImageGenNotice(name: string): string {
-	return `${IMAGE_GEN_NOTICE_PREFIX} ${name}`;
-}
 
 export function imageExtension(mimeType: string): string {
 	const normalized = mimeType.toLowerCase();
@@ -305,9 +300,8 @@ async function normalizeCompatibleImageText(
 }
 
 function resolveWorkspaceReferencePath(config: Config, rawRef: string): string {
-	if (rawRef === "~" || rawRef.startsWith("~/")) return resolve(homedir(), rawRef.slice(2));
-	if (isAbsolute(rawRef)) return resolve(rawRef);
-	const path = resolve(config.workspacePath, rawRef);
+	const path = resolveAgentPath(config.workspacePath, rawRef);
+	if (rawRef === "~" || rawRef.startsWith("~/") || isAbsolute(rawRef)) return path;
 	const workspaceRelative = relative(config.workspacePath, path);
 	if (!workspaceRelative || workspaceRelative.startsWith("..") || isAbsolute(workspaceRelative)) {
 		throw new Error(`Reference image path must be inside the workspace: ${rawRef}`);
@@ -574,7 +568,7 @@ export function createImageGenTool(
 
 			const attachments = await writeGeneratedImages(config, mediaSink, selected.result);
 			const primaryAttachment = attachments[0];
-			const notices = attachments.map((attachment) => formatImageGenNotice(attachment.name));
+			const notices = attachments.map((attachment) => attachedNotice("Image", attachment.name));
 			const sideText = textOutput(selected.result);
 			const selectedAttempt = attempts.at(-1);
 			return {

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Add a built-in `send_file` tool so the agent can send any file it made (HTML, SVG, PDF, slides, documents) as an attachment on its reply in the WebUI, Discord, and QQ.
+- Add a built-in `send_file` tool so the agent can send any file it made (HTML, SVG, PDF, slides, documents) as an attachment on its reply in the WebUI and Discord. QQ still delivers only images and audio.
 - Show sent files as cards in WebUI chat. HTML pages and PDFs open in a full-screen viewer, and other files download under their own names.
 
 ## 1.2.2 - 2026-09-24

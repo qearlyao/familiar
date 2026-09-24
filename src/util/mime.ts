@@ -1,6 +1,7 @@
 import { extname } from "node:path";
+import type { StoredAttachment } from "../conversation/chat-log.js";
 
-/** content types by extension, for everything the web server hands out and send_file attaches */
+/** the one extension → content type table; narrower lookups (images only) derive from it */
 const MIME_TYPES: Record<string, string> = {
 	".html": "text/html",
 	".htm": "text/html",
@@ -38,6 +39,13 @@ const MIME_TYPES: Record<string, string> = {
 	".txt": "text/plain",
 	".zip": "application/zip",
 };
+
+export function attachmentKindForMime(mimeType: string): NonNullable<StoredAttachment["kind"]> {
+	if (mimeType.startsWith("image/")) return "image";
+	if (mimeType.startsWith("audio/")) return "audio";
+	if (mimeType.startsWith("video/")) return "video";
+	return "file";
+}
 
 export function mimeTypeForPath(path: string): string {
 	return MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";

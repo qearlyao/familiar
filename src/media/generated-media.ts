@@ -14,6 +14,11 @@ export interface GeneratedMediaSink {
 	drain(): GeneratedAttachment[];
 }
 
+/** what a tool tells the agent after putting something on its reply, so it never sends it twice */
+export function attachedNotice(label: string, name: string): string {
+	return `${label} attached to your reply: ${name}`;
+}
+
 export function createGeneratedMediaSink(): GeneratedMediaSink {
 	const attachments: GeneratedAttachment[] = [];
 	return {

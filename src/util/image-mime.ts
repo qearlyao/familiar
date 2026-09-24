@@ -1,12 +1,4 @@
-import { extname } from "node:path";
-
-export const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".png": "image/png",
-	".gif": "image/gif",
-	".webp": "image/webp",
-};
+import { mimeTypeForPath } from "./mime.js";
 
 export const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
 	"image/jpeg": ".jpg",
@@ -16,7 +8,8 @@ export const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 export function imageMimeTypeFromPath(path: string): string | undefined {
-	return IMAGE_MIME_BY_EXTENSION[extname(path).toLowerCase()];
+	const mimeType = mimeTypeForPath(path);
+	return mimeType in IMAGE_EXTENSION_BY_MIME ? mimeType : undefined;
 }
 
 export function sniffImageMimeType(buffer: Buffer): string | undefined {

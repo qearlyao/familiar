@@ -3,8 +3,7 @@ import { describe, it } from "node:test";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
-import { AmbientDiaryInjector } from "../src/memory/diary/ambient-injector.js";
-import { __memoryServiceTest } from "../src/memory/service.js";
+import { __ambientDiaryInjectorTest, AmbientDiaryInjector } from "../src/memory/diary/ambient-injector.js";
 import { retrieveAmbientDiary } from "../src/memory/diary/ambient.js";
 import type { EmbeddingProvider } from "../src/memory/index/embedding-provider.js";
 import type { MemorySearchHit } from "../src/memory/index/store.js";
@@ -185,7 +184,7 @@ describe("ambient diary retrieval", () => {
 	});
 
 	it("does not duplicate diary date and heading prefixes in injected memory", async () => {
-		const text = __memoryServiceTest.renderAmbientDiaryRecall([
+		const text = __ambientDiaryInjectorTest.renderAmbientDiaryRecall([
 			ambientHit(
 				hit(1, "diary_chunk", "2026-05-12.md", "quiet thread", 0.1, {
 					date: "2026-05-12",
@@ -202,7 +201,7 @@ describe("ambient diary retrieval", () => {
 
 	it("strips repeated prefixes from already-indexed ambient snippets", () => {
 		assert.equal(
-			__memoryServiceTest.stripRepeatedDiaryPrefix(
+			__ambientDiaryInjectorTest.stripRepeatedDiaryPrefix(
 				"2026-05-12 2026-05-12: 2026-05-12 2026-05-12: Qearl gave me a memory system today.",
 				["2026-05-12 2026-05-12", "2026-05-12"],
 			),

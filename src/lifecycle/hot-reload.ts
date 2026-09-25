@@ -12,7 +12,6 @@ type WatchHandle = {
 	on(event: "error", listener: (error: Error) => void): unknown;
 };
 type WatchFn = (path: string, options: { persistent: boolean }, listener: WatchListener) => WatchHandle;
-type ListSkillDirectoriesFn = (skillsPath: string) => Promise<string[]>;
 
 export interface HotReloadWatcher {
 	close(): void;
@@ -24,7 +23,6 @@ export interface HotReloadOptions {
 	debounceMs?: number;
 	logger?: Pick<Console, "info" | "warn" | "error">;
 	watch?: WatchFn;
-	listSkillDirectories?: ListSkillDirectoriesFn;
 }
 
 const ROOT_FILES = new Set([
@@ -72,7 +70,6 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 	const debounceMs = options.debounceMs ?? 750;
 	const logger = options.logger ?? console;
 	const watchFn = options.watch ?? watch;
-	const listSkills = options.listSkillDirectories ?? listSkillDirectories;
 	const watchers = new Map<string, WatchHandle>();
 	let debounce: NodeJS.Timeout | undefined;
 	let reloadQueue: Promise<void> = Promise.resolve();
@@ -155,7 +152,7 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 	const refreshSkillWatchers = async (): Promise<void> => {
 		if (closed) return;
 		const skillsPath = resolve(workspacePath, SKILLS_DIR);
-		const wanted = new Set([skillsPath, ...(await listSkills(skillsPath))]);
+		const wanted = new Set([skillsPath, ...(await listSkillDirectories(skillsPath))]);
 		for (const path of wanted) watchDirectory(path);
 		for (const path of watchers.keys()) {
 			if (path !== workspacePath && isAtOrInsidePath(skillsPath, path) && !wanted.has(path)) {
@@ -169,8 +166,3 @@ export function startWorkspaceHotReload(options: HotReloadOptions): HotReloadWat
 
 	return { close };
 }
-
-export const __hotReloadTest = {
-	shouldReloadForPath,
-	listSkillDirectories,
-};

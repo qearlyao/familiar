@@ -7,7 +7,8 @@ import { describe, it } from "node:test";
 import { buildRecordBase, type ChatChannelRef } from "../src/conversation/chat-log.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
 import { LCM_RECORD_CORPUS } from "../src/memory/lcm/indexer.js";
-import { MemoryService, createMemoryService, __memoryServiceTest } from "../src/memory/service.js";
+import { __ambientDiaryInjectorTest } from "../src/memory/diary/ambient-injector.js";
+import { MemoryService, createMemoryService } from "../src/memory/service.js";
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSummarizer } from "../src/memory/lcm/summarizer.js";
 import { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
@@ -97,7 +98,7 @@ describe("MemoryService", () => {
 		const recall = "<injected_memory>\n1. 2026-05-10: warm\n</injected_memory>";
 		const takesNotes = { compat: { supportsMidConvoSystemMessages: true } } as any;
 
-		const next = __memoryServiceTest.injectAmbientDiaryRecall(messages, recall, takesNotes, 4);
+		const next = __ambientDiaryInjectorTest.injectAmbientDiaryRecall(messages, recall, takesNotes, 4);
 
 		assert.deepEqual(next.slice(0, 3), messages);
 		const last = next[3];
@@ -106,7 +107,7 @@ describe("MemoryService", () => {
 		assert.match(typeof last?.content === "string" ? last.content : "", /<injected_memory>/);
 
 		// a model pi marks as dropping later system messages hears the same recall as user text
-		const plain = __memoryServiceTest.injectAmbientDiaryRecall(messages, recall, { compat: {} } as any, 4)[3];
+		const plain = __ambientDiaryInjectorTest.injectAmbientDiaryRecall(messages, recall, { compat: {} } as any, 4)[3];
 		assert.equal(plain?.role, "user");
 		assert.deepEqual(plain?.content, [{ type: "text", text: recall }]);
 	});

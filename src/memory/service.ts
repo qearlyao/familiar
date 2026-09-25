@@ -9,7 +9,7 @@ import type { Config } from "../config/index.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
 import type { ContextBreakdown } from "../web/types.js";
-import { __ambientDiaryInjectorTest, AmbientDiaryInjector } from "./diary/ambient-injector.js";
+import { AmbientDiaryInjector } from "./diary/ambient-injector.js";
 import { DIARY_INDEX_FILE_RE, indexAllDiaryFiles, indexDiaryFile, removeDiaryFileIndex } from "./diary/indexer.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
 import { createEmbeddingProvider } from "./index/embedding-provider.js";
@@ -278,5 +278,3 @@ function parseIndexSourceId(value: string | null, prefix: "lcm_record" | "lcm_su
 	const id = Number(value.slice(prefix.length + 1));
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
-
-export const __memoryServiceTest = __ambientDiaryInjectorTest;

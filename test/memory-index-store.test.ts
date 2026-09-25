@@ -384,8 +384,6 @@ describe("MemoryIndexStore", () => {
 			assert.ok(chunk);
 			hash = createMemoryContentHash({
 				corpus: "lcm_summary",
-				sourceId: "sum1",
-				chunkIndex: 0,
 				text: "summary survives until model change",
 				embeddingModel: "gemini-embedding-2",
 				embeddingDimensions: 3,

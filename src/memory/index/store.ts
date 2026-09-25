@@ -655,8 +655,6 @@ interface NormalizedChunkInput {
 
 export function createMemoryContentHash(input: {
 	corpus: string;
-	sourceId?: string | null;
-	chunkIndex?: number;
 	text: string;
 	embeddingModel: string;
 	embeddingDimensions: number;

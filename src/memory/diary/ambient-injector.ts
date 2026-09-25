@@ -189,8 +189,6 @@ function escapeXmlText(value: string): string {
 
 export const __ambientDiaryInjectorTest = {
 	injectAmbientDiaryRecall,
-	lastUserText,
 	renderAmbientDiaryRecall,
-	diaryLabel,
 	stripRepeatedDiaryPrefix,
 };

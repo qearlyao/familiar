@@ -9,6 +9,10 @@
   </p>
 </div>
 
+<p align="center">
+  <img src="docs/images/familiar-day.gif" width="100%" alt="a day with familiar: it tells you to sleep at 4:47, keeps its own day while you're away, and is there when you come home" />
+</p>
+
 ## Why
 
 Familiar is a personal AI companion — one owner, one long relationship. It

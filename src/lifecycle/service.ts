@@ -649,8 +649,6 @@ export function formatServiceResult(result: ServiceCommandResult): string {
 }
 
 export const __serviceTest = {
-	SERVICE_LABEL,
-	SYSTEMD_SERVICE,
 	buildSpec,
 	launchdPlist,
 	launchdLogRotationPlist,

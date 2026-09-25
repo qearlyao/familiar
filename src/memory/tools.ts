@@ -241,10 +241,3 @@ function formatUnixTimestamp(value: number): string {
 	const milliseconds = value < 10_000_000_000 ? value * 1000 : value;
 	return new Date(milliseconds).toISOString();
 }
-
-export const __memoryToolsTest = {
-	formatUnixTimestamp,
-	formatOpenChunk,
-	formatRecallResults,
-	previewText,
-};

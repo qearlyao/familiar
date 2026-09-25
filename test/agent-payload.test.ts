@@ -183,18 +183,11 @@ describe("provider payload normalization", () => {
 		);
 	});
 
-	it("adds Anthropic user metadata from the configured owner id regardless of auth mode", async (t) => {
-		const workspacePath = await createWorkspace(
-			{
-				after(fn) {
-					t.after(fn);
-				},
-			},
-			minimalConfigToml(),
-		);
+	it("adds Anthropic user metadata from the configured owner id", async (t) => {
+		const workspacePath = await createWorkspace(t, minimalConfigToml().replace('owner_id = "owner"', 'owner_id = "12345"'));
 		await withDiscordToken(async () => {
 			const config = await loadConfig(workspacePath);
-			assert.deepEqual(buildAnthropicMetadata(config, anthropicModel), { user_id: "owner" });
+			assert.deepEqual(buildAnthropicMetadata(config, anthropicModel), { user_id: "12345" });
 			assert.equal(buildAnthropicMetadata(config, { ...anthropicModel, api: "openai-responses" }), undefined);
 		});
 	});

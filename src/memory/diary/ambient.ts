@@ -19,7 +19,6 @@ export interface AmbientDiaryRecallOptions {
 	metadataBoosts?: AmbientDiaryMetadataBoosts;
 	weights?: AmbientDiaryWeights;
 	useLexical?: boolean;
-	useSemantic?: boolean;
 	signal?: AbortSignal;
 }
 
@@ -68,7 +67,6 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 		limit: candidateLimit,
 		candidateLimit,
 		useLexical: options.useLexical,
-		useSemantic: options.useSemantic,
 		signal: options.signal,
 	} satisfies RetrieveMemoryOptions);
 

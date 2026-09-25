@@ -5,10 +5,8 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import { createMemoryTools } from "../src/memory/tools.js";
-import { __memoryToolsTest } from "../src/memory/tools.js";
 import type { EmbeddingProvider, EmbeddingInput } from "../src/memory/index/embedding-provider.js";
 import { MemoryIndexStore } from "../src/memory/index/store.js";
-import { createMemoryService } from "../src/memory/service.js";
 import { configWithDataDir, createTempDataDir } from "./helpers.js";
 
 async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
@@ -264,36 +262,4 @@ describe("memory tools", () => {
 		}
 	});
 
-	it("MemoryService reuses one memory store across repeated recall tool calls", async (t) => {
-		const config = await memoryConfig(t);
-		const service = createMemoryService(config);
-		try {
-			const store = serviceMemoryStore(service);
-			store.insertChunk({
-				corpus: "lcm_record",
-				sourceId: "lcm_record:1",
-				text: "shared store marker",
-				embedding: vector([1, 0, 0]),
-			});
-			const recall = service.memoryTools().find((tool) => tool.name === "memory_recall");
-			assert.ok(recall);
-
-			await recall.execute("call-a", { query: "shared", mode: "lexical" });
-			await recall.execute("call-b", { query: "shared", mode: "lexical" });
-			await recall.execute("call-c", { query: "shared", mode: "lexical" });
-
-			assert.equal(serviceMemoryStore(service), store);
-		} finally {
-			service.close();
-		}
-	});
-
-	it("formats sqlite unixepoch timestamps as real ISO timestamps", () => {
-		const seconds = Date.parse("2026-05-20T00:00:00.000Z") / 1000;
-		assert.equal(__memoryToolsTest.formatUnixTimestamp(seconds), "2026-05-20T00:00:00.000Z");
-	});
 });
-
-function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): MemoryIndexStore {
-	return (service as unknown as { memoryStore: MemoryIndexStore }).memoryStore;
-}

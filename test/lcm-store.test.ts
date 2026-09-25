@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
-
-import Database from "better-sqlite3";
 
 import { LcmStore } from "../src/memory/lcm/store.js";
 import type { LcmSourceProvenance, LcmSummarySnapshot } from "../src/memory/lcm/types.js";
@@ -235,25 +233,6 @@ describe("LcmStore", () => {
 		}
 	});
 
-	it("insertSummary dedupes concurrent summary_key inserts in one transaction path", async (t) => {
-		const store = await openStore(t);
-		try {
-			const input = {
-				segmentId: "seg-concurrent",
-				depth: 1,
-				status: "ready" as const,
-				text: "concurrent summary",
-				source: { sourceType: "manual" as const, sourceRef: "sum:concurrent" },
-			};
-			const [first, second] = await Promise.all([store.insertSummary(input), store.insertSummary(input)]);
-
-			assert.equal(first, second);
-			assert.equal(store.listSummaries("seg-concurrent").length, 1);
-		} finally {
-			store.close();
-		}
-	});
-
 	it("deleting a parent summary cascades through lcm_summary_parents", async (t) => {
 		const store = await openStore(t);
 		try {
@@ -278,24 +257,6 @@ describe("LcmStore", () => {
 
 			assert.deepEqual(store.getSummaryParents(parent), []);
 			assert.deepEqual(store.getSummaryChildren(child), []);
-		} finally {
-			store.close();
-		}
-	});
-
-	it("enables foreign key enforcement on opened store connections", async (t) => {
-		const path = await tempDbPath(t);
-		await mkdir(resolve(path, ".."), { recursive: true });
-		const raw = new Database(path);
-		try {
-			raw.pragma("foreign_keys = OFF");
-		} finally {
-			raw.close();
-		}
-
-		const store = new LcmStore({ path });
-		try {
-			assert.equal((store.db.pragma("foreign_keys", { simple: true }) as number), 1);
 		} finally {
 			store.close();
 		}

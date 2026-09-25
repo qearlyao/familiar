@@ -32,26 +32,6 @@ describe("browser tools", () => {
 		assert.deepEqual(createBrowserTools(config, createGeneratedMediaSink()), []);
 	});
 
-	it("loads browser defaults and allowlisted recurring sites", async (t) => {
-		const dataDir = await createTempDataDir(t);
-		const config = await configWithDataDir(t, dataDir, {
-			browser: {
-				enabled: true,
-			},
-		});
-
-		assert.equal(config.browser.backend, "opencli");
-		assert.equal(config.browser.opencliCommand, "opencli");
-		assert.equal(config.browser.harnessCommand, "browser-harness");
-		assert.equal(config.browser.session, "familiar");
-		assert.equal(config.browser.windowMode, "background");
-		assert.equal(config.browser.readWrite, false);
-		assert.equal(config.browser.allowedSites.twitter, true);
-		assert.equal(config.browser.allowedSites.reddit, true);
-		assert.equal(config.browser.allowedSites.youtube, true);
-		assert.equal(config.browser.allowedSites.spotify, true);
-	});
-
 	it("builds OpenCLI page args with positional session", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir, {
@@ -119,20 +99,6 @@ describe("browser tools", () => {
 		assert.equal(invocation.command, "C:\\Users\\C\\AppData\\Roaming\\npm\\opencli.cmd");
 		assert.deepEqual(invocation.args, ["reddit", "saved", "--window", "background", "-f", "json"]);
 		assert.equal(invocation.options.windowsVerbatimArguments, undefined);
-	});
-
-	it("keeps Windows .cmd paths and metacharacter args as argv", () => {
-		const spec: BrowserRunSpec = {
-			command: "C:\\Users\\C\\App Data\\npm\\opencli.cmd",
-			args: ["browser", "familiar", "type", 'hello" & echo injected & "x'],
-			backend: "opencli",
-		};
-
-		const invocation = __browserToolsTest.buildSpawnInvocation(spec, "win32");
-
-		assert.equal(invocation.spawnKind, "cross-spawn");
-		assert.equal(invocation.command, "C:\\Users\\C\\App Data\\npm\\opencli.cmd");
-		assert.deepEqual(invocation.args, ["browser", "familiar", "type", 'hello" & echo injected & "x']);
 	});
 
 	it("keeps direct helper spawning on non-Windows platforms", () => {

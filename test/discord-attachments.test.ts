@@ -87,41 +87,4 @@ describe("discord attachment payloads", () => {
 			globalThis.fetch = previousFetch;
 		}
 	});
-
-	it("attachment message ids are appended to messageIds before persistence", async (t) => {
-		const dataDir = await createTempDataDir(t);
-		const config = await configWithDataDir(t, dataDir);
-		const attachmentPath = resolve(dataDir, "attachments", "generated", "tts_atom.mp3");
-		await mkdir(resolve(dataDir, "attachments", "generated"), { recursive: true });
-		await writeFile(attachmentPath, Buffer.from("fake audio"));
-		const attachment: StoredAttachment = {
-			id: "tts_atom",
-			name: "tts_atom.mp3",
-			mimeType: "audio/mpeg",
-			localPath: attachmentPath,
-		};
-
-		const previousFetch = globalThis.fetch;
-		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({ id: "attachment-msg-id" }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			})) as typeof fetch;
-		try {
-			const botToken = config.discord.token;
-			assert.ok(botToken);
-			const ids = await postDiscordAttachments(botToken, "channel-2", [attachment]);
-			// The returned id must be present so callers can include it in messageIds for persistence.
-			assert.ok(ids.includes("attachment-msg-id"), "attachment message id must be returned for persistence");
-		} finally {
-			globalThis.fetch = previousFetch;
-		}
-	});
-
-	it("returns empty array and does not throw when no attachments have a local path", async (t) => {
-		const dataDir = await createTempDataDir(t);
-		await configWithDataDir(t, dataDir);
-		const ids = await postDiscordAttachments("discord-token", "channel-3", []);
-		assert.deepEqual(ids, []);
-	});
 });

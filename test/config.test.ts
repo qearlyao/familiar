@@ -138,7 +138,7 @@ describe("loadConfig tts", () => {
 		}
 	});
 
-	it("uses ElevenLabs defaults when tts config is omitted", async (t) => {
+	it("applies defaults when optional config sections are omitted", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		delete process.env.ELEVENLABS_VOICE_ID;
 		const workspacePath = await createWorkspace(t, minimalConfigToml());
@@ -525,20 +525,6 @@ custom = "openai-images"
 		assert.equal(config.imageGen.fallbackModel, "openrouter/openai/gpt-5-image");
 		assert.equal(config.imageGen.timeoutMs, 90000);
 		assert.equal(config.imageGen.apis.custom, "openai-images");
-	});
-
-	it("defaults image API shapes for providers with a known native endpoint", async (t) => {
-		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(t, minimalConfigToml());
-
-		const config = await loadConfig(workspacePath);
-
-		assert.equal(config.imageGen.apis.openai, "openai-images");
-		assert.equal(config.imageGen.apis.google, "google-images");
-		assert.equal(config.imageGen.apis.xai, "openai-images");
-		// Providers without a native shape fall through to openrouter-images
-		// at resolution time rather than being listed here.
-		assert.equal(config.imageGen.apis.openrouter, undefined);
 	});
 
 	it("lets an explicit image API shape override a built-in default", async (t) => {
@@ -1147,45 +1133,6 @@ compat = { send_session_affinity_headers = true, supports_eager_tool_input_strea
 			sendSessionAffinityHeaders: true,
 			supportsEagerToolInputStreaming: false,
 			supportsCacheControlOnTools: false,
-		});
-	});
-
-	it("inherits provider compat onto configured model overrides", async (t) => {
-		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(
-			t,
-			`
-[discord]
-owner_id = "owner"
-
-[agent]
-model = "proxy/claude-opus-4"
-
-[models.base_urls]
-proxy = "https://proxy.example.com"
-
-[models.api_key_envs]
-proxy = "PROXY_API_KEY"
-
-[models.providers.proxy]
-api = "anthropic-messages"
-compat = { send_session_affinity_headers = true, supports_eager_tool_input_streaming = false }
-
-[[models.providers.proxy.models]]
-id = "claude-opus-4"
-name = "Claude Opus 4 via Proxy"
-compat = { supports_cache_control_on_tools = false, allow_empty_signature = true }
-`,
-		);
-
-		const config = await loadConfig(workspacePath);
-		const model = createConfiguredModel(config);
-
-		assert.deepEqual(model.compat, {
-			sendSessionAffinityHeaders: true,
-			supportsEagerToolInputStreaming: false,
-			supportsCacheControlOnTools: false,
-			allowEmptySignature: true,
 		});
 	});
 

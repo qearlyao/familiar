@@ -154,30 +154,6 @@ body
 		assert.match(raw, /\n---\nnew body\n$/);
 	});
 
-	it("toggles prompt visibility through disable-model-invocation", async (t) => {
-		const config = await configWithWorkspace(t);
-		await mkdir(resolve(config.workspacePath, "skills", "memes"), { recursive: true });
-		await writeFile(
-			resolve(config.workspacePath, "skills", "memes", "SKILL.md"),
-			`---
-name: memes
-description: Meme skill
----
-
-body
-`,
-			"utf8",
-		);
-
-		const disabled = await setWebSkillEnabled(config, "memes/SKILL.md", false);
-		const enabled = await setWebSkillEnabled(config, "memes/SKILL.md", true);
-
-		assert.equal(disabled.enabled, false);
-		assert.equal(enabled.enabled, true);
-		const raw = await readFile(resolve(config.workspacePath, "skills", "memes", "SKILL.md"), "utf8");
-		assert.doesNotMatch(raw, /disable-model-invocation/);
-	});
-
 	it("preserves unknown frontmatter when toggling prompt visibility", async (t) => {
 		const config = await configWithWorkspace(t);
 		await mkdir(resolve(config.workspacePath, "skills", "memes"), { recursive: true });
@@ -199,7 +175,8 @@ body
 			"utf8",
 		);
 
-		await setWebSkillEnabled(config, "memes/SKILL.md", false);
+		const disabled = await setWebSkillEnabled(config, "memes/SKILL.md", false);
+		assert.equal(disabled.enabled, false);
 		const disabledRaw = await readFile(resolve(config.workspacePath, "skills", "memes", "SKILL.md"), "utf8");
 		assert.deepEqual(parseSkillFrontmatter(disabledRaw), {
 			name: "memes",
@@ -210,7 +187,8 @@ body
 		});
 		assert.match(disabledRaw, /\n---\n\nbody\n$/);
 
-		await setWebSkillEnabled(config, "memes/SKILL.md", true);
+		const enabled = await setWebSkillEnabled(config, "memes/SKILL.md", true);
+		assert.equal(enabled.enabled, true);
 		const enabledRaw = await readFile(resolve(config.workspacePath, "skills", "memes", "SKILL.md"), "utf8");
 		assert.deepEqual(parseSkillFrontmatter(enabledRaw), {
 			name: "memes",

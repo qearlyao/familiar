@@ -1,16 +1,7 @@
 export {
-  CONTROL_COMMANDS,
-  CONTROL_COMMANDS as WEB_SLASH_COMMANDS,
   controlCommandCompletionQuery,
-  controlCommandCompletionQuery as slashCommandCompletionQuery,
   matchingControlCommands,
-  matchingControlCommands as matchingSlashCommands,
   parseControlCommandText,
-  parseControlCommandText as parseWebSlashCommand,
   type ControlCommand,
-  type ControlCommand as WebSlashCommandName,
   type ControlCommandDefinition,
-  type ControlCommandDefinition as WebSlashCommand,
-  type ParsedControlCommandText,
-  type ParsedControlCommandText as ParsedWebSlashCommand,
 } from "../../../src/conversation/control-commands.js";

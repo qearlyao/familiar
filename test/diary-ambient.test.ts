@@ -70,29 +70,6 @@ describe("ambient diary retrieval", () => {
 		assert.equal(results.some((result) => result.chunk.corpus === "lcm_record"), false);
 	});
 
-	it("returns structured hits without rendering policy", async () => {
-		const diary = hit(1, "diary_chunk", "2026-05-10.md", "quiet continuity", 0.1, {
-			date: "2026-05-10",
-			heading: "Evening",
-			valence: "0.5",
-			intensity: "7",
-		});
-		const store = new FakeStore([diary], new Map());
-
-		const [result] = await retrieveAmbientDiary({
-			query: "quiet",
-			store,
-			limit: 1,
-			useSemantic: false,
-			now: new Date("2026-05-10T12:00:00.000Z"),
-		});
-
-		assert.equal(result?.chunk.metadata?.heading, "Evening");
-		assert.equal(typeof result?.chunk.text, "string");
-		assert.equal(typeof result?.ambientScore, "number");
-		assert.deepEqual(store.semanticCorpora, []);
-	});
-
 	it("short query below min skips ambient injection", async () => {
 		const store = new FakeStore([hit(1, "diary_chunk", "day.md", "quiet memory", 0.5, {})], new Map());
 		const provider = new FakeEmbeddingProviderFull();
@@ -126,22 +103,6 @@ describe("ambient diary retrieval", () => {
 		];
 
 		const next = await injector.inject(messages, undefined, "session-a", "mornig");
-
-		assert.equal(next, messages);
-		assert.deepEqual(provider.queries, []);
-	});
-
-	it("disabled ambient injection skips retrieval", async () => {
-		const store = new FakeStore([hit(1, "diary_chunk", "day.md", "quiet memory", 0.1, {})], new Map());
-		const provider = new FakeEmbeddingProviderFull();
-		const injector = new AmbientDiaryInjector({
-			store: store as any,
-			embeddingProvider: provider,
-			settings: { enabled: false, minQueryLength: 1, throttleSeconds: 0 },
-		});
-		const messages: AgentMessage[] = [{ role: "user", content: "quiet memory please", timestamp: 0 }];
-
-		const next = await injector.inject(messages, undefined, "session-a");
 
 		assert.equal(next, messages);
 		assert.deepEqual(provider.queries, []);

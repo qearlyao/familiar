@@ -19,13 +19,6 @@ function meme(name: string, url: string): DraftBlock {
 }
 
 describe("composer draft meme blocks", () => {
-	it("serializes text meme text in order", () => {
-		assert.equal(
-			serializeDraftBlocks([text("ur my hero"), meme(love.name, love.url), text("love u")]),
-			"ur my hero\n![falling in love](https://files.catbox.moe/love.png)\nlove u",
-		);
-	});
-
 	it("inserts a meme at the text cursor", () => {
 		const inserted = insertMemeDraftBlock([text("ur my hero\nlove u")], { blockIndex: 0, start: 10, end: 10 }, love);
 

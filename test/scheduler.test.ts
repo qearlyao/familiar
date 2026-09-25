@@ -7,16 +7,10 @@ import {
 	buildHeartbeatInjectionText,
 	dueCronSlot,
 	formatIdleDuration,
-	formatLocalTimestamp,
 	isHeartbeatDue,
 } from "../src/runtime/scheduler.js";
 
 describe("scheduler helpers", () => {
-	it("formats local timestamps in the runtime shape", () => {
-		const text = formatLocalTimestamp("2026-05-09T03:34:16.881Z");
-		assert.match(text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} GMT[+-]\d{1,2}(?::\d{2})?$/);
-	});
-
 	it("formats idle durations for heartbeat text", () => {
 		assert.equal(formatIdleDuration(59 * 60 * 1000), "59m");
 		assert.equal(formatIdleDuration((1 * 60 + 12) * 60 * 1000), "1h 12m");

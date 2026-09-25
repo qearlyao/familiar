@@ -5,8 +5,6 @@ import type { CronDeliveryMode, CronJobConfig } from "../config/types.js";
 import { readFileOrNull } from "../util/fs.js";
 import { formatLocalTimestamp, toDate } from "../util/time.js";
 
-export { formatLocalTimestamp } from "../util/time.js";
-
 export interface CronJobState {
 	lastFiredSlot?: string;
 	lastFiredAt?: string;

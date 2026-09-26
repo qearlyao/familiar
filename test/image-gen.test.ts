@@ -591,6 +591,80 @@ describe("image_gen tool", () => {
 		});
 	});
 
+	it("passes attachment IDs and workspace paths together into upstream image context", async (t) => {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const imageDir = resolve(attachmentsDir(config), "inbound", "web");
+			await mkdir(imageDir, { recursive: true });
+			const attachmentPath = resolve(imageDir, "moon.png");
+			await writeFile(attachmentPath, "attachment-image", "utf8");
+			const referenceDir = resolve(config.workspacePath, "refs");
+			await mkdir(referenceDir, { recursive: true });
+			await writeFile(resolve(referenceDir, "sun.png"), "workspace-image", "utf8");
+			const reference: StoredAttachment = {
+				id: "att-1",
+				name: "moon.png",
+				kind: "image",
+				mimeType: "image/png",
+				size: 16,
+				localPath: attachmentPath,
+				source: "web",
+			};
+			let capturedContext: ImagesContext | undefined;
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				referenceAttachments: () => [reference],
+				generateImages: async (model, context) => {
+					capturedContext = context;
+					return imageResult(
+						[{ type: "image", mimeType: "image/png", data: Buffer.from("out").toString("base64") }],
+						{ provider: model.provider, model: model.id },
+					);
+				},
+			});
+
+			await tool.execute("call-1", { prompt: "combine these", referenceImages: ["refs/sun.png", "att-1"] });
+
+			assert.deepEqual(capturedContext?.input.slice(1), [
+				{
+					type: "text",
+					text: '<attachment name="sun.png" mime="image/png"></attachment>\n<attachment name="moon.png" mime="image/png"></attachment>',
+				},
+				{ type: "image", mimeType: "image/png", data: Buffer.from("workspace-image").toString("base64") },
+				{ type: "image", mimeType: "image/png", data: Buffer.from("attachment-image").toString("base64") },
+			]);
+		});
+	});
+
+	it("points unknown attachment IDs at the attachment path", async (t) => {
+		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
+				imageGen: { model: "custom/gemini-image" },
+				models: {
+					baseUrls: { custom: "https://images.example.test/v1" },
+					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
+				},
+			});
+			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
+				generateImages: async () => {
+					throw new Error("should not generate");
+				},
+			});
+
+			await assert.rejects(
+				() => tool.execute("call-1", { prompt: "redraw this", referenceImages: ["att-from-yesterday"] }),
+				/Reference image not found: att-from-yesterday\. .*pass its path/,
+			);
+		});
+	});
+
 	it("passes ~/ reference image paths into upstream image context", async (t) => {
 		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);

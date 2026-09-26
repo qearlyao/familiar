@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import type { Config } from "../config/index.js";
 import { readFileOrNull } from "../util/fs.js";
+import type { FamiliarSkillsResult } from "./skills.js";
 
 export interface Persona {
 	soul: string;
@@ -31,14 +32,31 @@ ${file.contents.trim()}
 </file>`;
 }
 
-export function buildSystemPrompt(persona: Persona, diariesDir: string, skillsBlock = ""): string {
-	const files: SystemPromptFile[] = [
+function systemPromptFiles(persona: Persona): SystemPromptFile[] {
+	return [
 		{ name: "SOUL.md", contents: persona.soul },
 		{ name: "USER.md", contents: persona.user },
 		{ name: "MEMORY.md", contents: persona.memory },
 		...(persona.inner !== null ? [{ name: "INNER.md", contents: persona.inner }] : []),
 	];
-	const renderedFiles = files.map(renderSystemPromptFile).join("\n\n");
+}
+
+/** What went into the system prompt, without its contents: persona files hold private details. */
+export function logPromptSources(persona: Persona, skills: FamiliarSkillsResult): void {
+	console.log(
+		`prompt files loaded: ${systemPromptFiles(persona)
+			.map((file) => file.name)
+			.join(", ")}`,
+	);
+	const names = skills.skills.map((skill) => (skill.disableModelInvocation ? `${skill.name} (hidden)` : skill.name));
+	console.log(`skills loaded: ${names.length ? `${names.length} (${names.join(", ")})` : "none"}`);
+	for (const diagnostic of skills.diagnostics) {
+		console.warn(`skill ${diagnostic.type}: ${diagnostic.path}: ${diagnostic.message}`);
+	}
+}
+
+export function buildSystemPrompt(persona: Persona, diariesDir: string, skillsBlock = ""): string {
+	const renderedFiles = systemPromptFiles(persona).map(renderSystemPromptFile).join("\n\n");
 	const renderedSkillsBlock = skillsBlock.trim() ? `\n\n${skillsBlock.trim()}` : "";
 	return `<system-reminder>
 ${renderedFiles}

@@ -39,9 +39,3 @@ export function formatFamiliarSkillsForPrompt(skills: Skill[]): string {
 	lines.push("</available_skills>");
 	return lines.join("\n");
 }
-
-export function logSkillDiagnostics(result: FamiliarSkillsResult): void {
-	for (const diagnostic of result.diagnostics) {
-		console.warn(`skill ${diagnostic.type}: ${diagnostic.path}: ${diagnostic.message}`);
-	}
-}

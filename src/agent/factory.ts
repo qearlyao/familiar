@@ -21,8 +21,8 @@ import {
 } from "../models/index.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
-import { buildSystemPrompt, loadPersona } from "../prompting/persona.js";
-import { formatFamiliarSkillsForPrompt, loadFamiliarSkills, logSkillDiagnostics } from "../prompting/skills.js";
+import { buildSystemPrompt, loadPersona, logPromptSources } from "../prompting/persona.js";
+import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../prompting/skills.js";
 import { createMcpHub, pruneCondensedTools } from "../tools/mcp.js";
 import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
 import type { ContextBreakdown } from "../web/types.js";
@@ -76,15 +76,12 @@ export async function createFamiliarAgent(
 	const modelRuntime = options.modelRuntime ?? (await createModelRuntime(config));
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
-	logSkillDiagnostics(skillsResult);
+	logPromptSources(persona, skillsResult);
 	let systemPrompt = buildSystemPrompt(
 		persona,
 		config.memory.diariesDir,
 		formatFamiliarSkillsForPrompt(skillsResult.skills),
 	);
-	console.log("---SYSTEM PROMPT (start)---");
-	console.log(systemPrompt);
-	console.log("---SYSTEM PROMPT (end)---");
 	setMcpServersPath(config.workspace.dataDir);
 	const mcp = createMcpHub(() => rebuildSessionTools());
 	let defaultModel = createConfiguredModel(config, modelRuntime);
@@ -552,7 +549,7 @@ export async function createFamiliarAgent(
 				setAddedModelsPath(config.workspace.dataDir);
 				persona = next.persona;
 				skillsResult = next.skillsResult;
-				logSkillDiagnostics(skillsResult);
+				logPromptSources(persona, skillsResult);
 				systemPrompt = next.systemPrompt;
 				defaultModel = next.defaultModel;
 				for (const nextSession of reloadedSessions) {

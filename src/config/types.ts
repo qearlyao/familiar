@@ -214,7 +214,6 @@ export interface Config {
 		user: string;
 		contact: string;
 		memory: string;
-		inner: string;
 	};
 	media: {
 		generatedRetentionDays: number;

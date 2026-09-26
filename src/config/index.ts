@@ -779,7 +779,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			user: resolveWorkspacePath(workspacePath, readOptionalString(persona.user, "USER.md")),
 			contact: resolveWorkspacePath(workspacePath, readOptionalString(persona.contact, "CONTACT.md")),
 			memory: resolveWorkspacePath(workspacePath, readOptionalString(persona.memory, "MEMORY.md")),
-			inner: resolveWorkspacePath(workspacePath, readOptionalString(persona.inner, "INNER.md")),
 		},
 		media: {
 			generatedRetentionDays: readInteger(generatedMedia.retention_days, 30, "media.generated.retention_days"),

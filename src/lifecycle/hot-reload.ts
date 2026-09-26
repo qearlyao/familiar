@@ -32,7 +32,6 @@ const ROOT_FILES = new Set([
 	"USER.md",
 	"CONTACT.md",
 	"MEMORY.md",
-	"INNER.md",
 	"HEARTBEAT.md",
 ]);
 const SKILLS_DIR = "skills";

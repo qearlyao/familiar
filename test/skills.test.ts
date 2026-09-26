@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { createSyntheticSourceInfo } from "@earendil-works/pi-coding-agent";
 
 import { loadConfig } from "../src/config/index.js";
-import { buildSystemPrompt, loadPersona } from "../src/prompting/persona.js";
+import { buildSystemPrompt } from "../src/prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../src/prompting/skills.js";
 import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 
@@ -45,7 +45,7 @@ Prefer the reference board.
 
 	it("appends visible skills inside the persona system reminder after note-to-self", () => {
 		const prompt = buildSystemPrompt(
-			{ soul: "# Soul", user: "# User", memory: "# Memory", inner: null },
+			{ soul: "# Soul", user: "# User", memory: "# Memory" },
 			"/workspace/memories/diaries",
 			"<available_skills>\n</available_skills>",
 		);
@@ -58,33 +58,6 @@ Prefer the reference board.
 		assert.ok(reminderEnd > 0);
 		assert.ok(skillsStart > noteEnd);
 		assert.ok(skillsStart < reminderEnd);
-	});
-
-	it("omits missing optional INNER.md from the persona prompt", async (t) => {
-		const workspacePath = await createWorkspace(t, minimalConfigToml());
-		await withDiscordToken(async () => {
-			const config = await loadConfig(workspacePath);
-			const persona = await loadPersona(config);
-
-			assert.equal(persona.inner, null);
-			assert.doesNotMatch(buildSystemPrompt(persona, config.memory.diariesDir), /INNER\.md/);
-		});
-	});
-
-	it("surfaces configured INNER.md read errors", async (t) => {
-		const workspacePath = await createWorkspace(
-			t,
-			minimalConfigToml(`
-[persona]
-inner = "inner-dir"
-`),
-		);
-		await mkdir(resolve(workspacePath, "inner-dir"), { recursive: true });
-		await withDiscordToken(async () => {
-			const config = await loadConfig(workspacePath);
-
-			await assert.rejects(() => loadPersona(config), /EISDIR|illegal operation on a directory/);
-		});
 	});
 
 	it("omits skills disabled for model invocation", () => {

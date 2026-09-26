@@ -1,24 +1,21 @@
 import { readFile } from "node:fs/promises";
 
 import type { Config } from "../config/index.js";
-import { readFileOrNull } from "../util/fs.js";
 import type { FamiliarSkillsResult } from "./skills.js";
 
 export interface Persona {
 	soul: string;
 	user: string;
 	memory: string;
-	inner: string | null;
 }
 
 export async function loadPersona(config: Config): Promise<Persona> {
-	const [soul, user, memory, inner] = await Promise.all([
+	const [soul, user, memory] = await Promise.all([
 		readFile(config.persona.soul, "utf8"),
 		readFile(config.persona.user, "utf8"),
 		readFile(config.persona.memory, "utf8"),
-		readFileOrNull(config.persona.inner, "utf8"),
 	]);
-	return { soul, user, memory, inner };
+	return { soul, user, memory };
 }
 
 type SystemPromptFile = {
@@ -37,7 +34,6 @@ function systemPromptFiles(persona: Persona): SystemPromptFile[] {
 		{ name: "SOUL.md", contents: persona.soul },
 		{ name: "USER.md", contents: persona.user },
 		{ name: "MEMORY.md", contents: persona.memory },
-		...(persona.inner !== null ? [{ name: "INNER.md", contents: persona.inner }] : []),
 	];
 }
 

@@ -37,7 +37,7 @@ const imageGenSchema = Type.Object(
 		referenceImages: Type.Optional(
 			Type.Array(Type.String(), {
 				description:
-					"Optional. Image attachment IDs or names, or workspace-relative, absolute, or ~/ image file paths, to use as visual references. Prefer IDs from the attachment tags when available.",
+					"Optional visual references, in order (the first is @img1). Mix freely: attachment IDs or names from the current message's attachment tags, and workspace-relative, absolute, or ~/ image file paths. For an attachment from an earlier message, use its path.",
 			}),
 		),
 	},
@@ -309,10 +309,14 @@ function resolveWorkspaceReferencePath(config: Config, rawRef: string): string {
 	return path;
 }
 
-async function collectWorkspaceReferenceImages(config: Config, rawRef: string): Promise<WorkspaceReferenceImage[]> {
+async function collectWorkspaceReferenceImage(config: Config, rawRef: string): Promise<WorkspaceReferenceImage> {
 	const path = resolveWorkspaceReferencePath(config, rawRef);
 	const pathStat = await lstat(path).catch(() => undefined);
-	if (!pathStat) throw new Error(`Reference image path not found: ${rawRef}`);
+	if (!pathStat) {
+		throw new Error(
+			`Reference image not found: ${rawRef}. Only this message's attachment IDs resolve; for an earlier attachment, pass its path.`,
+		);
+	}
 	if (pathStat.isSymbolicLink()) throw new Error(`Reference image path cannot be a symlink: ${rawRef}`);
 	if (pathStat.isDirectory()) {
 		throw new Error(`Reference image path must be a file, not a folder: ${rawRef}`);
@@ -320,21 +324,22 @@ async function collectWorkspaceReferenceImages(config: Config, rawRef: string): 
 	if (!pathStat.isFile()) throw new Error(`Reference image path is not a file or folder: ${rawRef}`);
 	const mimeType = imageMimeTypeFromPath(path);
 	if (!mimeType) throw new Error(`Reference image path is not a supported image: ${rawRef}`);
-	return [
-		{
-			localPath: path,
-			name: basename(path),
-			mimeType,
-			size: pathStat.size,
-		},
-	];
+	return {
+		localPath: path,
+		name: basename(path),
+		mimeType,
+		size: pathStat.size,
+	};
 }
 
-function splitReferenceImages(
+type ReferenceImage = { kind: "attachment"; attachment: StoredAttachment } | { kind: "path"; ref: string };
+
+/** Resolves each reference to an attachment or a path, keeping the caller's order so @img1, @img2 line up. */
+function resolveReferenceImages(
 	attachments: readonly StoredAttachment[],
 	references: readonly string[] | undefined,
-): { attachments: StoredAttachment[]; workspaceRefs: string[] } {
-	if (!references?.length) return { attachments: [], workspaceRefs: [] };
+): ReferenceImage[] {
+	if (!references?.length) return [];
 	const imageAttachments = attachments.filter((attachment) => {
 		return (
 			attachment.localPath &&
@@ -342,84 +347,72 @@ function splitReferenceImages(
 			(!attachment.kind || attachment.kind === "image")
 		);
 	});
-	const selected: StoredAttachment[] = [];
-	const workspaceRefs: string[] = [];
-	const seenAttachments = new Set<string>();
-	const seenWorkspaceRefs = new Set<string>();
+	const resolved: ReferenceImage[] = [];
+	const seen = new Set<string>();
 	for (const rawRef of references) {
 		const ref = rawRef.trim();
 		if (!ref) continue;
 		const attachment = imageAttachments.find((candidate) => candidate.id === ref || candidate.name === ref);
 		if (attachment) {
-			if (seenAttachments.has(attachment.id)) continue;
-			seenAttachments.add(attachment.id);
-			selected.push(attachment);
+			if (seen.has(`attachment:${attachment.id}`)) continue;
+			seen.add(`attachment:${attachment.id}`);
+			resolved.push({ kind: "attachment", attachment });
 			continue;
 		}
 		const anyAttachment = attachments.find((candidate) => candidate.id === ref || candidate.name === ref);
 		if (anyAttachment) {
 			throw new Error(`Reference image is not an image attachment: ${ref}`);
 		}
-		if (seenWorkspaceRefs.has(ref)) continue;
-		seenWorkspaceRefs.add(ref);
-		workspaceRefs.push(ref);
+		if (seen.has(`path:${ref}`)) continue;
+		seen.add(`path:${ref}`);
+		resolved.push({ kind: "path", ref });
 	}
-	return { attachments: selected, workspaceRefs };
+	return resolved;
 }
 
-async function workspaceReferenceAttachments(
-	config: Config,
-	images: WorkspaceReferenceImage[],
-): Promise<StoredAttachment[]> {
-	const attachments: StoredAttachment[] = [];
-	for (const image of images) {
-		const attachment: StoredAttachment = {
-			id: `workspace:${image.localPath}`,
-			name: image.name,
-			kind: "image",
-			mimeType: image.mimeType,
-			size: image.size,
-			localPath: image.localPath,
+async function workspaceReferenceAttachment(config: Config, image: WorkspaceReferenceImage): Promise<StoredAttachment> {
+	const attachment: StoredAttachment = {
+		id: `workspace:${image.localPath}`,
+		name: image.name,
+		kind: "image",
+		mimeType: image.mimeType,
+		size: image.size,
+		localPath: image.localPath,
+	};
+	const derivedImage = await ensureInlineImageDerivative(config, attachment);
+	if (derivedImage) {
+		attachment.derived = {
+			...attachment.derived,
+			image: derivedImage,
 		};
-		const derivedImage = await ensureInlineImageDerivative(config, attachment);
-		if (derivedImage) {
-			attachment.derived = {
-				...attachment.derived,
-				image: derivedImage,
-			};
-		}
-		attachments.push(attachment);
 	}
-	return attachments;
+	return attachment;
 }
 
 async function buildImageContext(
 	model: ImagesModel<ImageGenApi>,
 	prompt: string,
-	references: StoredAttachment[],
-	workspaceRefs: readonly string[],
+	references: readonly ReferenceImage[],
 	config: Config,
 ): Promise<ImagesContext> {
 	const input: ImagesContext["input"] = [{ type: "text", text: prompt }];
-	const hasReferences = references.length > 0 || workspaceRefs.some((ref) => ref.trim().length > 0);
-	if (!hasReferences) return { input };
+	if (!references.length) return { input };
 	if (!model.input.includes("image")) {
 		throw new Error(`Image model does not support reference images: ${model.provider}/${model.id}`);
 	}
-	const workspaceImages: WorkspaceReferenceImage[] = [];
-	const seenWorkspaceImagePaths = new Set<string>();
-	for (const rawRef of workspaceRefs) {
-		if (!rawRef.trim()) continue;
-		for (const image of await collectWorkspaceReferenceImages(config, rawRef)) {
-			if (seenWorkspaceImagePaths.has(image.localPath)) continue;
-			seenWorkspaceImagePaths.add(image.localPath);
-			workspaceImages.push(image);
+	const ordered: StoredAttachment[] = [];
+	const seenPaths = new Set<string>();
+	for (const reference of references) {
+		if (reference.kind === "attachment") {
+			ordered.push(reference.attachment);
+			continue;
 		}
+		const image = await collectWorkspaceReferenceImage(config, reference.ref);
+		if (seenPaths.has(image.localPath)) continue;
+		seenPaths.add(image.localPath);
+		ordered.push(await workspaceReferenceAttachment(config, image));
 	}
-	const promptImages = await promptImagesFromAttachments([
-		...references,
-		...(await workspaceReferenceAttachments(config, workspaceImages)),
-	]);
+	const promptImages = await promptImagesFromAttachments(ordered);
 	if (promptImages.promptSuffix) input.push({ type: "text", text: promptImages.promptSuffix });
 	input.push(...promptImages.images);
 	if (!promptImages.images.length) throw new Error("No reference images could be inlined for image_gen.");
@@ -468,13 +461,12 @@ async function tryGenerateImages(
 	config: Config,
 	ref: ModelRef,
 	prompt: string,
-	references: StoredAttachment[],
-	workspaceRefs: readonly string[],
+	references: readonly ReferenceImage[],
 	signal: AbortSignal | undefined,
 	generate: ImagesFunction<any, any>,
 ): Promise<{ model: ImagesModel<ImageGenApi>; result: AssistantImages }> {
 	const model = resolveImageModel(config, ref);
-	const context = await buildImageContext(model, prompt, references, workspaceRefs, config);
+	const context = await buildImageContext(model, prompt, references, config);
 	const result = await generate(model, context, {
 		apiKey: resolveImageModelApiKey(config, model),
 		signal,
@@ -514,11 +506,7 @@ export function createImageGenTool(
 			if (config.imageGen.fallbackModel && !fallbackRef) {
 				throw new Error(`Invalid image_gen.fallback_model: ${config.imageGen.fallbackModel}`);
 			}
-			const allAttachmentRefs = deps.referenceAttachments?.() ?? [];
-			const { attachments: attachmentReferences, workspaceRefs: workspaceReferences } = splitReferenceImages(
-				allAttachmentRefs,
-				input.referenceImages,
-			);
+			const references = resolveReferenceImages(deps.referenceAttachments?.() ?? [], input.referenceImages);
 
 			const generate = deps.generateImages ?? generateImages;
 			const attempts: ImageGenAttemptDetails[] = [];
@@ -532,15 +520,7 @@ export function createImageGenTool(
 					  }
 					| undefined;
 				try {
-					attempt = await tryGenerateImages(
-						config,
-						ref,
-						prompt,
-						attachmentReferences,
-						workspaceReferences,
-						signal,
-						generate,
-					);
+					attempt = await tryGenerateImages(config, ref, prompt, references, signal, generate);
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					attempts.push({

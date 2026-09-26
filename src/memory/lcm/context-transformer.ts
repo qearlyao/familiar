@@ -11,8 +11,7 @@ import {
 	type LcmContextRawItem,
 	renderLcmRecordPartsForSummary,
 	resolveFreshTailStartIndex,
-	type selectLcmCompactionCandidate,
-	selectLcmCompactionCandidatePromptAware,
+	selectLcmCompactionCandidate,
 } from "./context.js";
 import { indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
@@ -44,7 +43,6 @@ export interface LcmContextTransformerOptions {
 		cacheTtlMs: number;
 		cacheTouchSlackMs: number;
 		criticalOverflowTokens: number;
-		promptAwareEvictionEnabled: boolean;
 	};
 	lcmStore: LcmStore;
 	indexer: ChunkIndexer;
@@ -111,7 +109,6 @@ export class LcmContextTransformer {
 	): Promise<AgentMessage[]> {
 		const settings = this.settings;
 		if (!settings.enabled) return messages;
-		const promptText = lastUserText(messages);
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
 		const state = this.contextState(sessionKey);
 		const now = this.now();
@@ -121,7 +118,7 @@ export class LcmContextTransformer {
 		this.projectContextState(sessionKey, options.sessionId, state);
 
 		try {
-			const pressure = this.evaluateCompactionPressure(state, options.model, promptText);
+			const pressure = this.evaluateCompactionPressure(state, options.model);
 			state.compactionDebt += pressure.pressureScore;
 			if (
 				shouldServiceCompactionDebt({
@@ -137,7 +134,6 @@ export class LcmContextTransformer {
 					sessionId: options.sessionId,
 					signal,
 					model: options.model,
-					promptText,
 					initialPressure: pressure,
 				});
 			}
@@ -177,14 +173,13 @@ export class LcmContextTransformer {
 		sessionId?: string;
 		signal?: AbortSignal;
 		model?: Model<any>;
-		promptText?: string;
 		initialPressure?: CompactionPressure;
 	}): Promise<void> {
 		for (let round = 0; input.state.compactionDebt > 0 && round < this.settings.maxRounds; round += 1) {
 			const pressure =
 				round === 0 && input.initialPressure
 					? input.initialPressure
-					: this.evaluateCompactionPressure(input.state, input.model, input.promptText ?? "");
+					: this.evaluateCompactionPressure(input.state, input.model);
 			if (!pressure.candidate.shouldCompact) {
 				if (pressure.thresholdOverflowTokens > 0) {
 					const condensed = await this.condenseRuntimeSummaries({
@@ -215,27 +210,16 @@ export class LcmContextTransformer {
 		}
 	}
 
-	private evaluateCompactionPressure(
-		state: LcmContextState,
-		model: Model<any> | undefined,
-		promptText = "",
-	): CompactionPressure {
-		const rawItems = state.items.filter((item): item is RawLcmItem => item.type === "raw");
-		const summaryTokens = state.items
-			.filter((item): item is CompactedLcmItem => item.type === "summary")
-			.reduce((total, item) => total + item.tokens, 0);
-		const candidate = selectLcmCompactionCandidatePromptAware(
-			rawItems,
+	private evaluateCompactionPressure(state: LcmContextState, model: Model<any> | undefined): CompactionPressure {
+		const candidate = selectLcmCompactionCandidate(
+			state.items,
 			{
 				contextThreshold: this.settings.contextThreshold,
 				freshTailCount: this.settings.freshTailCount,
 				freshTailMaxTokens: this.settings.freshTailMaxTokens,
 				leafChunkTokens: this.settings.leafChunkTokens,
-				promptAwareEvictionEnabled: this.settings.promptAwareEvictionEnabled,
 			},
 			model?.contextWindow ?? 200_000,
-			promptText,
-			summaryTokens,
 		);
 		const evictableTokens = candidate.shouldCompact ? candidate.rawTokensOutsideTail : 0;
 		const thresholdOverflowTokens = Math.max(0, candidate.totalTokens - candidate.contextThresholdTokens);
@@ -298,7 +282,7 @@ export class LcmContextTransformer {
 			if (persisted?.summaryId !== undefined) summaryItem.persistedSummaryId = persisted.summaryId;
 			state.items.splice(startIndex, removeCount, summaryItem);
 			compacted = true;
-			tokensSaved = Math.max(0, candidate.chunkTokens - summaryItem.tokens);
+			tokensSaved = Math.max(0, sumItemTokens(chunkItems) - summaryItem.tokens);
 			await this.condenseRuntimeSummaries({ state, sessionKey: input.sessionKey, signal: input.signal });
 		};
 
@@ -514,20 +498,6 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 	}
 
 	state.items = next;
-}
-
-function lastUserText(messages: readonly AgentMessage[]): string {
-	for (let index = messages.length - 1; index >= 0; index -= 1) {
-		const message = messages[index];
-		if (!message || message.role !== "user") continue;
-		if (typeof message.content === "string") return message.content.trim();
-		return message.content
-			.filter((item): item is { type: "text"; text: string } => item.type === "text")
-			.map((item) => item.text)
-			.join("\n")
-			.trim();
-	}
-	return "";
 }
 
 function contextItemsForStorage(items: readonly LcmContextItem[]): LcmContextItemInput[] {

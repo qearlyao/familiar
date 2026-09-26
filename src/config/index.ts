@@ -578,7 +578,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		"leaf_chunk_tokens",
 		"leaf_target_tokens",
 		"condensed_target_tokens",
-		"prompt_aware_eviction_enabled",
 		"condense_group_size",
 		"max_summary_depth",
 		"new_session_retain_depth",
@@ -865,9 +864,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				condensedTargetTokens: memoryLcmEnabled
 					? readInteger(memoryLcm.condensed_target_tokens, 2000, "memory.lcm.condensed_target_tokens", 1)
 					: 2000,
-				promptAwareEvictionEnabled: memoryLcmEnabled
-					? readBoolean(memoryLcm.prompt_aware_eviction_enabled, true, "memory.lcm.prompt_aware_eviction_enabled")
-					: true,
 				condenseGroupSize: memoryLcmEnabled
 					? readInteger(memoryLcm.condense_group_size, 4, "memory.lcm.condense_group_size", 1)
 					: 4,

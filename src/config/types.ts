@@ -271,7 +271,6 @@ export interface Config {
 			leafChunkTokens: number;
 			leafTargetTokens: number;
 			condensedTargetTokens: number;
-			promptAwareEvictionEnabled: boolean;
 			condenseGroupSize: number;
 			maxSummaryDepth: number;
 			newSessionRetainDepth: number;

@@ -50,7 +50,6 @@ async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 				freshTailCount: 64,
 				leafChunkTokens: 20000,
 				leafTargetTokens: 2400,
-				promptAwareEvictionEnabled: true,
 				condenseGroupSize: 4,
 				maxSummaryDepth: 4,
 				maxRounds: 10,
@@ -1757,7 +1756,7 @@ describe("MemoryService", () => {
 		});
 	});
 
-	it("prompt-aware LCM compaction skips records relevant to the last user message", async (t) => {
+	it("compacts the oldest LCM messages first", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
@@ -1770,51 +1769,6 @@ describe("MemoryService", () => {
 					leafChunkTokens: 32,
 					leafTargetTokens: 8,
 					maxRounds: 1,
-					promptAwareEvictionEnabled: true,
-				},
-			},
-		};
-		let summarizedInput = "";
-		const summarizer: LcmSummarizer = {
-			summarizeCondensed: condenseViaLeaf,
-			async summarizeLeaf(input) {
-				summarizedInput = input.text;
-				return "Files: none\nPrompt-aware unrelated details were compacted.\nExpand for details about: evicted range";
-			},
-		};
-
-		await withEmbeddingFetch([1, 0, 0], async () => {
-			const service = createMemoryService(config, { summarizer });
-			try {
-				await service.transformContext(promptAwareMessages(), undefined, {
-					sessionKey: "room-prompt-aware",
-					sessionId: "session-a",
-					model: { contextWindow: 10_000 } as any,
-				});
-
-				assert.match(summarizedInput, /weather|kanban/);
-				assert.equal(summarizedInput.includes("rebar lattice beam"), false);
-				assert.equal(summarizedInput.includes("rebar lattice footing"), false);
-			} finally {
-				service.close();
-			}
-		});
-	});
-
-	it("falls back to oldest-first LCM compaction when prompt-aware eviction is disabled", async (t) => {
-		const baseConfig = await memoryConfig(t);
-		const config = {
-			...baseConfig,
-			memory: {
-				...baseConfig.memory,
-				lcm: {
-					...baseConfig.memory.lcm,
-					enabled: true,
-					freshTailCount: 1,
-					leafChunkTokens: 32,
-					leafTargetTokens: 8,
-					maxRounds: 1,
-					promptAwareEvictionEnabled: false,
 				},
 			},
 		};
@@ -1830,8 +1784,8 @@ describe("MemoryService", () => {
 		await withEmbeddingFetch([1, 0, 0], async () => {
 			const service = createMemoryService(config, { summarizer });
 			try {
-				await service.transformContext(promptAwareMessages(), undefined, {
-					sessionKey: "room-prompt-aware-disabled",
+				await service.transformContext(topicMessages(), undefined, {
+					sessionKey: "room-oldest-first",
 					sessionId: "session-a",
 					model: { contextWindow: 10_000 } as any,
 				});
@@ -2005,7 +1959,7 @@ function criticalDebtMessages() {
 	];
 }
 
-function promptAwareMessages() {
+function topicMessages() {
 	return [
 		{ role: "user" as const, content: "rebar lattice beam splice detail ".repeat(8), timestamp: 30 },
 		{

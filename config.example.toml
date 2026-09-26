@@ -285,7 +285,6 @@ fresh_tail_count = 100
 leaf_chunk_tokens = 14000
 leaf_target_tokens = 1000
 
-prompt_aware_eviction_enabled = true
 condense_group_size = 4
 
 max_summary_depth = 2

@@ -9,7 +9,7 @@ import {
 	createRawContextItems,
 	estimateAgentMessageTokens,
 	estimateTextTokens,
-	selectLcmCompactionCandidatePromptAware,
+	selectLcmCompactionCandidate,
 } from "../src/memory/lcm/context.js";
 import {
 	buildCondensedSummaryPrompt,
@@ -194,12 +194,11 @@ describe("LCM context helpers", () => {
 		assert.equal(ids[0], createAgentMessageFingerprint(twin("a"), 0));
 	});
 
-	it("prompt-aware candidate selection preserves tool_call and tool_result pair integrity", () => {
-		const toolCall = record(1, "assistant", "[tool_call: read({\"path\":\"PLAN.md\"})]");
-		const toolResult = record(2, "tool", "[tool_result: read -> unrelated weather output]");
-		const rebar = record(3, "user", "rebar lattice anchor bolts and sleeve details");
-		const other = record(4, "user", "kanban schedule board cleanup");
-		const fresh = record(5, "user", "fresh rebar lattice question");
+	it("leaf chunk is the oldest raw run: keeps tool pairs whole and stops at a summary", () => {
+		const toolCall = record(1, "assistant", "[tool_call: read]");
+		const toolResult = record(2, "tool", "[tool_result: read -> output]");
+		const after = record(3, "user", "after the summary");
+		const fresh = record(4, "user", "fresh question");
 		const items = [
 			rawItem(toolCall, {
 				role: "assistant",
@@ -215,30 +214,26 @@ describe("LCM context helpers", () => {
 				role: "toolResult",
 				toolCallId: "call-1",
 				toolName: "read",
-				content: [{ type: "text", text: "unrelated weather output" }],
-				details: { text: "unrelated weather output" },
+				content: [{ type: "text", text: "output" }],
+				details: { text: "output" },
 				isError: false,
 				timestamp: 2,
 			}),
-			rawItem(rebar, { role: "user", content: rebar.text, timestamp: 3 }),
-			rawItem(other, { role: "user", content: other.text, timestamp: 4 }),
-			rawItem(fresh, { role: "user", content: fresh.text, timestamp: 5 }),
+			{ type: "summary" as const, tokens: 50 },
+			rawItem(after, { role: "user", content: after.text, timestamp: 3 }),
+			rawItem(fresh, { role: "user", content: fresh.text, timestamp: 4 }),
 		];
-
-		const candidate = selectLcmCompactionCandidatePromptAware(
-			items,
-			{
-				contextThreshold: 0.75,
-				freshTailCount: 1,
-				leafChunkTokens: 12,
-				promptAwareEvictionEnabled: true,
-			},
-			10_000,
-			"rebar lattice details",
-		);
+		const select = (leafChunkTokens: number) =>
+			selectLcmCompactionCandidate(items, { contextThreshold: 0.75, freshTailCount: 1, leafChunkTokens }, 100);
 
 		assert.deepEqual(
-			candidate.chunk.map((item) => item.record?.id),
+			select(1).chunk.map((item) => item.record?.id),
+			[1, 2],
+		);
+		const large = select(1_000);
+		assert.deepEqual(large.reasons, ["context_threshold"]);
+		assert.deepEqual(
+			large.chunk.map((item) => item.record?.id),
 			[1, 2],
 		);
 	});
@@ -262,18 +257,16 @@ describe("LCM context helpers", () => {
 			rawItem(userRecord, { role: "user", content: userRecord.text, timestamp: 2 }),
 		];
 
-		const withSignatures = selectLcmCompactionCandidatePromptAware(
+		const withSignatures = selectLcmCompactionCandidate(
 			items,
 			{
 				contextThreshold: 0.9,
 				freshTailCount: 0,
 				leafChunkTokens: 50,
-				promptAwareEvictionEnabled: false,
 			},
 			100,
-			"",
 		);
-		const withoutSignatures = selectLcmCompactionCandidatePromptAware(
+		const withoutSignatures = selectLcmCompactionCandidate(
 			[
 				rawItem(
 					signedAssistantRecord,
@@ -289,10 +282,8 @@ describe("LCM context helpers", () => {
 				contextThreshold: 0.9,
 				freshTailCount: 0,
 				leafChunkTokens: 50,
-				promptAwareEvictionEnabled: false,
 			},
 			100,
-			"",
 		);
 
 		assert.equal(withoutSignatures.shouldCompact, false);
@@ -308,17 +299,15 @@ describe("LCM context helpers", () => {
 			rawItem(record(4, "user", "fresh delta"), { role: "user", content: "fresh delta", timestamp: 4 }),
 		];
 
-		const candidate = selectLcmCompactionCandidatePromptAware(
+		const candidate = selectLcmCompactionCandidate(
 			items,
 			{
 				contextThreshold: 0.75,
 				freshTailCount: 4,
 				freshTailMaxTokens: 20,
 				leafChunkTokens: 1,
-				promptAwareEvictionEnabled: false,
 			},
 			10_000,
-			"",
 		);
 
 		assert.equal(candidate.freshTailStartIndex, 3);

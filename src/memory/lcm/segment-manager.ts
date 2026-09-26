@@ -47,6 +47,17 @@ export class LcmSegmentManager {
 		return unsubscribe;
 	}
 
+	/** Queue projection work so a later reset waits for it before applying retention. */
+	enqueue(channelKey: string, task: () => Promise<unknown>): void {
+		this.projectionQueue = this.projectionQueue.then(task).then(
+			() => undefined,
+			(error) => {
+				this.projectionFailures += 1;
+				console.error(`memory projection failed for ${channelKey}`, error);
+			},
+		);
+	}
+
 	async flush(): Promise<void> {
 		await this.projectionQueue.catch(() => undefined);
 	}
@@ -79,6 +90,9 @@ export class LcmSegmentManager {
 			this.rotateRuntimeSegment(runtime, record);
 			return;
 		}
+		// conversation turns reach LCM through the context transformer, whose record ids summaries
+		// cover; the chat log contributes only the /new boundary
+		if (record.type !== "control" || record.command !== "new") return;
 		const segmentId = this.activeSegmentId(runtime.channelKey);
 		const batch = normalizeChatRecords([record], {
 			segmentId,

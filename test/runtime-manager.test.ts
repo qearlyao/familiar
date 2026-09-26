@@ -24,6 +24,7 @@ function spyMemoryService(): {
 			};
 		},
 		transformContext: async (messages) => messages,
+		recordMessages: () => {},
 		getContextBreakdown: () => undefined,
 		serviceCompactionDebt: async () => {},
 		flush: async () => {},

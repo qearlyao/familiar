@@ -274,6 +274,17 @@ export async function createFamiliarAgent(
 					});
 				} else completedContexts.delete(sessionKey);
 			}
+			if (event.type === "agent_end" && memoryService && !activePromptOptions.get(sessionKey)?.ephemeral) {
+				const messages = agent.state.messages;
+				try {
+					memoryService.recordMessages(messages[0]?.role === "system" ? messages.slice(1) : messages, {
+						sessionKey,
+						sessionId,
+					});
+				} catch (error) {
+					console.error(`memory LCM turn recording failed for ${sessionKey}`, error);
+				}
+			}
 			if (event.type === "message_end") {
 				writeTranscriptLog(config, {
 					ts: new Date().toISOString(),

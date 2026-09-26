@@ -31,6 +31,7 @@ export interface MemoryService {
 		signal?: AbortSignal,
 		options?: MemoryTransformOptions,
 	): Promise<AgentMessage[]>;
+	recordMessages(messages: AgentMessage[], options: { sessionKey: string; sessionId?: string }): void;
 	getContextBreakdown(sessionKey: string): ContextBreakdown | undefined;
 	serviceCompactionDebt(sessionKey: string): Promise<void>;
 	flush(): Promise<void>;
@@ -195,6 +196,10 @@ class DefaultMemoryService implements MemoryOperatorService {
 		this.diaryWatchTimers.clear();
 		this.memoryStore.close();
 		this.lcmStore.close();
+	}
+
+	recordMessages(messages: AgentMessage[], options: { sessionKey: string; sessionId?: string }): void {
+		this.contextTransformer.recordMessages(messages, options);
 	}
 
 	async flush(): Promise<void> {

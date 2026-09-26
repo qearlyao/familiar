@@ -23,7 +23,7 @@ it("counts only selected context, separates fresh messages, and clears unavailab
 		lcmStore: store,
 		indexer: {} as ChunkIndexer,
 		summarizer: { summarizeLeaf: unexpectedSummary, summarizeCondensed: unexpectedSummary },
-		segmentManager: { activeSegmentId: () => "room:seg-1" } as unknown as LcmSegmentManager,
+		segmentManager: { activeSegmentId: () => "room:seg-1", enqueue: () => {} } as unknown as LcmSegmentManager,
 	});
 	const messages = [
 		{ role: "user" as const, content: "older ".repeat(100), timestamp: 1 },

@@ -64,11 +64,13 @@ async function memoryConfig(t: { after(fn: () => Promise<void>): void }) {
 
 async function withEmbeddingFetch<T>(values: number[], run: () => Promise<T>): Promise<T> {
 	const previousFetch = globalThis.fetch;
-	globalThis.fetch = (async () =>
-		new Response(JSON.stringify({ embeddings: [{ values }] }), {
+	globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+		const count = (JSON.parse(String(init?.body ?? "{}")).requests ?? [undefined]).length;
+		return new Response(JSON.stringify({ embeddings: Array.from({ length: count }, () => ({ values })) }), {
 			status: 200,
 			headers: { "content-type": "application/json" },
-		})) as typeof fetch;
+		});
+	}) as typeof fetch;
 	try {
 		return await run();
 	} finally {
@@ -178,7 +180,9 @@ describe("MemoryService", () => {
 				);
 				assert.equal(messages.length, 1);
 				assert.equal(messages[0]?.role, "user");
-				assert.equal(embeddingCalls, 0);
+				await service.flush();
+				// the turn's own record is indexed; ambient retrieval would add a query embedding
+				assert.equal(embeddingCalls, 1);
 			});
 		} finally {
 			globalThis.fetch = previousFetch;
@@ -246,7 +250,7 @@ describe("MemoryService", () => {
 		}
 	});
 
-	it("projects runtime records into LCM and rotates segments on reset", async (t) => {
+	it("records agent turns (not chat-log copies) into LCM and rotates segments on reset", async (t) => {
 		const baseConfig = await memoryConfig(t);
 		const config = {
 			...baseConfig,
@@ -262,12 +266,15 @@ describe("MemoryService", () => {
 			});
 			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
 			try {
-				await runtime.ingestInbound({
-					messageId: "m1",
-					authorId: "owner",
-					text: "Remember the compact toolbar.",
-				});
+				service.recordMessages([userTurn("Remember the compact toolbar.", 1)], { sessionKey: "web-web-room", sessionId: "session-a" });
 				await runtime.noteOutbound({ text: "I will remember the compact toolbar.", messageIds: ["m2"] });
+				service.recordMessages(
+					[
+						userTurn("Remember the compact toolbar.", 1),
+						assistantTurn("I will remember the compact toolbar.", 2),
+					],
+					{ sessionKey: "web-web-room", sessionId: "session-a" },
+				);
 				await runtime.resetConversation("new conversation requested");
 				await service.flush();
 
@@ -301,11 +308,7 @@ describe("MemoryService", () => {
 			});
 			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
 			try {
-				await runtime.ingestInbound({
-					messageId: "m1",
-					authorId: "owner",
-					text: "Remember the compact toolbar.",
-				});
+				service.recordMessages([userTurn("Remember the compact toolbar.", 1)], { sessionKey: "web-web-room", sessionId: "session-a" });
 				await service.flush();
 
 				const lcmStoreBeforeReset = LcmStore.open(config);
@@ -361,10 +364,9 @@ describe("MemoryService", () => {
 			});
 			const firstUnsubscribe = firstService.subscribeRuntime(firstRuntime, "session-a");
 			try {
-				await firstRuntime.ingestInbound({
-					messageId: "m1",
-					authorId: "owner",
-					text: "First session detail.",
+				firstService.recordMessages([userTurn("First session detail.", 1)], {
+					sessionKey: "web-web-room",
+					sessionId: "session-a",
 				});
 				await firstRuntime.resetConversation("new conversation requested");
 				await firstService.flush();
@@ -383,10 +385,9 @@ describe("MemoryService", () => {
 			});
 			const secondUnsubscribe = secondService.subscribeRuntime(secondRuntime, "session-b");
 			try {
-				await secondRuntime.ingestInbound({
-					messageId: "m2",
-					authorId: "owner",
-					text: "Second session detail.",
+				secondService.recordMessages([{ ...userTurn("Second session detail.", 2), timestamp: Date.now() }], {
+					sessionKey: "web-web-room",
+					sessionId: "session-b",
 				});
 				await secondService.flush();
 
@@ -429,11 +430,7 @@ describe("MemoryService", () => {
 			});
 			const unsubscribe = service.subscribeRuntime(runtime, "session-a");
 			try {
-				await runtime.ingestInbound({
-					messageId: "m1",
-					authorId: "owner",
-					text: "Recall should not find the pruned toolbar detail.",
-				});
+				service.recordMessages([userTurn("Recall should not find the pruned toolbar detail.", 1)], { sessionKey: "web-web-room", sessionId: "session-a" });
 				await service.flush();
 
 				let memoryStore = MemoryIndexStore.open(config);
@@ -478,7 +475,8 @@ describe("MemoryService", () => {
 			});
 			let reset: Promise<void> | undefined;
 			try {
-				await runtime.ingestInbound({ messageId: "old", authorId: "owner", text: "quartz secret" });
+				const old = userTurn("quartz secret", 1);
+				service.recordMessages([old], { sessionKey: "reset-barrier" });
 				await service.flush();
 				const recall = service.memoryTools().find((tool) => tool.name === "memory_recall")!;
 				const open = service.memoryTools().find((tool) => tool.name === "memory_open")!;
@@ -495,7 +493,7 @@ describe("MemoryService", () => {
 					await released;
 					return indexChunks(...args);
 				};
-				await runtime.ingestInbound({ messageId: "queued", authorId: "owner", text: "quartz pending" });
+				service.recordMessages([old, userTurn("quartz pending", 2)], { sessionKey: "reset-barrier" });
 				await started;
 				let completed = false;
 				reset = runtime.resetConversation().then(() => {
@@ -1821,11 +1819,7 @@ describe("MemoryService", () => {
 			};
 			console.error = () => {};
 			try {
-				await runtime.ingestInbound({
-					messageId: "m1",
-					authorId: "owner",
-					text: "Dangling toolbar marker after retention.",
-				});
+				service.recordMessages([userTurn("Dangling toolbar marker after retention.", 1)], { sessionKey: "web-web-room", sessionId: "session-a" });
 				await service.flush();
 
 				await assert.rejects(runtime.resetConversation("new conversation requested"), /simulated index delete failure/);
@@ -2039,4 +2033,22 @@ function serviceMemoryStore(service: ReturnType<typeof createMemoryService>): Me
 } {
 	return (service as unknown as { memoryStore: MemoryIndexStore & { deleteBySourceUnsafe(corpus: string, sourceId: string): void } })
 		.memoryStore;
+}
+
+// agent turns land in LCM through recordMessages/transformContext; timestamps sit before any reset
+function userTurn(text: string, second: number) {
+	return { role: "user" as const, content: text, timestamp: Date.parse(`2026-05-10T01:00:0${second}.000Z`) };
+}
+
+function assistantTurn(text: string, second: number) {
+	return {
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text }],
+		api: "test",
+		provider: "test",
+		model: "test",
+		usage: zeroUsage(),
+		stopReason: "stop" as const,
+		timestamp: Date.parse(`2026-05-10T01:00:0${second}.000Z`),
+	};
 }

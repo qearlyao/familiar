@@ -13,11 +13,11 @@ import {
 	resolveFreshTailStartIndex,
 	selectLcmCompactionCandidate,
 } from "./context.js";
-import { indexLcmSummaries } from "./indexer.js";
+import { indexLcmRecords, indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
-import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmSummary } from "./types.js";
+import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 const LCM_SUMMARY_OPEN_TAG = "<from_earlier>";
 const LCM_SUMMARY_CLOSE_TAG = "</from_earlier>";
@@ -108,14 +108,13 @@ export class LcmContextTransformer {
 		options: LcmContextTransformOptions,
 	): Promise<AgentMessage[]> {
 		const settings = this.settings;
-		if (!settings.enabled) return messages;
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
+		this.recordMessages(messages, { sessionKey, sessionId: options.sessionId });
+		if (!settings.enabled) return messages;
 		const state = this.contextState(sessionKey);
 		const now = this.now();
 		const previousCacheTouchedAt = state.cacheTouchedAt;
 		state.cacheTouchedAt = now;
-		syncContextState(state, messages);
-		this.projectContextState(sessionKey, options.sessionId, state);
 
 		try {
 			const pressure = this.evaluateCompactionPressure(state, options.model);
@@ -400,21 +399,37 @@ export class LcmContextTransformer {
 		this.contextStates.delete(sessionKey);
 	}
 
+	/**
+	 * Save conversation records whether or not compaction is enabled; recall reads them either way.
+	 * The agent also calls this at turn end, so a turn's closing reply doesn't wait for the next turn.
+	 */
+	recordMessages(messages: AgentMessage[], options: { sessionKey: string; sessionId?: string }): void {
+		const state = this.contextState(options.sessionKey);
+		syncContextState(state, messages);
+		this.projectContextState(options.sessionKey, options.sessionId, state);
+	}
+
+	// The only writer of conversation records: summaries cover these ids, so recall indexes these rows too.
 	private projectContextState(sessionKey: string, sessionId: string | undefined, state: LcmContextState): void {
 		const segmentId = this.segmentManager.activeSegmentId(sessionKey);
 		const inserts = state.items
 			.filter((item): item is RawLcmItem => item.type === "raw" && item.recordId === null)
 			.map((item) => ({ item, input: rawItemToRecordInput(item, segmentId, sessionKey, sessionId) }));
 		if (inserts.length === 0) return;
+		const inserted: StoredLcmRecord[] = [];
 		this.lcmStore.db
 			.transaction(() => {
 				for (const insert of inserts) {
 					const result = this.lcmStore.insertRecordReturningStored(insert.input);
 					insert.item.recordId = result.record.id;
 					insert.item.record = result.record;
+					if (result.inserted) inserted.push(result.record);
 				}
 			})
 			.immediate();
+		if (inserted.length === 0) return;
+		// off the prompt path, but queued ahead of any reset so retention never races a pending index write
+		this.segmentManager.enqueue(sessionKey, () => indexLcmRecords({ indexer: this.indexer, records: inserted }));
 	}
 
 	private rehydrateContextState(sessionKey: string, state: LcmContextState): void {

@@ -12,9 +12,7 @@ import {
 	indexLcmSummaries,
 	LCM_RECORD_CORPUS,
 	LCM_SUMMARY_CORPUS,
-	projectNormalizedLcmBatch,
 } from "../src/memory/lcm/indexer.js";
-import { normalizeChatRecords } from "../src/memory/lcm/normalize.js";
 import { LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "../src/memory/lcm/store.js";
 import type { LcmRecordPart, StoredLcmRecord } from "../src/memory/lcm/types.js";
 import { FakeEmbeddingProvider } from "./memory-fakes.js";
@@ -68,104 +66,6 @@ function storedRecord(input: {
 }
 
 describe("LCM indexer", () => {
-	it("projects normalized chat records into LcmStore and MemoryIndexStore while skipping noisy records", async (t) => {
-		const lcmStore = new LcmStore({ path: await tempDbPath(t, "familiar-lcm-indexer-", "lcm.sqlite") });
-		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-indexer-memory-", "memory.sqlite"));
-		const provider = new FakeEmbeddingProvider();
-		const indexer = new ChunkIndexer({ store: memoryStore, embeddingProvider: provider });
-		try {
-			const records: ChatLogRecord[] = [
-				{
-					...base,
-					type: "inbound",
-					recordId: 1,
-					messageId: "m1",
-					authorId: "u1",
-					text: "Please remember the compact toolbar.",
-					isBot: false,
-					mentionedBot: false,
-					attachments: [],
-				},
-				{
-					...base,
-					type: "job_queued",
-					recordId: 2,
-					jobId: "job-1",
-					trigger: "message",
-					triggerRecordId: 1,
-				},
-				{
-					...base,
-					type: "agent_event",
-					recordId: 3,
-					jobId: "job-1",
-					messageId: "event-1",
-					event: { type: "turn_start" },
-				},
-				{
-					...base,
-					type: "outbound",
-					recordId: 4,
-					messageIds: ["m2"],
-					text: "I will keep the toolbar preference in view.",
-					jobId: "job-1",
-				},
-				{
-					...base,
-					type: "checkpoint",
-					recordId: 5,
-					cursor: "cursor",
-				},
-				{
-					...base,
-					type: "outbound",
-					recordId: 6,
-					messageIds: ["m3"],
-					text: "silent control ack",
-					silent: true,
-				},
-			];
-
-			const batch = normalizeChatRecords(records, {
-				segmentId: "seg-a",
-				sessionId: "session-a",
-				channelKey: "web-web-room",
-				sourcePath: "data/chat/web-web-room/2026-05-10.jsonl",
-			});
-			const result = await projectNormalizedLcmBatch({ batch, lcmStore, indexer });
-
-			assert.deepEqual(result.segmentIds, ["seg-a"]);
-			assert.equal(result.recordIds.length, 2);
-			assert.equal(result.recordIndex.ids.length, 2);
-			assert.equal(result.recordIndex.embedded, 2);
-			assert.deepEqual(provider.batches[0], [
-				"Please remember the compact toolbar.",
-				"I will keep the toolbar preference in view.",
-			]);
-
-			const storedRecords = lcmStore.listRecords();
-			assert.deepEqual(
-				storedRecords.map((record) => ({ kind: record.kind, text: record.text, sourceRecordId: record.source.sourceRecordId })),
-				[
-					{ kind: "user", text: "Please remember the compact toolbar.", sourceRecordId: "1" },
-					{ kind: "assistant", text: "I will keep the toolbar preference in view.", sourceRecordId: "4" },
-				],
-			);
-
-			const chunks = memoryStore.searchLexical("toolbar", { corpus: LCM_RECORD_CORPUS, limit: 10 });
-			assert.equal(chunks.length, 2);
-			assert.deepEqual(
-				chunks.map((hit) => hit.chunk.sourceId).sort(),
-				storedRecords.map((record) => lcmRecordIndexSourceId(record.id)).sort(),
-			);
-			assert.equal(memoryStore.searchLexical("queued", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
-			assert.equal(memoryStore.stats().indexed, 2);
-		} finally {
-			lcmStore.close();
-			memoryStore.close();
-		}
-	});
-
 	it("indexes ready summaries with LCM summary source ids and skips placeholders", async (t) => {
 		const lcmStore = new LcmStore({ path: await tempDbPath(t, "familiar-lcm-summary-indexer-", "lcm.sqlite") });
 		const memoryStore = openMemoryStore(await tempDbPath(t, "familiar-lcm-summary-indexer-memory-", "memory.sqlite"));

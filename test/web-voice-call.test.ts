@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { buildRecordBase, type ChatLogRecord } from "../src/conversation/chat-log.js";
-import { normalizeChatRecords } from "../src/memory/lcm/normalize.js";
 import { ownerDmRef } from "../src/runtime/agent-core.js";
 import type { ConversationRuntime } from "../src/runtime/conversation-runtime.js";
 import {
@@ -65,7 +64,6 @@ describe("web voice call", () => {
 		];
 		assert.deepEqual(webMessagesFromRecords(config, records, "Fern").at(-1)?.call, { kept: false, durationMs: 252_000 });
 		assert.equal(voiceCallOpening(config, records, "Fern", 5), voiceCallOpening(config, chat(), "Fern", 5));
-		assert.equal(normalizeChatRecords(records, { segmentId: "s" }).records.length, 3);
 	});
 
 	async function fakeCall(t: Parameters<typeof configWithDataDir>[0], options: { holdUntilAborted?: boolean } = {}) {

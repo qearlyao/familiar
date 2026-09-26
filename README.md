@@ -544,7 +544,6 @@ Familiar includes local memory maintenance commands:
 familiar memory status
 familiar memory doctor
 familiar memory reindex
-familiar memory backfill
 familiar memory backup
 ```
 

@@ -2,8 +2,8 @@ import type { ChatLogRecord } from "../../conversation/chat-log.js";
 import type { ConversationRuntime } from "../../runtime/conversation-runtime.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import type { MemoryIndexStore } from "../index/store.js";
-import { projectNormalizedLcmBatch } from "./indexer.js";
-import { normalizeChatRecords } from "./normalize.js";
+import { indexLcmRecords } from "./indexer.js";
+import { chatBoundaryRecord } from "./normalize.js";
 import type { LcmStore } from "./store.js";
 
 export interface LcmSegmentManagerOptions {
@@ -90,17 +90,15 @@ export class LcmSegmentManager {
 			this.rotateRuntimeSegment(runtime, record);
 			return;
 		}
-		// conversation turns reach LCM through the context transformer, whose record ids summaries
-		// cover; the chat log contributes only the /new boundary
-		if (record.type !== "control" || record.command !== "new") return;
-		const segmentId = this.activeSegmentId(runtime.channelKey);
-		const batch = normalizeChatRecords([record], {
-			segmentId,
+		// conversation turns reach LCM through the context transformer, whose record ids summaries cover
+		const boundary = chatBoundaryRecord(record, {
+			segmentId: this.activeSegmentId(runtime.channelKey),
 			sessionId: sessionId ?? null,
 			channelKey: runtime.channelKey,
 		});
-		if (batch.records.length === 0 && batch.segments.length === 0) return;
-		await projectNormalizedLcmBatch({ batch, lcmStore: this.lcmStore, indexer: this.indexer });
+		if (!boundary) return;
+		const stored = this.lcmStore.insertRecordReturningStored(boundary).record;
+		await indexLcmRecords({ indexer: this.indexer, records: [stored] });
 	}
 
 	private rotateRuntimeSegment(
@@ -114,12 +112,11 @@ export class LcmSegmentManager {
 		// applied after commit; startup reconciliation repairs crashes between the two DBs.
 		this.lcmStore.db
 			.transaction(() => {
-				const batch = normalizeChatRecords([record], {
+				const boundary = chatBoundaryRecord(record, {
 					segmentId: previousSegmentId,
 					channelKey: runtime.channelKey,
 				});
-				for (const segment of batch.segments) this.lcmStore.ensureSegment(segment);
-				for (const normalizedRecord of batch.records) this.lcmStore.insertRecord(normalizedRecord);
+				if (boundary) this.lcmStore.insertRecord(boundary);
 				this.lcmStore.closeSegment(previousSegmentId, record.ts);
 				this.lcmStore.ensureSegment({
 					id: nextSegmentId,

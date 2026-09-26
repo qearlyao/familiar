@@ -38,7 +38,7 @@ import { startWebDaemon } from "./web/daemon.js";
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
 const DEFAULT_WORKSPACE_PATH = resolve(homedir(), ".familiar");
-const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "backfill", "prune", "backup", "help", "--help"]);
+const MEMORY_SUBCOMMANDS = new Set(["status", "doctor", "reindex", "prune", "backup", "help", "--help"]);
 const RESTART_EXIT_DELAY_MS = 1500;
 
 function loadWorkspaceEnv(envPath: string, override: boolean): void {

@@ -1,23 +1,9 @@
 import type { ChunkIndexer, ChunkIndexResult, MemoryChunkIndexInput } from "../index/chunk-indexer.js";
-import type { NormalizedLcmBatch } from "./normalize.js";
-import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store.js";
+import { lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store.js";
 import type { LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
 export const LCM_RECORD_CORPUS = "lcm_record";
 export const LCM_SUMMARY_CORPUS = "lcm_summary";
-
-export interface ProjectNormalizedLcmBatchOptions {
-	batch: NormalizedLcmBatch;
-	lcmStore: LcmStore;
-	indexer: ChunkIndexer;
-	signal?: AbortSignal;
-}
-
-export interface ProjectNormalizedLcmBatchResult {
-	segmentIds: string[];
-	recordIds: number[];
-	recordIndex: ChunkIndexResult;
-}
 
 export interface IndexLcmRecordsOptions {
 	indexer: ChunkIndexer;
@@ -29,26 +15,6 @@ export interface IndexLcmSummariesOptions {
 	indexer: ChunkIndexer;
 	summaries: readonly StoredLcmSummary[];
 	signal?: AbortSignal;
-}
-
-export async function projectNormalizedLcmBatch(
-	options: ProjectNormalizedLcmBatchOptions,
-): Promise<ProjectNormalizedLcmBatchResult> {
-	const segmentIds: string[] = [];
-	for (const segment of options.batch.segments) {
-		segmentIds.push(options.lcmStore.ensureSegment(segment).id);
-	}
-
-	const storedRecords: StoredLcmRecord[] = [];
-	for (const record of options.batch.records) {
-		storedRecords.push(options.lcmStore.insertRecordReturningStored(record).record);
-	}
-
-	return {
-		segmentIds,
-		recordIds: storedRecords.map((record) => record.id),
-		recordIndex: await indexLcmRecords({ indexer: options.indexer, records: storedRecords, signal: options.signal }),
-	};
 }
 
 export async function indexLcmRecords(options: IndexLcmRecordsOptions): Promise<ChunkIndexResult> {

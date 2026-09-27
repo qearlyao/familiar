@@ -25,15 +25,7 @@ export interface HotReloadOptions {
 	watch?: WatchFn;
 }
 
-const ROOT_FILES = new Set([
-	"config.toml",
-	".env",
-	"SOUL.md",
-	"USER.md",
-	"CONTACT.md",
-	"MEMORY.md",
-	"HEARTBEAT.md",
-]);
+const ROOT_FILES = new Set(["config.toml", ".env", "SOUL.md", "USER.md", "CONTACT.md", "MEMORY.md", "HEARTBEAT.md"]);
 const SKILLS_DIR = "skills";
 
 function shouldReloadForPath(workspacePath: string, changedPath: string): boolean {

@@ -168,8 +168,8 @@ linkgemini = "LINK_API_KEY"
 provider = "elevenlabs"
 api_key_env = "ELEVENLABS_API_KEY"
 voice_id = "${ELEVENLABS_VOICE_ID:-}"
-model_id = "eleven_v3"
-voice_call_model_id = "eleven_v3_conversational"
+model_id = "eleven_v4"
+voice_call_model_id = "eleven_v4_turbo"
 output_format = "mp3_44100_128"
 max_input_chars = 5000
 
@@ -179,7 +179,8 @@ voice_id = "${CARTESIA_VOICE_ID:-}"
 model_id = "sonic-3.5"
 
 [tts.voice_settings]
-# ElevenLabs v2/v2.5 voice settings. For eleven_v3, Familiar sends only stability and omits v2-only fields.
+# ElevenLabs v2/v2.5 voice settings. For eleven_v4, Familiar sends only stability and similarity_boost;
+# for eleven_v3, only stability.
 stability = 0.5
 similarity_boost = 0.75
 style = 0

@@ -15,8 +15,8 @@ describe("web voice protocol", () => {
 		const config = await configWithDataDir(t, "/workspace/data", {
 			tts: {
 				voiceId: "voice-1",
-				modelId: "eleven_v3",
-				voiceCallModelId: "eleven_v3_conversational",
+				modelId: "eleven_v4",
+				voiceCallModelId: "eleven_v4_turbo",
 				outputFormat: "mp3_44100_128",
 			},
 		});
@@ -33,13 +33,13 @@ describe("web voice protocol", () => {
 
 		const tts = new URL(buildElevenLabsRealtimeTtsUrl(config));
 		assert.equal(tts.pathname, "/v1/text-to-dialogue/stream-input");
-		assert.equal(tts.searchParams.get("model_id"), "eleven_v3_conversational");
+		assert.equal(tts.searchParams.get("model_id"), "eleven_v4_turbo");
 		// realtime playback always asks for raw PCM, regardless of the attachment format in config
 		assert.equal(tts.searchParams.get("output_format"), "pcm_24000");
 		assert.deepEqual(buildElevenLabsRealtimeTtsInit(config, "secret"), {
 			voices: ["voice-1"],
 			xi_api_key: "secret",
-			voice_settings: { stability: 0.5 },
+			voice_settings: { stability: 0.5, similarity_boost: 0.75 },
 		});
 	});
 

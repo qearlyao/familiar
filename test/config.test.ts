@@ -148,8 +148,8 @@ describe("loadConfig tts", () => {
 		assert.equal(config.tts.provider, "elevenlabs");
 		assert.equal(config.tts.apiKeyEnv, "ELEVENLABS_API_KEY");
 		assert.equal(config.tts.voiceId, "");
-		assert.equal(config.tts.modelId, "eleven_multilingual_v2");
-		assert.equal(config.tts.voiceCallModelId, "eleven_v3_conversational");
+		assert.equal(config.tts.modelId, "eleven_v4");
+		assert.equal(config.tts.voiceCallModelId, "eleven_v4_turbo");
 		assert.equal(config.tts.outputFormat, "mp3_44100_128");
 		assert.equal(config.tts.maxInputChars, 5000);
 		assert.deepEqual(config.tts.cartesia, {

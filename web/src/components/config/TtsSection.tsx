@@ -33,11 +33,11 @@ export function TtsSection({
           <TextInput value={values?.[voiceKey].value} placeholder="not set" allowEmpty disabled={disabled} onCommit={(next) => onChange(voiceKey, next)} />
         </Row>
         <Row label="model id">
-          <TextInput value={values?.[modelKey].value} placeholder={cartesia ? "sonic-3.5" : "eleven_v3"} disabled={disabled} onCommit={(next) => onChange(modelKey, next)} />
+          <TextInput value={values?.[modelKey].value} placeholder={cartesia ? "sonic-3.5" : "eleven_v4"} disabled={disabled} onCommit={(next) => onChange(modelKey, next)} />
         </Row>
         {!cartesia && (
           <Row label="model id on a call" help="a faster model keeps a call moving.">
-            <TextInput value={values?.["tts.voice_call_model_id"].value} placeholder="eleven_v3_conversational" disabled={disabled} onCommit={(next) => onChange("tts.voice_call_model_id", next)} />
+            <TextInput value={values?.["tts.voice_call_model_id"].value} placeholder="eleven_v4_turbo" disabled={disabled} onCommit={(next) => onChange("tts.voice_call_model_id", next)} />
           </Row>
         )}
       </Rows>

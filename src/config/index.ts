@@ -722,8 +722,8 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			provider: readEnum(readOptionalString(tts.provider, "elevenlabs"), "tts.provider", TTS_PROVIDERS),
 			apiKeyEnv: readOptionalString(tts.api_key_env, "ELEVENLABS_API_KEY"),
 			voiceId: readOptionalString(tts.voice_id, ""),
-			modelId: readOptionalString(tts.model_id, "eleven_multilingual_v2"),
-			voiceCallModelId: readOptionalString(tts.voice_call_model_id, "eleven_v3_conversational"),
+			modelId: readOptionalString(tts.model_id, "eleven_v4"),
+			voiceCallModelId: readOptionalString(tts.voice_call_model_id, "eleven_v4_turbo"),
 			outputFormat: readOptionalString(tts.output_format, "mp3_44100_128"),
 			maxInputChars: readInteger(tts.max_input_chars, 5000, "tts.max_input_chars"),
 			voiceSettings: {

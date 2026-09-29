@@ -64,6 +64,30 @@ describe("ElevenLabs voice settings", () => {
 		});
 	});
 
+	it("sends only stability and similarity for Eleven v4", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			tts: {
+				modelId: "eleven_v4",
+				voiceSettings: {
+					stability: 0.45,
+					similarityBoost: 0.8,
+					style: 0.2,
+					speed: 1.05,
+					useSpeakerBoost: false,
+				},
+			},
+		});
+
+		assert.deepEqual(buildElevenLabsVoiceSettings(config), {
+			stability: 0.45,
+			similarity_boost: 0.8,
+		});
+		assert.deepEqual(buildElevenLabsVoiceSettings(config, "eleven_v4_turbo"), {
+			stability: 0.45,
+			similarity_boost: 0.8,
+		});
+	});
+
 	it("uses the selected model when building voice settings", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data", {
 			tts: {

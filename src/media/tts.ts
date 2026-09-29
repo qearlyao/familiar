@@ -58,6 +58,10 @@ export function isElevenLabsV3Model(modelId: string): boolean {
 	return modelId === "eleven_v3" || modelId.startsWith("eleven_v3_");
 }
 
+export function isElevenLabsV4Model(modelId: string): boolean {
+	return modelId === "eleven_v4" || modelId.startsWith("eleven_v4_");
+}
+
 export function buildElevenLabsVoiceSettings(
 	config: Config,
 	modelId: string = config.tts.modelId,
@@ -66,6 +70,12 @@ export function buildElevenLabsVoiceSettings(
 	if (isElevenLabsV3Model(modelId)) {
 		return {
 			stability: settings.stability,
+		};
+	}
+	if (isElevenLabsV4Model(modelId)) {
+		return {
+			stability: settings.stability,
+			similarity_boost: settings.similarityBoost,
 		};
 	}
 	return {

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
-import type { AssistantImages, ImagesContext, ImagesModel } from "@earendil-works/pi-ai/compat";
+import type { AssistantImages, ImagesContext, ImageModel } from "@earendil-works/pi-ai/compat";
 
 import type { StoredAttachment } from "../src/conversation/chat-log.js";
 import { attachmentsDir } from "../src/media/generated-media.js";
@@ -147,7 +147,7 @@ describe("image_gen tool", () => {
 		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
 			const dataDir = await createTempDataDir(t);
 			const sink = createGeneratedMediaSink();
-			let capturedModel: ImagesModel<any> | undefined;
+			let capturedModel: ImageModel<any> | undefined;
 			let capturedContext: ImagesContext | undefined;
 			const config = await configWithDataDir(t, dataDir, {
 				imageGen: { model: "custom/gemini-image", timeoutMs: 1234 },

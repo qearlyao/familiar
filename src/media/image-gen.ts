@@ -10,9 +10,9 @@ import {
 	getEnvApiKey,
 	getImageModels,
 	getImageProviders,
+	type ImageModel,
 	type ImagesContext,
 	type ImagesFunction,
-	type ImagesModel,
 } from "@earendil-works/pi-ai/compat";
 import { type Static, Type } from "typebox";
 import { DEFAULT_IMAGE_GEN_API } from "../config/enums.js";
@@ -70,7 +70,7 @@ interface ImageGenToolDetails {
 }
 
 interface ImageGenDeps {
-	generateImages?: ImagesFunction<any, any>;
+	generateImages?: ImagesFunction<any>;
 	referenceAttachments?: () => readonly StoredAttachment[];
 }
 
@@ -101,7 +101,7 @@ export function imageExtension(mimeType: string): string {
 	return "png";
 }
 
-function resolveConfiguredBaseUrl(config: Config, ref: ModelRef, model?: ImagesModel<any>): string | undefined {
+function resolveConfiguredBaseUrl(config: Config, ref: ModelRef, model?: ImageModel<any>): string | undefined {
 	return (
 		config.models.baseUrls[ref.key] ??
 		config.models.baseUrls[ref.provider] ??
@@ -110,13 +110,13 @@ function resolveConfiguredBaseUrl(config: Config, ref: ModelRef, model?: ImagesM
 	);
 }
 
-function resolveConfiguredApiKeyEnv(config: Config, model: ImagesModel<any>): string | undefined {
+function resolveConfiguredApiKeyEnv(config: Config, model: ImageModel<any>): string | undefined {
 	return config.models.apiKeyEnvs[`${model.provider}/${model.id}`] ?? config.models.apiKeyEnvs[model.provider];
 }
 
-function findBuiltInImageModel(ref: ModelRef): ImagesModel<any> | undefined {
+function findBuiltInImageModel(ref: ModelRef): ImageModel<any> | undefined {
 	if (!getImageProviders().includes(ref.provider as any)) return undefined;
-	return (getImageModels(ref.provider as any) as ImagesModel<any>[]).find((model) => model.id === ref.id);
+	return (getImageModels(ref.provider as any) as ImageModel<any>[]).find((model) => model.id === ref.id);
 }
 
 /**
@@ -128,16 +128,17 @@ function resolveImageApi(config: Config, ref: ModelRef): ImageGenApi {
 	return config.imageGen.apis[ref.key] ?? config.imageGen.apis[ref.provider] ?? DEFAULT_IMAGE_GEN_API;
 }
 
-export function resolveImageModel(config: Config, ref: ModelRef): ImagesModel<ImageGenApi> {
+export function resolveImageModel(config: Config, ref: ModelRef): ImageModel<ImageGenApi> {
 	const builtIn = findBuiltInImageModel(ref);
 	const baseUrl = resolveConfiguredBaseUrl(config, ref, builtIn);
 	if (!baseUrl) {
 		throw new Error(`Missing image model base URL for ${ref.key}. Set models.base_urls.${ref.provider}.`);
 	}
 	const api = resolveImageApi(config, ref);
-	const model: ImagesModel<ImageGenApi> = builtIn
-		? ({ ...builtIn, api, baseUrl } as ImagesModel<ImageGenApi>)
+	const model: ImageModel<ImageGenApi> = builtIn
+		? ({ ...builtIn, api, baseUrl } as ImageModel<ImageGenApi>)
 		: {
+				type: "image",
 				id: ref.id,
 				name: ref.id,
 				api,
@@ -155,7 +156,7 @@ export function resolveImageModel(config: Config, ref: ModelRef): ImagesModel<Im
 	return model;
 }
 
-function resolveImageModelApiKey(config: Config, model: ImagesModel<any>): string {
+function resolveImageModelApiKey(config: Config, model: ImageModel<any>): string {
 	const configuredEnv = resolveConfiguredApiKeyEnv(config, model);
 	if (configuredEnv) {
 		const apiKey = process.env[configuredEnv];
@@ -390,7 +391,7 @@ async function workspaceReferenceAttachment(config: Config, image: WorkspaceRefe
 }
 
 async function buildImageContext(
-	model: ImagesModel<ImageGenApi>,
+	model: ImageModel<ImageGenApi>,
 	prompt: string,
 	references: readonly ReferenceImage[],
 	config: Config,
@@ -463,8 +464,8 @@ async function tryGenerateImages(
 	prompt: string,
 	references: readonly ReferenceImage[],
 	signal: AbortSignal | undefined,
-	generate: ImagesFunction<any, any>,
-): Promise<{ model: ImagesModel<ImageGenApi>; result: AssistantImages }> {
+	generate: ImagesFunction<any>,
+): Promise<{ model: ImageModel<ImageGenApi>; result: AssistantImages }> {
 	const model = resolveImageModel(config, ref);
 	const context = await buildImageContext(model, prompt, references, config);
 	const result = await generate(model, context, {
@@ -478,7 +479,7 @@ async function tryGenerateImages(
 	};
 }
 
-function attemptDetails(model: ImagesModel<ImageGenApi>, result: AssistantImages): ImageGenAttemptDetails {
+function attemptDetails(model: ImageModel<ImageGenApi>, result: AssistantImages): ImageGenAttemptDetails {
 	return {
 		model: `${model.provider}/${model.id}`,
 		stopReason: result.stopReason,
@@ -510,12 +511,12 @@ export function createImageGenTool(
 
 			const generate = deps.generateImages ?? generateImages;
 			const attempts: ImageGenAttemptDetails[] = [];
-			let selected: { model: ImagesModel<ImageGenApi>; result: AssistantImages } | undefined;
+			let selected: { model: ImageModel<ImageGenApi>; result: AssistantImages } | undefined;
 			let selectedError = "";
 			for (const ref of [primaryRef, fallbackRef].filter((ref): ref is ModelRef => !!ref)) {
 				let attempt:
 					| {
-							model: ImagesModel<ImageGenApi>;
+							model: ImageModel<ImageGenApi>;
 							result: AssistantImages;
 					  }
 					| undefined;

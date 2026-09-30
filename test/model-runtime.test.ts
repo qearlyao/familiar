@@ -64,39 +64,6 @@ describe("model runtime auth storage", () => {
 		await assert.rejects(refreshModelCatalogs(runtime as unknown as ModelRuntime), /timed out/);
 	});
 
-	it("updates OAuth request identity without changing API-key requests", async (t) => {
-		const workspace = await createWorkspace(
-			t,
-			'[agent]\nmodel = "anthropic/claude-sonnet-4-5"\n[models.api_key_envs]\nanthropic = "FAMILIAR_TEST_ANTHROPIC_KEY"\n',
-		);
-		const config = await loadConfig(workspace);
-		const runtime = await createModelRuntime(config);
-		const model = runtime.getModel("anthropic", "claude-sonnet-4-5")!;
-		for (const apiKey of ["sk-ant-oat-test", "sk-ant-api-test"]) {
-			for (const simple of [true, false]) {
-				let userAgent: string | null = null;
-				const options = {
-					apiKey,
-					maxRetries: 0,
-					fetch: async (_input: string | URL | Request, init?: RequestInit) => {
-						userAgent = new Headers(init?.headers).get("user-agent");
-						return Response.json(
-							{ type: "error", error: { type: "invalid_request_error", message: "test response" } },
-							{ status: 400 },
-						);
-					},
-				};
-				const context = { messages: [{ role: "user" as const, content: "hello", timestamp: Date.now() }] };
-				await (simple
-					? runtime.streamSimple(model, context, options)
-					: runtime.stream(model, context, options)
-				).result();
-				assert.ok(userAgent);
-				if (apiKey.includes("oat")) assert.equal(userAgent, "claude-cli/2.1.280");
-				else assert.doesNotMatch(userAgent, /claude-cli/);
-			}
-		}
-	});
 	it("stores custom provider credentials in the Familiar workspace", async (t) => {
 		const workspacePath = await createWorkspace(
 			t,

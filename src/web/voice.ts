@@ -2,8 +2,8 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Socket } from "node:net";
 
 import type { Config } from "../config/index.js";
-import { listElevenLabsVoices } from "../media/elevenlabs-voices.js";
 import { buildElevenLabsVoiceSettings } from "../media/tts.js";
+import { listVoices } from "../media/voice-list.js";
 import { isRecord } from "../util/guards.js";
 import { acceptWebSocket, decodeFrames, encodeFrame } from "./events.js";
 import { HttpError, sendJson } from "./http.js";
@@ -181,7 +181,7 @@ export function registerWebVoiceRoutes(route: RegisterWebRoute, config: Config):
 	});
 	route("GET", "/api/web/voice/voices", async (_request, response) => {
 		try {
-			sendJson(response, 200, { voices: await listElevenLabsVoices(config) });
+			sendJson(response, 200, { voices: await listVoices(config) });
 		} catch (error) {
 			throw new HttpError(502, errorMessage(error));
 		}

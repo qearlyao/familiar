@@ -11,7 +11,7 @@ import { attachedNotice, ensureGeneratedAttachmentsDir } from "./generated-media
 
 const ELEVENLABS_TTS_BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 const CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes";
-const CARTESIA_VERSION = "2026-03-01";
+export const CARTESIA_VERSION = "2026-03-01";
 const AUDIO_EXTENSIONS = ["mp3", "opus", "pcm", "ulaw", "alaw"] as const;
 const ttsSchema = Type.Object(
 	{

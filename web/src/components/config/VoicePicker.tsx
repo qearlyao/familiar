@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchVoices, type VoiceOption } from "@/lib/api";
+import { fetchVoices, type TtsProvider, type VoiceOption } from "@/lib/api";
 import { IconChevronDown } from "../organicIcons";
 import { TextInput } from "./inputs";
 
-/** The ElevenLabs voice, picked by name from the voices the key can use; an id pasted by hand still works. */
-export function VoicePicker({ value, disabled, onCommit }: { value: string | undefined; disabled: boolean; onCommit: (next: string) => Promise<void> }) {
+/** The voice, picked by name from the ones the provider's key can use; an id pasted by hand still works. */
+export function VoicePicker({
+  provider,
+  value,
+  disabled,
+  onCommit,
+}: {
+  provider: TtsProvider;
+  value: string | undefined;
+  disabled: boolean;
+  onCommit: (next: string) => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +75,7 @@ export function VoicePicker({ value, disabled, onCommit }: { value: string | und
           {error ? (
             <p className="voice-picker-note is-error">{error}</p>
           ) : !voices ? (
-            <p className="voice-picker-note">asking elevenlabs…</p>
+            <p className="voice-picker-note">asking {provider === "cartesia" ? "cartesia" : "11labs"}…</p>
           ) : (
             <>
               <input

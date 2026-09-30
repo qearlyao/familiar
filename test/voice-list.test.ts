@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { listElevenLabsVoices, parseElevenLabsVoices } from "../src/media/elevenlabs-voices.js";
+import { listVoices, parseCartesiaVoices, parseElevenLabsVoices } from "../src/media/voice-list.js";
 import { configWithDataDir } from "./helpers.js";
 
-describe("elevenlabs voices", () => {
+describe("voice list", () => {
 	it("keeps id, name, category and labels, and skips voices without an id", () => {
 		const parsed = parseElevenLabsVoices({
 			voices: [
@@ -19,7 +19,7 @@ describe("elevenlabs voices", () => {
 			{ id: "v1", name: "Rachel", category: "premade", labels: ["american", "female"], previewUrl: "https://x/p.mp3" },
 			{ id: "v2", name: "v2", category: undefined, labels: [], previewUrl: undefined },
 		]);
-		assert.equal(parsed.nextPageToken, undefined);
+		assert.equal(parsed.next, undefined);
 		assert.throws(() => parseElevenLabsVoices({ detail: "nope" }), /invalid response/);
 	});
 
@@ -38,7 +38,7 @@ describe("elevenlabs voices", () => {
 					: { voices: [{ voice_id: "a", name: "A" }], has_more: true, next_page_token: "page2" },
 			);
 		});
-		const voices = await listElevenLabsVoices(config);
+		const voices = await listVoices(config);
 		assert.deepEqual(
 			voices.map((voice) => voice.id),
 			["a", "b"],
@@ -50,12 +50,50 @@ describe("elevenlabs voices", () => {
 
 	it("says which env is missing, and passes an upstream error through", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data", { tts: { apiKeyEnv: "TEST_ELEVENLABS_KEY_UNSET" } });
-		await assert.rejects(listElevenLabsVoices(config), /TEST_ELEVENLABS_KEY_UNSET/);
+		await assert.rejects(listVoices(config), /TEST_ELEVENLABS_KEY_UNSET/);
 
 		const keyed = await configWithDataDir(t, "/workspace/data", { tts: { apiKeyEnv: "TEST_ELEVENLABS_KEY" } });
 		process.env.TEST_ELEVENLABS_KEY = "secret";
 		t.after(() => delete process.env.TEST_ELEVENLABS_KEY);
 		t.mock.method(globalThis, "fetch", async () => new Response('{"detail":"missing_permissions"}', { status: 401 }));
-		await assert.rejects(listElevenLabsVoices(keyed), /elevenlabs voices failed: 401 .*missing_permissions/);
+		await assert.rejects(listVoices(keyed), /elevenlabs voices failed: 401 .*missing_permissions/);
+	});
+
+	it("reads Cartesia voices and pages after the last id", async (t) => {
+		const parsed = parseCartesiaVoices({
+			data: [
+				{ id: "c1", name: "Katie", gender: "gender_neutral", is_owner: false, tagline: "calm narrator", accents: [{ accent: "American", locale: "en-US" }] },
+				{ id: "c2", name: "Mine", is_owner: true, preview_file_url: "https://x/c2.wav" },
+			],
+			has_more: true,
+			next_page: null,
+		});
+		assert.deepEqual(parsed.voices, [
+			{ id: "c1", name: "Katie", category: "public", labels: ["gender neutral", "en-US", "calm narrator"], previewUrl: undefined },
+			{ id: "c2", name: "Mine", category: "yours", labels: [], previewUrl: "https://x/c2.wav" },
+		]);
+		assert.equal(parsed.next, "c2");
+
+		const config = await configWithDataDir(t, "/workspace/data", { tts: { provider: "cartesia", cartesia: { apiKeyEnv: "TEST_CARTESIA_KEY", voiceId: "", modelId: "sonic-3.5" } } });
+		process.env.TEST_CARTESIA_KEY = "csecret";
+		t.after(() => delete process.env.TEST_CARTESIA_KEY);
+		const seen: URL[] = [];
+		t.mock.method(globalThis, "fetch", async (input: URL, init: RequestInit) => {
+			seen.push(input);
+			const headers = init.headers as Record<string, string>;
+			assert.equal(headers.authorization, "Bearer csecret");
+			assert.ok(headers["cartesia-version"]);
+			return Response.json(
+				input.searchParams.get("starting_after") === "a"
+					? { data: [{ id: "b", name: "B" }], has_more: false }
+					: { data: [{ id: "a", name: "A" }], has_more: true },
+			);
+		});
+		assert.deepEqual(
+			(await listVoices(config)).map((voice) => voice.id),
+			["a", "b"],
+		);
+		assert.equal(seen[0]?.origin + seen[0]?.pathname, "https://api.cartesia.ai/voices");
+		assert.equal(seen[0]?.searchParams.get("limit"), "100");
 	});
 });

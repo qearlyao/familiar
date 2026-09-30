@@ -346,7 +346,7 @@ export interface VoiceOption {
   previewUrl?: string;
 }
 
-/** the ElevenLabs voices the configured key can use; the server's error text comes through as the message */
+/** the voices the active TTS provider's key can use; the server's error text comes through as the message */
 export async function fetchVoices(): Promise<VoiceOption[]> {
   const res = await fetch("/api/web/voice/voices");
   const body = (await res.json().catch(() => ({}))) as { voices?: VoiceOption[]; error?: string };

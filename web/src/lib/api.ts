@@ -338,6 +338,22 @@ export function fetchVoiceConfig(): Promise<VoiceConfig> {
   return getJson<VoiceConfig>("/api/web/voice/config", "voice config");
 }
 
+export interface VoiceOption {
+  id: string;
+  name: string;
+  category?: string;
+  labels: string[];
+  previewUrl?: string;
+}
+
+/** the ElevenLabs voices the configured key can use; the server's error text comes through as the message */
+export async function fetchVoices(): Promise<VoiceOption[]> {
+  const res = await fetch("/api/web/voice/voices");
+  const body = (await res.json().catch(() => ({}))) as { voices?: VoiceOption[]; error?: string };
+  if (!res.ok || !Array.isArray(body.voices)) throw new Error(body.error ?? `voices: ${res.status}`);
+  return body.voices;
+}
+
 /** a finished call, handed to the main chat as one entry; a discarded one leaves only its mark */
 export async function keepVoiceCall(body: { choice: "transcript" | "summary" | "discard"; durationMs: number; lines: VoiceCallLine[] }): Promise<void> {
   await jsonRequest<{ ok: true }>("/api/web/voice/keep", "POST", body, "voice/keep");

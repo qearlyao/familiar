@@ -2,10 +2,11 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Socket } from "node:net";
 
 import type { Config } from "../config/index.js";
+import { listElevenLabsVoices } from "../media/elevenlabs-voices.js";
 import { buildElevenLabsVoiceSettings } from "../media/tts.js";
 import { isRecord } from "../util/guards.js";
 import { acceptWebSocket, decodeFrames, encodeFrame } from "./events.js";
-import { sendJson } from "./http.js";
+import { HttpError, sendJson } from "./http.js";
 import type { RegisterWebRoute } from "./routes.js";
 import { createVoiceCall, type VoiceCallDeps } from "./voice-call.js";
 
@@ -177,6 +178,13 @@ export function registerWebVoiceRoutes(route: RegisterWebRoute, config: Config):
 			enabled: config.tts.provider === "elevenlabs",
 			keep: config.web.voiceKeep,
 		});
+	});
+	route("GET", "/api/web/voice/voices", async (_request, response) => {
+		try {
+			sendJson(response, 200, { voices: await listElevenLabsVoices(config) });
+		} catch (error) {
+			throw new HttpError(502, errorMessage(error));
+		}
 	});
 }
 

@@ -13,20 +13,17 @@ import {
 import { assertModelCanAuthenticateWithRuntime } from "../models/runtime.js";
 import { assertModelAllowed, formatModel, resolveModelName } from "./session-helpers.js";
 
-export type ModelSettings = ReturnType<typeof createModelSettings>;
-
-export interface ResolvedModel {
-	model: Model<any>;
-	source: "config" | "override";
-}
-
 /** each session's model and thinking level: a stored per-channel override, else the configured default */
 export function createModelSettings(settings: SettingsStore, modelRuntime: ModelRuntime) {
 	// a session that borrows another's model and thinking (a voice call takes its chat's)
 	const sources = new Map<string, string>();
 	const settingsKey = (sessionKey: string): string => sources.get(sessionKey) ?? sessionKey;
 
-	const resolveSessionModel = (config: Config, defaultModel: Model<any>, sessionKey: string): ResolvedModel => {
+	const resolveSessionModel = (
+		config: Config,
+		defaultModel: Model<any>,
+		sessionKey: string,
+	): { model: Model<any>; source: "config" | "override" } => {
 		const override = settings.getChannelModel(settingsKey(sessionKey));
 		const modelName = resolveModelName(override.value, defaultModel);
 		const ref = parseModelRef(modelName);

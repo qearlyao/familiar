@@ -3,20 +3,17 @@ import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
-import { createGeneratedMediaSink, type GeneratedMediaSink } from "../media/generated-media.js";
+import { createGeneratedMediaSink } from "../media/generated-media.js";
 import { dropOrphanToolRemovals, pruneCondensedTools } from "../tools/mcp.js";
 import { createProviderStreamFn } from "./provider-stream.js";
 import { logUsage } from "./session-helpers.js";
 import type { SessionMemory } from "./session-memory.js";
+import type { ToolContext } from "./tools.js";
 import { loadStoredMessages, writeTranscriptLog } from "./transcript-log.js";
 import type { FamiliarAgentSession } from "./types.js";
 
 /** the per-session pieces a tool list is built from */
-export interface SessionToolParts {
-	mediaSink: GeneratedMediaSink;
-	referenceAttachments: StoredAttachment[];
-	agent: () => Agent;
-}
+export type SessionToolParts = Pick<ToolContext, "mediaSink" | "referenceAttachments" | "agent">;
 
 export interface AgentSessionSetup {
 	config: Config;
@@ -46,7 +43,7 @@ export async function createAgentSession(setup: AgentSessionSetup): Promise<Fami
 			systemPrompt: setup.systemPrompt,
 			model,
 			messages,
-			tools: setup.tools({ mediaSink, referenceAttachments, agent: current }),
+			tools: setup.tools({ mediaSink, referenceAttachments: () => referenceAttachments, agent: current }),
 			thinkingLevel,
 		},
 		sessionId,

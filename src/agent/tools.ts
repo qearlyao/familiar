@@ -27,30 +27,10 @@ export interface ToolContext {
 	paused: ReadonlySet<string>;
 }
 
-type ToolProvider = (ctx: ToolContext) => AgentTool<any>[];
-
 function withDescription(tool: AgentTool<any>, description: string): AgentTool<any> {
 	tool.description = description;
 	return tool;
 }
-
-/** every built-in tool but codemode, which wraps the others; names match BUILTIN_TOOLS */
-const BUILTIN_TOOL_PROVIDERS: readonly ToolProvider[] = [
-	({ config }) => [
-		withDescription(createBashTool(config.workspacePath), BASH_DESCRIPTION),
-		withDescription(createReadTool(config.workspacePath), READ_DESCRIPTION),
-		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
-		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),
-	],
-	({ config }) => [createCronTool(config)],
-	({ config, mediaSink }) => [createTtsTool(config, mediaSink)],
-	({ config, mediaSink, referenceAttachments }) =>
-		config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : [],
-	({ config, mediaSink }) => [createSendFileTool(config, mediaSink)],
-	() => createWebTools(),
-	({ config, mediaSink }) => createBrowserTools(config, mediaSink),
-	({ memory }) => memory.memoryTools(),
-];
 
 /** a paused tool is off until the next restart, whatever its lasting reach says */
 export function toolReach(config: Config, paused: ReadonlySet<string>, name: string): ToolReach {
@@ -58,8 +38,23 @@ export function toolReach(config: Config, paused: ReadonlySet<string>, name: str
 }
 
 export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
-	const { config, mcp, paused } = ctx;
-	const builtins = BUILTIN_TOOL_PROVIDERS.flatMap((provide) => provide(ctx));
+	const { config, mediaSink, mcp, paused } = ctx;
+	// every built-in but codemode, which wraps the others; names match BUILTIN_TOOLS
+	const builtins: AgentTool<any>[] = [
+		withDescription(createBashTool(config.workspacePath), BASH_DESCRIPTION),
+		withDescription(createReadTool(config.workspacePath), READ_DESCRIPTION),
+		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
+		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),
+		createCronTool(config),
+		createTtsTool(config, mediaSink),
+		...(config.imageGen.enabled
+			? [createImageGenTool(config, mediaSink, { referenceAttachments: ctx.referenceAttachments })]
+			: []),
+		createSendFileTool(config, mediaSink),
+		...createWebTools(),
+		...createBrowserTools(config, mediaSink),
+		...ctx.memory.memoryTools(),
+	];
 	const reachable = builtins.filter((tool) => toolReach(config, paused, tool.name) !== "off");
 	builtins.push(createCodemodeTool([...reachable, ...mcp.tools, ...mcp.deferred]));
 	const pinned = builtins.filter((tool) => toolReach(config, paused, tool.name) === "pinned");

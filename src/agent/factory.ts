@@ -61,19 +61,11 @@ export async function createFamiliarAgent(
 	// built-ins set aside until the next restart; never written anywhere
 	const pausedTools = new Set<string>();
 	const buildTools = (cfg: Config, parts: SessionToolParts) =>
-		createFamiliarTools({
-			config: cfg,
-			mediaSink: parts.mediaSink,
-			referenceAttachments: () => parts.referenceAttachments,
-			memory: memoryService,
-			mcp,
-			agent: parts.agent,
-			paused: pausedTools,
-		});
+		createFamiliarTools({ config: cfg, memory: memoryService, mcp, paused: pausedTools, ...parts });
 	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
 		buildTools(cfg, {
 			mediaSink: session.mediaSink,
-			referenceAttachments: session.referenceAttachments,
+			referenceAttachments: () => session.referenceAttachments,
 			agent: () => session.agent,
 		});
 	// a server connecting, dropping or flipping deferred changes every live session's tool list
@@ -228,12 +220,12 @@ export async function createFamiliarAgent(
 		}
 	};
 
-	const steerWith = (sessionKey: string, message: () => AgentMessage): void => {
+	const steerWith = (sessionKey: string, message: AgentMessage): void => {
 		const session = sessions.get(sessionKey);
 		if (!session) return;
 		void session
 			.then((resolved) => {
-				resolved.agent.steer(message());
+				resolved.agent.steer(message);
 			})
 			.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
 	};
@@ -409,10 +401,10 @@ export async function createFamiliarAgent(
 			);
 		},
 		steer(sessionKey: string, input: string): void {
-			steerWith(sessionKey, () => userTextMessage(input));
+			steerWith(sessionKey, userTextMessage(input));
 		},
 		steerMessage(sessionKey: string, message: AgentMessage): void {
-			steerWith(sessionKey, () => message);
+			steerWith(sessionKey, message);
 		},
 		async followUpMessage(
 			sessionKey: string,

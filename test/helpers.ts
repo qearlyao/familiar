@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { Readable } from "node:stream";
 
 import { type Config, loadConfig } from "../src/config/index.js";
+import type { MemoryService } from "../src/memory/service.js";
 
 export type TestAfter = { after(fn: () => void | Promise<void>): void };
 
@@ -130,6 +131,23 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			},
 		};
 	});
+}
+
+/** A memory service that remembers nothing and passes context through untouched. */
+export function stubMemoryService(overrides: Partial<MemoryService> = {}): MemoryService {
+	return {
+		memoryTools: () => [],
+		indexDiaries: async () => {},
+		watchDiaries: () => {},
+		subscribeRuntime: () => () => {},
+		transformContext: async (messages) => messages,
+		recordMessages: () => {},
+		getContextBreakdown: () => undefined,
+		serviceCompactionDebt: async () => {},
+		flush: async () => {},
+		close: () => {},
+		...overrides,
+	};
 }
 
 /** A JSON request body as the web route handlers read it. */

@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import type { FamiliarAgent } from "../src/agent/factory.js";
 import { chatChannelKey } from "../src/conversation/chat-log.js";
 import { createAgentCore, ownerDmRef, WEB_OWNER_ID } from "../src/runtime/agent-core.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, stubMemoryService } from "./helpers.js";
 
 const fakeAgent = {} as FamiliarAgent;
 
@@ -13,7 +13,7 @@ describe("owner DM sharing", () => {
 	it("routes every platform's owner DM into one runtime and one chat log", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);
-		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		const core = createAgentCore({ config, familiarAgent: fakeAgent, memoryService: stubMemoryService() });
 		t.after(() => core.stop());
 
 		// What each daemon does for an owner DM: resolve the shared ref, not its own platform ref.
@@ -40,7 +40,7 @@ describe("owner DM sharing", () => {
 
 	it("treats the shared owner DM as a direct conversation", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		const core = createAgentCore({ config, familiarAgent: fakeAgent, memoryService: stubMemoryService() });
 		t.after(() => core.stop());
 
 		// isDirect gates steer dispatch and DM triggers. The shared ref carries scope "web",

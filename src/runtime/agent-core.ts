@@ -68,7 +68,7 @@ export interface AgentCore {
 export function createAgentCore(deps: {
 	config: Config;
 	familiarAgent: FamiliarAgent;
-	memoryService?: MemoryService;
+	memoryService: MemoryService;
 }): AgentCore {
 	const sources = new Map<ChatService, PlatformSource>();
 	const webSource: PlatformSource = {

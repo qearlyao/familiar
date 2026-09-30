@@ -5,7 +5,7 @@ import { ConversationRuntime } from "./conversation-runtime.js";
 
 export interface RuntimeManagerDeps {
 	config: Config;
-	memoryService?: MemoryService;
+	memoryService: MemoryService;
 	identityFor: (channel: ChatChannelRef) => { ownerId: string; botUserId?: string };
 }
 
@@ -27,9 +27,9 @@ export function createRuntimeManager(deps: RuntimeManagerDeps) {
 			log: createChatLog(deps.config, channel),
 			...deps.identityFor(channel),
 		});
-		const unsubscribe = deps.memoryService?.subscribeRuntime(runtime, runtime.channelKey);
+		const unsubscribe = deps.memoryService.subscribeRuntime(runtime, runtime.channelKey);
 		const release = async (): Promise<void> => {
-			unsubscribe?.();
+			unsubscribe();
 			await runtime.disconnect();
 		};
 		try {

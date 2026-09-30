@@ -1,5 +1,6 @@
 import type { ConfigKey, ConfigValues } from "@/lib/api";
 import { Card, EnumToggle, NumberInput, Row, Rows, TextInput } from "./inputs";
+import { VoicePicker } from "./VoicePicker";
 
 export function TtsSection({
   values,
@@ -29,8 +30,9 @@ export function TtsSection({
             onChange={(next) => void onChange("tts.provider", next)}
           />
         </Row>
-        <Row label="voice id">
-          <TextInput value={values?.[voiceKey].value} placeholder="not set" allowEmpty disabled={disabled} onCommit={(next) => onChange(voiceKey, next)} />
+        <Row label="voice">
+          {/* keyed by provider: each one has its own voices, fetched afresh */}
+          <VoicePicker key={provider} provider={cartesia ? "cartesia" : "elevenlabs"} value={values?.[voiceKey].value} disabled={disabled} onCommit={(next) => onChange(voiceKey, next)} />
         </Row>
         <Row label="model id">
           <TextInput value={values?.[modelKey].value} placeholder={cartesia ? "sonic-3.5" : "eleven_v4"} disabled={disabled} onCommit={(next) => onChange(modelKey, next)} />

@@ -1,6 +1,7 @@
 import type { Message } from "../types";
 import type { WebMessage, WebStreamEvent } from "../../../src/web/types.js";
 import type { VoiceCallLine } from "../../../src/conversation/chat-log.js";
+import type { VoiceOption } from "../../../src/media/voice-list.js";
 import type { ControlCommand } from "@/lib/slashCommands";
 
 type WireMessage = WebMessage;
@@ -336,6 +337,16 @@ export interface VoiceConfig {
 
 export function fetchVoiceConfig(): Promise<VoiceConfig> {
   return getJson<VoiceConfig>("/api/web/voice/config", "voice config");
+}
+
+export type { VoiceOption };
+
+/** the voices the active TTS provider's key can use; the server's error text comes through as the message */
+export async function fetchVoices(): Promise<VoiceOption[]> {
+  const res = await fetch("/api/web/voice/voices");
+  const body = (await res.json().catch(() => ({}))) as { voices?: VoiceOption[]; error?: string };
+  if (!res.ok || !Array.isArray(body.voices)) throw new Error(body.error ?? `voices: ${res.status}`);
+  return body.voices;
 }
 
 /** a finished call, handed to the main chat as one entry; a discarded one leaves only its mark */

@@ -15,7 +15,6 @@ export interface VoiceOption {
 	category?: string;
 	/** accent, gender, age, use case: whatever the provider says about the voice */
 	labels: string[];
-	previewUrl?: string;
 }
 
 interface VoicePage {
@@ -37,7 +36,6 @@ export function parseElevenLabsVoices(body: unknown): VoicePage {
 			name: text(voice.name) ?? id,
 			category: text(voice.category),
 			labels: isRecord(voice.labels) ? Object.values(voice.labels).flatMap((label) => text(label) ?? []) : [],
-			previewUrl: text(voice.preview_url),
 		});
 	}
 	return { voices, next: body.has_more === true ? text(body.next_page_token) : undefined };
@@ -57,21 +55,15 @@ export function parseCartesiaVoices(body: unknown): VoicePage {
 			id,
 			name: text(voice.name) ?? id,
 			category: typeof voice.is_owner === "boolean" ? (voice.is_owner ? "yours" : "public") : undefined,
-			labels: [...(gender ? [gender] : []), ...accents, ...(text(voice.tagline) ? [voice.tagline as string] : [])],
-			previewUrl: text(voice.preview_file_url),
+			labels: [gender, ...accents, text(voice.tagline)].filter((label): label is string => !!label),
 		});
 	}
 	// Cartesia pages by cursor: the next page starts after the last voice of this one
 	return { voices, next: body.has_more === true ? voices.at(-1)?.id : undefined };
 }
 
-async function fetchPage(
-	url: URL,
-	headers: Record<string, string>,
-	provider: string,
-	signal?: AbortSignal,
-): Promise<unknown> {
-	const response = await fetch(url, { headers, signal });
+async function fetchPage(url: URL, headers: Record<string, string>, provider: string): Promise<unknown> {
+	const response = await fetch(url, { headers });
 	if (!response.ok) {
 		const detail = (await response.text().catch(() => "")).slice(0, 300);
 		throw new Error(`${provider} voices failed: ${response.status}${detail ? ` ${detail}` : ""}`);
@@ -80,7 +72,7 @@ async function fetchPage(
 }
 
 /** every voice the active TTS provider's key can speak with, by name */
-export async function listVoices(config: Config, signal?: AbortSignal): Promise<VoiceOption[]> {
+export async function listVoices(config: Config): Promise<VoiceOption[]> {
 	const provider = config.tts.provider;
 	const apiKeyEnv = provider === "cartesia" ? config.tts.cartesia.apiKeyEnv : config.tts.apiKeyEnv;
 	const apiKey = process.env[apiKeyEnv];
@@ -92,10 +84,9 @@ export async function listVoices(config: Config, signal?: AbortSignal): Promise<
 		if (provider === "cartesia") {
 			const url = new URL(CARTESIA_VOICES_URL);
 			url.searchParams.set("limit", String(PAGE_SIZE));
-			url.searchParams.append("expand[]", "preview_file_url");
 			if (next) url.searchParams.set("starting_after", next);
 			const headers = { authorization: `Bearer ${apiKey}`, "cartesia-version": CARTESIA_VERSION };
-			parsed = parseCartesiaVoices(await fetchPage(url, headers, provider, signal));
+			parsed = parseCartesiaVoices(await fetchPage(url, headers, provider));
 		} else {
 			const url = new URL(ELEVENLABS_VOICES_URL);
 			url.searchParams.set("page_size", String(PAGE_SIZE));
@@ -103,7 +94,7 @@ export async function listVoices(config: Config, signal?: AbortSignal): Promise<
 			url.searchParams.set("sort_direction", "asc");
 			url.searchParams.set("include_total_count", "false");
 			if (next) url.searchParams.set("next_page_token", next);
-			parsed = parseElevenLabsVoices(await fetchPage(url, { "xi-api-key": apiKey }, provider, signal));
+			parsed = parseElevenLabsVoices(await fetchPage(url, { "xi-api-key": apiKey }, provider));
 		}
 		voices.push(...parsed.voices);
 		if (!parsed.next) break;

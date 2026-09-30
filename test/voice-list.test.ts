@@ -8,7 +8,7 @@ describe("voice list", () => {
 	it("keeps id, name, category and labels, and skips voices without an id", () => {
 		const parsed = parseElevenLabsVoices({
 			voices: [
-				{ voice_id: "v1", name: "Rachel", category: "premade", labels: { accent: "american", gender: "female", empty: "" }, preview_url: "https://x/p.mp3" },
+				{ voice_id: "v1", name: "Rachel", category: "premade", labels: { accent: "american", gender: "female", empty: "" } },
 				{ voice_id: "v2", labels: null },
 				{ name: "no id" },
 			],
@@ -16,8 +16,8 @@ describe("voice list", () => {
 			next_page_token: null,
 		});
 		assert.deepEqual(parsed.voices, [
-			{ id: "v1", name: "Rachel", category: "premade", labels: ["american", "female"], previewUrl: "https://x/p.mp3" },
-			{ id: "v2", name: "v2", category: undefined, labels: [], previewUrl: undefined },
+			{ id: "v1", name: "Rachel", category: "premade", labels: ["american", "female"] },
+			{ id: "v2", name: "v2", category: undefined, labels: [] },
 		]);
 		assert.equal(parsed.next, undefined);
 		assert.throws(() => parseElevenLabsVoices({ detail: "nope" }), /invalid response/);
@@ -63,14 +63,14 @@ describe("voice list", () => {
 		const parsed = parseCartesiaVoices({
 			data: [
 				{ id: "c1", name: "Katie", gender: "gender_neutral", is_owner: false, tagline: "calm narrator", accents: [{ accent: "American", locale: "en-US" }] },
-				{ id: "c2", name: "Mine", is_owner: true, preview_file_url: "https://x/c2.wav" },
+				{ id: "c2", name: "Mine", is_owner: true },
 			],
 			has_more: true,
 			next_page: null,
 		});
 		assert.deepEqual(parsed.voices, [
-			{ id: "c1", name: "Katie", category: "public", labels: ["gender neutral", "en-US", "calm narrator"], previewUrl: undefined },
-			{ id: "c2", name: "Mine", category: "yours", labels: [], previewUrl: "https://x/c2.wav" },
+			{ id: "c1", name: "Katie", category: "public", labels: ["gender neutral", "en-US", "calm narrator"] },
+			{ id: "c2", name: "Mine", category: "yours", labels: [] },
 		]);
 		assert.equal(parsed.next, "c2");
 

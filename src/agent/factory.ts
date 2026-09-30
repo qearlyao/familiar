@@ -9,6 +9,7 @@ import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { createGeneratedMediaSink } from "../media/generated-media.js";
 import { estimateTextTokens } from "../memory/lcm/context.js";
+import type { ContextBreakdown } from "../memory/lcm/types.js";
 import type { MemoryService } from "../memory/service.js";
 import { setAddedModelsPath } from "../models/added-models.js";
 import {
@@ -19,13 +20,13 @@ import {
 	resolveModel,
 	supportedThinkingLevels,
 } from "../models/index.js";
+import { harnessNoteMessage, userTextMessage } from "../models/messages.js";
 import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona, logPromptSources } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../prompting/skills.js";
 import { createMcpHub, dropOrphanToolRemovals, pruneCondensedTools } from "../tools/mcp.js";
 import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
-import type { ContextBreakdown } from "../web/types.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import {
 	assertModelAllowed,
@@ -33,12 +34,10 @@ import {
 	deriveSessionId,
 	formatModel,
 	getLastAssistantText,
-	harnessNoteMessage,
 	installProviderDebugFilter,
 	isNoisyProviderDebug,
 	logUsage,
 	resolveModelName,
-	userTextMessage,
 } from "./session-helpers.js";
 import { normalizeToolNameStream } from "./tool-name-compat.js";
 import { createFamiliarTools, deferredToolNames, setReferenceAttachments } from "./tools.js";

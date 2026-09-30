@@ -1,7 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai/compat";
 import { formatLocalTimestamp } from "../../util/time.js";
-import type { ContextBreakdown } from "../../web/types.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { condense } from "./condense.js";
 import {
@@ -17,7 +16,14 @@ import { indexLcmRecords, indexLcmSummaries } from "./indexer.js";
 import type { LcmSegmentManager } from "./segment-manager.js";
 import type { LcmStore } from "./store.js";
 import { createSyntheticLcmSummaryMessage, type LcmSummarizer } from "./summarizer.js";
-import type { LcmContextItemInput, LcmRecordInput, LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
+import type {
+	ContextBreakdown,
+	LcmContextItemInput,
+	LcmRecordInput,
+	LcmRecordPart,
+	StoredLcmRecord,
+	StoredLcmSummary,
+} from "./types.js";
 
 const LCM_SUMMARY_OPEN_TAG = "<from_earlier>";
 const LCM_SUMMARY_CLOSE_TAG = "</from_earlier>";

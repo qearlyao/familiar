@@ -188,3 +188,11 @@ export interface LcmRetentionReport {
 	summariesDeleted: number;
 	indexDeletes: LcmIndexDeleteRef[];
 }
+
+/** Relative token estimates for the context selected for the latest model request. */
+export interface ContextBreakdown {
+	summaries: number;
+	pending: number;
+	fresh: number;
+	other: number;
+}

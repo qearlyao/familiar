@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai/compat";
-import { harnessNoteMessage } from "../../agent/session-helpers.js";
+import { harnessNoteMessage } from "../../models/messages.js";
 import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { positiveIntegerOrDefault } from "../util.js";

@@ -5,10 +5,10 @@ import type { Config, ThinkingLevel } from "../config/index.js";
 import type { EffectiveSetting } from "../config/settings.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedAttachment, GeneratedMediaSink } from "../media/generated-media.js";
+import type { ContextBreakdown } from "../memory/lcm/types.js";
 import type { loadPersona } from "../prompting/persona.js";
 import type { loadFamiliarSkills } from "../prompting/skills.js";
 import type { McpHub } from "../tools/mcp.js";
-import type { ContextBreakdown } from "../web/types.js";
 
 export interface FamiliarAgentReply {
 	text: string;

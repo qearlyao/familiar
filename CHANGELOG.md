@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.4.0 - 2026-09-30
+
+### Added
+
+- Add a built-in `codemode` tool: the agent writes JavaScript in a QuickJS sandbox that calls any enabled tool, deferred MCP tools included, and only its printed output and return value reach context. It defaults to pinned and is configurable like other built-ins.
+- Add a one-time `inkbox-setup` skill and an Inkbox inbox check in `HEARTBEAT.md`, skipped when Inkbox isn't set up.
+
+### Changed
+
+- Move MCP onto the upstream `pi-mcp` client. Embedded resources in tool results are now kept instead of dropped.
+- Upgrade pi to 0.99.1.
+- Default TTS to `eleven_v4` and `eleven_v4_turbo` for calls, sending only stability and similarity voice settings to v4 models.
+- Log loaded persona file names and the skill roster at startup and on `/reload` instead of the full system prompt.
+
+### Fixed
+
+- Record each conversation turn in LCM once, from the agent's messages, instead of twice with mismatched keys. A turn's closing reply is saved before a reset.
+- Compact the oldest contiguous raw run in LCM, so older messages are no longer stranded between summaries or summarized in tiny passes.
+- Drop MCP tool removals whose declaration was condensed away, fixing Anthropic `tool_reference_unresolved` errors in long sessions.
+- Keep `image_gen` reference order when mixing attachment IDs and paths.
+
+### Breaking
+
+- Remove `memory.lcm.prompt_aware_eviction_enabled`. Delete it from `config.toml`, since unknown `memory.lcm` keys are rejected.
+- Remove `persona.inner`. `INNER.md` is no longer loaded into the prompt.
+- Remove the `familiar memory backfill` command.
+
 ## 1.3.0 - 2026-09-24
 
 ### Added

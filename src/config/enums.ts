@@ -92,4 +92,5 @@ export const BUILTIN_TOOLS = [
 	"browser",
 	"memory_recall",
 	"memory_open",
+	"codemode",
 ] as const;

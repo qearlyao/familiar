@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import { createInMemoryTransportPair } from "@earendil-works/pi-mcp/testing";
 
 import { loadConfig } from "../src/config/index.js";
+import { createCodemodeTool } from "../src/tools/codemode.js";
 import {
 	connectMcpClient,
 	createLoadToolsTool,
@@ -16,19 +15,32 @@ import {
 import { mcpServerSpecs, saveWebMcpServers, setMcpServersPath } from "../src/tools/mcp-servers.js";
 import { configWithDataDir, createTempDataDir, createWorkspace, minimalConfigToml, withDiscordToken, withEnv } from "./helpers.js";
 
+const demoTools = [
+	{
+		name: "add",
+		description: "add two numbers",
+		inputSchema: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } } },
+	},
+	{ name: "boom", description: "always fails", inputSchema: { type: "object" } },
+];
+
+// just enough of a server for the client: initialize, tools/list, tools/call
 async function inMemoryTools() {
-	const server = new McpServer({ name: "demo", version: "0" });
-	server.registerTool(
-		"add",
-		{ description: "add two numbers", inputSchema: { a: z.number(), b: z.number() } },
-		async ({ a, b }) => ({ content: [{ type: "text", text: String(a + b) }] }),
-	);
-	server.registerTool("boom", { description: "always fails" }, async () => ({
-		content: [{ type: "text", text: "nope" }],
-		isError: true,
-	}));
-	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-	await server.connect(serverTransport);
+	const { client: clientTransport, server } = createInMemoryTransportPair();
+	server.onMessage((message: any) => {
+		if (message.id === undefined) return;
+		const { a, b } = message.params?.arguments ?? {};
+		const result =
+			message.method === "initialize"
+				? { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "demo", version: "0" } }
+				: message.method === "tools/list"
+					? { tools: demoTools }
+					: message.params.name === "add"
+						? { content: [{ type: "text", text: String(a + b) }] }
+						: { content: [{ type: "text", text: "nope" }], isError: true };
+		void server.send({ jsonrpc: "2.0", id: message.id, result });
+	});
+	await server.start();
 	return connectMcpClient("demo", clientTransport);
 }
 
@@ -42,6 +54,25 @@ describe("mcp", () => {
 		const result = await add.execute("1", { a: 2, b: 3 });
 		assert.deepEqual(result.content, [{ type: "text", text: "5" }]);
 		await assert.rejects(tools.find((tool) => tool.name === "demo__boom")!.execute("2", {}), /nope/);
+	});
+
+	it("codemode scripts call tools and only their output comes back", async (t) => {
+		const { client, tools } = await inMemoryTools();
+		t.after(() => client.close());
+		const codemode = createCodemodeTool(tools);
+		const result = await codemode.execute("1", {
+			code: `const sums = await Promise.all([tools.demo__add({ a: 1, b: 2 }), tools.demo__add({ a: 3, b: 4 })]);
+text("sums " + sums.join(","));
+return (await describeTool("demo__add")).includes("a?: number");`,
+		});
+		assert.deepEqual(result.content, [
+			{ type: "text", text: "sums 3,7" },
+			{ type: "text", text: "true" },
+		]);
+		await assert.rejects(
+			codemode.execute("2", { code: `text("before"); await tools.demo__boom({});` }),
+			/script: .*nope[\s\S]*before/,
+		);
 	});
 
 	it("load_tools hands matches to onLoad and the transcript's declarations replay them", async (t) => {

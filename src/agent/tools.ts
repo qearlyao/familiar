@@ -9,6 +9,7 @@ import { createSendFileTool } from "../media/send-file.js";
 import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
 import { createBrowserTools } from "../tools/browser-tools.js";
+import { createCodemodeTool } from "../tools/codemode.js";
 import { createCronTool } from "../tools/cron.js";
 import { createLoadToolsTool, loadedToolNames, type McpHub } from "../tools/mcp.js";
 import { createWebTools } from "../web-tools/index.js";
@@ -50,6 +51,8 @@ export function createFamiliarTools(
 		...createBrowserTools(config, mediaSink),
 		...(memoryService?.memoryTools() ?? []),
 	];
+	const reachable = builtins.filter((tool) => toolReach(config, paused, tool.name) !== "off");
+	builtins.push(createCodemodeTool([...reachable, ...mcp.tools, ...mcp.deferred]));
 	const pinned = builtins.filter((tool) => toolReach(config, paused, tool.name) === "pinned");
 	const loadable = builtins.filter((tool) => toolReach(config, paused, tool.name) === "loadable");
 	return [...pinned, ...mcp.tools, ...deferredToolsFor([...loadable, ...mcp.deferred], agent)];

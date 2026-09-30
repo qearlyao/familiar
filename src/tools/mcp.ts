@@ -1,10 +1,12 @@
 import type { Agent, AgentMessage, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { getCurrentTools } from "@earendil-works/pi-ai";
-import type { ImageContent, TextContent } from "@earendil-works/pi-ai/compat";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import {
+	McpClient,
+	type McpTransport,
+	StdioTransport,
+	StreamableHttpTransport,
+	toLlmContent,
+} from "@earendil-works/pi-mcp";
 import { Type } from "typebox";
 import type { McpServerConfig } from "../config/types.js";
 import { createWriteQueue } from "../util/fs.js";
@@ -37,11 +39,11 @@ function toolName(server: string, name: string): string {
 
 export async function connectMcpClient(
 	server: string,
-	transport: Transport,
-): Promise<{ client: Client; tools: AgentTool<any>[] }> {
-	const client = new Client({ name: "familiar", version: "1.0.0" });
+	transport: McpTransport,
+): Promise<{ client: McpClient; tools: AgentTool<any>[] }> {
+	const client = new McpClient({ name: "familiar", version: "1.0.0" });
 	await client.connect(transport);
-	const { tools } = await client.listTools();
+	const tools = await client.listTools();
 	return {
 		client,
 		tools: tools.map((tool) => ({
@@ -50,27 +52,8 @@ export async function connectMcpClient(
 			description: tool.description ?? tool.name,
 			parameters: Type.Unsafe<Record<string, unknown>>(tool.inputSchema),
 			async execute(_toolCallId, params, signal): Promise<AgentToolResult<unknown>> {
-				const result = await client.callTool(
-					{ name: tool.name, arguments: params as Record<string, unknown> },
-					undefined,
-					{ signal },
-				);
-				const blocks = (result.content ?? []) as Array<{
-					type: string;
-					text?: string;
-					data?: string;
-					mimeType?: string;
-				}>;
-				const content: (TextContent | ImageContent)[] = [];
-				for (const block of blocks) {
-					if (block.type === "text" && block.text !== undefined) content.push({ type: "text", text: block.text });
-					else if (block.type === "image" && block.data && block.mimeType) {
-						content.push({ type: "image", data: block.data, mimeType: block.mimeType });
-					}
-				}
-				if (result.structuredContent && content.length === 0) {
-					content.push({ type: "text", text: JSON.stringify(result.structuredContent) });
-				}
+				const result = await client.callTool(tool.name, params as Record<string, unknown>, { signal });
+				const content = toLlmContent(result);
 				if (result.isError)
 					throw new Error(content.map((block) => (block.type === "text" ? block.text : "")).join("\n"));
 				return { content, details: result.structuredContent };
@@ -79,15 +62,10 @@ export async function connectMcpClient(
 	};
 }
 
-function openTransport(spec: McpServerConfig): Transport {
+function openTransport(spec: McpServerConfig): McpTransport {
 	return spec.url
-		? new StreamableHTTPClientTransport(new URL(spec.url), { requestInit: { headers: spec.headers } })
-		: new StdioClientTransport({
-				command: spec.command!,
-				args: spec.args,
-				env: { ...(process.env as Record<string, string>), ...spec.env },
-				stderr: "ignore",
-			});
+		? new StreamableHttpTransport({ url: spec.url, headers: spec.headers })
+		: new StdioTransport({ command: spec.command!, args: spec.args, env: spec.env });
 }
 
 function sameTransport(a: McpServerConfig, b: McpServerConfig): boolean {
@@ -96,7 +74,7 @@ function sameTransport(a: McpServerConfig, b: McpServerConfig): boolean {
 
 /** onChange fires after the tool set shifts, so live sessions can rebuild their tool lists */
 export function createMcpHub(onChange: () => void | Promise<void> = () => {}): McpHub {
-	const states = new Map<string, McpServerState & { client?: Client }>();
+	const states = new Map<string, McpServerState & { client?: McpClient }>();
 	const serial = createWriteQueue("mcp");
 	const pick = (deferred: boolean) =>
 		[...states.values()].flatMap((state) =>
@@ -105,13 +83,13 @@ export function createMcpHub(onChange: () => void | Promise<void> = () => {}): M
 
 	const connect = async (name: string, spec: McpServerConfig, source: McpSource): Promise<void> => {
 		await states.get(name)?.client?.close();
-		const state: McpServerState & { client?: Client } = { name, source, spec, status: "failed", tools: [] };
+		const state: McpServerState & { client?: McpClient } = { name, source, spec, status: "failed", tools: [] };
 		states.set(name, state);
 		if (!spec.enabled) return;
 		try {
 			const { client, tools } = await connectMcpClient(name, openTransport(spec));
 			Object.assign(state, { client, tools, status: "connected" });
-			const listChanged = client.getServerCapabilities()?.tools?.listChanged ? ", announces list changes" : "";
+			const listChanged = client.serverCapabilities?.tools?.listChanged ? ", announces list changes" : "";
 			console.log(
 				`mcp: ${name} connected (${tools.length} tools${spec.deferred ? ", deferred" : ""}${listChanged})`,
 			);

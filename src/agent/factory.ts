@@ -23,7 +23,7 @@ import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona, logPromptSources } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../prompting/skills.js";
-import { createMcpHub, pruneCondensedTools } from "../tools/mcp.js";
+import { createMcpHub, dropOrphanToolRemovals, pruneCondensedTools } from "../tools/mcp.js";
 import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
 import type { ContextBreakdown } from "../web/types.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
@@ -255,7 +255,7 @@ export async function createFamiliarAgent(
 							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
 						});
 						pruneCondensedTools(agent, transformed, deferredToolNames(config, mcp, pausedTools));
-						return head ? [head, ...transformed] : transformed;
+						return dropOrphanToolRemovals(head ? [head, ...transformed] : transformed);
 					}
 				: undefined,
 		});

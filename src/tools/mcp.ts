@@ -162,6 +162,19 @@ export function pruneCondensedTools(
 	if (kept.length !== agent.state.tools.length) agent.state.tools = kept;
 }
 
+// LCM condenses tool-change system messages like any other, so a removal can outlive the
+// declaration it withdraws — pruneCondensedTools always produces one. anthropic rejects that
+// (tool_reference_unresolved), so the request drops removals of tools it never declared.
+export function dropOrphanToolRemovals(messages: AgentMessage[]): AgentMessage[] {
+	const declared = new Set<string>();
+	return messages.map((message) => {
+		if (message.role !== "system") return message;
+		const toolsRemoved = message.toolsRemoved?.filter((tool) => declared.has(tool.name));
+		for (const tool of message.toolsAdded ?? []) declared.add(tool.name);
+		return toolsRemoved?.length === message.toolsRemoved?.length ? message : { ...message, toolsRemoved };
+	});
+}
+
 const loadToolsSchema = Type.Object({
 	query: Type.Optional(
 		Type.String({ description: "words to match against tool names and descriptions. empty lists everything." }),

@@ -9,6 +9,7 @@ import {
 	connectMcpClient,
 	createLoadToolsTool,
 	createMcpHub,
+	dropOrphanToolRemovals,
 	loadedToolNames,
 	pruneCondensedTools,
 } from "../src/tools/mcp.js";
@@ -112,6 +113,20 @@ return (await describeTool("demo__add")).includes("a?: number");`,
 		};
 		assert.deepEqual(names([declared]), ["bash", "demo__add"]);
 		assert.deepEqual(names([{ role: "user", content: "summary", timestamp: 0 }]), ["bash"]);
+	});
+
+	it("drops tool removals whose declaration was condensed away", () => {
+		const tool = (name: string) => ({ name, description: "", parameters: {} });
+		const head = { role: "system", content: "prompt", toolsAdded: [tool("bash"), tool("load_tools")], timestamp: 0 };
+		const summary = { role: "assistant", content: [{ type: "text", text: "<from_earlier>" }], timestamp: 1 };
+		const reload = { role: "system", content: "", toolsRemoved: [{ name: "load_tools" }], toolsAdded: [tool("load_tools")], timestamp: 2 };
+		const orphan = { role: "system", content: "", toolsRemoved: [{ name: "browser" }], timestamp: 3 };
+		const mixed = { role: "system", content: "", toolsRemoved: [{ name: "browser" }, { name: "bash" }], timestamp: 4 };
+		const out = dropOrphanToolRemovals([head, summary, reload, orphan, mixed] as any) as any[];
+		assert.deepEqual(out.slice(0, 3), [head, summary, reload]);
+		assert.deepEqual(out[3].toolsRemoved, []);
+		assert.deepEqual(out[4].toolsRemoved, [{ name: "bash" }]);
+		assert.deepEqual(mixed.toolsRemoved, [{ name: "browser" }, { name: "bash" }]);
 	});
 
 	it("parses [mcp.servers] and rejects ambiguous transports", async (t) => {

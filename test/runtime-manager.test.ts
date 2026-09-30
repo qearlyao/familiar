@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import type { ChatChannelRef } from "../src/conversation/chat-log.js";
 import type { MemoryService } from "../src/memory/service.js";
 import { createRuntimeManager } from "../src/runtime/runtime-manager.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, stubMemoryService } from "./helpers.js";
 
 function spyMemoryService(): {
 	memory: MemoryService;
@@ -13,23 +13,14 @@ function spyMemoryService(): {
 } {
 	const subscribeCalls: string[] = [];
 	const unsubscribeCalls: string[] = [];
-	const memory: MemoryService = {
-		memoryTools: () => [],
-		indexDiaries: async () => {},
-		watchDiaries: () => {},
+	const memory = stubMemoryService({
 		subscribeRuntime: (runtime) => {
 			subscribeCalls.push(runtime.channelKey);
 			return () => {
 				unsubscribeCalls.push(runtime.channelKey);
 			};
 		},
-		transformContext: async (messages) => messages,
-		recordMessages: () => {},
-		getContextBreakdown: () => undefined,
-		serviceCompactionDebt: async () => {},
-		flush: async () => {},
-		close: () => {},
-	};
+	});
 	return { memory, subscribeCalls, unsubscribeCalls };
 }
 

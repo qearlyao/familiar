@@ -1,4 +1,4 @@
-import type { ContextBreakdown } from "../../../src/web/types.js";
+import type { ContextBreakdown } from "../../../src/memory/lcm/types.js";
 
 export type { ContextBreakdown };
 

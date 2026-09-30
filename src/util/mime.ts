@@ -1,5 +1,4 @@
 import { extname } from "node:path";
-import type { StoredAttachment } from "../conversation/chat-log.js";
 
 /** the one extension → content type table; narrower lookups (images only) derive from it */
 const MIME_TYPES: Record<string, string> = {
@@ -40,7 +39,9 @@ const MIME_TYPES: Record<string, string> = {
 	".zip": "application/zip",
 };
 
-export function attachmentKindForMime(mimeType: string): NonNullable<StoredAttachment["kind"]> {
+export type AttachmentKind = "image" | "file" | "audio" | "video";
+
+export function attachmentKindForMime(mimeType: string): AttachmentKind {
 	if (mimeType.startsWith("image/")) return "image";
 	if (mimeType.startsWith("audio/")) return "audio";
 	if (mimeType.startsWith("video/")) return "video";

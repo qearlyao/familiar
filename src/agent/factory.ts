@@ -1,48 +1,25 @@
-import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import { createInitialSystemMessage, getCurrentTools, toToolDeclaration } from "@earendil-works/pi-ai";
-import type { AssistantMessage, ImageContent, Model } from "@earendil-works/pi-ai/compat";
-import { THINKING_LEVELS } from "../config/enums.js";
-import type { Config, ThinkingLevel } from "../config/index.js";
+import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import { createInitialSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
+import type { ImageContent } from "@earendil-works/pi-ai/compat";
+import type { Config } from "../config/index.js";
 import { setConfigOverridesPath } from "../config/overrides.js";
 import { applyConfigOverridesToConfig } from "../config/registry.js";
 import type { EffectiveSetting, SettingsStore } from "../config/settings.js";
-import type { StoredAttachment } from "../conversation/chat-log.js";
-import { createGeneratedMediaSink } from "../media/generated-media.js";
-import { estimateTextTokens } from "../memory/lcm/context.js";
 import type { MemoryService } from "../memory/service.js";
 import { setAddedModelsPath } from "../models/added-models.js";
-import {
-	clampConfiguredThinkingLevel,
-	createConfiguredModel,
-	isThinkingLevel,
-	parseModelRef,
-	resolveModel,
-	supportedThinkingLevels,
-} from "../models/index.js";
-import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
-import { assertModelCanAuthenticateWithRuntime, createModelRuntime, modelRuntimeEnv } from "../models/runtime.js";
+import { createConfiguredModel } from "../models/index.js";
+import { harnessNoteMessage, userTextMessage } from "../models/messages.js";
+import { assertModelCanAuthenticateWithRuntime, createModelRuntime } from "../models/runtime.js";
 import { buildSystemPrompt, loadPersona, logPromptSources } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../prompting/skills.js";
-import { createMcpHub, dropOrphanToolRemovals, pruneCondensedTools } from "../tools/mcp.js";
+import { createMcpHub } from "../tools/mcp.js";
 import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
-import type { ContextBreakdown } from "../web/types.js";
-import { normalizeProviderPayload } from "./payload-normalizers.js";
-import {
-	assertModelAllowed,
-	buildAnthropicMetadata,
-	deriveSessionId,
-	formatModel,
-	getLastAssistantText,
-	harnessNoteMessage,
-	installProviderDebugFilter,
-	isNoisyProviderDebug,
-	logUsage,
-	resolveModelName,
-	userTextMessage,
-} from "./session-helpers.js";
-import { normalizeToolNameStream } from "./tool-name-compat.js";
+import { createModelSettings } from "./model-settings.js";
+import { createAgentSession, editLastAssistant, popLastAssistant, type SessionToolParts } from "./session.js";
+import { deriveSessionId, formatModel, getLastAssistantText, installProviderDebugFilter } from "./session-helpers.js";
+import { createSessionMemory } from "./session-memory.js";
 import { createFamiliarTools, deferredToolNames, setReferenceAttachments } from "./tools.js";
-import { loadStoredMessages, writePayloadLog, writeTranscriptLog, writeTranscriptReset } from "./transcript-log.js";
+import { writeTranscriptReset } from "./transcript-log.js";
 import type {
 	FamiliarAgent,
 	FamiliarAgentOptions,
@@ -55,18 +32,10 @@ import type {
 
 export type { FamiliarAgent, FamiliarAgentOptions, FamiliarAgentReply, FamiliarPromptOptions } from "./types.js";
 
-export const __agentTest = {
-	isNoisyProviderDebug,
-	normalizeProviderPayload,
-};
-
-const PROVIDER_MAX_RETRIES = 2;
-const PROVIDER_MAX_RETRY_DELAY_MS = 60_000;
-
 export async function createFamiliarAgent(
 	config: Config,
 	settings: SettingsStore,
-	memoryService?: MemoryService,
+	memoryService: MemoryService,
 	options: FamiliarAgentOptions = {},
 ): Promise<FamiliarAgent> {
 	installProviderDebugFilter();
@@ -87,18 +56,18 @@ export async function createFamiliarAgent(
 	let defaultModel = createConfiguredModel(config, modelRuntime);
 	await assertModelCanAuthenticateWithRuntime(config, modelRuntime, defaultModel);
 	const sessions = new Map<string, Promise<FamiliarAgentSession>>();
+	const sessionMemory = createSessionMemory(memoryService);
+	const modelSettings = createModelSettings(settings, modelRuntime);
 	// built-ins set aside until the next restart; never written anywhere
 	const pausedTools = new Set<string>();
+	const buildTools = (cfg: Config, parts: SessionToolParts) =>
+		createFamiliarTools({ config: cfg, memory: memoryService, mcp, paused: pausedTools, ...parts });
 	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
-		createFamiliarTools(
-			cfg,
-			session.mediaSink,
-			() => session.referenceAttachments,
-			memoryService,
-			mcp,
-			() => session.agent,
-			pausedTools,
-		);
+		buildTools(cfg, {
+			mediaSink: session.mediaSink,
+			referenceAttachments: () => session.referenceAttachments,
+			agent: () => session.agent,
+		});
 	// a server connecting, dropping or flipping deferred changes every live session's tool list
 	const rebuildSessionTools = async (): Promise<void> => {
 		for (const sessionPromise of sessions.values()) {
@@ -107,200 +76,25 @@ export async function createFamiliarAgent(
 		}
 	};
 	await mcp.sync(mcpServerSpecs(config));
-	// activePromptOptions covers each prompt window; skipAmbientMessages tags message
-	// identities so followUpMessage's fire-and-forget path also opts out.
-	const completedContexts = new Map<string, { tokens: number; breakdown: ContextBreakdown }>();
-	const activePromptOptions = new Map<string, FamiliarPromptOptions>();
-	const skipAmbientMessages = new WeakSet<AgentMessage & object>();
-	const enterPromptOptions = (sessionKey: string, options: FamiliarPromptOptions): (() => void) => {
-		const previousOptions = activePromptOptions.get(sessionKey);
-		activePromptOptions.set(sessionKey, options);
-		return () => {
-			if (previousOptions) activePromptOptions.set(sessionKey, previousOptions);
-			else activePromptOptions.delete(sessionKey);
-		};
-	};
 	let reloadInProgress: Promise<void> | undefined;
-	// a session that borrows another's model and thinking (a voice call takes its chat's)
-	const settingsSources = new Map<string, string>();
-	const settingsKey = (sessionKey: string): string => settingsSources.get(sessionKey) ?? sessionKey;
 
-	const resolveChannelModel = (sessionKey: string): { model: Model<any>; source: "config" | "override" } => {
-		const override = settings.getChannelModel(settingsKey(sessionKey));
-		const modelName = resolveModelName(override.value, defaultModel);
-		const ref = parseModelRef(modelName);
-		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
-		if (override.value) assertModelAllowed(config, ref);
-		const model = override.value ? resolveModel(ref, config, modelRuntime) : defaultModel;
-		return { model, source: override.source };
-	};
-
-	const resolveChannelThinkingLevel = (sessionKey: string, model: Model<any>): EffectiveSetting<ThinkingLevel> => {
-		const setting = settings.getChannelThinkingLevel(settingsKey(sessionKey), config.agent.thinkingLevel);
-		return {
-			value: clampConfiguredThinkingLevel(model, setting.value),
-			source: setting.source,
-		};
-	};
-
-	const resolveChannelModelForConfig = (
-		nextConfig: Config,
-		nextDefaultModel: Model<any>,
-		sessionKey: string,
-	): { model: Model<any>; source: "config" | "override" } => {
-		const override = settings.getChannelModel(settingsKey(sessionKey));
-		const modelName = resolveModelName(override.value, nextDefaultModel);
-		const ref = parseModelRef(modelName);
-		if (!ref) throw new Error(`Invalid persisted model for ${sessionKey}: ${modelName}`);
-		if (override.value) assertModelAllowed(nextConfig, ref);
-		const model = override.value ? resolveModel(ref, nextConfig, modelRuntime) : nextDefaultModel;
-		return { model, source: override.source };
-	};
-
-	const resolveChannelThinkingLevelForConfig = (
-		nextConfig: Config,
-		sessionKey: string,
-		model: Model<any>,
-	): EffectiveSetting<ThinkingLevel> => {
-		const setting = settings.getChannelThinkingLevel(settingsKey(sessionKey), nextConfig.agent.thinkingLevel);
-		return {
-			value: clampConfiguredThinkingLevel(model, setting.value),
-			source: setting.source,
-		};
-	};
+	const resolveChannelModel = (sessionKey: string) => modelSettings.resolveModel(config, defaultModel, sessionKey);
 
 	const createSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
-		const sessionId = deriveSessionId(config.workspacePath, sessionKey);
-		const messages = await loadStoredMessages(config.workspace.dataDir, sessionId);
 		const { model } = resolveChannelModel(sessionKey);
 		await assertModelCanAuthenticateWithRuntime(config, modelRuntime, model);
-		const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model).value;
-		const mediaSink = createGeneratedMediaSink();
-		const referenceAttachments: StoredAttachment[] = [];
-		console.log(`Loaded ${messages.length} prior messages from session history for ${sessionKey}`);
-		let agent!: Agent;
-		const stub = { state: { messages } } as Agent;
-		agent = new Agent({
-			initialState: {
-				systemPrompt,
-				model,
-				messages,
-				tools: createFamiliarTools(
-					config,
-					mediaSink,
-					() => referenceAttachments,
-					memoryService,
-					mcp,
-					() => agent ?? stub,
-					pausedTools,
-				),
-				thinkingLevel,
-			},
-			sessionId,
-			// load_tools grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
-			prepareNextTurnWithContext: (turn) => ({ context: { ...turn.context, tools: agent.state.tools.slice() } }),
-			streamFn: (streamModel, context, options) => {
-				const stream = modelRuntime.streamSimple(streamModel, context, {
-					...options,
-					env: modelRuntimeEnv(config, streamModel),
-					metadata: buildAnthropicMetadata(config, streamModel),
-					cacheRetention: config.agent.cacheRetention,
-					maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
-					maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,
-					onPayload: (payload, payloadModel) => {
-						const routing = resolveOpenRouterRouting(config, payloadModel);
-						const requestPayload = normalizeProviderPayload(payload, payloadModel, routing);
-						writePayloadLog(config, {
-							ts: new Date().toISOString(),
-							direction: "request",
-							sessionId,
-							sessionKey,
-							model: payloadModel.id,
-							payload: requestPayload,
-						});
-						return requestPayload;
-					},
-					onResponse: (response, responseModel) => {
-						writePayloadLog(config, {
-							ts: new Date().toISOString(),
-							direction: "response_meta",
-							sessionId,
-							sessionKey,
-							model: responseModel.id,
-							status: response.status,
-							headers: response.headers,
-						});
-					},
-				});
-				return normalizeToolNameStream(stream, getCurrentTools(context.messages));
-			},
-			// the leading system message carries the prompt and tool declarations; keep it out of
-			// LCM's reach and count it through otherContextTokens as before.
-			transformContext: memoryService
-				? async (contextMessages, signal) => {
-						const head = contextMessages[0]?.role === "system" ? contextMessages[0] : undefined;
-						const body = head ? contextMessages.slice(1) : contextMessages;
-						const activeOptions = activePromptOptions.get(sessionKey);
-						const skipAmbient = activeOptions?.skipAmbient || lastUserMessageSkipsAmbient(body);
-						const transformed = await memoryService.transformContext(body, signal, {
-							sessionKey,
-							sessionId,
-							model: agent.state.model,
-							// JSON.stringify drops each tool's execute function on its own.
-							otherContextTokens:
-								estimateTextTokens(agent.state.systemPrompt) +
-								estimateTextTokens(JSON.stringify(agent.state.tools)),
-							...(skipAmbient ? { skipAmbient: true } : {}),
-							...(activeOptions?.ephemeral ? { skipLcm: true } : {}),
-							...(activeOptions?.ambientQuery !== undefined ? { ambientQuery: activeOptions.ambientQuery } : {}),
-						});
-						pruneCondensedTools(agent, transformed, deferredToolNames(config, mcp, pausedTools));
-						return dropOrphanToolRemovals(head ? [head, ...transformed] : transformed);
-					}
-				: undefined,
-		});
-		agent.subscribe((event) => {
-			logUsage(event);
-			if (event.type === "message_end" && event.message.role === "assistant") {
-				const breakdown = memoryService?.getContextBreakdown(sessionKey);
-				const usage = event.message.usage;
-				if (breakdown) {
-					completedContexts.set(sessionKey, {
-						tokens: usage.input + usage.cacheRead + usage.cacheWrite + usage.output,
-						breakdown,
-					});
-				} else completedContexts.delete(sessionKey);
-			}
-			if (event.type === "agent_end" && memoryService && !activePromptOptions.get(sessionKey)?.ephemeral) {
-				const messages = agent.state.messages;
-				try {
-					memoryService.recordMessages(messages[0]?.role === "system" ? messages.slice(1) : messages, {
-						sessionKey,
-						sessionId,
-					});
-				} catch (error) {
-					console.error(`memory LCM turn recording failed for ${sessionKey}`, error);
-				}
-			}
-			if (event.type === "message_end") {
-				writeTranscriptLog(config, {
-					ts: new Date().toISOString(),
-					sessionId,
-					sessionKey,
-					message: event.message,
-				});
-			}
-		});
-
-		return {
-			agent,
-			sessionId,
+		return createAgentSession({
+			config,
+			modelRuntime,
+			memory: sessionMemory,
+			sessionKey,
+			sessionId: deriveSessionId(config.workspacePath, sessionKey),
+			systemPrompt,
 			model,
-			thinkingLevel,
-			mediaSink,
-			referenceAttachments,
-			promptQueue: Promise.resolve(),
-		};
+			thinkingLevel: modelSettings.resolveThinkingLevel(config, sessionKey, model).value,
+			tools: (parts) => buildTools(config, parts),
+			deferredToolNames: () => deferredToolNames(config, mcp, pausedTools),
+		});
 	};
 
 	const getSession = async (sessionKey: string): Promise<FamiliarAgentSession> => {
@@ -357,9 +151,9 @@ export async function createFamiliarAgent(
 		return Promise.all(
 			[...sessions.entries()].map(async ([sessionKey, sessionPromise]) => {
 				const session = await sessionPromise;
-				const { model } = resolveChannelModelForConfig(next.config, next.defaultModel, sessionKey);
+				const { model } = modelSettings.resolveModel(next.config, next.defaultModel, sessionKey);
 				await assertModelCanAuthenticateWithRuntime(next.config, modelRuntime, model);
-				const thinkingLevel = resolveChannelThinkingLevelForConfig(next.config, sessionKey, model).value;
+				const thinkingLevel = modelSettings.resolveThinkingLevel(next.config, sessionKey, model).value;
 				return {
 					session,
 					model,
@@ -374,7 +168,7 @@ export async function createFamiliarAgent(
 	// settles on the session's promptQueue, keep the stored tail non-rejecting, and run
 	// teardown (onTurnEnd → reference reset → enterTurn's exit → unsubscribe) in a fixed
 	// order regardless of how the turn ends. enterTurn returns its own cleanup so callers
-	// can scope per-turn state (e.g. activePromptOptions) across the exact finally window.
+	// can scope per-turn state (e.g. the turn's memory options) across the exact finally window.
 	const runPromptTurn = async (
 		sessionKey: string,
 		options: FamiliarPromptOptions,
@@ -426,61 +220,14 @@ export async function createFamiliarAgent(
 		}
 	};
 
-	const popLastAssistant = (session: FamiliarAgentSession, action: "retry" | "delete"): void => {
-		const messages = session.agent.state.messages;
-		const message = messages.at(-1);
-		if (!message || message.role !== "assistant") {
-			throw new Error(`No assistant message to ${action}`);
-		}
-		if (action === "retry" && message.stopReason === "aborted") {
-			throw new Error("Cannot retry an aborted assistant message");
-		}
-		session.agent.state.messages = messages.slice(0, -1);
-		writeTranscriptLog(config, {
-			ts: new Date().toISOString(),
-			sessionId: session.sessionId,
-			type: "supersede",
-			messageTimestamp: message.timestamp,
-		});
-	};
-
-	const replaceAssistantTextContent = (message: AssistantMessage, text: string): AssistantMessage => {
-		let replaced = false;
-		const content = message.content.map((part) => {
-			if (part.type !== "text") return part;
-			if (replaced) return { ...part, text: "" };
-			replaced = true;
-			return { ...part, text };
-		});
-		if (!replaced) throw new Error("Assistant message has no text to edit");
-		return {
-			...message,
-			content,
-			stopReason: "stop",
-			errorMessage: undefined,
-			timestamp: Math.max(Date.now(), message.timestamp + 1),
-		};
-	};
-
-	const editLastAssistantMessage = (session: FamiliarAgentSession, text: string): void => {
-		const messages = session.agent.state.messages;
-		const message = messages.at(-1);
-		if (!message || message.role !== "assistant") {
-			throw new Error("No assistant message to edit");
-		}
-		const edited = replaceAssistantTextContent(message, text);
-		session.agent.state.messages = [...messages.slice(0, -1), edited];
-		writeTranscriptLog(config, {
-			ts: new Date().toISOString(),
-			sessionId: session.sessionId,
-			type: "supersede",
-			messageTimestamp: message.timestamp,
-		});
-		writeTranscriptLog(config, {
-			ts: new Date().toISOString(),
-			sessionId: session.sessionId,
-			message: edited,
-		});
+	const steerWith = (sessionKey: string, message: AgentMessage): void => {
+		const session = sessions.get(sessionKey);
+		if (!session) return;
+		void session
+			.then((resolved) => {
+				resolved.agent.steer(message);
+			})
+			.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
 	};
 
 	return {
@@ -497,16 +244,13 @@ export async function createFamiliarAgent(
 			const session = await sessions.get(sessionKey);
 			return session?.agent.state.tools.map((tool) => tool.name) ?? [];
 		},
-		getContextBreakdown: (sessionKey, tokens) => {
-			const completed = completedContexts.get(sessionKey);
-			return completed?.tokens === tokens ? completed.breakdown : undefined;
-		},
+		getContextBreakdown: (sessionKey, tokens) => sessionMemory.contextBreakdown(sessionKey, tokens),
 		abort: abortSession,
 		async dispose(sessionKey: string): Promise<void> {
 			await abortSession(sessionKey);
 			sessions.delete(sessionKey);
-			completedContexts.delete(sessionKey);
-			settingsSources.delete(sessionKey);
+			sessionMemory.forget(sessionKey);
+			modelSettings.forget(sessionKey);
 		},
 		async retryLastAssistant(
 			sessionKey: string,
@@ -514,22 +258,22 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			return runPromptTurn(sessionKey, options, eventHandler, async (session) => {
-				popLastAssistant(session, "retry");
+				popLastAssistant(config, session, "retry");
 				await session.agent.continue();
 			});
 		},
 		async deleteLastAssistant(sessionKey: string): Promise<void> {
 			const session = await getSession(sessionKey);
 			await session.promptQueue;
-			popLastAssistant(session, "delete");
+			popLastAssistant(config, session, "delete");
 		},
 		async editLastAssistant(sessionKey: string, text: string): Promise<void> {
 			const session = await getSession(sessionKey);
 			await session.promptQueue;
-			editLastAssistantMessage(session, text);
+			editLastAssistant(config, session, text);
 		},
 		async reset(sessionKey: string): Promise<void> {
-			completedContexts.delete(sessionKey);
+			sessionMemory.forget(sessionKey);
 			const existing = sessions.get(sessionKey);
 			if (!existing) return writeTranscriptReset(config, deriveSessionId(config.workspacePath, sessionKey));
 			const session = await existing;
@@ -588,48 +332,30 @@ export async function createFamiliarAgent(
 		},
 		getThinkingLevel(sessionKey: string): EffectiveSetting<string> {
 			const { model } = resolveChannelModel(sessionKey);
-			const thinkingLevel = resolveChannelThinkingLevel(sessionKey, model);
-			return thinkingLevel;
+			return modelSettings.resolveThinkingLevel(config, sessionKey, model);
 		},
 		async setModel(sessionKey: string, input: string): Promise<string> {
-			const ref = parseModelRef(input);
-			if (!ref) throw new Error("Usage: /model provider/model-id");
-			assertModelAllowed(config, ref);
-			const nextModel = resolveModel(ref, config, modelRuntime);
-			await assertModelCanAuthenticateWithRuntime(config, modelRuntime, nextModel);
-			const previousThinking = settings.getChannelThinkingLevel(
-				settingsKey(sessionKey),
-				config.agent.thinkingLevel,
-			).value;
-			const nextThinking = clampConfiguredThinkingLevel(nextModel, previousThinking);
-			await settings.setChannelModel(sessionKey, formatModel(nextModel));
+			const { model, thinkingLevel, message } = await modelSettings.setModel(config, sessionKey, input);
 			const sessionPromise = sessions.get(sessionKey);
 			if (sessionPromise) {
 				const session = await sessionPromise;
-				session.model = nextModel;
-				session.thinkingLevel = nextThinking;
-				session.agent.state.model = nextModel;
-				session.agent.state.thinkingLevel = nextThinking;
+				session.model = model;
+				session.thinkingLevel = thinkingLevel;
+				session.agent.state.model = model;
+				session.agent.state.thinkingLevel = thinkingLevel;
 			}
-			const suffix = nextThinking === previousThinking ? "" : ` (clamped from ${previousThinking})`;
-			return `Model set to ${formatModel(nextModel)} for this channel\nThinking: ${nextThinking}${suffix}`;
+			return message;
 		},
 		async setThinkingLevel(sessionKey: string, input: string): Promise<string> {
-			const level = input.trim().toLowerCase();
-			if (!isThinkingLevel(level)) {
-				throw new Error(`Usage: /thinking ${THINKING_LEVELS.join("|")}`);
-			}
 			const { model } = resolveChannelModel(sessionKey);
-			const clamped = clampConfiguredThinkingLevel(model, level);
-			await settings.setChannelThinkingLevel(sessionKey, clamped);
+			const { thinkingLevel, message } = await modelSettings.setThinkingLevel(model, sessionKey, input);
 			const sessionPromise = sessions.get(sessionKey);
 			if (sessionPromise) {
 				const session = await sessionPromise;
-				session.thinkingLevel = clamped;
-				session.agent.state.thinkingLevel = clamped;
+				session.thinkingLevel = thinkingLevel;
+				session.agent.state.thinkingLevel = thinkingLevel;
 			}
-			const suffix = clamped === level ? "" : ` (clamped from ${level})`;
-			return `Thinking set to ${clamped}${suffix} for this channel\nSupported: ${supportedThinkingLevels(model).join(", ")}`;
+			return message;
 		},
 		async prompt(
 			sessionKey: string,
@@ -639,7 +365,7 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<FamiliarAgentReply> {
 			const images = Array.isArray(imagesOrOnEvent) ? imagesOrOnEvent : undefined;
-			if (options.settingsFrom) settingsSources.set(sessionKey, options.settingsFrom);
+			if (options.settingsFrom) modelSettings.borrow(sessionKey, options.settingsFrom);
 			// the listener may ride in the images slot; a missing images slot must not drop the fourth argument
 			const eventHandler = typeof imagesOrOnEvent === "function" ? imagesOrOnEvent : onEvent;
 			return runPromptTurn(
@@ -654,7 +380,7 @@ export async function createFamiliarAgent(
 					};
 					return session.agent.prompt(withNotes(session, typed, options.notes));
 				},
-				() => enterPromptOptions(sessionKey, options),
+				() => sessionMemory.enterTurn(sessionKey, options),
 			);
 		},
 		async promptMessage(
@@ -668,29 +394,17 @@ export async function createFamiliarAgent(
 				options,
 				onEvent,
 				(session) => {
-					if (options.skipAmbient) skipAmbientMessages.add(message);
+					if (options.skipAmbient) sessionMemory.skipAmbientFor(message);
 					return session.agent.prompt(withNotes(session, message, options.notes));
 				},
-				() => enterPromptOptions(sessionKey, options),
+				() => sessionMemory.enterTurn(sessionKey, options),
 			);
 		},
 		steer(sessionKey: string, input: string): void {
-			const session = sessions.get(sessionKey);
-			if (!session) return;
-			void session
-				.then((resolved) => {
-					resolved.agent.steer(userTextMessage(input));
-				})
-				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
+			steerWith(sessionKey, userTextMessage(input));
 		},
 		steerMessage(sessionKey: string, message: AgentMessage): void {
-			const session = sessions.get(sessionKey);
-			if (!session) return;
-			void session
-				.then((resolved) => {
-					resolved.agent.steer(message);
-				})
-				.catch((error) => console.error(`failed to load familiar session ${sessionKey} for steer`, error));
+			steerWith(sessionKey, message);
 		},
 		async followUpMessage(
 			sessionKey: string,
@@ -698,7 +412,7 @@ export async function createFamiliarAgent(
 			options: FamiliarPromptOptions = {},
 		): Promise<void> {
 			const session = await getSession(sessionKey);
-			if (options.skipAmbient) skipAmbientMessages.add(message);
+			if (options.skipAmbient) sessionMemory.skipAmbientFor(message);
 			for (const queued of withNotes(session, message, options.notes)) session.agent.followUp(queued);
 		},
 	};
@@ -710,15 +424,5 @@ export async function createFamiliarAgent(
 		if (!notes?.length) return [message];
 		const timestamp = message.timestamp ?? Date.now();
 		return [...notes.map((text) => harnessNoteMessage(session.agent.state.model, text, timestamp)), message];
-	}
-
-	function lastUserMessageSkipsAmbient(messages: readonly AgentMessage[]): boolean {
-		for (let index = messages.length - 1; index >= 0; index -= 1) {
-			const message = messages[index];
-			if (!message || typeof message !== "object" || !("role" in message)) continue;
-			if (message.role !== "user" && message.role !== "system") continue;
-			return skipAmbientMessages.has(message);
-		}
-		return false;
 	}
 }

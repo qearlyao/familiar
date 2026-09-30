@@ -6,9 +6,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../config/index.js";
-import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isEnoent } from "../util/fs.js";
-import type { ContextBreakdown } from "../web/types.js";
 import { AmbientDiaryInjector } from "./diary/ambient-injector.js";
 import { DIARY_INDEX_FILE_RE, indexAllDiaryFiles, indexDiaryFile, removeDiaryFileIndex } from "./diary/indexer.js";
 import { ChunkIndexer } from "./index/chunk-indexer.js";
@@ -16,16 +14,17 @@ import { createEmbeddingProvider } from "./index/embedding-provider.js";
 import { MemoryIndexStore } from "./index/store.js";
 import { estimateAgentMessageTokens } from "./lcm/context.js";
 import { LcmContextTransformer } from "./lcm/context-transformer.js";
-import { LcmSegmentManager } from "./lcm/segment-manager.js";
+import { type ChatRecordSource, LcmSegmentManager } from "./lcm/segment-manager.js";
 import { LcmStore } from "./lcm/store.js";
 import { DefaultLcmSummarizer, type LcmSummarizer } from "./lcm/summarizer.js";
+import type { ContextBreakdown } from "./lcm/types.js";
 import { createMemoryTools } from "./tools.js";
 
 export interface MemoryService {
 	memoryTools(): AgentTool<any>[];
 	indexDiaries(): Promise<void>;
 	watchDiaries(): void;
-	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void;
+	subscribeRuntime(runtime: ChatRecordSource, sessionId?: string): () => void;
 	transformContext(
 		messages: AgentMessage[],
 		signal?: AbortSignal,
@@ -148,7 +147,7 @@ class DefaultMemoryService implements MemoryOperatorService {
 		return createMemoryTools({ store: this.memoryStore, embeddingProvider: this.embeddingProvider });
 	}
 
-	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void {
+	subscribeRuntime(runtime: ChatRecordSource, sessionId?: string): () => void {
 		return this.segmentManager.subscribeRuntime(runtime, sessionId);
 	}
 

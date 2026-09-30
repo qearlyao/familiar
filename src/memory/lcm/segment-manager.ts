@@ -1,10 +1,15 @@
 import type { ChatLogRecord } from "../../conversation/chat-log.js";
-import type { ConversationRuntime } from "../../runtime/conversation-runtime.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import type { MemoryIndexStore } from "../index/store.js";
 import { indexLcmRecords } from "./indexer.js";
 import { chatBoundaryRecord } from "./normalize.js";
 import type { LcmStore } from "./store.js";
+
+/** the slice of a conversation runtime LCM listens to: its key and its chat-log records */
+export interface ChatRecordSource {
+	readonly channelKey: string;
+	subscribe(listener: (record: ChatLogRecord) => void | Promise<void>): () => void;
+}
 
 export interface LcmSegmentManagerOptions {
 	lcmStore: LcmStore;
@@ -33,7 +38,7 @@ export class LcmSegmentManager {
 		this.onRotate = options.onRotate;
 	}
 
-	subscribeRuntime(runtime: ConversationRuntime, sessionId?: string): () => void {
+	subscribeRuntime(runtime: ChatRecordSource, sessionId?: string): () => void {
 		const unsubscribe = runtime.subscribe((record) => {
 			const projection = this.projectionQueue.then(() => this.projectRuntimeRecord(runtime, record, sessionId));
 			// Keep the queue usable after an error, but return the rejecting reset
@@ -82,7 +87,7 @@ export class LcmSegmentManager {
 	}
 
 	private async projectRuntimeRecord(
-		runtime: ConversationRuntime,
+		runtime: ChatRecordSource,
 		record: ChatLogRecord,
 		sessionId: string | undefined,
 	): Promise<void> {
@@ -101,10 +106,7 @@ export class LcmSegmentManager {
 		await indexLcmRecords({ indexer: this.indexer, records: [stored] });
 	}
 
-	private rotateRuntimeSegment(
-		runtime: ConversationRuntime,
-		record: Extract<ChatLogRecord, { type: "runtime" }>,
-	): void {
+	private rotateRuntimeSegment(runtime: ChatRecordSource, record: Extract<ChatLogRecord, { type: "runtime" }>): void {
 		const previousSegmentId = this.activeSegmentId(runtime.channelKey);
 		const nextSegmentId = this.nextSegmentId(runtime.channelKey);
 		let indexDeletes: Array<{ corpus: "lcm_record" | "lcm_summary"; sourceId: string }> = [];

@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { Config } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
-import { removeOldFiles } from "../lifecycle/data-retention.js";
+import { removeOldFiles } from "../util/fs.js";
 
 export interface GeneratedAttachment extends StoredAttachment {
 	provider?: string;

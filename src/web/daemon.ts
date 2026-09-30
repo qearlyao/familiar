@@ -1,15 +1,10 @@
 import { createServer } from "node:http";
-
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-
-import type { FamiliarAgent } from "../agent/factory.js";
-import type { Config, WebAuthMode } from "../config/index.js";
+import type { WebAuthMode } from "../config/index.js";
 import { refreshContactNote, setContactNotePath } from "../conversation/contact-note.js";
-import type { RestartHandler } from "../lifecycle/control.js";
 import { DefaultLcmSummarizer } from "../memory/lcm/summarizer.js";
 import { setAddedModelsPath } from "../models/added-models.js";
 import { loadPersona, parsePersonaName } from "../prompting/persona.js";
-import type { AgentCore } from "../runtime/agent-core.js";
+import type { ChannelContext } from "../runtime/channel.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { registerWebAgentRoutes } from "./agent-routes.js";
 import { createAuth, loadWebSessionStore } from "./auth.js";
@@ -34,12 +29,13 @@ import type { WebDaemon } from "./types.js";
 import { attachWebSocketVoice, registerWebVoiceRoutes } from "./voice.js";
 import { registerWebVoiceCallRoutes, type VoiceCallDeps } from "./voice-call.js";
 
-export async function startWebDaemon(
-	config: Config,
-	familiarAgent: FamiliarAgent,
-	agentCore: AgentCore,
-	options: { restart?: RestartHandler; modelRuntime?: ModelRuntime } = {},
-): Promise<WebDaemon> {
+export async function startWebDaemon({
+	config,
+	familiarAgent,
+	core: agentCore,
+	modelRuntime,
+	restart,
+}: ChannelContext): Promise<WebDaemon> {
 	setAddedModelsPath(config.workspace.dataDir);
 	setContactNotePath(config.persona.contact);
 	await refreshContactNote();
@@ -75,7 +71,7 @@ export async function startWebDaemon(
 		agentCore,
 		eventHub,
 		personaName,
-		restart: options.restart,
+		restart,
 	});
 
 	registerWebAuthRoutes(route, auth, { authMode: config.web.authMode, personaName });
@@ -91,7 +87,7 @@ export async function startWebDaemon(
 		familiarAgent,
 	});
 	registerWebAgentRoutes({
-		modelRuntime: options.modelRuntime,
+		modelRuntime,
 		route,
 		config,
 		familiarAgent,
@@ -99,7 +95,7 @@ export async function startWebDaemon(
 		personaName,
 		publish: eventHub.publish,
 	});
-	registerWebConfigRoutes(route, config, agentCore, familiarAgent, options.restart);
+	registerWebConfigRoutes(route, config, agentCore, familiarAgent, restart);
 	registerWebMcpRoutes(route, config, familiarAgent, getRuntime);
 	registerWebPushRoutes(route, push);
 	registerWebBookRoutes(route, config, { getRuntime, drainJobs: actions.drainJobs });
@@ -113,7 +109,7 @@ export async function startWebDaemon(
 		familiarAgent,
 		getMainRuntime: () => getRuntime(),
 		personaName,
-		summarizer: new DefaultLcmSummarizer(config, undefined, options.modelRuntime),
+		summarizer: new DefaultLcmSummarizer(config, undefined, modelRuntime),
 	};
 	registerWebVoiceCallRoutes(route, voiceCall);
 

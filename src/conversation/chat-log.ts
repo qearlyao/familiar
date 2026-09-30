@@ -5,6 +5,7 @@ import lockfile from "proper-lockfile";
 
 import type { Config } from "../config/index.js";
 import { isEnoent, readFileOrNull } from "../util/fs.js";
+import type { AttachmentKind } from "../util/mime.js";
 import type { ControlCommand } from "./control-commands.js";
 
 export type ChatService = "discord" | "qq" | "web";
@@ -23,7 +24,7 @@ export interface ChatChannelRef {
 export interface StoredAttachment {
 	id: string;
 	name: string;
-	kind?: "image" | "file" | "audio" | "video";
+	kind?: AttachmentKind;
 	mimeType?: string;
 	size?: number;
 	remoteUrl?: string;

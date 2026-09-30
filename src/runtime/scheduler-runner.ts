@@ -1,10 +1,10 @@
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { FamiliarAgent, FamiliarAgentReply, FamiliarPromptOptions } from "../agent/factory.js";
-import { userTextMessage } from "../agent/session-helpers.js";
 import { manageCron } from "../config/cron.js";
 import type { Config } from "../config/index.js";
 import type { CronJobConfig } from "../config/types.js";
+import { userTextMessage } from "../models/messages.js";
 import { thinkingDurationMs } from "./agent-events.js";
 import type { ConversationRuntime } from "./conversation-runtime.js";
 import {

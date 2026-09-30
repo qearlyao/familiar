@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 
 import type { Model } from "@earendil-works/pi-ai/compat";
 
-import { __agentTest } from "../src/agent/factory.js";
-import { buildAnthropicMetadata } from "../src/agent/session-helpers.js";
+import { normalizeProviderPayload } from "../src/agent/payload-normalizers.js";
+import { buildAnthropicMetadata, isNoisyProviderDebug } from "../src/agent/session-helpers.js";
 import { modelRuntimeEnv } from "../src/models/runtime.js";
 import { createWorkspace, minimalConfigToml, withDiscordToken } from "./helpers.js";
 import { loadConfig } from "../src/config/index.js";
@@ -18,13 +18,13 @@ const anthropicModel = {
 describe("provider payload normalization", () => {
 	it("filters only the noisy Google Vertex auth debug note", () => {
 		assert.equal(
-			__agentTest.isNoisyProviderDebug([
+			isNoisyProviderDebug([
 				"The user provided project/location will take precedence over the API key from the environment variables.",
 			]),
 			true,
 		);
-		assert.equal(__agentTest.isNoisyProviderDebug(["different debug note"]), false);
-		assert.equal(__agentTest.isNoisyProviderDebug(["debug note", { provider: "google-vertex" }]), false);
+		assert.equal(isNoisyProviderDebug(["different debug note"]), false);
+		assert.equal(isNoisyProviderDebug(["debug note", { provider: "google-vertex" }]), false);
 	});
 
 	it("moves Anthropic cache_control off a trailing injected-memory note onto the stable message", () => {
@@ -37,14 +37,14 @@ describe("provider payload normalization", () => {
 		const typed = { role: "user", content: [{ type: "text", text: "what did you see?" }] };
 		const plain = { role: "user", content: "what did you see?" };
 
-		const blocks = __agentTest.normalizeProviderPayload(
+		const blocks = normalizeProviderPayload(
 			{ messages: [typed, structuredClone(note)] },
 			anthropicModel,
 		) as { messages: { content: { cache_control?: unknown }[] }[] };
 		assert.deepEqual(blocks.messages[0]?.content[0]?.cache_control, { type: "ephemeral" });
 		assert.equal("cache_control" in (blocks.messages[1]?.content[0] ?? {}), false);
 
-		const text = __agentTest.normalizeProviderPayload(
+		const text = normalizeProviderPayload(
 			{ messages: [plain, structuredClone(note)] },
 			anthropicModel,
 		) as { messages: { content: unknown }[] };
@@ -60,7 +60,7 @@ describe("provider payload normalization", () => {
 		const typed = { role: "user", content: [{ type: "text", text: "typed prompt" }] };
 		const note = { role: "system", content: [{ type: "text", text: "a call was kept" }] };
 
-		const opened = __agentTest.normalizeProviderPayload(
+		const opened = normalizeProviderPayload(
 			{ messages: [typed, assistant, structuredClone(heartbeat), structuredClone(effort)] },
 			anthropicModel,
 		) as { messages: { role: string; content: unknown }[] };
@@ -72,7 +72,7 @@ describe("provider payload normalization", () => {
 
 		// a note behind a user turn is legal; a second one behind it is not, so the run folds into one
 		const recall = { role: "system", content: [{ type: "text", text: "<injected_memory>\nrecall\n</injected_memory>" }] };
-		const run = __agentTest.normalizeProviderPayload(
+		const run = normalizeProviderPayload(
 			{ messages: [assistant, typed, structuredClone(note), structuredClone(recall)] },
 			anthropicModel,
 		) as { messages: { role: string; content: unknown }[] };
@@ -83,7 +83,7 @@ describe("provider payload normalization", () => {
 		assert.deepEqual(run.messages[2]?.content, [...note.content, ...recall.content]);
 
 		// the same run with no user turn in front of it lands on the user role, still as one message
-		const opening = __agentTest.normalizeProviderPayload(
+		const opening = normalizeProviderPayload(
 			{ messages: [typed, assistant, structuredClone(note), structuredClone(recall)] },
 			anthropicModel,
 		) as { messages: { role: string; content: unknown }[] };
@@ -94,7 +94,7 @@ describe("provider payload normalization", () => {
 		assert.deepEqual(opening.messages[2]?.content, [...note.content, ...recall.content]);
 
 		const other = { messages: [structuredClone(heartbeat)] };
-		assert.equal(__agentTest.normalizeProviderPayload(other, { ...anthropicModel, api: "openai-responses" }), other);
+		assert.equal(normalizeProviderPayload(other, { ...anthropicModel, api: "openai-responses" }), other);
 		assert.equal(other.messages[0]?.role, "system");
 	});
 
@@ -106,7 +106,7 @@ describe("provider payload normalization", () => {
 		};
 		const effort = { role: "system", content: [], output_config: { effort: "high" } };
 
-		const payload = __agentTest.normalizeProviderPayload(
+		const payload = normalizeProviderPayload(
 			{ messages: [typed, structuredClone(note), effort] },
 			anthropicModel,
 		) as { messages: { content: { cache_control?: unknown }[] }[] };
@@ -115,7 +115,7 @@ describe("provider payload normalization", () => {
 
 		// recall folded in behind a kept-call note carries the breakpoint back off the whole run
 		const kept = { role: "system", content: [{ type: "text", text: "a call was kept" }] };
-		const folded = __agentTest.normalizeProviderPayload(
+		const folded = normalizeProviderPayload(
 			{ messages: [typed, kept, structuredClone(note), effort] },
 			anthropicModel,
 		) as { messages: { role: string; content: { cache_control?: unknown }[] }[] };
@@ -129,7 +129,7 @@ describe("provider payload normalization", () => {
 		const openRouterModel = { ...anthropicModel, baseUrl: "https://openrouter.ai/api/" };
 		const payload = { messages: [] };
 
-		assert.deepEqual(__agentTest.normalizeProviderPayload(payload, openRouterModel, routing), {
+		assert.deepEqual(normalizeProviderPayload(payload, openRouterModel, routing), {
 			messages: [],
 			provider: { order: ["anthropic"], allow_fallbacks: true },
 		});
@@ -142,16 +142,16 @@ describe("provider payload normalization", () => {
 			"https://openrouter.ai/api/v1",
 		]) {
 			const untouched = { messages: [] };
-			assert.equal(__agentTest.normalizeProviderPayload(untouched, { ...anthropicModel, baseUrl }), untouched);
+			assert.equal(normalizeProviderPayload(untouched, { ...anthropicModel, baseUrl }), untouched);
 			assert.equal("provider" in untouched, false);
 			assert.throws(
-				() => __agentTest.normalizeProviderPayload({ messages: [] }, { ...anthropicModel, baseUrl }, routing),
+				() => normalizeProviderPayload({ messages: [] }, { ...anthropicModel, baseUrl }, routing),
 				/OpenRouter routing requires https:\/\/openrouter\.ai\/api/,
 			);
 		}
 
 		assert.deepEqual(
-			__agentTest.normalizeProviderPayload(
+			normalizeProviderPayload(
 				{ model: "anthropic/claude-sonnet-4", messages: [] },
 				{
 					id: "anthropic/claude-sonnet-4",
@@ -169,7 +169,7 @@ describe("provider payload normalization", () => {
 		);
 		assert.throws(
 			() =>
-				__agentTest.normalizeProviderPayload(
+				normalizeProviderPayload(
 					{ input: [] },
 					{
 						id: "gpt-5",

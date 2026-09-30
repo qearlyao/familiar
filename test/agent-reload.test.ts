@@ -7,7 +7,15 @@ import { describe, it } from "node:test";
 import { createFamiliarAgent } from "../src/agent/factory.js";
 import { loadConfig } from "../src/config/index.js";
 import { loadSettingsStore } from "../src/config/settings.js";
-import { createTempDataDir, createWorkspace, minimalConfigToml, withDiscordToken, withEnv, withoutEnv } from "./helpers.js";
+import {
+	createTempDataDir,
+	createWorkspace,
+	minimalConfigToml,
+	stubMemoryService,
+	withDiscordToken,
+	withEnv,
+	withoutEnv,
+} from "./helpers.js";
 
 describe("FamiliarAgent reload", () => {
 	it("keeps the previous live config when reload validation fails", async (t) => {
@@ -28,7 +36,7 @@ allow = ["anthropic/claude-sonnet-4-5", "openai/gpt-5.2"]
 					const config = await loadConfig(workspacePath);
 					const settings = await loadSettingsStore(config);
 					let nextConfig = config;
-					const agent = await createFamiliarAgent(config, settings, undefined, {
+					const agent = await createFamiliarAgent(config, settings, stubMemoryService(), {
 						reloadConfig: async () => nextConfig,
 					});
 
@@ -78,7 +86,7 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\")}"
 				);
 				const config = await loadConfig(workspacePath);
 				const settings = await loadSettingsStore(config);
-				const agent = await createFamiliarAgent(config, settings, undefined, {
+				const agent = await createFamiliarAgent(config, settings, stubMemoryService(), {
 					reloadConfig: async () => loadConfig(workspacePath),
 				});
 

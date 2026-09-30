@@ -16,46 +16,50 @@ import { createWebTools } from "../web-tools/index.js";
 import { BASH_DESCRIPTION, EDIT_DESCRIPTION, READ_DESCRIPTION, WRITE_DESCRIPTION } from "./tool-descriptions.js";
 import type { FamiliarAgentSession } from "./types.js";
 
+/** everything a session's tools are built from; one per session, rebuilt whenever its tool list is */
+export interface ToolContext {
+	config: Config;
+	mediaSink: GeneratedMediaSink;
+	referenceAttachments: () => readonly StoredAttachment[];
+	memory: MemoryService;
+	mcp: McpHub;
+	agent: () => Agent;
+	paused: ReadonlySet<string>;
+}
+
+function withDescription(tool: AgentTool<any>, description: string): AgentTool<any> {
+	tool.description = description;
+	return tool;
+}
+
 /** a paused tool is off until the next restart, whatever its lasting reach says */
 export function toolReach(config: Config, paused: ReadonlySet<string>, name: string): ToolReach {
 	return paused.has(name) ? "off" : (config.tools.reach[name] ?? "pinned");
 }
 
-export function createFamiliarTools(
-	config: Config,
-	mediaSink: GeneratedMediaSink,
-	referenceAttachments: () => readonly StoredAttachment[] = () => [],
-	memoryService: MemoryService | undefined,
-	mcp: McpHub,
-	agent: () => Agent,
-	paused: ReadonlySet<string> = new Set(),
-): AgentTool<any>[] {
-	const bashTool = createBashTool(config.workspacePath);
-	bashTool.description = BASH_DESCRIPTION;
-	const readTool = createReadTool(config.workspacePath);
-	readTool.description = READ_DESCRIPTION;
-	const writeTool = createWriteTool(config.workspacePath);
-	writeTool.description = WRITE_DESCRIPTION;
-	const editTool = createEditTool(config.workspacePath);
-	editTool.description = EDIT_DESCRIPTION;
+export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
+	const { config, mediaSink, mcp, paused } = ctx;
+	// every built-in but codemode, which wraps the others; names match BUILTIN_TOOLS
 	const builtins: AgentTool<any>[] = [
-		bashTool,
-		readTool,
-		writeTool,
-		editTool,
+		withDescription(createBashTool(config.workspacePath), BASH_DESCRIPTION),
+		withDescription(createReadTool(config.workspacePath), READ_DESCRIPTION),
+		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
+		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),
 		createCronTool(config),
 		createTtsTool(config, mediaSink),
-		...(config.imageGen.enabled ? [createImageGenTool(config, mediaSink, { referenceAttachments })] : []),
+		...(config.imageGen.enabled
+			? [createImageGenTool(config, mediaSink, { referenceAttachments: ctx.referenceAttachments })]
+			: []),
 		createSendFileTool(config, mediaSink),
 		...createWebTools(),
 		...createBrowserTools(config, mediaSink),
-		...(memoryService?.memoryTools() ?? []),
+		...ctx.memory.memoryTools(),
 	];
 	const reachable = builtins.filter((tool) => toolReach(config, paused, tool.name) !== "off");
 	builtins.push(createCodemodeTool([...reachable, ...mcp.tools, ...mcp.deferred]));
 	const pinned = builtins.filter((tool) => toolReach(config, paused, tool.name) === "pinned");
 	const loadable = builtins.filter((tool) => toolReach(config, paused, tool.name) === "loadable");
-	return [...pinned, ...mcp.tools, ...deferredToolsFor([...loadable, ...mcp.deferred], agent)];
+	return [...pinned, ...mcp.tools, ...deferredToolsFor([...loadable, ...mcp.deferred], ctx.agent)];
 }
 
 /** every tool that waits for load_tools: loadable built-ins and deferred mcp servers */

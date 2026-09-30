@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import type { ChatChannelRef, ChatService } from "../src/conversation/chat-log.js";
 import { createAgentCore, WEB_OWNER_ID, type PlatformSource } from "../src/runtime/agent-core.js";
 import type { FamiliarAgent } from "../src/agent/factory.js";
-import { configWithDataDir, createTempDataDir } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, stubMemoryService } from "./helpers.js";
 
 const fakeAgent = {} as FamiliarAgent;
 
@@ -30,7 +30,7 @@ const mainChat = {
 describe("agent core platform sources", () => {
 	it("uses the Web fallback when nothing is attached", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		const core = createAgentCore({ config, familiarAgent: fakeAgent, memoryService: stubMemoryService() });
 		t.after(() => core.stop());
 		assert.deepEqual(await core.getWebSessions(), [mainChat]);
 		const runtime = await core.getRuntimeForWebChannel();
@@ -39,7 +39,7 @@ describe("agent core platform sources", () => {
 
 	it("keeps Main Chat first and lists platform channels after it", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		const core = createAgentCore({ config, familiarAgent: fakeAgent, memoryService: stubMemoryService() });
 		t.after(() => core.stop());
 		await core.attachPlatform(source("qq", "qq-owner", "q", "qq-bot"));
 		await core.attachPlatform(source("discord", "dc-owner", "d", "dc-bot"));
@@ -63,7 +63,7 @@ describe("agent core platform sources", () => {
 
 	it("replaces a source for the same service and rejects unattached services", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
-		const core = createAgentCore({ config, familiarAgent: fakeAgent });
+		const core = createAgentCore({ config, familiarAgent: fakeAgent, memoryService: stubMemoryService() });
 		t.after(() => core.stop());
 		await core.attachPlatform(source("discord", "old", "old"));
 		await core.attachPlatform(source("discord", "new", "new"));

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ImagesContext, ImagesModel } from "@earendil-works/pi-ai/compat";
+import type { ImagesContext, ImageModel } from "@earendil-works/pi-ai/compat";
 
 import { generateImages as generateGoogleImages } from "../src/media/image-apis/google-images.js";
 import { generateImages as generateOpenAIImages } from "../src/media/image-apis/openai-images.js";
@@ -13,8 +13,9 @@ interface CapturedRequest {
 	init: RequestInit;
 }
 
-function imageModel(api: string, baseUrl: string, overrides: Partial<ImagesModel<string>> = {}): ImagesModel<string> {
+function imageModel(api: string, baseUrl: string, overrides: Partial<ImageModel<string>> = {}): ImageModel<string> {
 	return {
+		type: "image",
 		id: "test-image-model",
 		name: "test-image-model",
 		api,
@@ -24,7 +25,7 @@ function imageModel(api: string, baseUrl: string, overrides: Partial<ImagesModel
 		output: ["image", "text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 		...overrides,
-	} as ImagesModel<string>;
+	} as ImageModel<string>;
 }
 
 /** Capture the outbound request and answer it with a canned response. */

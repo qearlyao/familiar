@@ -22,7 +22,7 @@ describe("model runtime auth storage", () => {
 		await runtime.setRuntimeApiKey("anthropic", "test-key");
 		const catalogModel = {
 			...runtime.getModel("openrouter", "anthropic/claude-opus-5")!,
-			id: "anthropic/claude-opus-5.5",
+			id: "anthropic/claude-opus-6",
 			thinkingLevelMap: {
 				off: null,
 				minimal: null,
@@ -37,22 +37,22 @@ describe("model runtime auth storage", () => {
 			const provider = new URL(String(input)).pathname.split("/").at(-1);
 			assert.ok(provider === "openrouter" || provider === "anthropic");
 			return Response.json(
-				[{ ...catalogModel, provider, id: provider === "anthropic" ? "claude-opus-5-5" : catalogModel.id }],
-				{ headers: { "last-modified": "Wed, 23 Sep 2026 00:00:00 GMT" } },
+				[{ ...catalogModel, provider, id: provider === "anthropic" ? "claude-opus-6" : catalogModel.id }],
+				{ headers: { "last-modified": new Date().toUTCString() } },
 			);
 		});
 		const result = await runtime.refresh({ providers: ["openrouter", "anthropic"], allowNetwork: true, force: true });
 		assert.equal(result.errors.size, 0);
 		const restored = await createModelRuntime(config);
-		const ref = parseModelRef("openrouter/anthropic/claude-opus-5.5")!;
+		const ref = parseModelRef("openrouter/anthropic/claude-opus-6")!;
 		for (const catalog of [runtime, restored]) {
-			assert.ok(catalog.getModel("anthropic", "claude-opus-5-5"));
+			assert.ok(catalog.getModel("anthropic", "claude-opus-6"));
 			const model = resolveModel(ref, config, catalog);
 			assert.deepEqual(supportedThinkingLevels(model), ["low", "medium", "high", "xhigh", "max"]);
 			assert.equal(model.maxTokens, 128000);
 			assert.deepEqual(model.compat, catalogModel.compat);
 		}
-		assert.match(await readFile(resolve(config.workspace.dataDir, "models-store.json"), "utf8"), /claude-opus-5.5/);
+		assert.match(await readFile(resolve(config.workspace.dataDir, "models-store.json"), "utf8"), /claude-opus-6/);
 	});
 
 	it("surfaces refresh failures and timeouts", async () => {

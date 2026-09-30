@@ -38,7 +38,7 @@ interface GeminiResponse {
  * Gemini image models (Nano Banana and successors); reference images ride
  * inline in the same `contents` array as the prompt.
  */
-export const generateImages: ImagesFunction<string, ImagesOptions> = (model, context, options) =>
+export const generateImages: ImagesFunction<ImagesOptions> = (model, context, options) =>
 	runImageRequest(model, options, async (fetchImpl, signal) => {
 		const apiKey = apiKeyOrThrow(model, options);
 		const base = withDefaultPath(model.baseUrl, "/v1beta");

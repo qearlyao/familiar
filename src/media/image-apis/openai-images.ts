@@ -1,4 +1,4 @@
-import type { AssistantImages, ImagesFunction, ImagesModel, ImagesOptions } from "@earendil-works/pi-ai/compat";
+import type { AssistantImages, ImageModel, ImagesFunction, ImagesOptions } from "@earendil-works/pi-ai/compat";
 
 import {
 	apiKeyOrThrow,
@@ -27,7 +27,7 @@ interface OpenAIImagesResponse {
  * several go in repeated `image[]` fields, which is how gpt-image-2 accepts
  * multi-image edits.
  */
-function referenceForm(model: ImagesModel<string>, request: ImageRequestContext): FormData {
+function referenceForm(model: ImageModel<string>, request: ImageRequestContext): FormData {
 	const form = new FormData();
 	form.append("model", model.id);
 	form.append("prompt", request.prompt);
@@ -78,7 +78,7 @@ async function parseResponse(
  * `image: { url, type }` rather than multipart — so reference images are not
  * supported against api.x.ai through this api style.
  */
-export const generateImages: ImagesFunction<string, ImagesOptions> = (model, context, options) =>
+export const generateImages: ImagesFunction<ImagesOptions> = (model, context, options) =>
 	runImageRequest(model, options, async (fetchImpl, signal) => {
 		const apiKey = apiKeyOrThrow(model, options);
 		const base = withDefaultPath(model.baseUrl, "/v1");

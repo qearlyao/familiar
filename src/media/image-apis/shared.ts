@@ -1,4 +1,4 @@
-import type { AssistantImages, ImagesContext, ImagesModel, ImagesOptions } from "@earendil-works/pi-ai/compat";
+import type { AssistantImages, ImageModel, ImagesContext, ImagesOptions } from "@earendil-works/pi-ai/compat";
 
 import { sniffImageMimeType } from "../../util/image-mime.js";
 
@@ -45,7 +45,7 @@ export function imageRequestContext(context: ImagesContext): ImageRequestContext
 	return { prompt: texts.join("\n"), references };
 }
 
-export function apiKeyOrThrow(model: ImagesModel<string>, options: ImagesOptions | undefined): string {
+export function apiKeyOrThrow(model: ImageModel<string>, options: ImagesOptions | undefined): string {
 	const apiKey = options?.apiKey;
 	if (!apiKey) throw new Error(`No API key for provider: ${model.provider}`);
 	return apiKey;
@@ -131,7 +131,7 @@ export async function imageFromUrl(
  * shape, matching how pi-ai's own image adapters report failure.
  */
 export async function runImageRequest(
-	model: ImagesModel<string>,
+	model: ImageModel<string>,
 	options: ImagesOptions | undefined,
 	run: (fetchImpl: typeof fetch, signal: AbortSignal | undefined) => Promise<AssistantImages["output"]>,
 ): Promise<AssistantImages> {
@@ -164,7 +164,7 @@ export async function runImageRequest(
  * from one source and a `content-type` from another cannot both survive.
  */
 export function headersFor(
-	model: ImagesModel<string>,
+	model: ImageModel<string>,
 	options: ImagesOptions | undefined,
 	own: Record<string, string>,
 ): Record<string, string> {

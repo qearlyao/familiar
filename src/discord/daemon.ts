@@ -7,15 +7,11 @@ import {
 	type Interaction,
 	type Message,
 } from "discord.js";
-import type { FamiliarAgent } from "../agent/factory.js";
-import type { Config } from "../config/index.js";
-import type { SettingsStore } from "../config/settings.js";
 import { chatChannelKey } from "../conversation/chat-log.js";
 import { saveOwnerIdentity } from "../conversation/owner-identity.js";
-import type { RestartHandler } from "../lifecycle/control.js";
-import type { MemoryService } from "../memory/service.js";
-import { type AgentCore, type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
+import { type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
+import type { Channel, ChannelContext } from "../runtime/channel.js";
 import { applyControlCommand, getChannelTriggerSetting } from "../runtime/control-actions.js";
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
@@ -42,10 +38,6 @@ import {
 import { canSteerFromRecord, getDispatchMode, toInboundInput } from "./inbound.js";
 import { sendChannelMessage, sendDiscordAttachments, sendReply } from "./send.js";
 
-export interface DiscordDaemon {
-	stop(): Promise<void>;
-}
-
 const RETRY_MS = 15_000;
 
 function startTypingIndicator(message: Message): () => void {
@@ -60,16 +52,9 @@ function startTypingIndicator(message: Message): () => void {
 	};
 }
 
-export function startDiscordDaemon(
-	config: Config,
-	token: string,
-	familiarAgent: FamiliarAgent,
-	settings: SettingsStore,
-	_memoryService: MemoryService | undefined,
-	core: AgentCore,
-	options: { restart?: RestartHandler } = {},
-): DiscordDaemon {
-	const ownerId = config.discord.ownerId;
+export function startDiscordDaemon({ config, familiarAgent, settings, core, restart }: ChannelContext): Channel {
+	const { token, ownerId } = config.discord;
+	if (!token) throw new Error("Discord daemon requires DISCORD_TOKEN");
 	if (!ownerId) throw new Error("Discord owner identity is required");
 	let client: Client<true> | undefined;
 	let session: ConnectedSession | undefined;
@@ -254,7 +239,7 @@ export function startDiscordDaemon(
 						channelTrigger,
 						isDm,
 						activeAgentOwner: core.activeOwner,
-						restart: options.restart,
+						restart,
 					});
 					const messageIds = await sendReply(config, token, message, text);
 					await runtime.noteOutbound({ text, messageIds, control: control.command });
@@ -330,7 +315,7 @@ export function startDiscordDaemon(
 					channelTrigger,
 					isDm,
 					activeAgentOwner: core.activeOwner,
-					restart: options.restart,
+					restart,
 				});
 				const messageIds = await replyEphemeral(interaction, text);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });

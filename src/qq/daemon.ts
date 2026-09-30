@@ -1,12 +1,9 @@
-import type { FamiliarAgent } from "../agent/factory.js";
-import type { Config } from "../config/index.js";
-import type { SettingsStore } from "../config/settings.js";
 import { type ChatChannelRef, chatChannelKey } from "../conversation/chat-log.js";
-import type { RestartHandler } from "../lifecycle/control.js";
 import type { IncomingAttachment } from "../media/inbound-attachments.js";
 import { materializeInboundAttachments } from "../media/inbound-attachments.js";
-import { type AgentCore, type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
+import { type ChatSession, ownerDmRef, WEB_OWNER_ID } from "../runtime/agent-core.js";
 import { thinkingDurationMs } from "../runtime/agent-events.js";
+import type { Channel, ChannelContext } from "../runtime/channel.js";
 import { applyControlCommand, getChannelTriggerSetting } from "../runtime/control-actions.js";
 import type { ConversationRuntime, InboundMessageInput } from "../runtime/conversation-runtime.js";
 import type { SchedulerDeliverySink } from "../runtime/scheduler-runner.js";
@@ -23,17 +20,7 @@ function quoteBlock(text: string): string {
 		.join("\n");
 }
 
-export interface QqDaemon {
-	stop(): Promise<void>;
-}
-
-export function startQqDaemon(
-	config: Config,
-	familiarAgent: FamiliarAgent,
-	settings: SettingsStore,
-	core: AgentCore,
-	options: { restart?: RestartHandler; WebSocketImpl?: typeof WebSocket } = {},
-): QqDaemon {
+export function startQqDaemon({ config, familiarAgent, settings, core, restart }: ChannelContext): Channel {
 	const { wsUrl, ownerId } = config.qq;
 	if (!wsUrl || !ownerId) throw new Error("QQ daemon requires qq.ws_url and qq.owner_id");
 	// Where owner DMs are *sent* on QQ; where they are *logged* is the shared ownerDmRef.
@@ -202,7 +189,7 @@ export function startQqDaemon(
 					channelTrigger,
 					isDm,
 					activeAgentOwner: core.activeOwner,
-					restart: options.restart,
+					restart,
 				});
 				const messageIds = await sendQqMessage(client, ref, text).catch(() => [] as string[]);
 				await runtime.noteOutbound({ text, messageIds, control: control.command });
@@ -244,7 +231,6 @@ export function startQqDaemon(
 		accessToken: config.qq.token,
 		onOpen: () => void onConnected(),
 		onEvent: (event) => void onEvent(event),
-		WebSocketImpl: options.WebSocketImpl,
 	});
 
 	return {

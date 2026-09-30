@@ -11,10 +11,10 @@ import { parseEnv } from "node:util";
 import type { AuthEvent, AuthPrompt, AuthType } from "@earendil-works/pi-ai";
 
 import { createFamiliarAgent } from "./agent/factory.js";
+import { CHANNELS } from "./channels.js";
 import { loadConfig } from "./config/index.js";
 import { loadSettingsStore } from "./config/settings.js";
 import { loadOwnerIdentity } from "./conversation/owner-identity.js";
-import { startDiscordDaemon } from "./discord/daemon.js";
 import { runDataRetention } from "./lifecycle/data-retention.js";
 import { startWorkspaceHotReload } from "./lifecycle/hot-reload.js";
 import {
@@ -31,9 +31,8 @@ import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
 import { createModelRuntime, refreshModelCatalogs } from "./models/runtime.js";
-import { startQqDaemon } from "./qq/daemon.js";
 import { createAgentCore } from "./runtime/agent-core.js";
-import { startWebDaemon } from "./web/daemon.js";
+import type { Channel } from "./runtime/channel.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(SOURCE_DIR, "..");
@@ -326,15 +325,13 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
 	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
 	let stopping = false;
-	let discordDaemon: ReturnType<typeof startDiscordDaemon> | undefined;
-	let qqDaemon: ReturnType<typeof startQqDaemon> | undefined;
-	let webDaemon: Awaited<ReturnType<typeof startWebDaemon>> | undefined;
+	const channels: Channel[] = [];
 	const stop = async (exitCode = 0) => {
 		if (stopping) return;
 		stopping = true;
 		console.log("Stopping familiar");
 		hotReload.close();
-		await Promise.all([webDaemon?.stop(), discordDaemon?.stop(), qqDaemon?.stop()]);
+		await Promise.all(channels.map((channel) => channel.stop()));
 		await agentCore.stop();
 		await familiarAgent.close();
 		memoryService.close();
@@ -346,17 +343,13 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 		return "Restart requested. If Familiar is managed by launchd/systemd, it should come back automatically; otherwise run familiar run again.";
 	};
 	const identity = await loadOwnerIdentity(config.workspace.dataDir);
-	const token = config.discord.token;
 	if (identity && config.discord.ownerId) await agentCore.useCachedIdentity(identity);
 	await agentCore.start();
-	webDaemon = await startWebDaemon(config, familiarAgent, agentCore, { restart: requestRestart, modelRuntime });
-	if (config.discord.enabled && token) {
-		discordDaemon = startDiscordDaemon(config, token, familiarAgent, settings, memoryService, agentCore, {
-			restart: requestRestart,
-		});
-	}
-	if (config.qq.enabled && config.qq.wsUrl) {
-		qqDaemon = startQqDaemon(config, familiarAgent, settings, agentCore, { restart: requestRestart });
+	const channelContext = { config, familiarAgent, settings, core: agentCore, modelRuntime, restart: requestRestart };
+	for (const definition of CHANNELS) {
+		if (!definition.enabled(config)) continue;
+		channels.push(await definition.start(channelContext));
+		console.log(`channel started: ${definition.name}`);
 	}
 	console.log(`familiar running for workspace ${config.workspacePath}`);
 	console.log("agent sessions are created per channel");

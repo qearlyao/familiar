@@ -39,7 +39,7 @@ export function createCodemodeTool(tools: readonly AgentTool<any>[]): AgentTool<
 		name: "codemode",
 		label: "Codemode",
 		description:
-			"run javascript that calls your tools as `await tools.<name>(args)` — same names and arguments as calling them yourself, and that includes tools still waiting behind load_tools. every tool returns its text output as a string. only what you print with text() or console.log, or return, comes back to you; the results in between stay out of your context. good for chaining calls, running independent ones together with Promise.all, or trimming a big result down to the part you need. `ALL_TOOLS` lists every name with its description; `await describeTool(name)` shows a tool's arguments. top-level await and return work. there's no fetch, timers, or modules in here — tools are the only way out.",
+			"run javascript that calls your tools as `await tools.<name>(args)`, including ones you haven't loaded. only what you text(), console.log, or return comes back, so the results in between never touch your context — use it to chain calls, fan out with Promise.all, or pare a big result down. each tool returns its text output as a string; `ALL_TOOLS` lists them all and `await describeTool(name)` shows a tool's arguments.",
 		parameters: codemodeSchema,
 		async execute(_toolCallId, { code }, signal) {
 			const sandbox = new CodemodeSandbox({ tools: nested, globals: [describeTool] });

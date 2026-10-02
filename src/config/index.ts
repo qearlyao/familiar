@@ -18,6 +18,7 @@ import {
 	DISCORD_DISPATCH_MODES,
 	DISCORD_REPLY_MODES,
 	IMAGE_GEN_APIS,
+	MCP_EXPOSURES,
 	MEDIA_UNDERSTANDING_PROVIDERS,
 	MEMORY_EMBEDDING_FORMATS,
 	THINKING_LEVELS,
@@ -77,6 +78,7 @@ export type {
 	DiscordDispatchMode,
 	DiscordReplyMode,
 	ImageGenApi,
+	McpExposure,
 	MediaUnderstandingProvider,
 	MemoryEmbeddingFormat,
 	OpenRouterRoutingConfig,
@@ -296,7 +298,7 @@ export function readMcpServers(value: Record<string, unknown>): Config["mcp"]["s
 		Object.entries(value).map(([name, raw]) => {
 			const path = `mcp.servers.${name}`;
 			const spec = readConfigTable(raw, path);
-			assertKnownKeys(spec, path, ["command", "args", "env", "url", "headers", "deferred"]);
+			assertKnownKeys(spec, path, ["command", "args", "env", "url", "headers", "exposure"]);
 			const command = readOptionalConfigString(spec.command, `${path}.command`);
 			const url = readOptionalConfigString(spec.url, `${path}.url`);
 			if (!command === !url) throw new Error(`Config value ${path} needs exactly one of command or url`);
@@ -308,7 +310,8 @@ export function readMcpServers(value: Record<string, unknown>): Config["mcp"]["s
 					env: readStringRecord(spec.env, `${path}.env`),
 					url,
 					headers: readStringRecord(spec.headers, `${path}.headers`),
-					deferred: readBoolean(spec.deferred, true, `${path}.deferred`),
+					exposure:
+						spec.exposure === undefined ? "codemode" : readEnum(spec.exposure, `${path}.exposure`, MCP_EXPOSURES),
 					enabled: true,
 				},
 			];

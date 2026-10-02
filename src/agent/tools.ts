@@ -1,6 +1,6 @@
 import type { Agent, AgentTool } from "@earendil-works/pi-agent-core";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
-import { BUILTIN_TOOLS } from "../config/enums.js";
+import { BUILTIN_TOOLS, MCP_EXPOSURES } from "../config/enums.js";
 import type { Config, ToolReach } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedMediaSink } from "../media/generated-media.js";
@@ -11,7 +11,8 @@ import type { MemoryService } from "../memory/service.js";
 import { createBrowserTools } from "../tools/browser-tools.js";
 import { createCodemodeTool } from "../tools/codemode.js";
 import { createCronTool } from "../tools/cron.js";
-import { createLoadToolsTool, loadedToolNames, type McpHub } from "../tools/mcp.js";
+import { loadedToolNames, type McpHub } from "../tools/mcp.js";
+import { createToolSearchTool } from "../tools/tool-search.js";
 import { createWebTools } from "../web-tools/index.js";
 import { BASH_DESCRIPTION, EDIT_DESCRIPTION, READ_DESCRIPTION, WRITE_DESCRIPTION } from "./tool-descriptions.js";
 import type { FamiliarAgentSession } from "./types.js";
@@ -55,33 +56,58 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 		...createBrowserTools(config, mediaSink),
 		...ctx.memory.memoryTools(),
 	];
-	const reachable = builtins.filter((tool) => toolReach(config, paused, tool.name) !== "off");
-	builtins.push(createCodemodeTool([...reachable, ...mcp.tools, ...mcp.deferred]));
-	const pinned = builtins.filter((tool) => toolReach(config, paused, tool.name) === "pinned");
-	const loadable = builtins.filter((tool) => toolReach(config, paused, tool.name) === "loadable");
-	return [...pinned, ...mcp.tools, ...deferredToolsFor([...loadable, ...mcp.deferred], ctx.agent)];
+	const reach = (name: string) => toolReach(config, paused, name);
+	const direct = [...builtins.filter((tool) => reach(tool.name) === "pinned"), ...mcp.tools("direct")];
+	const loadable = builtins.filter((tool) => reach(tool.name) === "loadable");
+	const codemode = createCodemodeTool([...builtins.filter((tool) => reach(tool.name) !== "off"), ...mcpTools(mcp)], {
+		direct: new Set(direct.map((tool) => tool.name)),
+		// pi's deferred exposures: callable from scripts, never listed with a declaration
+		deferred: new Set(
+			[...loadable, ...mcp.tools("codemode-deferred"), ...mcp.tools("deferred")].map((tool) => tool.name),
+		),
+		namespaceOf: (name) => mcp.namespaceOf(name),
+	});
+	const codemodeReach = reach(codemode.name);
+	if (codemodeReach === "pinned") direct.push(codemode);
+	if (codemodeReach === "loadable") loadable.push(codemode);
+	const searchable = [...loadable, ...mcpTools(mcp, true)];
+	// tool_search earns its place when something waits on it that a pinned codemode can't reach for
+	const needsSearch =
+		loadable.length > 0 || mcp.tools("deferred").length > 0 || (codemodeReach !== "pinned" && searchable.length > 0);
+	return needsSearch ? [...direct, ...searchableFor(searchable, mcp, ctx.agent)] : direct;
 }
 
-/** every tool that waits for load_tools: loadable built-ins and deferred mcp servers */
+/** with skipDirect, what tool_search reaches: like pi, every mcp tool that isn't declared up front */
+function mcpTools(mcp: McpHub, skipDirect = false): AgentTool<any>[] {
+	return MCP_EXPOSURES.filter((exposure) => !skipDirect || exposure !== "direct").flatMap((exposure) =>
+		mcp.tools(exposure),
+	);
+}
+
+/** every tool that waits for tool_search, so LCM can let a loaded one go again */
 export function deferredToolNames(config: Config, mcp: McpHub, paused: ReadonlySet<string>): Set<string> {
 	return new Set([
 		...BUILTIN_TOOLS.filter((name) => toolReach(config, paused, name) === "loadable"),
-		...mcp.deferred.map((tool) => tool.name),
+		...mcpTools(mcp, true).map((tool) => tool.name),
 	]);
 }
 
-// deferred tools stay out of state.tools until load_tools names them; the transcript's system
+// searchable tools stay out of state.tools until tool_search finds them; the transcript's system
 // messages record what's been loaded, so restarts and reloads rebuild it.
-function deferredToolsFor(deferred: AgentTool<any>[], agent: () => Agent): AgentTool<any>[] {
-	if (deferred.length === 0) return [];
+function searchableFor(searchable: AgentTool<any>[], mcp: McpHub, agent: () => Agent): AgentTool<any>[] {
 	const loaded = loadedToolNames(agent().state.messages);
 	return [
-		createLoadToolsTool(deferred, (tools) => {
-			const current = agent().state.tools;
-			const present = new Set(current.map((tool) => tool.name));
-			agent().state.tools = [...current, ...tools.filter((tool) => !present.has(tool.name))];
-		}),
-		...deferred.filter((tool) => loaded.has(tool.name)),
+		createToolSearchTool(
+			searchable,
+			(name) => mcp.namespaceOf(name),
+			() => new Set(agent().state.tools.map((tool) => tool.name)),
+			(tools) => {
+				const current = agent().state.tools;
+				const present = new Set(current.map((tool) => tool.name));
+				agent().state.tools = [...current, ...tools.filter((tool) => !present.has(tool.name))];
+			},
+		),
+		...searchable.filter((tool) => loaded.has(tool.name)),
 	];
 }
 

@@ -760,13 +760,15 @@ export interface McpTool {
   loaded: boolean;
 }
 
+export type McpExposure = import("../../../src/config/types.js").McpExposure;
+
 export interface McpServer {
   name: string;
   source: "config" | "web";
   transport: "stdio" | "http";
   where: string;
   headers: number;
-  deferred: boolean;
+  exposure: McpExposure;
   /** off keeps it listed here but closed and toolless */
   enabled: boolean;
   status: "connected" | "failed";
@@ -796,7 +798,7 @@ async function mcpRequest(path: string, method: "POST" | "DELETE", body: unknown
 
 export const addMcpServer = (server: NewMcpServer, channelKey?: string) => mcpRequest("", "POST", server, channelKey);
 export const removeMcpServer = (name: string, channelKey?: string) => mcpRequest("", "DELETE", { name }, channelKey);
-export const setMcpDeferred = (name: string, deferred: boolean, channelKey?: string) => mcpRequest("/deferred", "POST", { name, deferred }, channelKey);
+export const setMcpExposure = (name: string, exposure: McpExposure, channelKey?: string) => mcpRequest("/exposure", "POST", { name, exposure }, channelKey);
 export const setMcpEnabled = (name: string, enabled: boolean, channelKey?: string) => mcpRequest("/enabled", "POST", { name, enabled }, channelKey);
 export const reconnectMcpServer = (name: string, channelKey?: string) => mcpRequest("/reconnect", "POST", { name }, channelKey);
 

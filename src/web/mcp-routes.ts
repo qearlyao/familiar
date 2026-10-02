@@ -1,4 +1,5 @@
 import type { FamiliarAgent } from "../agent/factory.js";
+import { MCP_EXPOSURES } from "../config/enums.js";
 import { type Config, readMcpServers } from "../config/index.js";
 import { loadWebMcpServers, mcpServerSpecs, saveWebMcpServers } from "../tools/mcp-servers.js";
 import { isRecord } from "../util/guards.js";
@@ -35,14 +36,14 @@ export function registerWebMcpRoutes(
 					transport: spec.url ? "http" : "stdio",
 					where: spec.url ?? [spec.command, ...(spec.args ?? [])].join(" "),
 					headers: Object.keys(spec.headers ?? {}).length,
-					deferred: server.spec.deferred,
+					exposure: server.spec.exposure,
 					enabled: server.spec.enabled,
 					status: server.status,
 					error: server.error,
 					tools: server.tools.map((tool) => ({
-						name: tool.name.slice(server.name.length + 2),
+						name: tool.name.replace(`mcp__${server.name}__`, ""),
 						description: tool.description,
-						loaded: server.spec.deferred && held.has(tool.name),
+						loaded: server.spec.exposure !== "direct" && held.has(tool.name),
 					})),
 				};
 			});
@@ -88,13 +89,17 @@ export function registerWebMcpRoutes(
 		sendJson(response, 200, await payload(url));
 	});
 
-	// deferred and enabled are the two flips a config.toml server can keep here
-	for (const flag of ["deferred", "enabled"] as const) {
+	// exposure and enabled are the two flips a config.toml server can keep here
+	const flips = {
+		exposure: (value: unknown) => typeof value === "string" && (MCP_EXPOSURES as readonly string[]).includes(value),
+		enabled: (value: unknown) => typeof value === "boolean",
+	};
+	for (const [flag, valid] of Object.entries(flips)) {
 		route("POST", `/api/web/mcp/${flag}`, async (request, response, url) => {
 			const body = await readJsonBody(request);
 			const name = serverName(body);
 			const value = (body as Record<string, unknown>)[flag];
-			if (typeof value !== "boolean") throw new HttpError(400, `${flag} must be a boolean`);
+			if (!valid(value)) throw new HttpError(400, `${flag} can't be ${JSON.stringify(value)}`);
 			const web = loadWebMcpServers();
 			if (!web[name] && !config.mcp.servers[name]) throw new HttpError(404, `no mcp server named ${name}`);
 			await save({ ...web, [name]: { ...web[name], [flag]: value } });

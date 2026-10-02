@@ -68,7 +68,7 @@ export async function createFamiliarAgent(
 			referenceAttachments: () => session.referenceAttachments,
 			agent: () => session.agent,
 		});
-	// a server connecting, dropping or flipping deferred changes every live session's tool list
+	// a server connecting, dropping or flipping exposure changes every live session's tool list
 	const rebuildSessionTools = async (): Promise<void> => {
 		for (const sessionPromise of sessions.values()) {
 			const session = await sessionPromise;

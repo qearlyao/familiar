@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Dialog } from "radix-ui";
-import { addMcpServer, reconnectMcpServer, removeMcpServer, setMcpDeferred, setMcpEnabled, type McpServer } from "@/lib/api";
+import { addMcpServer, reconnectMcpServer, removeMcpServer, setMcpEnabled, setMcpExposure, type McpServer } from "@/lib/api";
 import type { useMcp } from "@/lib/useMcp";
 import { cn } from "@/lib/utils";
 import { IconChevronDown, IconPlus } from "../organicIcons";
@@ -9,10 +9,19 @@ import { Card, EnumToggle, Field, OnOffToggle } from "./inputs";
 
 type Mcp = ReturnType<typeof useMcp>;
 
-const REACH_OPTIONS = [
-  { value: "hand", label: "at hand" },
-  { value: "fetched", label: "fetched" },
+const EXPOSURE_OPTIONS = [
+  { value: "direct", label: "at hand", hint: "every tool rides in every message, ready to call straight away" },
+  { value: "codemode", label: "listed", hint: "named in their codemode notes, as many as fit; they call them from a script" },
+  { value: "codemode-deferred", label: "unlisted", hint: "only counted in their codemode notes; their scripts search for them when needed" },
+  { value: "deferred", label: "fetched", hint: "out of sight until tool_search finds them, then called straight away" },
 ] as const;
+
+const EXPOSURE_STATUS = {
+  direct: "connected · loaded now",
+  codemode: "connected · listed for their scripts",
+  "codemode-deferred": "connected · their scripts search for them",
+  deferred: "connected · fetched on demand",
+} as const;
 
 const KIND_OPTIONS = [
   { value: "command", label: "a command" },
@@ -45,7 +54,7 @@ function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
             {!off && ` · ${down ? "no tools reachable" : `${server.tools.length} tools`}`}
           </small>
           <small className={down ? "settings-error" : "mcp-status"}>
-            {off ? "resting — nothing of its is in his reach" : down ? server.error : server.deferred ? "connected · fetched on demand" : "connected · loaded now"}
+            {off ? "resting — nothing of its is in their reach" : down ? server.error : EXPOSURE_STATUS[server.exposure]}
           </small>
         </div>
         <div className="settings-row-control">
@@ -56,11 +65,11 @@ function ServerRow({ server, mcp }: { server: McpServer; mcp: Mcp }) {
               </button>
             ) : (
               <EnumToggle
-                value={server.deferred ? "fetched" : "hand"}
-                options={REACH_OPTIONS}
+                value={server.exposure}
+                options={EXPOSURE_OPTIONS}
                 ariaPrefix={`how ${server.name} reaches them`}
                 disabled={mcp.busy}
-                onChange={(next) => act((key) => setMcpDeferred(server.name, next === "fetched", key))}
+                onChange={(next) => act((key) => setMcpExposure(server.name, next, key))}
               />
             ))}
         </div>
@@ -215,12 +224,12 @@ function AddServer({ mcp }: { mcp: Mcp }) {
 
 export function McpSection({ mcp }: { mcp: Mcp }) {
   const connected = mcp.servers?.filter((server) => server.status === "connected") ?? [];
-  const handy = connected.filter((server) => !server.deferred).length;
+  const handy = connected.filter((server) => server.exposure === "direct").length;
   const resting = mcp.servers?.filter((server) => !server.enabled).length ?? 0;
   return (
     <Card
       title="mcp servers"
-      hint={mcp.servers ? `${handy} at hand · ${connected.length - handy} fetched on demand${resting ? ` · ${resting} resting` : ""}` : "counting them…"}
+      hint={mcp.servers ? `${handy} at hand · ${connected.length - handy} in reach of their scripts${resting ? ` · ${resting} resting` : ""}` : "counting them…"}
       action={<AddServer mcp={mcp} />}
     >
       <div className="settings-rows">

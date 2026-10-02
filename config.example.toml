@@ -81,9 +81,12 @@ enabled = false
 idle_threshold_minutes = 60
 interval_minutes = 240
 
-# MCP servers. Each becomes a set of tools named "<server>__<tool>".
-# deferred = true (default) keeps them out of every request until the agent
-# calls load_tools; set false for small servers you want always in reach.
+# MCP servers. Each becomes a set of tools named "mcp__<server>__<tool>".
+# exposure picks how the agent reaches them (codemode scripts reach all of them):
+#   "codemode" (default)  listed in codemode's description, within its 3000-token budget
+#   "codemode-deferred"   left out of the listing; scripts find them with searchTools()
+#   "deferred"            declared only once tool_search loads them
+#   "direct"              declared in every request; for small, always-used servers
 # [mcp.servers.filesystem]
 # command = "npx"
 # args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/familiar/notes"]
@@ -91,7 +94,7 @@ interval_minutes = 240
 # [mcp.servers.linear]
 # url = "https://mcp.linear.app/mcp"
 # headers = { Authorization = "Bearer ${LINEAR_TOKEN}" }
-# deferred = false
+# exposure = "direct"
 
 [cron]
 poll_seconds = 60

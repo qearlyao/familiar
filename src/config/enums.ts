@@ -10,6 +10,7 @@ import type {
 	DiscordDispatchMode,
 	DiscordReplyMode,
 	ImageGenApi,
+	McpExposure,
 	MediaUnderstandingProvider,
 	MemoryEmbeddingFormat,
 	ThinkingLevel,
@@ -76,6 +77,12 @@ export const MEMORY_EMBEDDING_FORMATS = [
 export const BROWSER_BACKENDS = ["opencli", "browser-harness"] as const satisfies readonly BrowserBackend[];
 export const BROWSER_HARNESS_MODES = ["attach", "cdp", "cloud"] as const satisfies readonly BrowserHarnessMode[];
 export const BROWSER_WINDOW_MODES = ["foreground", "background"] as const;
+export const MCP_EXPOSURES = [
+	"codemode",
+	"codemode-deferred",
+	"deferred",
+	"direct",
+] as const satisfies readonly McpExposure[];
 export const TOOL_REACHES = ["pinned", "loadable", "off"] as const satisfies readonly ToolReach[];
 /** the tools they're born holding, in the order they're declared */
 export const BUILTIN_TOOLS = [

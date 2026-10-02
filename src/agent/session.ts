@@ -47,7 +47,7 @@ export async function createAgentSession(setup: AgentSessionSetup): Promise<Fami
 			thinkingLevel,
 		},
 		sessionId,
-		// load_tools grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
+		// tool_search grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
 		prepareNextTurnWithContext: (turn) => ({ context: { ...turn.context, tools: current().state.tools.slice() } }),
 		streamFn: createProviderStreamFn(config, setup.modelRuntime, { sessionId, sessionKey }),
 		// the leading system message carries the prompt and tool declarations; keep it out of

@@ -11,7 +11,8 @@ const tool = (name: string): AgentTool<any> => ({
 	name,
 	label: name,
 	description: name, parameters: {} as any, execute: async () => ({ content: [], details: undefined }) });
-const hub = (deferred: AgentTool<any>[] = []) => ({ tools: [], deferred }) as unknown as McpHub;
+const hub = (deferred: AgentTool<any>[] = []) =>
+	({ tools: (exposure: string) => (exposure === "deferred" ? deferred : []), namespaceOf: () => undefined }) as unknown as McpHub;
 const noMedia = { drain() {}, take: () => [] } as any;
 const emptyAgent = () => ({ state: { messages: [], tools: [] } }) as any;
 const context = (config: Config, overrides: Partial<ToolContext> = {}): ToolContext => ({
@@ -34,15 +35,15 @@ describe("built-in tool reach", () => {
 		assert.equal(toolReach(config, paused, "browser"), "loadable");
 		assert.equal(toolReach(config, paused, "tts"), "off");
 		assert.equal(toolReach(config, paused, "bash"), "off");
-		assert.deepEqual([...deferredToolNames(config, hub([tool("demo__add")]), paused)], ["browser", "demo__add"]);
+		assert.deepEqual([...deferredToolNames(config, hub([tool("mcp__demo__add")]), paused)], ["browser", "mcp__demo__add"]);
 	});
 
-	it("declares pinned tools, hides loadable ones behind load_tools, and drops the rest", async (t) => {
+	it("declares pinned tools, hides loadable ones behind tool_search, and drops the rest", async (t) => {
 		const config = await configWithDataDir(t, await createTempDataDir(t), { imageGen: { enabled: false } });
 		config.tools.reach = { search_web: "loadable", tts: "off" };
 		const names = createFamiliarTools(context(config, { paused: new Set(["fetch_web"]) })).map((t) => t.name);
 		assert.ok(names.includes("bash"));
-		assert.ok(names.includes("load_tools"));
+		assert.ok(names.includes("tool_search"));
 		for (const hidden of ["search_web", "tts", "fetch_web"]) assert.ok(!names.includes(hidden), hidden);
 
 		const loaded = () =>
@@ -50,7 +51,7 @@ describe("built-in tool reach", () => {
 		assert.ok(createFamiliarTools(context(config, { agent: loaded })).some((t) => t.name === "search_web"));
 
 		const everything = createFamiliarTools(context({ ...config, tools: { reach: {} } })).map((t) => t.name);
-		assert.ok(!everything.includes("load_tools"));
+		assert.ok(!everything.includes("tool_search"));
 	});
 });
 

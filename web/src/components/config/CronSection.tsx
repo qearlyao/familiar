@@ -12,7 +12,7 @@ type Frequency = CronJob["frequency"];
 
 const FREQUENCY_OPTIONS = CRON_FREQUENCIES.map((value) => ({ value, label: value }));
 const DELIVERY_OPTIONS = [
-  { value: "queue", label: "wait for his turn" },
+  { value: "queue", label: "wait for their turn" },
   { value: "follow_up", label: "slip it in" },
 ] as const;
 const WEEKDAYS = ["sundays", "mondays", "tuesdays", "wednesdays", "thursdays", "fridays", "saturdays"];
@@ -161,8 +161,8 @@ function JobForm({ initial, isNew, busy, error, onSave }: {
           )}
         </div>
         {job.frequency === "monthly" && (job.day ?? 1) > 28 && <p className="settings-note">shorter months land on their last day.</p>}
-        <Field label="if he's mid-reply">
-          <EnumToggle value={job.deliveryMode} options={DELIVERY_OPTIONS} ariaPrefix="if he's mid-reply" disabled={busy} onChange={(deliveryMode) => edit({ deliveryMode })} />
+        <Field label="if they're mid-reply">
+          <EnumToggle value={job.deliveryMode} options={DELIVERY_OPTIONS} ariaPrefix="if they're mid-reply" disabled={busy} onChange={(deliveryMode) => edit({ deliveryMode })} />
         </Field>
         {isNew && (
           <Field label="name">

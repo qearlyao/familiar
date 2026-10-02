@@ -10,7 +10,7 @@ export function EnumToggle<T extends string>({
   onChange,
 }: {
   value: T | undefined;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; label: string; hint?: string }[];
   ariaPrefix: string;
   disabled: boolean;
   onChange: (next: T) => void;
@@ -18,7 +18,7 @@ export function EnumToggle<T extends string>({
   return (
     <div className="seg" role="group" aria-label={ariaPrefix}>
       {options.map((option) => (
-        <button key={option.value} type="button" className="seg-pill" aria-pressed={option.value === value} disabled={disabled} onClick={() => onChange(option.value)}>
+        <button key={option.value} type="button" className="seg-pill" title={option.hint} aria-pressed={option.value === value} disabled={disabled} onClick={() => onChange(option.value)}>
           {option.label}
         </button>
       ))}

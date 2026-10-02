@@ -6,7 +6,7 @@ import { jsonSettingsStore } from "../util/fs.js";
 export type McpSource = "config" | "web";
 
 /**
- * Servers added from the WebUI, plus deferred/enabled flips on config.toml servers (stored as just
+ * Servers added from the WebUI, plus exposure/enabled flips on config.toml servers (stored as just
  * that flag under the server's name). Values keep `${NAME}` raw; they resolve at connect.
  */
 export type WebMcpServers = Record<string, Partial<McpServerConfig>>;
@@ -33,7 +33,7 @@ export function mcpServerSpecs(config: Config): Record<string, { spec: McpServer
 		if (base)
 			base.spec = {
 				...base.spec,
-				deferred: raw.deferred ?? base.spec.deferred,
+				exposure: raw.exposure ?? base.spec.exposure,
 				enabled: raw.enabled ?? base.spec.enabled,
 			};
 		// a flag flip whose config.toml server has since gone is left inert

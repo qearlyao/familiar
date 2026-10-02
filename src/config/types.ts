@@ -26,6 +26,7 @@ export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
 export type TtsProvider = "elevenlabs" | "cartesia";
 export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
 export type ToolReach = "pinned" | "loadable" | "off";
+export type McpExposure = "codemode" | "codemode-deferred" | "deferred" | "direct";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type BrowserBackend = "opencli" | "browser-harness";
@@ -92,8 +93,12 @@ export interface McpServerConfig {
 	env?: Record<string, string>;
 	url?: string;
 	headers?: Record<string, string>;
-	/** stay out of the request until the agent loads them */
-	deferred: boolean;
+	/**
+	 * how its tools are reached: codemode (default) lists them in codemode within its budget,
+	 * codemode-deferred leaves them for searchTools(), deferred waits for tool_search, direct
+	 * declares them in every request. scripts reach all of them either way.
+	 */
+	exposure: McpExposure;
 	/** set aside without being taken away: nothing connects while it's off */
 	enabled: boolean;
 }

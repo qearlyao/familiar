@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Align MCP and codemode with upstream pi 0.99. MCP servers take an `exposure` (`codemode` by default, `codemode-deferred`, `deferred`, or `direct`) in place of `deferred`, and their tools are named `mcp__<server>__<tool>`. The codemode description lists tool declarations grouped by server within a 3000-token budget, and scripts get `searchTools()` (BM25), `// @options` for output budget and timeout, and MCP results as the whole `CallToolResult`. `load_tools` is replaced by `tool_search`, which ranks with the same BM25 search.
+
 ## 1.4.0 - 2026-09-30
 
 ### Added

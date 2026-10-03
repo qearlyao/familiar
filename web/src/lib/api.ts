@@ -572,6 +572,8 @@ export interface KeptFile {
   source: string;
   createdAt: number;
   updatedAt: number;
+  /** the opening of a text-like file */
+  excerpt?: string;
   url: string;
 }
 

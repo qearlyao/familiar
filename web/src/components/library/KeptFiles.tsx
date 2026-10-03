@@ -41,10 +41,34 @@ function shelfLine(file: KeptFile): string {
   return `${label} · ${when}`;
 }
 
-/** A loose sheet rather than a bound book: the file's kind on a tab, its name on the paper. */
+/** What's on the sheet: a live, shrunken page for html, the opening lines for notes and text. */
+function KeptPeek({ file }: { file: KeptFile }) {
+  const reading = READINGS[file.mimeType]?.reading;
+  if (reading === "page" && file.mimeType !== "application/pdf") {
+    return (
+      <span className="library-kept-peek library-kept-peek-page">
+        {/* scripts run, but in an opaque origin: the thumbnail can't reach the app */}
+        <iframe src={file.url} title="" tabIndex={-1} loading="lazy" sandbox="allow-scripts" />
+      </span>
+    );
+  }
+  if (!file.excerpt) return null;
+  return (
+    <span className="library-kept-peek library-kept-peek-text">
+      {reading === "markdown" ? (
+        <MarkdownRenderer text={file.excerpt} className="warm-prose chat-markdown" remarkPlugins={remarkPlugins} />
+      ) : (
+        <pre>{file.excerpt}</pre>
+      )}
+    </span>
+  );
+}
+
+/** A loose sheet rather than a bound book: the file's kind on a tab, a peek at what's inside, its name. */
 function KeptCover({ file, className }: { file: KeptFile; className?: string }) {
   return (
     <span aria-hidden className={cn("library-kept-cover", className)}>
+      <KeptPeek file={file} />
       <span className="library-kept-tab">{extensionOf(file.name).slice(0, 4)}</span>
       <span className="library-kept-name">{file.name.replace(/\.[^.]+$/, "")}</span>
     </span>

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { constants } from "node:fs";
-import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, open, readdir, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
 import type { Config } from "../config/index.js";
@@ -22,12 +22,15 @@ export interface KeptFile {
 	source: string;
 	createdAt: number;
 	updatedAt: number;
+	/** the opening of a text-like file, for the card on the shelf */
+	excerpt?: string;
 	url: string;
 }
 
 type KeptFileRecord = Omit<KeptFile, "url">;
 
 const KEPT_ID_RE = /^[a-f0-9]{12}$/;
+const EXCERPT_BYTES = 1200;
 export const KEPT_FILE_URL_PREFIX = "/api/web/library/kept/";
 
 export function keptFilesDir(config: Config): string {
@@ -55,6 +58,7 @@ export async function keepSentFile(
 	await mkdir(resolve(dir, "file"), { recursive: true });
 	await copyFile(sent.copyFrom, resolve(dir, "file", sent.name), constants.COPYFILE_FICLONE);
 	const fromWorkspace = relative(config.workspacePath, sourcePath);
+	const excerpt = isTextLike(sent.mimeType) ? await readExcerpt(sent.copyFrom) : undefined;
 	const now = Date.now();
 	const record: KeptFileRecord = {
 		id,
@@ -64,6 +68,7 @@ export async function keepSentFile(
 		source: fromWorkspace && !fromWorkspace.startsWith("..") ? fromWorkspace : sourcePath,
 		createdAt: previous?.createdAt ?? now,
 		updatedAt: Math.max(now, (previous?.updatedAt ?? 0) + 1),
+		...(excerpt ? { excerpt } : {}),
 	};
 	await atomicWriteJson(resolve(dir, "record.json"), record);
 	return { ...record, url: keptFileUrl(record) };
@@ -129,5 +134,23 @@ async function readKeptRecord(config: Config, id: string): Promise<KeptFileRecor
 		source: parsed.source,
 		createdAt: parsed.createdAt,
 		updatedAt: parsed.updatedAt,
+		...(typeof parsed.excerpt === "string" ? { excerpt: parsed.excerpt } : {}),
 	};
+}
+
+function isTextLike(mimeType: string): boolean {
+	return (mimeType.startsWith("text/") && mimeType !== "text/html") || mimeType === "application/json";
+}
+
+async function readExcerpt(path: string): Promise<string | undefined> {
+	const handle = await open(path, "r");
+	try {
+		const buffer = Buffer.alloc(EXCERPT_BYTES);
+		const { bytesRead } = await handle.read(buffer, 0, EXCERPT_BYTES, 0);
+		// a cut multi-byte character decodes to U+FFFD at the very end; drop it
+		const text = buffer.subarray(0, bytesRead).toString("utf8").replace(/\uFFFD+$/, "").trim();
+		return text || undefined;
+	} finally {
+		await handle.close();
+	}
 }

@@ -46,6 +46,7 @@ describe("kept files", () => {
 		assert.equal(kept?.mimeType, "text/markdown");
 		assert.equal(kept?.source, "out/notes.md");
 		assert.equal(kept?.size, 7);
+		assert.equal(kept?.excerpt, "# hello");
 		assert.match(kept!.url, /^\/api\/web\/library\/kept\/[a-f0-9]{12}\/notes\.md\?v=\d+$/);
 		const found = await findKeptFile(config, kept!.id);
 		assert.equal(await readFile(found!.path, "utf8"), "# hello");
@@ -65,6 +66,7 @@ describe("kept files", () => {
 		assert.equal(files.length, 1);
 		assert.equal(files[0]?.id, first?.id);
 		assert.equal(files[0]?.name, "final.html");
+		assert.equal(files[0]?.excerpt, undefined);
 		assert.equal(files[0]?.createdAt, first?.createdAt);
 		assert.ok(files[0]!.updatedAt > first!.updatedAt);
 		assert.notEqual(files[0]?.url, first?.url);

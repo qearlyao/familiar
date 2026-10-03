@@ -148,7 +148,11 @@ async function readExcerpt(path: string): Promise<string | undefined> {
 		const buffer = Buffer.alloc(EXCERPT_BYTES);
 		const { bytesRead } = await handle.read(buffer, 0, EXCERPT_BYTES, 0);
 		// a cut multi-byte character decodes to U+FFFD at the very end; drop it
-		const text = buffer.subarray(0, bytesRead).toString("utf8").replace(/\uFFFD+$/, "").trim();
+		const text = buffer
+			.subarray(0, bytesRead)
+			.toString("utf8")
+			.replace(/\uFFFD+$/, "")
+			.trim();
 		return text || undefined;
 	} finally {
 		await handle.close();

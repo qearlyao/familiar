@@ -563,6 +563,27 @@ export async function uploadBook(file: File): Promise<BookSummary> {
   return parsed.book;
 }
 
+/** a document the companion sent, kept on the library shelf */
+export interface KeptFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  source: string;
+  createdAt: number;
+  updatedAt: number;
+  url: string;
+}
+
+export async function fetchKeptFiles(): Promise<KeptFile[]> {
+  const body = await getJson<{ files: KeptFile[] }>("/api/web/library/kept", "library/kept");
+  return body.files;
+}
+
+export async function deleteKeptFile(id: string): Promise<void> {
+  await jsonRequest<{ ok: true }>("/api/web/library/kept", "DELETE", { id }, "library/kept");
+}
+
 export async function deleteBook(id: string): Promise<void> {
   await jsonRequest<{ ok: true }>("/api/web/book", "DELETE", { id }, "book");
 }

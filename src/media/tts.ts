@@ -6,6 +6,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 
 import type { Config } from "../config/index.js";
+import { SILENT_RESPONSE_MARKER } from "../runtime/silent-marker.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { attachedNotice, ensureGeneratedAttachmentsDir } from "./generated-media.js";
 
@@ -119,6 +120,9 @@ async function readTtsError(response: Response): Promise<string> {
 	return text;
 }
 
+// agents tend to add a line like "here you go" because they assume a voice note needs text to travel with it
+const VOICE_NOTE_STANDS_ALONE = `it goes out whatever else you write, and a voice note can be the whole reply, the way people send them. ${SILENT_RESPONSE_MARKER} sends it on its own.`;
+
 export function createTtsTool(
 	config: Config,
 	mediaSink: GeneratedMediaSink,
@@ -201,7 +205,7 @@ export function createTtsTool(
 			} as const;
 			mediaSink.add(attachment);
 			return {
-				content: [{ type: "text", text: attachedNotice("Voice message", name) }],
+				content: [{ type: "text", text: `${attachedNotice("Voice message", name)}. ${VOICE_NOTE_STANDS_ALONE}` }],
 				details: {
 					localPath,
 				},

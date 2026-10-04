@@ -1,9 +1,8 @@
-import { lstat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 
 import type { Config } from "../config/index.js";
 import { findKeptFile, KEPT_FILE_URL_PREFIX, listKeptFiles, removeKeptFile } from "../media/kept-files.js";
-import { isEnoent } from "../util/fs.js";
 import { isRecord } from "../util/guards.js";
 import { HttpError, readJsonBody, sendJson } from "./http.js";
 import type { RegisterWebRoute } from "./routes.js";
@@ -27,7 +26,7 @@ export async function serveKeptFile(
 	response: ServerResponse,
 	requestPath: string,
 	rangeHeader?: string,
-): Promise<boolean> {
+): Promise<void> {
 	let requested: string;
 	try {
 		requested = decodeURIComponent(requestPath.slice(KEPT_FILE_URL_PREFIX.length));
@@ -38,12 +37,8 @@ export async function serveKeptFile(
 	if (slash < 1) throw new HttpError(400, "invalid kept file path");
 	const kept = await findKeptFile(config, requested.slice(0, slash));
 	// only the recorded name is servable, so a request path can never walk out of the entry
-	if (!kept || kept.record.name !== requested.slice(slash + 1)) throw new HttpError(404, "kept file not found");
-	const fileStat = await lstat(kept.path).catch((error) => {
-		if (isEnoent(error)) return undefined;
-		throw error;
-	});
+	if (!kept || kept.name !== requested.slice(slash + 1)) throw new HttpError(404, "kept file not found");
+	const fileStat = await stat(kept.path).catch(() => undefined);
 	if (!fileStat?.isFile()) throw new HttpError(404, "kept file not found");
 	servePrivateFile(response, kept.path, fileStat.size, rangeHeader);
-	return true;
 }

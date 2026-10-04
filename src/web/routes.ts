@@ -37,7 +37,8 @@ export function createWebRouteRegistry(
 				return await serveBookAsset(config, response, url.pathname, request.headers.range);
 			}
 			if (request.method === "GET" && url.pathname.startsWith(KEPT_FILE_URL_PREFIX)) {
-				return await serveKeptFile(config, response, url.pathname, request.headers.range);
+				await serveKeptFile(config, response, url.pathname, request.headers.range);
+				return true;
 			}
 			const handler = webRoutes.get(`${request.method} ${url.pathname}`);
 			// await is load-bearing: it keeps handler rejections inside this try so the catch maps HttpError to a status.

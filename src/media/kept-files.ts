@@ -6,7 +6,6 @@ import { relative, resolve } from "node:path";
 
 import type { Config } from "../config/index.js";
 import { atomicWriteJson, isEnoent, readFileOrNull } from "../util/fs.js";
-import { isRecord } from "../util/guards.js";
 
 /**
  * Documents the agent sent (pages, markdown, pdfs, ...) kept on the library shelf.
@@ -33,12 +32,8 @@ const KEPT_ID_RE = /^[a-f0-9]{12}$/;
 const EXCERPT_BYTES = 1200;
 export const KEPT_FILE_URL_PREFIX = "/api/web/library/kept/";
 
-export function keptFilesDir(config: Config): string {
-	return resolve(config.workspace.dataDir, "library", "kept");
-}
-
-function keptDir(config: Config, id: string): string {
-	return resolve(keptFilesDir(config), id);
+function keptDir(config: Config, id = ""): string {
+	return resolve(config.workspace.dataDir, "library", "kept", id);
 }
 
 function keptFileUrl(record: KeptFileRecord): string {
@@ -68,7 +63,7 @@ export async function keepSentFile(
 		source: fromWorkspace && !fromWorkspace.startsWith("..") ? fromWorkspace : sourcePath,
 		createdAt: previous?.createdAt ?? now,
 		updatedAt: Math.max(now, (previous?.updatedAt ?? 0) + 1),
-		...(excerpt ? { excerpt } : {}),
+		excerpt,
 	};
 	await atomicWriteJson(resolve(dir, "record.json"), record);
 	return { ...record, url: keptFileUrl(record) };
@@ -77,7 +72,7 @@ export async function keepSentFile(
 export async function listKeptFiles(config: Config): Promise<KeptFile[]> {
 	let entries: Dirent[];
 	try {
-		entries = await readdir(keptFilesDir(config), { withFileTypes: true });
+		entries = await readdir(keptDir(config), { withFileTypes: true });
 	} catch (error) {
 		if (isEnoent(error)) return [];
 		throw error;
@@ -94,13 +89,10 @@ export async function listKeptFiles(config: Config): Promise<KeptFile[]> {
 }
 
 /** the kept copy's path, or undefined when no such entry exists */
-export async function findKeptFile(
-	config: Config,
-	id: string,
-): Promise<{ record: KeptFile; path: string } | undefined> {
+export async function findKeptFile(config: Config, id: string): Promise<{ name: string; path: string } | undefined> {
 	const record = await readKeptRecord(config, id);
 	if (!record) return undefined;
-	return { record: { ...record, url: keptFileUrl(record) }, path: resolve(keptDir(config, id), "file", record.name) };
+	return { name: record.name, path: resolve(keptDir(config, id), "file", record.name) };
 }
 
 export async function removeKeptFile(config: Config, id: string): Promise<boolean> {
@@ -113,47 +105,25 @@ async function readKeptRecord(config: Config, id: string): Promise<KeptFileRecor
 	if (!KEPT_ID_RE.test(id)) return undefined;
 	const raw = await readFileOrNull(resolve(keptDir(config, id), "record.json"), "utf8");
 	if (!raw) return undefined;
-	const parsed: unknown = JSON.parse(raw);
-	if (
-		!isRecord(parsed) ||
-		parsed.id !== id ||
-		typeof parsed.name !== "string" ||
-		typeof parsed.mimeType !== "string" ||
-		typeof parsed.size !== "number" ||
-		typeof parsed.source !== "string" ||
-		typeof parsed.createdAt !== "number" ||
-		typeof parsed.updatedAt !== "number"
-	) {
-		return undefined;
-	}
-	return {
-		id,
-		name: parsed.name,
-		mimeType: parsed.mimeType,
-		size: parsed.size,
-		source: parsed.source,
-		createdAt: parsed.createdAt,
-		updatedAt: parsed.updatedAt,
-		...(typeof parsed.excerpt === "string" ? { excerpt: parsed.excerpt } : {}),
-	};
+	const parsed = JSON.parse(raw) as KeptFileRecord;
+	return parsed.id === id ? parsed : undefined;
 }
 
 function isTextLike(mimeType: string): boolean {
 	return (mimeType.startsWith("text/") && mimeType !== "text/html") || mimeType === "application/json";
 }
 
-async function readExcerpt(path: string): Promise<string | undefined> {
+async function readExcerpt(path: string): Promise<string> {
 	const handle = await open(path, "r");
 	try {
 		const buffer = Buffer.alloc(EXCERPT_BYTES);
 		const { bytesRead } = await handle.read(buffer, 0, EXCERPT_BYTES, 0);
 		// a cut multi-byte character decodes to U+FFFD at the very end; drop it
-		const text = buffer
+		return buffer
 			.subarray(0, bytesRead)
 			.toString("utf8")
 			.replace(/\uFFFD+$/, "")
 			.trim();
-		return text || undefined;
 	} finally {
 		await handle.close();
 	}

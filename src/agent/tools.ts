@@ -20,6 +20,7 @@ import type { FamiliarAgentSession } from "./types.js";
 /** everything a session's tools are built from; one per session, rebuilt whenever its tool list is */
 export interface ToolContext {
 	config: Config;
+	sessionKey: string;
 	mediaSink: GeneratedMediaSink;
 	referenceAttachments: () => readonly StoredAttachment[];
 	memory: MemoryService;
@@ -32,6 +33,9 @@ function withDescription(tool: AgentTool<any>, description: string): AgentTool<a
 	tool.description = description;
 	return tool;
 }
+
+/** a voice call's session; everything it says is already spoken, so it holds no tts */
+export const VOICE_CALL_SESSION_PREFIX = "voice:";
 
 /** a paused tool is off until the next restart, whatever its lasting reach says */
 export function toolReach(config: Config, paused: ReadonlySet<string>, name: string): ToolReach {
@@ -47,7 +51,7 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
 		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),
 		createCronTool(config),
-		createTtsTool(config, mediaSink),
+		...(ctx.sessionKey.startsWith(VOICE_CALL_SESSION_PREFIX) ? [] : [createTtsTool(config, mediaSink)]),
 		...(config.imageGen.enabled
 			? [createImageGenTool(config, mediaSink, { referenceAttachments: ctx.referenceAttachments })]
 			: []),

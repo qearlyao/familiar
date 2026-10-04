@@ -1,36 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, MessageSquareText, Plus, Search } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
   deleteBook,
+  deleteKeptFile,
   fetchBooks,
+  fetchKeptFiles,
   fetchMarginalia,
   uploadBook,
   type BookSummary,
+  type KeptFile,
   type MarginaliaEntry,
 } from "@/lib/api";
 import { BookCover } from "./library/BookCover";
+import { KeptFileTile } from "./library/KeptFiles";
+import { ShelfItem } from "./library/ShelfItem";
 import { noteAge } from "./reader/marginText";
 import { ReaderView } from "./reader/ReaderView";
 import "./library.css";
 
 const ACCEPTED = ".epub,.txt,.md";
-const FILTERS = ["everything", "books", "papers", "annotated"] as const;
+const FILTERS = ["everything", "books", "papers", "annotated", "theirs"] as const;
 type LibraryFilter = (typeof FILTERS)[number];
 
 function shelfLine(book: BookSummary, notes: MarginaliaEntry[]): string {
@@ -44,42 +33,13 @@ function shelfLine(book: BookSummary, notes: MarginaliaEntry[]): string {
 
 function matchesFilter(book: BookSummary, notes: MarginaliaEntry[], filter: LibraryFilter): boolean {
   if (filter === "everything") return true;
+  if (filter === "theirs") return false;
   if (filter === "books") return book.format === "epub";
   if (filter === "papers") return book.format === "text";
   return notes.length > 0;
 }
 
-function ShelfBook({ book, onRemove, children }: { book: BookSummary; onRemove: () => void; children: ReactNode }) {
-  const [confirming, setConfirming] = useState(false);
-  return (
-    <>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem variant="destructive" onSelect={() => setConfirming(true)}>
-            remove from shelf
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-serif font-normal">let "{book.title}" go?</AlertDialogTitle>
-            <AlertDialogDescription className="font-serif italic">
-              it leaves the shelf, and the margins go with it.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>keep it</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={onRemove}>
-              let it go
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
+const BOOK_FAREWELL = "it leaves the shelf, and the margins go with it.";
 
 function OpenBookCard({
   book,
@@ -94,7 +54,7 @@ function OpenBookCard({
 }) {
   const percent = Math.max(1, Math.round(book.percent ?? 0));
   return (
-    <ShelfBook book={book} onRemove={onRemove}>
+    <ShelfItem title={book.title} farewell={BOOK_FAREWELL} onRemove={onRemove}>
       <button type="button" className="library-open-card" onClick={onOpen}>
         <BookCover book={book} className="library-open-cover" />
         <span className="library-open-copy">
@@ -119,7 +79,7 @@ function OpenBookCard({
           <span className="library-keep-reading">keep reading</span>
         </span>
       </button>
-    </ShelfBook>
+    </ShelfItem>
   );
 }
 
@@ -135,7 +95,7 @@ function ShelfTile({
   onRemove: () => void;
 }) {
   return (
-    <ShelfBook book={book} onRemove={onRemove}>
+    <ShelfItem title={book.title} farewell={BOOK_FAREWELL} onRemove={onRemove}>
       <button type="button" className="library-shelf-tile" onClick={onOpen}>
         <BookCover book={book} className="library-shelf-cover" />
         <span className="library-shelf-copy">
@@ -146,12 +106,13 @@ function ShelfTile({
           </span>
         </span>
       </button>
-    </ShelfBook>
+    </ShelfItem>
   );
 }
 
 export function LibraryPage({ personaName }: { personaName: string }) {
   const [books, setBooks] = useState<BookSummary[]>([]);
+  const [kept, setKept] = useState<KeptFile[]>([]);
   const [notesByBook, setNotesByBook] = useState<Record<string, MarginaliaEntry[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
@@ -165,9 +126,10 @@ export function LibraryPage({ personaName }: { personaName: string }) {
 
   const reload = useCallback(async () => {
     try {
-      const nextBooks = await fetchBooks();
+      const [nextBooks, nextKept] = await Promise.all([fetchBooks(), fetchKeptFiles()]);
       const notes = await Promise.all(nextBooks.map(async (book) => [book.id, await fetchMarginalia(book.id)] as const));
       setBooks(nextBooks);
+      setKept(nextKept);
       setNotesByBook(Object.fromEntries(notes));
       setError(undefined);
     } catch (err) {
@@ -199,9 +161,9 @@ export function LibraryPage({ personaName }: { personaName: string }) {
     }
   }, [reload]);
 
-  const remove = useCallback(async (id: string) => {
+  const remove = useCallback(async (removeOne: () => Promise<void>) => {
     try {
-      await deleteBook(id);
+      await removeOne();
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -221,6 +183,12 @@ export function LibraryPage({ personaName }: { personaName: string }) {
     });
   }, [books, filter, notesByBook, query]);
 
+  const matchingKept = useMemo(() => {
+    if (filter !== "everything" && filter !== "theirs") return [];
+    const needle = query.trim().toLocaleLowerCase();
+    return kept.filter((file) => !needle || `${file.name}\n${file.source}`.toLocaleLowerCase().includes(needle));
+  }, [filter, kept, query]);
+
   const openBooks = matching.filter((book) => book.position);
   const shelfBooks = matching.filter((book) => !book.position);
   const mobileShelfBooks = matching.filter((book, index) => !book.position || index > 0);
@@ -231,7 +199,7 @@ export function LibraryPage({ personaName }: { personaName: string }) {
       book={book}
       notes={notesByBook[book.id] ?? []}
       onOpen={() => setOpenBookId(book.id)}
-      onRemove={() => void remove(book.id)}
+      onRemove={() => void remove(() => deleteBook(book.id))}
     />
   );
 
@@ -269,7 +237,7 @@ export function LibraryPage({ personaName }: { personaName: string }) {
 
       <header className="library-header">
         <div className="library-title-block">
-          <span>{books.length} {books.length === 1 ? "thing" : "things"}, {books.filter((book) => book.position).length} open</span>
+          <span>{books.length + kept.length} {books.length + kept.length === 1 ? "thing" : "things"}, {books.filter((book) => book.position).length} open</span>
           <h1>the library</h1>
         </div>
         <div className="library-actions">
@@ -293,7 +261,7 @@ export function LibraryPage({ personaName }: { personaName: string }) {
       <div className="library-filters" role="group" aria-label="filter the library">
         {FILTERS.map((item) => (
           <button key={item} type="button" aria-pressed={filter === item} onClick={() => setFilter(item)}>
-            {item}
+            {item === "theirs" ? `from ${personaName}` : item}
           </button>
         ))}
       </div>
@@ -303,12 +271,12 @@ export function LibraryPage({ personaName }: { personaName: string }) {
       <div className="library-scroll">
         {!loaded ? (
           <p className="library-empty">opening the library…</p>
-        ) : books.length === 0 ? (
+        ) : books.length === 0 && kept.length === 0 ? (
           <div className="library-empty">
             <p>the shelf is bare. bring an epub, text, or markdown file and we’ll read it together.</p>
             <button type="button" onClick={() => fileInputRef.current?.click()}>choose a book</button>
           </div>
-        ) : matching.length === 0 ? (
+        ) : matching.length === 0 && matchingKept.length === 0 ? (
           <p className="library-empty">nothing on the shelf matches that.</p>
         ) : (
           <>
@@ -322,14 +290,25 @@ export function LibraryPage({ personaName }: { personaName: string }) {
                       book={book}
                       notes={notesByBook[book.id] ?? []}
                       onOpen={() => setOpenBookId(book.id)}
-                      onRemove={() => void remove(book.id)}
+                      onRemove={() => void remove(() => deleteBook(book.id))}
                     />
                   ))}
                 </div>
               </section>
             ) : null}
 
-            <section className="library-shelf-section">
+            {matchingKept.length > 0 ? (
+              <section className="library-shelf-section library-kept-section">
+                <h2>from {personaName}</h2>
+                <div className="library-shelf-grid library-kept-grid">
+                  {matchingKept.map((file) => (
+                    <KeptFileTile key={file.id} file={file} onRemove={() => void remove(() => deleteKeptFile(file.id))} />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {filter === "theirs" ? null : <section className="library-shelf-section">
               <h2>on the shelf</h2>
               <div className="library-shelf-grid library-shelf-desktop">
                 {shelfBooks.map(tile)}
@@ -341,7 +320,7 @@ export function LibraryPage({ personaName }: { personaName: string }) {
               <div className="library-shelf-list library-shelf-mobile">
                 {mobileShelfBooks.map(tile)}
               </div>
-            </section>
+            </section>}
           </>
         )}
       </div>

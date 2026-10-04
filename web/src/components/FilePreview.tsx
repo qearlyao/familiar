@@ -1,3 +1,4 @@
+import { extensionOf, fileSize } from "@/lib/fileInfo";
 import type { Attachment } from "../types";
 import { IconExpand, IconPaperclip } from "./organicIcons";
 import { ViewerDialog } from "./ViewerDialog";
@@ -9,18 +10,6 @@ function previewLabel(attachment: Attachment): string | undefined {
   if (type === "text/html") return "a page";
   if (type === "application/pdf") return "a pdf";
   return undefined;
-}
-
-function fileSize(bytes: number | undefined): string | undefined {
-  if (bytes === undefined) return undefined;
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toUpperCase() : "FILE";
 }
 
 function FileCardBody({ name, meta }: { name: string; meta: string }) {

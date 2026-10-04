@@ -9,6 +9,7 @@ import { resolveAgentPath } from "../util/fs.js";
 import { attachmentKindForMime, mimeTypeForPath } from "../util/mime.js";
 import { MAX_SENT_FILE_BYTES } from "./attachment-limits.js";
 import { attachedNotice, type GeneratedMediaSink, generatedAttachmentsDir } from "./generated-media.js";
+import { keepSentFile } from "./kept-files.js";
 
 const sendFileSchema = Type.Object(
 	{
@@ -43,7 +44,8 @@ export function createSendFileTool(
 	return {
 		name: "send_file",
 		label: "send_file",
-		description: "attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits.",
+		description:
+			"attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits. documents also stay on their library shelf; resending the same file updates that copy.",
 		parameters: sendFileSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: SendFileToolInput) {
@@ -66,10 +68,15 @@ export function createSendFileTool(
 			const localPath = resolve(dir, name);
 			await copyFile(sourcePath, localPath, constants.COPYFILE_FICLONE);
 			const mimeType = mimeTypeForPath(name);
+			const kind = attachmentKindForMime(mimeType);
+			// documents also go on the library shelf; pictures and sounds already live in makings
+			if (kind === "file") {
+				await keepSentFile(config, { sourcePath, copyFrom: localPath, name, mimeType, size: sourceStat.size });
+			}
 			mediaSink.add({
 				id,
 				name,
-				kind: attachmentKindForMime(mimeType),
+				kind,
 				mimeType,
 				size: sourceStat.size,
 				localPath,

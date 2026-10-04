@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Config } from "../config/index.js";
+import { KEPT_FILE_URL_PREFIX } from "../media/kept-files.js";
 import type { WebAuth } from "./auth.js";
 import { serveBookAsset } from "./book-routes.js";
 import { HttpError, sendJson } from "./http.js";
+import { serveKeptFile } from "./kept-file-routes.js";
 import { serveAttachment } from "./static.js";
 
 export type WebRoute = (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<void>;
@@ -29,10 +31,14 @@ export function createWebRouteRegistry(
 		}
 		try {
 			if (request.method === "GET" && url.pathname.startsWith("/api/web/attachments/")) {
-				return serveAttachment(config, response, url.pathname, request.headers.range);
+				return await serveAttachment(config, response, url.pathname, request.headers.range);
 			}
 			if (request.method === "GET" && url.pathname.startsWith("/api/web/books/assets/")) {
-				return serveBookAsset(config, response, url.pathname, request.headers.range);
+				return await serveBookAsset(config, response, url.pathname, request.headers.range);
+			}
+			if (request.method === "GET" && url.pathname.startsWith(KEPT_FILE_URL_PREFIX)) {
+				await serveKeptFile(config, response, url.pathname, request.headers.range);
+				return true;
 			}
 			const handler = webRoutes.get(`${request.method} ${url.pathname}`);
 			// await is load-bearing: it keeps handler rejections inside this try so the catch maps HttpError to a status.

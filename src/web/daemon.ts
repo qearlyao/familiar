@@ -17,6 +17,7 @@ import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
 import { sendText } from "./http.js";
+import { registerWebKeptFileRoutes } from "./kept-file-routes.js";
 import { registerWebMcpRoutes } from "./mcp-routes.js";
 import { createWebPushService } from "./push.js";
 import { registerWebPushRoutes } from "./push-routes.js";
@@ -102,6 +103,7 @@ export async function startWebDaemon({
 	registerWebDiaryRoutes(route, config);
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);
+	registerWebKeptFileRoutes(route, config);
 	registerWebSkillRoutes(route, config);
 	registerWebVoiceRoutes(route, config);
 	const voiceCall: VoiceCallDeps = {

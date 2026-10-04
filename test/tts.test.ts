@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { audioExtension, audioMimeType, buildCartesiaRequestBody, buildElevenLabsVoiceSettings } from "../src/media/tts.js";
-import { configWithDataDir } from "./helpers.js";
+import { createGeneratedMediaSink } from "../src/media/generated-media.js";
+import {
+	audioExtension,
+	audioMimeType,
+	buildCartesiaRequestBody,
+	buildElevenLabsVoiceSettings,
+	createTtsTool,
+} from "../src/media/tts.js";
+import { SILENT_RESPONSE_MARKER } from "../src/runtime/silent-marker.js";
+import { configWithDataDir, createTempDataDir, withEnv } from "./helpers.js";
 
 describe("tts audio formats", () => {
 	const cases = [
@@ -121,6 +129,26 @@ describe("Cartesia request body", () => {
 			transcript: "hello there",
 			voice: { mode: "id", id: "voice-abc" },
 			output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
+		});
+	});
+});
+
+describe("tts tool", () => {
+	it("tells the agent the voice note travels without any text", async (t) => {
+		await withEnv("TEST_TTS_KEY", "secret", async () => {
+			const dataDir = await createTempDataDir(t);
+			const config = await configWithDataDir(t, dataDir, {
+				tts: { provider: "elevenlabs", apiKeyEnv: "TEST_TTS_KEY", voiceId: "voice-1" },
+			});
+			t.mock.method(globalThis, "fetch", async () => new Response(Buffer.from("fake-mp3")));
+			const sink = createGeneratedMediaSink();
+
+			const result = await createTtsTool(config, sink).execute("call-1", { text: "hi there" });
+
+			assert.equal(sink.drain().length, 1);
+			const text = result.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+			assert.match(text, /^Voice message attached to your reply: tts_.+\.mp3\. /);
+			assert.ok(text.includes(SILENT_RESPONSE_MARKER));
 		});
 	});
 });

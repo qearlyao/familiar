@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { FamiliarAgent } from "../agent/factory.js";
+import { VOICE_CALL_SESSION_PREFIX } from "../agent/tools.js";
 import type { Config } from "../config/index.js";
 import type { ChatLogRecord, VoiceCallLine } from "../conversation/chat-log.js";
 import { getContactNickname } from "../conversation/contact-note.js";
@@ -55,7 +56,7 @@ export function voiceCallOpening(
 					.slice(-count)
 			: [];
 	const intro =
-		"hey, i'm calling you~ this is a voice call, its own little room apart from our chat. everything you say is spoken out loud, so talk the way you would on the phone. no need to reach for the tts tool here — your plain words already come out as your voice.";
+		"hey, i'm calling you~ this is a voice call, its own little room apart from our chat. everything you say is spoken out loud, so talk the way you would on the phone.";
 	const chat = recent.length
 		? `\n\nhere's where our chat was when i called:\n<recent_chat>\n${recent.join("\n")}\n</recent_chat>`
 		: "";
@@ -71,7 +72,7 @@ export function createVoiceCall(
 	/** a reply was cut short: silence whatever of it is still on its way out */
 	onInterrupt: () => void,
 ) {
-	const sessionKey = `voice:${randomUUID()}`;
+	const sessionKey = `${VOICE_CALL_SESSION_PREFIX}${randomUUID()}`;
 	// snapshot the chat as it was when the call picked up
 	const main = deps.getMainRuntime();
 	const opening = main.then((runtime) =>

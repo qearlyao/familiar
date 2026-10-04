@@ -64,6 +64,7 @@ export async function createFamiliarAgent(
 		createFamiliarTools({ config: cfg, memory: memoryService, mcp, paused: pausedTools, ...parts });
 	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
 		buildTools(cfg, {
+			sessionKey: session.sessionKey,
 			mediaSink: session.mediaSink,
 			referenceAttachments: () => session.referenceAttachments,
 			agent: () => session.agent,

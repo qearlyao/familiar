@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { createFamiliarTools, deferredToolNames, type ToolContext, toolReach } from "../src/agent/tools.js";
+import { createFamiliarTools, deferredToolNames, type ToolContext, toolReach, VOICE_CALL_SESSION_PREFIX } from "../src/agent/tools.js";
 import { BUILTIN_TOOLS } from "../src/config/enums.js";
 import type { Config } from "../src/config/index.js";
 import type { McpHub } from "../src/tools/mcp.js";
@@ -17,6 +17,7 @@ const noMedia = { drain() {}, take: () => [] } as any;
 const emptyAgent = () => ({ state: { messages: [], tools: [] } }) as any;
 const context = (config: Config, overrides: Partial<ToolContext> = {}): ToolContext => ({
 	config,
+	sessionKey: "web",
 	mediaSink: noMedia,
 	referenceAttachments: () => [],
 	memory: stubMemoryService(),
@@ -52,6 +53,15 @@ describe("built-in tool reach", () => {
 
 		const everything = createFamiliarTools(context({ ...config, tools: { reach: {} } })).map((t) => t.name);
 		assert.ok(!everything.includes("tool_search"));
+	});
+});
+
+describe("voice call tools", () => {
+	it("leaves tts out of a voice call's session, since its words are already spoken", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const names = (sessionKey: string) => createFamiliarTools(context(config, { sessionKey })).map((t) => t.name);
+		assert.ok(names("web").includes("tts"));
+		assert.ok(!names(`${VOICE_CALL_SESSION_PREFIX}call`).includes("tts"));
 	});
 });
 

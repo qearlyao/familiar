@@ -78,6 +78,7 @@ export interface FamiliarAgent {
 
 export interface FamiliarAgentSession {
 	agent: Agent;
+	sessionKey: string;
 	sessionId: string;
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;

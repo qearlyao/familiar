@@ -13,7 +13,7 @@ import { loadStoredMessages, writeTranscriptLog } from "./transcript-log.js";
 import type { FamiliarAgentSession } from "./types.js";
 
 /** the per-session pieces a tool list is built from */
-export type SessionToolParts = Pick<ToolContext, "mediaSink" | "referenceAttachments" | "agent">;
+export type SessionToolParts = Pick<ToolContext, "sessionKey" | "mediaSink" | "referenceAttachments" | "agent">;
 
 export interface AgentSessionSetup {
 	config: Config;
@@ -43,7 +43,12 @@ export async function createAgentSession(setup: AgentSessionSetup): Promise<Fami
 			systemPrompt: setup.systemPrompt,
 			model,
 			messages,
-			tools: setup.tools({ mediaSink, referenceAttachments: () => referenceAttachments, agent: current }),
+			tools: setup.tools({
+				sessionKey,
+				mediaSink,
+				referenceAttachments: () => referenceAttachments,
+				agent: current,
+			}),
 			thinkingLevel,
 		},
 		sessionId,
@@ -79,6 +84,7 @@ export async function createAgentSession(setup: AgentSessionSetup): Promise<Fami
 
 	return {
 		agent,
+		sessionKey,
 		sessionId,
 		model,
 		thinkingLevel,

@@ -42,12 +42,12 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "0.99.1",
-		"@earendil-works/pi-ai": "0.99.1",
-		"@earendil-works/pi-codemode": "0.99.1",
-		"@earendil-works/pi-coding-agent": "0.99.1",
-		"@earendil-works/pi-mcp": "0.99.1",
-		"@earendil-works/pi-server": "0.99.1",
+		"@earendil-works/pi-agent-core": "1.0.2",
+		"@earendil-works/pi-ai": "1.0.2",
+		"@earendil-works/pi-codemode": "1.0.2",
+		"@earendil-works/pi-coding-agent": "1.0.2",
+		"@earendil-works/pi-mcp": "1.0.2",
+		"@earendil-works/pi-server": "1.0.2",
 		"better-sqlite3": "^12.10.0",
 		"cross-spawn": "^7.0.6",
 		"discord.js": "^14.27.0",

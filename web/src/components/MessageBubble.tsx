@@ -187,9 +187,10 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.role === "user") return <UserTurn message={message} />;
   if (editing) return <EditForm initialText={text} onSave={onEdit} onCancel={() => setEditing(false)} saving={pendingLatestAssistantAction === "edit"} />;
 
+  const attachments = message.attachments ?? [];
   // marker-only silence: whatever steps ran sit above, the quiet note beneath.
-  // silence with words left over falls through and renders muted (see TextStep).
-  if (message.silent && !withoutSilentMarker(text) && !message.steps.some((s) => s.kind === "error")) {
+  // silence with words left over, or with media it sent (a tts voice note), falls through.
+  if (message.silent && !withoutSilentMarker(text) && attachments.length === 0 && !message.steps.some((s) => s.kind === "error")) {
     return (
       <>
         <TurnView message={message} />
@@ -201,7 +202,6 @@ export const MessageBubble = memo(function MessageBubble({
     );
   }
 
-  const attachments = message.attachments ?? [];
   // A turn that has only tool steps so far (tts/image_gen still running) gets no speaker block of its own.
   const hasBody = message.steps.some((step) => (step.kind === "text" && withoutSilentMarker(step.text)) || step.kind === "error");
   const showActions = (onRetry || onDelete || canEdit) && (hasBody || attachments.length > 0);

@@ -5,8 +5,30 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
+import { createWorkspace, minimalConfigToml } from "./helpers.js";
 
 const execFileAsync = promisify(execFile);
+
+it("exits with a failure when startup fails after opening the diary watcher", async (t) => {
+	const workspacePath = await createWorkspace(t, minimalConfigToml());
+	const env = { ...process.env, ANTHROPIC_API_KEY: "", ANTHROPIC_AUTH_TOKEN: "", ANTHROPIC_OAUTH_TOKEN: "" };
+	await assert.rejects(
+		execFileAsync(process.execPath, ["--import", "tsx", "src/cli.ts", "run", workspacePath], {
+			cwd: resolve(import.meta.dirname, ".."),
+			env,
+			timeout: 15_000,
+		}),
+		(error: unknown) => {
+			const result = error as Error & { code: number; killed: boolean; stdout: string; stderr: string };
+			assert.equal(result.killed, false, "startup failure must exit on its own, not on timeout");
+			assert.equal(result.code, 1);
+			assert.match(result.stdout, /prompt files loaded/);
+			assert.match(result.stderr, /Familiar command failed/);
+			assert.match(result.stderr, /Missing API key for anthropic/);
+			return true;
+		},
+	);
+});
 
 describe("CLI init", () => {
 	it("prints top-level help", async () => {

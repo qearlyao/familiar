@@ -1,4 +1,4 @@
-import type { ServerResponse } from "node:http";
+import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 
 export const MAX_BODY_BYTES = 64 * 1024;
 
@@ -12,6 +12,36 @@ export class HttpError extends Error {
 		super(message);
 		this.name = "HttpError";
 	}
+}
+
+/** Undefined for a bad host or an undecodable path; validated once here so handlers can decode freely. */
+export function parseRequestUrl(request: IncomingMessage): URL | undefined {
+	try {
+		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+		decodeURIComponent(url.pathname);
+		return url;
+	} catch {
+		return undefined;
+	}
+}
+
+export function createWebRequestListener(
+	handle: (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<void>,
+): RequestListener {
+	return (request, response) => {
+		void (async () => {
+			const url = parseRequestUrl(request);
+			if (!url) throw new HttpError(400, "Malformed request URL");
+			await handle(request, response, url);
+		})().catch((error) => {
+			const context = `Web request ${request.method} ${request.url?.split("?", 1)[0]}`;
+			const status = error instanceof HttpError ? error.status : 500;
+			if (status === 500) console.error(`${context} failed`, error);
+			else console.warn(`${context} rejected: ${error.message}`);
+			if (response.headersSent) response.destroy();
+			else sendText(response, status, status === 500 ? "Internal server error" : error.message);
+		});
+	};
 }
 
 export function sendJson(

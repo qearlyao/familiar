@@ -5,6 +5,7 @@ import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isRecord } from "../util/guards.js";
 import type { WebEventHub } from "./event-hub.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, type WebSocketClient } from "./events.js";
+import { parseRequestUrl } from "./http.js";
 import { WEB_VOICE_PATH } from "./voice.js";
 
 type StreamAction = (runtime: ConversationRuntime) => Promise<void>;
@@ -49,7 +50,12 @@ export function attachWebSocketStream(
 
 	server.on("upgrade", (request, socket) => {
 		const netSocket = socket as Socket;
-		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+		const url = parseRequestUrl(request);
+		if (!url) {
+			netSocket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+			netSocket.destroy();
+			return;
+		}
 		if (url.pathname === WEB_VOICE_PATH) return;
 		if (url.pathname !== "/api/web/stream") {
 			netSocket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

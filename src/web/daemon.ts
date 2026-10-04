@@ -16,7 +16,7 @@ import { registerWebDiaryRoutes } from "./diary-routes.js";
 import { createWebEventHub } from "./event-hub.js";
 import { registerWebFileRoutes } from "./file-routes.js";
 import { registerWebGalleryRoutes } from "./gallery-routes.js";
-import { sendText } from "./http.js";
+import { createWebRequestListener, sendText } from "./http.js";
 import { registerWebKeptFileRoutes } from "./kept-file-routes.js";
 import { registerWebMcpRoutes } from "./mcp-routes.js";
 import { createWebPushService } from "./push.js";
@@ -117,14 +117,13 @@ export async function startWebDaemon({
 
 	await subscribeKnownRuntimes();
 
-	const server = createServer((request, response) => {
-		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-		void handleApi(request, response, url).then(async (handled) => {
-			if (handled) return;
+	const server = createServer(
+		createWebRequestListener(async (request, response, url) => {
+			if (await handleApi(request, response, url)) return;
 			if (await serveStatic(response, url.pathname)) return;
 			sendText(response, 404, "Not found");
-		});
-	});
+		}),
+	);
 
 	attachWebSocketVoice(server, {
 		authorize: (request, pathname) => auth.authorize(request, pathname),

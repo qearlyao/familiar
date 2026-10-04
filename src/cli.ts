@@ -472,6 +472,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-	console.error(error instanceof Error ? error.message : error);
-	process.exitCode = 1;
+	console.error("Familiar command failed", error);
+	// Startup can fail after watchers or sockets open. Exit so the service manager
+	// sees the failure instead of leaving a live process with no working channels.
+	process.exit(1);
 });

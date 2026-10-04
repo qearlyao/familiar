@@ -6,7 +6,7 @@ import { buildElevenLabsVoiceSettings } from "../media/tts.js";
 import { listVoices } from "../media/voice-list.js";
 import { isRecord } from "../util/guards.js";
 import { acceptWebSocket, decodeFrames, encodeFrame } from "./events.js";
-import { HttpError, sendJson } from "./http.js";
+import { HttpError, parseRequestUrl, sendJson } from "./http.js";
 import type { RegisterWebRoute } from "./routes.js";
 import { createVoiceCall, type VoiceCallDeps } from "./voice-call.js";
 
@@ -198,8 +198,9 @@ export function attachWebSocketVoice(
 ): void {
 	server.on("upgrade", (request, rawSocket) => {
 		const socket = rawSocket as Socket;
-		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-		if (url.pathname !== WEB_VOICE_PATH) return;
+		// The stream listener answers malformed upgrades.
+		const url = parseRequestUrl(request);
+		if (url?.pathname !== WEB_VOICE_PATH) return;
 		void options
 			.authorize(request, url.pathname)
 			.then(async (authorized) => {

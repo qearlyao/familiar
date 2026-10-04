@@ -157,12 +157,7 @@ export async function serveBookAsset(
 	requestPath: string,
 	rangeHeader?: string,
 ): Promise<boolean> {
-	let requested: string;
-	try {
-		requested = decodeURIComponent(requestPath.slice(ASSET_PREFIX.length));
-	} catch {
-		throw new HttpError(400, "invalid book asset path");
-	}
+	const requested = decodeURIComponent(requestPath.slice(ASSET_PREFIX.length));
 	const slash = requested.indexOf("/");
 	if (slash < 1) throw new HttpError(400, "invalid book asset path");
 	const id = assertBookId(requested.slice(0, slash));

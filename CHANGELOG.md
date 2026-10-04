@@ -1,10 +1,25 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 - 2026-10-04
+
+### Added
+
+- Pick the TTS voice in WebUI settings from a searchable list of the voices your ElevenLabs or Cartesia key can use, or paste an id by hand.
+- Keep documents the agent sends with `send_file` on the library shelf under `data/library/kept`, one entry per source file, so a resent edit updates it. They don't expire with generated media, and each card shows a peek: a live thumbnail for pages, opening lines for markdown, text, csv and json.
 
 ### Changed
 
 - Align MCP and codemode with upstream pi 0.99. MCP servers take an `exposure` (`codemode` by default, `codemode-deferred`, `deferred`, or `direct`) in place of `deferred`, and their tools are named `mcp__<server>__<tool>`. The codemode description lists tool declarations grouped by server within a 3000-token budget, and scripts get `searchTools()` (BM25), `// @options` for output budget and timeout, and MCP results as the whole `CallToolResult`. `load_tools` is replaced by `tool_search`, which ranks with the same BM25 search.
+- Upgrade pi to 1.0.2. Codemode scripts that print past 16 Mi characters or 100000 outputs now fail instead of exhausting host memory, and reading a missing member of `tools` throws instead of returning `undefined`.
+
+### Fixed
+
+- Answer malformed URLs, bad Host headers and failed handlers with 400/500 instead of crashing the daemon.
+- Exit when a CLI command fails, so the service manager sees startup failures instead of a half-alive process.
+
+### Breaking
+
+- Replace `deferred` with `exposure` on `[mcp.servers.*]` in `config.toml`; the old key is rejected at startup. `deferred` flips saved from the WebUI in `mcp-servers.json` are ignored, so servers fall back to `codemode` until set again.
 
 ## 1.4.0 - 2026-09-30
 

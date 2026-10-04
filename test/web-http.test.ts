@@ -71,7 +71,7 @@ it("rejects malformed URLs and contains request failures without losing the web 
 	assert.equal((await get("/100%25")).status, 200);
 	assert.equal(warnings.mock.calls.length, 6);
 	assert.equal(errors.mock.calls.length, 2);
-	assert.deepEqual(errors.mock.calls[0]?.arguments, ["Web request GET /fail failed", failure]);
+	assert.deepEqual(errors.mock.calls[0]?.arguments, ["%s failed", "Web request GET /fail", failure]);
 });
 
 function body(...parts: (Buffer | string)[]): AsyncIterable<Buffer | string> {

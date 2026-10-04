@@ -36,7 +36,7 @@ export function createWebRequestListener(
 		})().catch((error) => {
 			const context = `Web request ${request.method} ${request.url?.split("?", 1)[0]}`;
 			const status = error instanceof HttpError ? error.status : 500;
-			if (status === 500) console.error(`${context} failed`, error);
+			if (status === 500) console.error("%s failed", context, error);
 			else console.warn(`${context} rejected: ${error.message}`);
 			if (response.headersSent) response.destroy();
 			else sendText(response, status, status === 500 ? "Internal server error" : error.message);

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.1 - 2026-10-06
+
+### Changed
+
+- Leave the `tts` tool out of voice call sessions, since a call already speaks every word the agent writes.
+- Tell the agent in the `tts` result that a voice note can be the whole reply, so it can send one alone with the silent marker.
+
+### Fixed
+
+- Show TTS audio on a web turn that sent a voice note and then stayed silent, instead of dropping it as "stayed quiet".
+- Keep bundled skills the agent deleted, such as the one-time `inkbox-setup`, from being restored by `familiar init` on upgrade.
+- Keep the request path out of the web error log's format string, so a path containing `%s` or `%o` can't garble the log.
+
 ## 1.5.0 - 2026-10-04
 
 ### Added

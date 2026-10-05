@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -69,6 +70,22 @@ describe("CLI init", () => {
 
 		assert.match(normalizedSkill, /^---\nname: image-gen/m);
 		assert.match(normalizedSkill, /Read this skill before using the image_gen tool/);
+	});
+
+	it("does not restore a default skill the agent deleted", async (t) => {
+		const workspacePath = await mkdtemp(resolve(tmpdir(), "familiar-init-deleted-"));
+		t.after(() => rm(workspacePath, { recursive: true, force: true }));
+		const init = () =>
+			execFileAsync(process.execPath, ["--import", "tsx", "src/cli.ts", "init", workspacePath], {
+				cwd: resolve(import.meta.dirname, ".."),
+			});
+
+		await init();
+		await rm(resolve(workspacePath, "skills", "inkbox-setup"), { recursive: true });
+		await init();
+
+		assert.equal(existsSync(resolve(workspacePath, "skills", "inkbox-setup")), false);
+		assert.equal(existsSync(resolve(workspacePath, "skills", "image-gen", "SKILL.md")), true);
 	});
 
 	it("does not overwrite existing workspace files", async (t) => {

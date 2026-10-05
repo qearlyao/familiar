@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
-import { copyFile, cp, mkdir, readFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -92,13 +92,19 @@ async function ensureWorkspaceDirs(dirs: WorkspaceDirs): Promise<void> {
 	]);
 }
 
+// Each bundled skill is seeded once; the manifest keeps skills the agent deleted from coming back on upgrade.
 async function copyDefaultSkills(workspacePath: string): Promise<void> {
 	const sourcePath = resolve(PROJECT_ROOT, "skills");
 	if (!existsSync(sourcePath)) return;
-	await cp(sourcePath, resolve(workspacePath, "skills"), {
-		recursive: true,
-		force: false,
-	});
+	const targetPath = resolve(workspacePath, "skills");
+	const manifestPath = resolve(targetPath, ".bundled.json");
+	const seeded = new Set<string>(existsSync(manifestPath) ? JSON.parse(await readFile(manifestPath, "utf8")) : []);
+	for (const name of await readdir(sourcePath)) {
+		if (seeded.has(name)) continue;
+		await cp(resolve(sourcePath, name), resolve(targetPath, name), { recursive: true, force: false });
+		seeded.add(name);
+	}
+	await writeFile(manifestPath, `${JSON.stringify([...seeded].sort(), null, "\t")}\n`, "utf8");
 }
 
 async function copyIfMissing(sourcePath: string, targetPath: string): Promise<void> {

@@ -21,9 +21,8 @@ interface OpenRouterImagesResponse {
 
 /**
  * OpenRouter's dedicated Image API — `POST {base}/images` with a prompt and
- * optional `input_references`. Every image model OpenRouter adds now lands
- * here only (FLUX.3 among them); the older chat-completions route with image
- * modalities is what `openrouter-images` speaks. Output is always base64.
+ * optional `input_references`. OpenRouter adds new image models (FLUX.3 among
+ * them) here only. Output is always base64.
  */
 export const generateImages: ImagesFunction<ImagesOptions> = (model, context, options) =>
 	runImageRequest(model, options, async (fetchImpl, signal) => {

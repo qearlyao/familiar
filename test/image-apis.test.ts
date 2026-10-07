@@ -5,7 +5,7 @@ import type { ImagesContext, ImageModel } from "@earendil-works/pi-ai/compat";
 
 import { generateImages as generateGoogleImages } from "../src/media/image-apis/google-images.js";
 import { generateImages as generateOpenAIImages } from "../src/media/image-apis/openai-images.js";
-import { generateImages as generateOpenRouterNativeImages } from "../src/media/image-apis/openrouter-native.js";
+import { generateImages as generateOpenRouterImages } from "../src/media/image-apis/openrouter-images.js";
 import { withDefaultPath } from "../src/media/image-apis/shared.js";
 import { pngBytes } from "./media-fixtures.js";
 
@@ -331,13 +331,13 @@ describe("google-images api", () => {
 	});
 });
 
-describe("openrouter-native api", () => {
+describe("openrouter-images api", () => {
 	it("posts the prompt to OpenRouter's images endpoint and decodes base64 output", async () => {
 		const stub = stubFetch(() =>
 			jsonResponse({ data: [{ b64_json: pngBytes().toString("base64"), media_type: "image/png" }] }),
 		);
-		const result = await generateOpenRouterNativeImages(
-			imageModel("openrouter-native", "https://openrouter.ai/api/v1"),
+		const result = await generateOpenRouterImages(
+			imageModel("openrouter-images", "https://openrouter.ai/api/v1"),
 			promptContext("a fox in snow"),
 			{ apiKey: "secret", fetch: stub.fetch },
 		);
@@ -355,7 +355,7 @@ describe("openrouter-native api", () => {
 
 	it("defaults a bare host to the /api/v1 mount", async () => {
 		const stub = stubFetch(() => jsonResponse({ data: [{ b64_json: pngBytes().toString("base64") }] }));
-		await generateOpenRouterNativeImages(imageModel("openrouter-native", "https://openrouter.ai"), promptContext("x"), {
+		await generateOpenRouterImages(imageModel("openrouter-images", "https://openrouter.ai"), promptContext("x"), {
 			apiKey: "secret",
 			fetch: stub.fetch,
 		});
@@ -365,8 +365,8 @@ describe("openrouter-native api", () => {
 
 	it("sends reference images as data URL input_references", async () => {
 		const stub = stubFetch(() => jsonResponse({ data: [{ b64_json: pngBytes().toString("base64") }] }));
-		await generateOpenRouterNativeImages(
-			imageModel("openrouter-native", "https://openrouter.ai/api/v1"),
+		await generateOpenRouterImages(
+			imageModel("openrouter-images", "https://openrouter.ai/api/v1"),
 			referenceContext("in watercolor"),
 			{ apiKey: "secret", fetch: stub.fetch },
 		);
@@ -379,8 +379,8 @@ describe("openrouter-native api", () => {
 
 	it("reports an error when the response carries no image", async () => {
 		const stub = stubFetch(() => jsonResponse({ data: [] }));
-		const result = await generateOpenRouterNativeImages(
-			imageModel("openrouter-native", "https://openrouter.ai/api/v1"),
+		const result = await generateOpenRouterImages(
+			imageModel("openrouter-images", "https://openrouter.ai/api/v1"),
 			promptContext("nothing back"),
 			{ apiKey: "secret", fetch: stub.fetch },
 		);

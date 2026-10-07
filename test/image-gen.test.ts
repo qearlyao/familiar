@@ -86,6 +86,21 @@ describe("image_gen helpers", () => {
 		assert.equal(fallback.baseUrl, "https://gw.test/v1beta");
 	});
 
+	it("sends OpenRouter models to its dedicated Image API by default", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			imageGen: { model: "openrouter/black-forest-labs/flux-3-image" },
+		});
+
+		const model = resolveImageModel(config, {
+			provider: "openrouter",
+			id: "black-forest-labs/flux-3-image",
+			key: "openrouter/black-forest-labs/flux-3-image",
+		});
+
+		assert.equal(model.api, "openrouter-native");
+		assert.equal(model.baseUrl, "https://openrouter.ai/api/v1");
+	});
+
 	it("prefers a provider/model wire style over the provider-wide one", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data", {
 			imageGen: {

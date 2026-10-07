@@ -291,10 +291,14 @@ fallback_model = "google/gemini-3-pro-image"
 | --- | --- |
 | `openai-images` | `POST {base}/images/generations`, or `/images/edits` for reference images |
 | `google-images` | `POST {base}/models/{id}:generateContent` |
+| `openrouter-native` | `POST {base}/images`, OpenRouter's dedicated Image API |
 | `openrouter-images` | `POST {base}/chat/completions` with image modalities |
 
-`openai`, `xai`, and `google` default to their native shape; every other
-provider defaults to `openrouter-images`. Endpoints and credentials come from
+`openrouter`, `openai`, `xai`, and `google` default to their native shape;
+every other provider defaults to `openrouter-images`. OpenRouter adds new image
+models (FLUX.3 among them) to its Image API only; a model it still serves only
+through chat completions needs a quoted `"openrouter/<model>" = "openrouter-images"`
+entry. Endpoints and credentials come from
 `[models.base_urls]` and `[models.api_key_envs]`, so any of these can point at
 a self-hosted or proxied deployment. A base URL with no path of its own gains
 `/v1` (or `/v1beta` for `google-images`); one that already has a path is used

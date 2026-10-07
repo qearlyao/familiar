@@ -2,6 +2,7 @@ import { registerImagesApiProvider } from "@earendil-works/pi-ai/compat";
 
 import { generateImages as generateGoogleImages } from "./google-images.js";
 import { generateImages as generateOpenAIImages } from "./openai-images.js";
+import { generateImages as generateOpenRouterNativeImages } from "./openrouter-native.js";
 
 /**
  * Image APIs beyond the one pi-ai ships. pi-ai dispatches `generateImages`
@@ -14,4 +15,5 @@ import { generateImages as generateOpenAIImages } from "./openai-images.js";
 export function registerImageApis(): void {
 	registerImagesApiProvider({ api: "openai-images", generateImages: generateOpenAIImages });
 	registerImagesApiProvider({ api: "google-images", generateImages: generateGoogleImages });
+	registerImagesApiProvider({ api: "openrouter-native", generateImages: generateOpenRouterNativeImages });
 }

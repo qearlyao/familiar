@@ -162,6 +162,7 @@ describe("loadConfig tts", () => {
 			model: "openrouter/google/gemini-2.5-flash-image",
 			fallbackModel: undefined,
 			apis: {
+				openrouter: "openrouter-native",
 				openai: "openai-images",
 				xai: "openai-images",
 				google: "google-images",
@@ -716,6 +717,7 @@ api_key_env = "ALT_GEMINI_KEY"
 			model: "linkgpt/gpt-image-2-c",
 			fallbackModel: "linkgemini/gemini-3-pro-image-preview",
 			apis: {
+				openrouter: "openrouter-native",
 				openai: "openai-images",
 				xai: "openai-images",
 				google: "google-images",

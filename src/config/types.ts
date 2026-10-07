@@ -24,7 +24,7 @@ export type WebAuthMode = "tailscale-only" | "bearer" | "public-2fa";
 /** what a finished voice call leaves in the chat, or "ask" to decide each time */
 export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
 export type TtsProvider = "elevenlabs" | "cartesia";
-export type ImageGenApi = "openrouter-images" | "openai-images" | "google-images";
+export type ImageGenApi = "openrouter-images" | "openrouter-native" | "openai-images" | "google-images";
 export type ToolReach = "pinned" | "loadable" | "off";
 export type McpExposure = "codemode" | "codemode-deferred" | "deferred" | "direct";
 export type MediaUnderstandingProvider = "groq" | "google";

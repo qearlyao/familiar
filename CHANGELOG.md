@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Generate OpenRouter images through its dedicated Image API (`openrouter-native`), now the default for the `openrouter` provider, so models only offered there such as FLUX.3 work. A model OpenRouter still serves only through chat completions can go back to that route with a quoted `"openrouter/<model>" = "openrouter-images"` entry under `[image_gen.apis]`.
+
 ## 1.5.1 - 2026-10-06
 
 ### Changed

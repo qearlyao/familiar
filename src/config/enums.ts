@@ -48,6 +48,7 @@ export const TTS_PROVIDERS = ["elevenlabs", "cartesia"] as const satisfies reado
 export const VOICE_KEEP_CHOICES = ["ask", "transcript", "summary", "discard"] as const satisfies readonly VoiceKeep[];
 export const IMAGE_GEN_APIS = [
 	"openrouter-images",
+	"openrouter-native",
 	"openai-images",
 	"google-images",
 ] as const satisfies readonly ImageGenApi[];
@@ -61,6 +62,7 @@ export const IMAGE_GEN_APIS = [
 export const DEFAULT_IMAGE_GEN_API: ImageGenApi = "openrouter-images";
 
 export const DEFAULT_IMAGE_GEN_APIS: Record<string, ImageGenApi> = {
+	openrouter: "openrouter-native",
 	openai: "openai-images",
 	xai: "openai-images",
 	google: "google-images",

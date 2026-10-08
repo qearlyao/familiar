@@ -20,7 +20,7 @@ import type { Config, ImageGenApi } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
 import { type ModelRef, parseModelRef } from "../models/index.js";
 import { resolveAgentPath } from "../util/fs.js";
-import { imageMimeTypeFromPath, sniffImageMimeType } from "../util/image-mime.js";
+import { imageMimeTypeFromPath } from "../util/image-mime.js";
 import type { GeneratedMediaSink } from "./generated-media.js";
 import { attachedNotice, ensureGeneratedAttachmentsDir } from "./generated-media.js";
 import { registerImageApis } from "./image-apis/index.js";
@@ -81,17 +81,6 @@ interface WorkspaceReferenceImage {
 	size: number;
 }
 
-interface RecoveredImage {
-	mimeType: string;
-	data: string;
-}
-
-interface TextImageRecoveryOptions {
-	signal?: AbortSignal;
-}
-
-const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
-
 export function imageExtension(mimeType: string): string {
 	const normalized = mimeType.toLowerCase();
 	if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
@@ -121,8 +110,7 @@ function findBuiltInImageModel(ref: ModelRef): ImageModel<any> | undefined {
 
 /**
  * Wire style for a provider's image endpoint: an explicit `image_gen.apis`
- * entry, else the provider's known native shape, else the OpenRouter
- * chat-completions shape that gateways commonly proxy.
+ * entry, else the provider's known native shape, else OpenRouter's Image API.
  */
 function resolveImageApi(config: Config, ref: ModelRef): ImageGenApi {
 	return config.imageGen.apis[ref.key] ?? config.imageGen.apis[ref.provider] ?? DEFAULT_IMAGE_GEN_API;
@@ -183,121 +171,6 @@ function textOutput(result: AssistantImages): string {
 		.map((item) => item.text.trim())
 		.filter(Boolean)
 		.join("\n");
-}
-
-function recoveredImageFromBase64(value: string): RecoveredImage | undefined {
-	const data = value.trim();
-	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length % 4 !== 0) return undefined;
-	const buffer = Buffer.from(data, "base64");
-	if (!buffer.length) return undefined;
-	const detectedMimeType = sniffImageMimeType(buffer);
-	if (!detectedMimeType) return undefined;
-	return {
-		mimeType: detectedMimeType,
-		data,
-	};
-}
-
-function recoveredInlineImageFromText(text: string): RecoveredImage | undefined {
-	const trimmed = text.trim();
-	const dataUrlMatch = trimmed.match(/^data:(image\/[^;]+);base64,([A-Za-z0-9+/]+={0,2})$/);
-	if (dataUrlMatch) return recoveredImageFromBase64(dataUrlMatch[2] ?? "");
-	const embeddedDataUrlMatch = text.match(/data:(image\/[^;)\]\s]+);base64,([A-Za-z0-9+/]+={0,2})/);
-	if (embeddedDataUrlMatch) {
-		return recoveredImageFromBase64(embeddedDataUrlMatch[2] ?? "");
-	}
-	return recoveredImageFromBase64(trimmed);
-}
-
-function imageUrlFromMarkdownText(text: string): URL | undefined {
-	const match = text.match(/!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i);
-	if (!match?.[1]) return undefined;
-	try {
-		const url = new URL(match[1]);
-		if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
-		return url;
-	} catch {
-		return undefined;
-	}
-}
-
-async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Buffer | undefined> {
-	const reader = response.body?.getReader();
-	if (!reader) {
-		const buffer = Buffer.from(await response.arrayBuffer());
-		return buffer.byteLength > maxBytes ? undefined : buffer;
-	}
-	const chunks: Buffer[] = [];
-	let total = 0;
-	try {
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			const chunk = Buffer.from(value);
-			total += chunk.byteLength;
-			if (total > maxBytes) return undefined;
-			chunks.push(chunk);
-		}
-		return Buffer.concat(chunks);
-	} finally {
-		reader.releaseLock();
-	}
-}
-
-async function recoveredImageFromRemoteUrl(
-	url: URL,
-	options: TextImageRecoveryOptions,
-): Promise<RecoveredImage | undefined> {
-	try {
-		const response = await fetch(url, { signal: options.signal });
-		if (!response.ok) return undefined;
-		const contentLength = Number(response.headers.get("content-length") ?? 0);
-		if (contentLength > MAX_REMOTE_IMAGE_BYTES) return undefined;
-		const bytes = await readBoundedResponseBody(response, MAX_REMOTE_IMAGE_BYTES);
-		if (!bytes) return undefined;
-		const detectedMimeType = sniffImageMimeType(bytes);
-		if (!detectedMimeType) return undefined;
-		return {
-			mimeType: detectedMimeType,
-			data: bytes.toString("base64"),
-		};
-	} catch (error) {
-		if (options.signal?.aborted) throw error;
-		return undefined;
-	}
-}
-
-async function recoveredImageFromText(
-	text: string,
-	options: TextImageRecoveryOptions,
-): Promise<RecoveredImage | undefined> {
-	const inlineImage = recoveredInlineImageFromText(text);
-	if (inlineImage) return inlineImage;
-	const url = imageUrlFromMarkdownText(text);
-	if (!url) return undefined;
-	return recoveredImageFromRemoteUrl(url, options);
-}
-
-async function normalizeCompatibleImageText(
-	result: AssistantImages,
-	options: TextImageRecoveryOptions,
-): Promise<AssistantImages> {
-	if (result.output.some((item) => item.type === "image")) return result;
-	const output: AssistantImages["output"] = [];
-	for (const item of result.output) {
-		if (item.type !== "text") {
-			output.push(item);
-			continue;
-		}
-		const recovered = await recoveredImageFromText(item.text, options);
-		if (!recovered) {
-			output.push(item);
-			continue;
-		}
-		output.push({ type: "image", mimeType: recovered.mimeType, data: recovered.data });
-	}
-	if (!output.some((item) => item.type === "image")) return result;
-	return { ...result, output };
 }
 
 function resolveWorkspaceReferencePath(config: Config, rawRef: string): string {
@@ -473,10 +346,7 @@ async function tryGenerateImages(
 		signal,
 		timeoutMs: config.imageGen.timeoutMs,
 	});
-	return {
-		model,
-		result: await normalizeCompatibleImageText(result, { signal }),
-	};
+	return { model, result };
 }
 
 function attemptDetails(model: ImageModel<ImageGenApi>, result: AssistantImages): ImageGenAttemptDetails {

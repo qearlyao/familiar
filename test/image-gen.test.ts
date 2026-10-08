@@ -86,6 +86,21 @@ describe("image_gen helpers", () => {
 		assert.equal(fallback.baseUrl, "https://gw.test/v1beta");
 	});
 
+	it("sends OpenRouter models to its dedicated Image API by default", async (t) => {
+		const config = await configWithDataDir(t, "/workspace/data", {
+			imageGen: { model: "openrouter/black-forest-labs/flux-3-image" },
+		});
+
+		const model = resolveImageModel(config, {
+			provider: "openrouter",
+			id: "black-forest-labs/flux-3-image",
+			key: "openrouter/black-forest-labs/flux-3-image",
+		});
+
+		assert.equal(model.api, "openrouter-images");
+		assert.equal(model.baseUrl, "https://openrouter.ai/api/v1");
+	});
+
 	it("prefers a provider/model wire style over the provider-wide one", async (t) => {
 		const config = await configWithDataDir(t, "/workspace/data", {
 			imageGen: {
@@ -245,238 +260,6 @@ describe("image_gen tool", () => {
 				assert.equal(result.details.stopReason, "stop");
 			}),
 		);
-	});
-
-	it("recovers provider text data URLs as generated images", async (t) => {
-		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
-			const dataDir = await createTempDataDir(t);
-			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, sink, {
-				generateImages: async (model) => {
-					return imageResult(
-						[
-							{
-								type: "text",
-								text: `data:image/png;base64,${pngBytes().toString("base64")}`,
-							},
-						],
-						{ provider: model.provider, model: model.id },
-					);
-				},
-			});
-
-			const result = await tool.execute("call-1", { prompt: "draw via text data url" });
-			const attachments = sink.drain();
-
-			assert.equal(attachments.length, 1);
-			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.id, attachments[0]?.id);
-			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
-			assert.doesNotMatch(toolText(result), /data:image/);
-		});
-	});
-
-	it("recovers provider markdown image data URLs as generated images", async (t) => {
-		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
-			const dataDir = await createTempDataDir(t);
-			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, sink, {
-				generateImages: async (model) => {
-					return imageResult(
-						[
-							{
-								type: "text",
-								text: `![image](data:image/jpeg;base64,${pngBytes().toString("base64")})`,
-							},
-						],
-						{ provider: model.provider, model: model.id },
-					);
-				},
-			});
-
-			const result = await tool.execute("call-1", { prompt: "draw via markdown image" });
-			const attachments = sink.drain();
-
-			assert.equal(attachments.length, 1);
-			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.id, attachments[0]?.id);
-			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
-			assert.doesNotMatch(toolText(result), /data:image/);
-		});
-	});
-
-	it("recovers provider markdown image URLs as generated images", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		const previousFetch = globalThis.fetch;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
-			const dataDir = await createTempDataDir(t);
-			const sink = createGeneratedMediaSink();
-			const imageBytes = pngBytes();
-			const fetches: string[] = [];
-			globalThis.fetch = (async (input, init) => {
-				fetches.push(String(input));
-				assert.equal(init?.signal instanceof AbortSignal, true);
-				const body = new Uint8Array(imageBytes);
-				return new Response(body, { headers: { "content-type": "image/png" } });
-			}) as typeof fetch;
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, sink, {
-				generateImages: async (model) => {
-					return imageResult(
-						[
-							{
-								type: "text",
-								text: "![image](https://oss.filenest.top/uploads/generated.png)\n\n",
-							},
-						],
-						{ provider: model.provider, model: model.id },
-					);
-				},
-			});
-
-			const result = await tool.execute("call-1", { prompt: "draw via markdown image url" }, new AbortController().signal);
-			const attachments = sink.drain();
-
-			assert.deepEqual(fetches, ["https://oss.filenest.top/uploads/generated.png"]);
-			assert.equal(attachments.length, 1);
-			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.id, attachments[0]?.id);
-			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.deepEqual(await readFile(attachments[0]?.localPath ?? ""), imageBytes);
-			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
-			assert.doesNotMatch(toolText(result), /oss\.filenest/);
-		} finally {
-			globalThis.fetch = previousFetch;
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
-	});
-
-	it("ignores provider markdown URLs that do not fetch image bytes", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		const previousFetch = globalThis.fetch;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
-			const dataDir = await createTempDataDir(t);
-			globalThis.fetch = (async () => new Response("not an image", { headers: { "content-type": "text/plain" } })) as typeof fetch;
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
-				generateImages: async (model) => {
-					return imageResult([{ type: "text", text: "![image](https://images.example.test/not-image.png)" }], {
-						provider: model.provider,
-						model: model.id,
-					});
-				},
-			});
-
-			await assert.rejects(() => tool.execute("call-1", { prompt: "draw invalid remote image" }), {
-				message: "Image generation failed: image generation returned no image output",
-			});
-		} finally {
-			globalThis.fetch = previousFetch;
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
-	});
-
-	it("rejects provider markdown URLs whose response body exceeds the size cap", async (t) => {
-		const previousKey = process.env.CUSTOM_IMAGE_KEY;
-		const previousFetch = globalThis.fetch;
-		process.env.CUSTOM_IMAGE_KEY = "secret";
-		try {
-			const dataDir = await createTempDataDir(t);
-			globalThis.fetch = (async () =>
-				new Response(new Uint8Array(pngBytes()), {
-					headers: {
-						"content-type": "image/png",
-						"content-length": String(20 * 1024 * 1024),
-					},
-				})) as typeof fetch;
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, createGeneratedMediaSink(), {
-				generateImages: async (model) => {
-					return imageResult([{ type: "text", text: "![image](https://images.example.test/huge.png)" }], {
-						provider: model.provider,
-						model: model.id,
-					});
-				},
-			});
-
-			await assert.rejects(() => tool.execute("call-1", { prompt: "draw oversized remote image" }), {
-				message: "Image generation failed: image generation returned no image output",
-			});
-		} finally {
-			globalThis.fetch = previousFetch;
-			if (previousKey === undefined) delete process.env.CUSTOM_IMAGE_KEY;
-			else process.env.CUSTOM_IMAGE_KEY = previousKey;
-		}
-	});
-
-	it("recovers provider raw base64 text as generated images", async (t) => {
-		await withEnv("CUSTOM_IMAGE_KEY", "secret", async () => {
-			const dataDir = await createTempDataDir(t);
-			const sink = createGeneratedMediaSink();
-			const config = await configWithDataDir(t, dataDir, {
-				imageGen: { model: "custom/gpt-image" },
-				models: {
-					baseUrls: { custom: "https://images.example.test/v1" },
-					apiKeyEnvs: { custom: "CUSTOM_IMAGE_KEY" },
-				},
-			});
-			const tool = createImageGenTool(config, sink, {
-				generateImages: async (model) => {
-					return imageResult([{ type: "text", text: pngBytes().toString("base64") }], {
-						provider: model.provider,
-						model: model.id,
-					});
-				},
-			});
-
-			const result = await tool.execute("call-1", { prompt: "draw via raw base64" });
-			const attachments = sink.drain();
-
-			assert.equal(attachments.length, 1);
-			assert.equal(attachments[0]?.mimeType, "image/png");
-			assert.equal(result.details.id, attachments[0]?.id);
-			assert.equal(result.details.localPath, attachments[0]?.localPath);
-			assert.match(toolText(result), /Image attached to your reply: image_gen_/);
-			assert.doesNotMatch(toolText(result), /iVBOR/);
-		});
 	});
 
 	it("does not surface long text payloads as no-image errors", async (t) => {

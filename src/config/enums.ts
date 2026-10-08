@@ -54,9 +54,8 @@ export const IMAGE_GEN_APIS = [
 
 /**
  * Wire style used when `image_gen.apis` does not name a provider. Providers
- * with a known native image endpoint default to it; everything else keeps the
- * OpenRouter chat-completions shape, which is what gateways proxying an
- * OpenRouter-style route expect.
+ * with a known native image endpoint default to it; everything else speaks
+ * OpenRouter's Image API.
  */
 export const DEFAULT_IMAGE_GEN_API: ImageGenApi = "openrouter-images";
 

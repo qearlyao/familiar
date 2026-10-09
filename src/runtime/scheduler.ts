@@ -6,6 +6,8 @@ import { readFileOrNull } from "../util/fs.js";
 import { formatLocalTimestamp, toDate } from "../util/time.js";
 
 export interface CronJobState {
+	/** the schedule this record was kept under; see seedCronState */
+	schedule?: string;
 	lastFiredSlot?: string;
 	lastFiredAt?: string;
 }
@@ -147,10 +149,26 @@ export function dueCronSlot(
 	return state?.lastFiredSlot === slot ? undefined : slot;
 }
 
+/** A recurring job owes only the slots that come after it was scheduled. Without a record kept under
+    its current schedule (just created, or its timing just changed), the latest slot passed before the
+    schedule existed, so it is marked spent rather than fired. Returns the record to store, or
+    undefined when the existing one stands. */
+export function seedCronState(
+	job: CronJobConfig,
+	state: CronJobState | undefined,
+	now: Date | number,
+): CronJobState | undefined {
+	if (!job.enabled || job.frequency === "once") return undefined;
+	const schedule = [job.frequency, job.time, job.minute, job.weekday, job.day].map((v) => v ?? "").join("|");
+	if (state?.schedule === schedule) return undefined;
+	const scheduled = latestScheduledDate(job, toDate(now));
+	return { ...state, schedule, lastFiredSlot: scheduled && cronSlotKey(job, scheduled) };
+}
+
 /** How late this fire is, when late enough to mean the box was down rather than merely busy.
-    A job that has never run is catching up on its own creation, not missed. */
+    A job with no run record has no schedule it was keeping, so it cannot be late. */
 function missedBy(job: CronJobConfig, state: CronJobState | undefined, now: Date, graceMs: number): string | undefined {
-	const scheduled = state?.lastFiredAt ? latestScheduledDate(job, now) : undefined;
+	const scheduled = state ? latestScheduledDate(job, now) : undefined;
 	if (!scheduled) return undefined;
 	const lateMs = now.getTime() - scheduled.getTime();
 	return lateMs > graceMs ? formatIdleDuration(lateMs) : undefined;

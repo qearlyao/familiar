@@ -17,6 +17,7 @@ import {
 	type SchedulerLogEvent,
 	type SchedulerState,
 	saveSchedulerState,
+	seedCronState,
 } from "./scheduler.js";
 import { CRON_SKIPPED, HEARTBEAT_SKIPPED, heartbeatStillDue, runAgentTurn } from "./turn.js";
 
@@ -165,6 +166,7 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 
 	const markCronSlotStarted = async (job: CronJobConfig, slot: string): Promise<void> => {
 		schedulerState.cron[job.name] = {
+			...schedulerState.cron[job.name],
 			lastFiredSlot: slot,
 			lastFiredAt: new Date().toISOString(),
 		};
@@ -257,6 +259,11 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 			const session = await resolveDefaultSession();
 			for (const job of config.cron.jobs) {
 				if (!config.cron.jobs.includes(job)) continue;
+				const seeded = seedCronState(job, schedulerState.cron[job.name], Date.now());
+				if (seeded) {
+					schedulerState.cron[job.name] = seeded;
+					await saveScheduler();
+				}
 				const slot = dueCronSlot(job, schedulerState.cron[job.name], Date.now());
 				if (!slot) continue;
 				try {

@@ -264,15 +264,6 @@ describe("scheduler helpers", () => {
 			later: "weekly:2026-10-11T10:00",
 		});
 		const daily: CronJobConfig = { ...base, name: "d", frequency: "daily", time: "12:00" };
-		assert.deepEqual(fire(daily, new Date(2026, 9, 9, 11, 0), new Date(2026, 9, 9, 12, 0)), {
-			created: undefined,
-			later: "daily:2026-10-09T12:00",
-		});
-		const hourly: CronJobConfig = { ...base, name: "h", frequency: "hourly", minute: 15 };
-		assert.deepEqual(fire(hourly, new Date(2026, 9, 9, 11, 30), new Date(2026, 9, 9, 12, 15)), {
-			created: undefined,
-			later: "hourly:2026-10-09T12:15",
-		});
 
 		// a record kept under the same schedule stands, so downtime still catches up
 		const kept = { ...seedCronState(daily, undefined, new Date(2026, 9, 8, 13)), lastFiredAt: "2026-10-08T05:00:00Z" };

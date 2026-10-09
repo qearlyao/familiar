@@ -149,11 +149,6 @@ export function dueCronSlot(
 	return state?.lastFiredSlot === slot ? undefined : slot;
 }
 
-/** The fields that decide when a recurring job fires. */
-function cronSchedule(job: CronJobConfig): string {
-	return [job.frequency, job.time, job.minute, job.weekday, job.day].map((value) => value ?? "").join("|");
-}
-
 /** A recurring job owes only the slots that come after it was scheduled. Without a record kept under
     its current schedule (just created, or its timing just changed), the latest slot passed before the
     schedule existed, so it is marked spent rather than fired. Returns the record to store, or
@@ -164,7 +159,7 @@ export function seedCronState(
 	now: Date | number,
 ): CronJobState | undefined {
 	if (!job.enabled || job.frequency === "once") return undefined;
-	const schedule = cronSchedule(job);
+	const schedule = [job.frequency, job.time, job.minute, job.weekday, job.day].map((v) => v ?? "").join("|");
 	if (state?.schedule === schedule) return undefined;
 	const scheduled = latestScheduledDate(job, toDate(now));
 	return { ...state, schedule, lastFiredSlot: scheduled && cronSlotKey(job, scheduled) };

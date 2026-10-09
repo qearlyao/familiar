@@ -263,7 +263,6 @@ export function createSchedulerRunner(deps: SchedulerRunnerDeps): SchedulerRunne
 				if (seeded) {
 					schedulerState.cron[job.name] = seeded;
 					await saveScheduler();
-					continue;
 				}
 				const slot = dueCronSlot(job, schedulerState.cron[job.name], Date.now());
 				if (!slot) continue;

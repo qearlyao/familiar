@@ -10,6 +10,10 @@
 
 - Drop the chat-completions image route and the recovery of images from reply text that came with it. `openrouter-images` now means OpenRouter's Image API, and models it does not list no longer work through OpenRouter.
 
+### Fixed
+
+- Stop new recurring cron jobs from firing at once on a slot that passed before they existed; a new job, or one whose timing changes, now waits for its next slot. Jobs whose timing is unchanged still catch up after downtime with `missed=`.
+
 ## 1.5.1 - 2026-10-06
 
 ### Changed

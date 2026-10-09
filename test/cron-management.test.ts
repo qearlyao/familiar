@@ -260,6 +260,42 @@ describe("cron management", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
+  it("waits for a new recurring job's next slot instead of catching up on one before it existed", { timeout: 3000 }, async (t) => {
+    const dataDir = await createTempDataDir(t);
+    const config = await configWithDataDir(t, dataDir, { heartbeat: { enabled: false }, cron: { jobs: [], pollMs: 5 } });
+    setConfigOverridesPath(dataDir);
+    let prompted = false;
+    const runner = createSchedulerRunner({
+      config,
+      familiarAgent: {},
+      resolveDefaultSession: async () => ({ runtime: {} }),
+      delivery: {},
+      agentWork: {
+        activeOwner: undefined,
+        promptScheduledMessage: async () => {
+          prompted = true;
+          return CRON_SKIPPED;
+        },
+      },
+    } as unknown as SchedulerRunnerDeps);
+    t.after(() => runner.stop());
+    await runner.start();
+    // the latest slot of an hourly job is always already behind it
+    await manageCron(config, req("create", { name: "hourly", frequency: "hourly", prompt: "Tick", minute: 0 }));
+    let state: Awaited<ReturnType<typeof loadSchedulerState>>["cron"][string] | undefined;
+    for (let attempt = 0; attempt < 100 && !state; attempt++) {
+      state = (await loadSchedulerState(dataDir)).cron.hourly;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    // give a wrongly due slot a few more ticks to fire
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    runner.stop();
+    assert.ok(state?.lastFiredSlot);
+    assert.equal(state?.lastFiredAt, undefined);
+    assert.equal(prompted, false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
   it("starts polling with no jobs and skips a job deleted while queued", { timeout: 3000 }, async (t) => {
     const dataDir = await createTempDataDir(t);
     const config = await configWithDataDir(t, dataDir, { heartbeat: { enabled: false }, cron: { jobs: [], pollMs: 5 } });
@@ -275,7 +311,7 @@ describe("cron management", () => {
       agentWork: {
         activeOwner: undefined,
         promptScheduledMessage: async (_runtime: unknown, buildMessage: () => Promise<unknown>) => {
-          await manageCron(config, { action: "delete", name: daily.name });
+          await manageCron(config, { action: "delete", name: "soon" });
           queuedResult = await buildMessage();
           finish();
           return CRON_SKIPPED;
@@ -285,7 +321,9 @@ describe("cron management", () => {
     const runner = createSchedulerRunner(deps);
     t.after(() => runner.stop());
     await runner.start();
-    await manageCron(config, req("create", daily));
+    // a recurring job created now would wait for its next slot, so a once job just ahead stands in
+    const runAt = new Date(Date.now() + 100).toISOString();
+    await manageCron(config, req("create", { name: "soon", frequency: "once", prompt: "Soon", runAt }));
     await finished;
     assert.equal(queuedResult, CRON_SKIPPED);
     runner.stop();

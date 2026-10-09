@@ -8,6 +8,7 @@ import {
 	dueCronSlot,
 	formatIdleDuration,
 	isHeartbeatDue,
+	seedCronState,
 } from "../src/runtime/scheduler.js";
 
 describe("scheduler helpers", () => {
@@ -225,7 +226,9 @@ describe("scheduler helpers", () => {
 		// fired hours past its slot because the box was down, not because the tick ran long
 		const late = { job, now: "2026-05-13T13:20:00", graceMs: 300_000 };
 		assert.match(buildCronInjectionText({ ...late, state: { lastFiredAt: "2026-05-12T09:00:00Z" } }), / missed="4h 20m">/);
-		// within grace, and a job that has never run is catching up on its own creation
+		// a job seeded but never fired is just as late when the box was down across its first slot
+		assert.match(buildCronInjectionText({ ...late, state: { lastFiredSlot: "daily:2026-05-12T09:00" } }), / missed="4h 20m">/);
+		// within grace, and a job with no record has no schedule to be late on
 		assert.doesNotMatch(buildCronInjectionText({ ...late, now: "2026-05-13T09:04:00", state: { lastFiredAt: "x" } }), /missed/);
 		assert.doesNotMatch(buildCronInjectionText(late), /missed/);
 	});
@@ -246,6 +249,44 @@ describe("scheduler helpers", () => {
 			dueCronSlot(daily, { lastFiredSlot: slot }, new Date(2026, 4, 14, 9, 0)),
 			"daily:2026-05-14T09:00",
 		);
+	});
+
+	it("seeds a new or rescheduled recurring job so it waits for its next slot", () => {
+		const base = { enabled: true, deliveryMode: "queue", prompt: "p" } as const;
+		const fire = (job: CronJobConfig, created: Date, later: Date) => {
+			const state = seedCronState(job, undefined, created);
+			return { created: dueCronSlot(job, state, created), later: dueCronSlot(job, state, later) };
+		};
+		// Friday 11:38: last Sunday's 10:00 is behind it, next Sunday's is the first owed
+		const weekly: CronJobConfig = { ...base, name: "w", frequency: "weekly", weekday: 0, time: "10:00" };
+		assert.deepEqual(fire(weekly, new Date(2026, 9, 9, 11, 38), new Date(2026, 9, 11, 10, 0)), {
+			created: undefined,
+			later: "weekly:2026-10-11T10:00",
+		});
+		const daily: CronJobConfig = { ...base, name: "d", frequency: "daily", time: "12:00" };
+		assert.deepEqual(fire(daily, new Date(2026, 9, 9, 11, 0), new Date(2026, 9, 9, 12, 0)), {
+			created: undefined,
+			later: "daily:2026-10-09T12:00",
+		});
+		const hourly: CronJobConfig = { ...base, name: "h", frequency: "hourly", minute: 15 };
+		assert.deepEqual(fire(hourly, new Date(2026, 9, 9, 11, 30), new Date(2026, 9, 9, 12, 15)), {
+			created: undefined,
+			later: "hourly:2026-10-09T12:15",
+		});
+
+		// a record kept under the same schedule stands, so downtime still catches up
+		const kept = { ...seedCronState(daily, undefined, new Date(2026, 9, 8, 13)), lastFiredAt: "2026-10-08T05:00:00Z" };
+		assert.equal(seedCronState(daily, kept, new Date(2026, 9, 10, 15)), undefined);
+		assert.equal(dueCronSlot(daily, kept, new Date(2026, 9, 10, 15)), "daily:2026-10-10T12:00");
+		// a timing change starts afresh but remembers when it last ran
+		const moved = { ...daily, time: "08:00" };
+		const reseeded = seedCronState(moved, kept, new Date(2026, 9, 9, 9));
+		assert.equal(reseeded?.lastFiredAt, kept.lastFiredAt);
+		assert.equal(dueCronSlot(moved, reseeded, new Date(2026, 9, 9, 9)), undefined);
+		// once jobs and parked jobs are left alone
+		assert.equal(seedCronState({ ...daily, enabled: false }, undefined, new Date(2026, 9, 9, 13)), undefined);
+		const once: CronJobConfig = { ...base, name: "o", frequency: "once", runAt: "2026-10-09 10:00" };
+		assert.equal(seedCronState(once, undefined, new Date(2026, 9, 9, 13)), undefined);
 	});
 
 	it("supports one-time, hourly, weekly, and monthly cron slots", () => {

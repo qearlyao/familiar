@@ -16,8 +16,8 @@ export function UnderstandingSection({
   return (
     <Card title="senses" hint="how voice notes and clips are understood">
       <Rows>
-        <Row label="listening model" help="the provider lives in config.toml; this name has to be one it knows.">{model("media.understanding.audio.model", "whisper-large-v3")}</Row>
-        <Row label="watching model" help="the provider lives in config.toml; this name has to be one it knows.">{model("media.understanding.video.model", "gemini-3-flash-preview")}</Row>
+        <Row label="listening model">{model("media.understanding.audio.model", "whisper-large-v3")}</Row>
+        <Row label="watching model">{model("media.understanding.video.model", "gemini-3-flash-preview")}</Row>
       </Rows>
     </Card>
   );

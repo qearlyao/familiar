@@ -6,6 +6,9 @@ import { mmss } from "@/lib/clock";
 
 export type PreviewMedia = { src: string; name: string; kind: "image" | "video" };
 
+/** iOS paints no frame for preload="metadata" alone; seeking a hair in makes the first frame the poster. */
+const firstFrame = (src: string) => `${src}#t=0.001`;
+
 function IconSound({ muted, size = 17 }: { muted: boolean; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -48,7 +51,7 @@ function Stage({ item, onBare }: { item: PreviewMedia; onBare: () => void }) {
         {item.kind === "video" ? (
           <video
             ref={video}
-            src={item.src}
+            src={firstFrame(item.src)}
             playsInline
             preload="metadata"
             aria-label={item.name}
@@ -69,7 +72,7 @@ function Stage({ item, onBare }: { item: PreviewMedia; onBare: () => void }) {
       {item.kind === "video" && (
         <div className="viewer-transport">
           <button type="button" className="viewer-accent is-round" onClick={() => void togglePlay()} aria-label={playing ? "pause" : "play"}>
-            {playing ? <IconPause size={19} /> : <IconPlay size={19} />}
+            {playing ? <IconPause size={22} /> : <IconPlay size={24} />}
           </button>
           <span className="viewer-scrub">
             <input
@@ -93,7 +96,7 @@ function Stage({ item, onBare }: { item: PreviewMedia; onBare: () => void }) {
             </span>
           </span>
           <button type="button" className="viewer-ghost" aria-label={muted ? "sound on" : "sound off"} onClick={() => { if (video.current) video.current.muted = !video.current.muted; }}>
-            <IconSound muted={muted} />
+            <IconSound muted={muted} size={20} />
           </button>
         </div>
       )}
@@ -109,6 +112,7 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
   const media = items?.length ? items : [{ src, name: alt, kind }];
   const index = Math.max(0, media.findIndex((item) => item.src === selected));
   const current = media[index];
+  const [clipLength, setClipLength] = useState(0);
   const move = (delta: number) => setSelected(media[(index + delta + media.length) % media.length].src);
 
   return (
@@ -119,8 +123,10 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
             <img src={src} alt={alt} loading="lazy" className={cn("h-auto max-h-72 max-w-full rounded-md", imageClassName)} />
           ) : (
             <>
-              <video src={src} preload="metadata" muted playsInline aria-hidden="true" />
-              <span className="media-preview-play"><IconPlay size={24} /> <span>watch clip</span></span>
+              <span className="media-preview-clip">
+                <video src={firstFrame(src)} preload="metadata" muted playsInline aria-hidden="true" onLoadedMetadata={(event) => setClipLength(event.currentTarget.duration)} />
+                <span className="media-preview-play"><IconPlay size={22} />{Number.isFinite(clipLength) && clipLength > 0 && <time>{mmss(clipLength)}</time>}</span>
+              </span>
               <span className="chat-media-name">{alt}</span>
             </>
           )}
@@ -160,7 +166,7 @@ export function MediaPreview({ src, alt, className, imageClassName, kind = "imag
         <nav className="viewer-strip" aria-label="everything sent together">
           {media.map((item, itemIndex) => (
             <button key={item.src} type="button" aria-label={`view ${item.name}`} aria-current={itemIndex === index ? "true" : undefined} onClick={() => setSelected(item.src)}>
-              {item.kind === "image" ? <img src={item.src} alt="" loading="lazy" /> : <><video src={item.src} preload="metadata" muted playsInline aria-hidden="true" /><IconPlay size={14} /></>}
+              {item.kind === "image" ? <img src={item.src} alt="" loading="lazy" /> : <><video src={firstFrame(item.src)} preload="metadata" muted playsInline aria-hidden="true" /><IconPlay size={14} /></>}
             </button>
           ))}
         </nav>

@@ -33,6 +33,8 @@ export type ConfigKey =
 	| "image_gen.enabled"
 	| "image_gen.model"
 	| "image_gen.fallback_model"
+	| "media.understanding.audio.model"
+	| "media.understanding.video.model"
 	| "tools.reach"
 	| "memory.lcm.enabled"
 	| "memory.lcm.model"
@@ -116,6 +118,17 @@ function requireNonNegativeNumber(value: unknown, key: string): number {
 		throw new Error(`${key} must be a number >= 0`);
 	}
 	return n;
+}
+
+function understandingModelEntry(kind: "audio" | "video"): RegistryEntry {
+	const key = `media.understanding.${kind}.model`;
+	return {
+		read: (config) => config.mediaUnderstanding[kind].model,
+		validate: (value) => requireString(value, key),
+		write: (config, value) => {
+			config.mediaUnderstanding[kind].model = value as string;
+		},
+	};
 }
 
 export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
@@ -293,6 +306,8 @@ export const CONFIG_REGISTRY: Record<ConfigKey, RegistryEntry> = {
 			config.imageGen.fallbackModel = value as string;
 		},
 	},
+	"media.understanding.audio.model": understandingModelEntry("audio"),
+	"media.understanding.video.model": understandingModelEntry("video"),
 	"tools.reach": {
 		read: (config) => config.tools.reach,
 		// pinned is the default, so it is stored as absence

@@ -3,6 +3,7 @@ import { ModelSection } from "./config/ModelSection";
 import { CronSection } from "./config/CronSection";
 import { HeartbeatSection } from "./config/HeartbeatSection";
 import { ImageGenSection } from "./config/ImageGenSection";
+import { UnderstandingSection } from "./config/UnderstandingSection";
 import { MemorySection } from "./config/MemorySection";
 import { TtsSection, VoiceCallSection } from "./config/TtsSection";
 import { DevicesSection } from "./config/DevicesSection";
@@ -103,6 +104,7 @@ export function SettingsSurface({
           <TtsSection values={values} disabled={disabled} onChange={config.setConfig} />
           <VoiceCallSection values={values} disabled={disabled} onChange={config.setConfig} />
           <ImageGenSection values={values} disabled={disabled} onChange={config.setConfig} />
+          <UnderstandingSection values={values} disabled={disabled} onChange={config.setConfig} />
         </>
       );
       break;

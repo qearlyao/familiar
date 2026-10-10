@@ -690,7 +690,9 @@ export type ConfigKey =
   | "memory.ambient.weightIntensity"
   | "image_gen.enabled"
   | "image_gen.model"
-  | "image_gen.fallback_model";
+  | "image_gen.fallback_model"
+  | "media.understanding.audio.model"
+  | "media.understanding.video.model";
 
 export interface ConfigValue<T = unknown> {
   value: T;
@@ -742,6 +744,8 @@ export interface ConfigPayload {
     "image_gen.enabled": ConfigValue<boolean>;
     "image_gen.model": ConfigValue<string>;
     "image_gen.fallback_model": ConfigValue<string>;
+    "media.understanding.audio.model": ConfigValue<string>;
+    "media.understanding.video.model": ConfigValue<string>;
   };
 }
 

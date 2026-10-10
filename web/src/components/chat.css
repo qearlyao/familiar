@@ -524,6 +524,11 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   font-size: 0.96875rem; line-height: 1.6; display: flex; flex-direction: column; gap: 0.375rem; text-align: left;
 }
 .chat-attachment-context small { font-size: 0.6875rem; letter-spacing: 0.13em; text-transform: uppercase; color: #525833; }
+.chat-attachment-context-head { display: flex; align-items: center; gap: 0.5rem; }
+.chat-attachment-context-head button { margin-left: auto; width: 1.625rem; height: 1.625rem; border: 0; border-radius: 62.4375rem; background: transparent; color: #4c3e2c; display: grid; place-items: center; }
+.chat-attachment-context-head button:hover { background: rgba(43, 25, 1, 0.1); }
+.chat-attachment-context:not([data-open]) { padding: 0.25rem 0.375rem 0.25rem 0.875rem; border-radius: 62.4375rem; }
+.chat-attachment-context:not([data-open]) > span { display: none; }
 .chat-media-frame { position: relative; width: 21.5rem; max-width: 100%; }
 .chat-media-frame video { display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 1rem; background: #2b1901; object-fit: contain; }
 .chat-media-name { font-size: 0.78125rem; color: #4c3e2c; padding: 0 0.3125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -870,8 +875,13 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 
 /* Media opens into a quiet, shared image/video viewing surface. */
 .media-preview-trigger { position: relative; padding: 0; border: 0; cursor: zoom-in; background: transparent; }
-.media-preview-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 0.625rem; color: #f0e5cd; background: #211d1640; }
-.media-preview-play svg { box-sizing: content-box; padding: 0.9375rem; border-radius: 50%; background: #525833; }
+.media-preview-clip { position: relative; display: block; }
+.media-preview-play { position: absolute; inset: 0; display: grid; place-items: center; }
+.media-preview-play svg { box-sizing: content-box; padding: 0.875rem; border-radius: 50%; background: rgba(43, 25, 1, 0.72); color: #d6bd8a; }
+.media-preview-play time {
+  position: absolute; right: 0.5625rem; bottom: 0.5625rem; height: 1.5rem; padding: 0 0.625rem; border-radius: 62.4375rem;
+  display: inline-flex; align-items: center; background: rgba(43, 25, 1, 0.72); color: #e7e0d5; font: var(--font-weight-normal) 0.71875rem var(--font-mono);
+}
 /* The viewer: the one ink room in the product — mock 1a–1d. */
 .viewer-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(36, 21, 3, 0.93); }
 .viewer {
@@ -896,7 +906,8 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   border-radius: 62.4375rem; background: var(--viewer-accent); color: var(--viewer-sand); font-size: 0.875rem; transition: background 0.15s;
 }
 .viewer-accent:hover { background: var(--viewer-accent-lift); }
-.viewer-accent.is-round { width: 3.25rem; height: 3.25rem; flex: none; padding: 0; }
+.viewer-accent.is-round { width: 2.875rem; height: 2.875rem; flex: none; padding: 0; }
+.viewer-transport .viewer-ghost { width: 2.875rem; height: 2.875rem; }
 
 .viewer-head { grid-area: head; display: flex; align-items: flex-start; gap: 0.75rem; }
 .viewer-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1875rem; padding-top: 0.0625rem; }

@@ -21,9 +21,15 @@ function isMedia(attachment: Attachment): boolean {
 }
 
 function DerivedText({ derived }: { derived: NonNullable<Attachment["derivedText"]> }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="chat-attachment-context">
-      {derived.label ? <small>{derived.label}</small> : null}
+    <div className="chat-attachment-context" data-open={open || undefined}>
+      <div className="chat-attachment-context-head">
+        {derived.label ? <small>{derived.label}</small> : null}
+        <button type="button" aria-expanded={open} aria-label={open ? "collapse" : "expand"} onClick={() => setOpen((was) => !was)}>
+          {open ? <IconChevronUp size={13} /> : <IconChevronDown size={13} />}
+        </button>
+      </div>
       <span>{derived.text}</span>
     </div>
   );

@@ -20,15 +20,18 @@ function isMedia(attachment: Attachment): boolean {
   return isImage(attachment) || attachment.mimeType?.startsWith("video/") === true;
 }
 
-function DerivedText({ derived }: { derived: NonNullable<Attachment["derivedText"]> }) {
-  const [open, setOpen] = useState(false);
+// Voice transcripts are already gated by the "transcribed" pill, so only other derived text folds.
+function DerivedText({ derived, foldable }: { derived: NonNullable<Attachment["derivedText"]>; foldable: boolean }) {
+  const [open, setOpen] = useState(!foldable);
   return (
     <div className="chat-attachment-context" data-open={open || undefined}>
       <div className="chat-attachment-context-head">
         {derived.label ? <small>{derived.label}</small> : null}
-        <button type="button" aria-expanded={open} aria-label={open ? "collapse" : "expand"} onClick={() => setOpen((was) => !was)}>
-          {open ? <IconChevronUp size={13} /> : <IconChevronDown size={13} />}
-        </button>
+        {foldable ? (
+          <button type="button" aria-expanded={open} aria-label={open ? "collapse" : "expand"} onClick={() => setOpen((was) => !was)}>
+            {open ? <IconChevronUp size={13} /> : <IconChevronDown size={13} />}
+          </button>
+        ) : null}
       </div>
       <span>{derived.text}</span>
     </div>
@@ -126,7 +129,7 @@ function UserTurn({ message }: { message: Message }) {
       {derived
         .filter((a) => showTranscript || !transcripts.includes(a))
         .map((a) => (
-          <DerivedText key={`${a.id}-derived`} derived={a.derivedText!} />
+          <DerivedText key={`${a.id}-derived`} derived={a.derivedText!} foldable={!transcripts.includes(a)} />
         ))}
     </div>
   );

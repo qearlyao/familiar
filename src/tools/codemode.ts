@@ -12,8 +12,6 @@ import {
 	type CodemodeResult,
 	CodemodeSandbox,
 	type CodemodeTool,
-	MCP_TYPESCRIPT_PREAMBLE,
-	mcpStructuredContentSchema,
 	parseCodemodeSource,
 	renderToolSample,
 	toCodemodeIdentifier,
@@ -127,9 +125,6 @@ export function createCodemodeDescription(
 
 	const sections = [DESCRIPTION_INTRO];
 	if (!complete) sections.push(DEFERRED_TOOLS_GUIDANCE);
-	if (declarations.some((declaration) => mcpStructuredContentSchema(declaration.outputSchema) !== undefined)) {
-		sections.push(`shared mcp types:\n\`\`\`ts\n${MCP_TYPESCRIPT_PREAMBLE}\n\`\`\``);
-	}
 	if (declarations.length === 0) return sections.join("\n\n");
 
 	const toolSections = [

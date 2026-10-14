@@ -55,17 +55,53 @@ export function createMcpToolName(
 	return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;
 }
 
-/** every mcp tool's output schema: the CallToolResult scripts receive, with the tool's own schema as structuredContent */
+/** keywords whose values are data, so a `$ref` key in them is not a reference */
+const SCHEMA_DATA_KEYWORDS: ReadonlySet<string> = new Set(["const", "enum", "default", "examples"]);
+/** keywords whose values map names to schemas, so their keys are names, not keywords */
+const SCHEMA_MAP_KEYWORDS: ReadonlySet<string> = new Set([
+	"properties",
+	"patternProperties",
+	"dependentSchemas",
+	"dependencies",
+	"$defs",
+	"definitions",
+]);
+
+/** follows pi's mcp/tools.ts: rewrites local `$ref`s (`#`, `#/$defs/Item`) so they resolve below `pointer` */
+function relocateSchema(schema: unknown, pointer: string): unknown {
+	if (Array.isArray(schema)) return schema.map((item) => relocateSchema(item, pointer));
+	if (typeof schema !== "object" || schema === null) return schema;
+	const relocated: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(schema)) {
+		if (key === "$ref" && typeof value === "string" && (value === "#" || value.startsWith("#/"))) {
+			relocated[key] = `${pointer}${value.slice(1)}`;
+		} else if (SCHEMA_DATA_KEYWORDS.has(key)) {
+			relocated[key] = value;
+		} else if (SCHEMA_MAP_KEYWORDS.has(key) && typeof value === "object" && value !== null && !Array.isArray(value)) {
+			relocated[key] = Object.fromEntries(
+				Object.entries(value).map(([name, subschema]) => [name, relocateSchema(subschema, pointer)]),
+			);
+		} else {
+			relocated[key] = relocateSchema(value, pointer);
+		}
+	}
+	return relocated;
+}
+
+/** every mcp tool's output schema: the CallToolResult scripts receive (minus `_meta`), with the tool's own schema as structuredContent */
 function createMcpResultSchema(structuredContentSchema: Record<string, unknown> | undefined): TSchema {
 	return {
 		type: "object",
 		properties: {
 			content: { type: "array", items: { type: "object" } },
-			...(structuredContentSchema ? { structuredContent: structuredContentSchema } : {}),
+			// servers may send structured content without declaring a schema, and it may be any json value
+			structuredContent: structuredContentSchema
+				? relocateSchema(structuredContentSchema, "#/properties/structuredContent")
+				: {},
 			isError: { type: "boolean" },
-			_meta: { type: "object" },
 		},
 		required: ["content"],
+		additionalProperties: true,
 	} as unknown as TSchema;
 }
 

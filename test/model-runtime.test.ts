@@ -34,6 +34,8 @@ describe("model runtime auth storage", () => {
 			},
 		};
 		t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+			// openrouter's per-key personalization; 404 keeps the catalog unchanged
+			if (String(input).endsWith("/models/user")) return new Response(null, { status: 404 });
 			const provider = new URL(String(input)).pathname.split("/").at(-1);
 			assert.ok(provider === "openrouter" || provider === "anthropic");
 			return Response.json(

@@ -14,6 +14,23 @@
 
 - Stop new recurring cron jobs from firing at once on a slot that passed before they existed; a new job, or one whose timing changes, now waits for its next slot. Jobs whose timing is unchanged still catch up after downtime with `missed=`.
 
+## 1.5.2 - 2026-10-14
+
+### Added
+
+- Choose the audio and video understanding models from the web settings.
+
+### Changed
+
+- Upgrade pi to 1.2.0. MCP tool results in code mode now spell out their own type instead of relying on shared MCP types, and OpenRouter catalogs narrow to the models the key may use.
+- Call OpenRouter's dedicated Image API for `image_gen`, so newer image models such as FLUX.3 are reachable.
+- Fold derived attachment text in chat behind an expand toggle; voice transcripts stay open behind the transcribed pill.
+- Show a first-frame poster and the clip length on video attachments.
+
+### Fixed
+
+- Keep a newly created recurring cron job from firing on a slot that passed before it existed.
+
 ## 1.5.1 - 2026-10-06
 
 ### Changed

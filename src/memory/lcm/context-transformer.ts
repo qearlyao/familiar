@@ -4,6 +4,7 @@ import { formatLocalTimestamp } from "../../util/time.js";
 import type { ChunkIndexer } from "../index/chunk-indexer.js";
 import { condense } from "./condense.js";
 import {
+	createAgentMessageFingerprint,
 	createRawContextItems,
 	estimateAgentMessageTokens,
 	estimateTextTokens,
@@ -402,14 +403,16 @@ export class LcmContextTransformer {
 		if (breakdown) breakdown.other = tokens;
 	}
 
-	/** the messages a request can still use: a summary already stands in for the rest, whose records stay in the store */
-	liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[] {
+	/** whether a summary already stands in for a message; its record stays in the store.
+	    shortcut: matches by fingerprint without the repeat suffix, so an exact duplicate of a summarized
+	    message (same role, timestamp and text) counts as summarized too. */
+	isSummarized(sessionKey: string): (message: AgentMessage) => boolean {
 		const covered = new Set(
-			this.contextState(sessionKey).items.flatMap((item) => (item.type === "summary" ? item.sourceIds : [])),
+			this.contextState(sessionKey).items.flatMap((item) =>
+				item.type === "summary" ? item.sourceIds.map((id) => id.split(":")[0]) : [],
+			),
 		);
-		if (covered.size === 0) return messages;
-		const items = createRawContextItems(messages);
-		return messages.filter((_, index) => !covered.has(items[index]?.id ?? ""));
+		return (message) => covered.size > 0 && covered.has(createAgentMessageFingerprint(message, 0));
 	}
 
 	invalidateSession(sessionKey: string): void {

@@ -206,7 +206,8 @@ linkgemini = "google-images"
 retention_days = 30
 
 [data.chat]
-retention_days = 0
+# Every runtime loads its channel's whole chat log at startup, so keep it bounded; 0 keeps everything.
+retention_days = 30
 
 [data.transcripts]
 # Transcripts are the canonical raw history for restart replay; retain them unless loss is intentional.

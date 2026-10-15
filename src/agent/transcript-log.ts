@@ -1,5 +1,7 @@
-import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Config } from "../config/index.js";
@@ -79,7 +81,13 @@ function isStoredSupersedeRecord(value: unknown): value is StoredSupersedeRecord
 	);
 }
 
-export async function loadStoredMessages(dataDir: string, sessionId: string): Promise<AgentMessage[]> {
+/** the session's messages since its last reset; `skip` drops messages as they are read, so
+    history a summary already covers never piles up in memory */
+export async function loadStoredMessages(
+	dataDir: string,
+	sessionId: string,
+	skip: (message: AgentMessage) => boolean = () => false,
+): Promise<AgentMessage[]> {
 	const transcriptsDir = resolve(dataDir, "transcripts");
 	let files: string[];
 	try {
@@ -91,30 +99,40 @@ export async function loadStoredMessages(dataDir: string, sessionId: string): Pr
 	}
 
 	const jsonlFiles = files.filter((entry) => entry.endsWith(".jsonl")).sort();
-	const records: StoredTranscriptRecord[] = [];
+	let records: StoredTranscriptRecord[] = [];
 	for (const file of jsonlFiles) {
 		const path = resolve(transcriptsDir, file);
-		let contents: string;
+		let index = 0;
 		try {
-			contents = await readFile(path, "utf8");
-		} catch (error) {
-			console.error(`transcript file read failed: ${path}`, error);
-			continue;
-		}
-		for (const [index, line] of contents.split(/\r?\n/).entries()) {
-			// other sessions share these files; skip their lines without parsing them
-			if (!line.includes(sessionId)) continue;
-			try {
-				const parsed = JSON.parse(line) as unknown;
+			for await (const line of createInterface({
+				input: createReadStream(path),
+				crlfDelay: Number.POSITIVE_INFINITY,
+			})) {
+				index += 1;
+				// other sessions share these files; skip their lines without parsing them
+				if (!line.includes(sessionId)) continue;
+				let parsed: unknown;
+				try {
+					parsed = JSON.parse(line);
+				} catch (error) {
+					console.error(`skipping unparsable transcript line: ${path}:${index}`, error);
+					continue;
+				}
 				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed) && !isStoredSupersedeRecord(parsed)) {
-					console.error(`skipping malformed transcript line: ${path}:${index + 1}`);
+					console.error(`skipping malformed transcript line: ${path}:${index}`);
 					continue;
 				}
 				if (parsed.sessionId !== sessionId) continue;
+				if ("message" in parsed && skip(parsed.message)) continue;
+				// everything before a reset is dropped below anyway; don't hold it while reading on
+				if ("type" in parsed && parsed.type === "reset") {
+					const resetTs = parsed.ts;
+					records = records.filter((record) => record.ts > resetTs);
+				}
 				records.push(parsed);
-			} catch (error) {
-				console.error(`skipping unparsable transcript line: ${path}:${index + 1}`, error);
 			}
+		} catch (error) {
+			console.error(`transcript file read failed: ${path}`, error);
 		}
 	}
 

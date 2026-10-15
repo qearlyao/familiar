@@ -82,7 +82,8 @@ export function createSessionMemory(memory: MemoryService) {
 				try {
 					memory.recordMessages(body, { sessionKey, sessionId });
 					// summarized history lives in LCM; holding it here too grows the process without bound
-					const live = memory.liveMessages(sessionKey, body);
+					const isSummarized = memory.isSummarized(sessionKey);
+					const live = body.filter((message) => !isSummarized(message));
 					if (live.length < body.length) agent.state.messages = head ? [head, ...live] : live;
 				} catch (error) {
 					console.error(`memory LCM turn recording failed for ${sessionKey}`, error);
@@ -96,8 +97,8 @@ export function createSessionMemory(memory: MemoryService) {
 			return completed?.tokens === tokens ? completed.breakdown : undefined;
 		},
 
-		liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[] {
-			return memory.liveMessages(sessionKey, messages);
+		isSummarized(sessionKey: string): (message: AgentMessage) => boolean {
+			return memory.isSummarized(sessionKey);
 		},
 
 		forget(sessionKey: string): void {

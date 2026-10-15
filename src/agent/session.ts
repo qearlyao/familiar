@@ -30,11 +30,12 @@ export interface AgentSessionSetup {
 
 export async function createAgentSession(setup: AgentSessionSetup): Promise<FamiliarAgentSession> {
 	const { config, sessionKey, sessionId, model, thinkingLevel } = setup;
-	const stored = await loadStoredMessages(config.workspace.dataDir, sessionId);
-	const messages = setup.memory.liveMessages(sessionKey, stored);
-	console.log(
-		`Loaded ${messages.length} prior messages from session history for ${sessionKey} (${stored.length - messages.length} already summarized)`,
+	const messages = await loadStoredMessages(
+		config.workspace.dataDir,
+		sessionId,
+		setup.memory.isSummarized(sessionKey),
 	);
+	console.log(`Loaded ${messages.length} unsummarized prior messages from session history for ${sessionKey}`);
 	const mediaSink = createGeneratedMediaSink();
 	const referenceAttachments: StoredAttachment[] = [];
 	// tools are built while the Agent is still being constructed; until then they read the stored history

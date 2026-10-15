@@ -788,7 +788,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 		},
 		data: {
 			chat: {
-				retentionDays: readInteger(dataChat.retention_days, 0, "data.chat.retention_days"),
+				retentionDays: readInteger(dataChat.retention_days, 30, "data.chat.retention_days"),
 			},
 			transcripts: {
 				retentionDays: readInteger(dataTranscripts.retention_days, 0, "data.transcripts.retention_days"),

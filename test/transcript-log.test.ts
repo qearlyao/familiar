@@ -55,6 +55,25 @@ describe("transcript log", () => {
 		assert.deepEqual(messages.map((message) => message.timestamp), [1, 3]);
 	});
 
+	it("drops summarized and pre-reset messages while reading", async (t) => {
+		const dataDir = await createTempDataDir(t);
+		const transcriptsDir = resolve(dataDir, "transcripts");
+		await mkdir(transcriptsDir, { recursive: true });
+		const user = (timestamp: number): AgentMessage => ({ role: "user", content: `m${timestamp}`, timestamp });
+		const lines = [
+			{ ts: "2026-06-01T00:00:00.000Z", sessionId: "s1", message: user(1) },
+			{ ts: "2026-06-01T00:00:01.000Z", sessionId: "s1", type: "reset" },
+			{ ts: "2026-06-01T00:00:02.000Z", sessionId: "s1", message: user(2) },
+			{ ts: "2026-06-01T00:00:03.000Z", sessionId: "s1", message: user(3) },
+			{ ts: "2026-06-01T00:00:04.000Z", sessionId: "s2", message: user(4) },
+		];
+		await writeFile(resolve(transcriptsDir, "2026-06-01.jsonl"), `${lines.map((line) => JSON.stringify(line)).join("\r\n")}\r\n`);
+
+		const messages = await loadStoredMessages(dataDir, "s1", (message) => message.timestamp === 2);
+
+		assert.deepEqual(messages.map((message) => message.timestamp), [3]);
+	});
+
 	it("persists a reset marker for a cold session", async (t) => {
 		const dataDir = await createTempDataDir(t);
 		const config = await configWithDataDir(t, dataDir);

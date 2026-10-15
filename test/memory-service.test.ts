@@ -615,7 +615,7 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 1);
 				assert.deepEqual(second.map((message) => message.role), first.map((message) => message.role));
-				assert.deepEqual(service.liveMessages("room-a", messages), [messages[2]]);
+				assert.deepEqual(messages.filter((message) => !service.isSummarized("room-a")(message)), [messages[2]]);
 
 				const summaries = service.lcmStore.listSummaries();
 				assert.equal(summaries.length, 1);

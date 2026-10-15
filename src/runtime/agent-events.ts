@@ -1,6 +1,10 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-import type { StoredAgentEvent, StoredAssistantMessageEvent } from "../conversation/chat-log.js";
+import {
+	isLiveOnlyAgentEvent,
+	type StoredAgentEvent,
+	type StoredAssistantMessageEvent,
+} from "../conversation/chat-log.js";
 import { isRecord } from "../util/guards.js";
 
 export interface AgentEventSummary {
@@ -64,6 +68,7 @@ export function createAgentEventRecorder(write: AgentEventWriter): AgentEventRec
 
 	return {
 		async record(event: StoredAgentEvent): Promise<void> {
+			if (isLiveOnlyAgentEvent(event)) return;
 			const kind = deltaKind(event);
 			if (kind) {
 				if (pendingKind === kind) {

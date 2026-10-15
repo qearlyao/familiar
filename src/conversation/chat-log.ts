@@ -1,5 +1,7 @@
-import { appendFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { appendFile, lstat, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline";
 
 import lockfile from "proper-lockfile";
 
@@ -164,6 +166,16 @@ export type StoredAgentEvent =
 	| { type: "turn_end" }
 	| { type: "agent_start" }
 	| { type: "agent_end" };
+
+/** streamed only, never logged: tool_execution_end and toolcall_end restate them, and a long command's
+    output snapshots would otherwise fill the log (and every runtime's memory) many times over */
+export function isLiveOnlyAgentEvent(event: StoredAgentEvent): boolean {
+	if (event.type === "tool_execution_update") return true;
+	return (
+		event.type === "message_update" &&
+		(event.assistantMessageEvent.type === "toolcall_start" || event.assistantMessageEvent.type === "toolcall_delta")
+	);
+}
 
 export interface AgentEventChatRecord extends ChatRecordBase {
 	type: "agent_event";
@@ -343,18 +355,21 @@ export function createChatLog(config: Config, channel: ChatChannelRef): ChatLog 
 				throw error;
 			}
 			const jsonlFiles = files.filter((entry) => entry.endsWith(".jsonl")).sort();
-			const contents = await Promise.all(
-				jsonlFiles.map(async (file) => {
-					const filePath = resolve(dir, file);
-					return { filePath, content: await readFile(filePath, "utf8") };
-				}),
-			);
 			const records: ChatLogRecord[] = [];
-			for (const { filePath, content } of contents) {
-				for (const [index, line] of content.split(/\r?\n/).entries()) {
+			// one file and one line at a time: the log only grows, so never hold it all as text
+			for (const file of jsonlFiles) {
+				const filePath = resolve(dir, file);
+				let index = 0;
+				for await (const line of createInterface({
+					input: createReadStream(filePath),
+					crlfDelay: Number.POSITIVE_INFINITY,
+				})) {
+					index += 1;
 					if (!line.trim()) continue;
 					const parsed = JSON.parse(line) as unknown;
-					if (!isChatLogRecord(parsed)) throw new Error(`Malformed chat log record: ${filePath}:${index + 1}`);
+					if (!isChatLogRecord(parsed)) throw new Error(`Malformed chat log record: ${filePath}:${index}`);
+					// logs written before these events went live-only still carry them
+					if (parsed.type === "agent_event" && isLiveOnlyAgentEvent(parsed.event)) continue;
 					records.push(parsed);
 				}
 			}

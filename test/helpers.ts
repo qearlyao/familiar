@@ -142,7 +142,7 @@ export function stubMemoryService(overrides: Partial<MemoryService> = {}): Memor
 		subscribeRuntime: () => () => {},
 		transformContext: async (messages) => messages,
 		recordMessages: () => {},
-		liveMessages: (_sessionKey, messages) => messages,
+		isSummarized: () => () => false,
 		getContextBreakdown: () => undefined,
 		serviceCompactionDebt: async () => {},
 		flush: async () => {},

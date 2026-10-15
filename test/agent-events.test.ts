@@ -23,6 +23,21 @@ describe("createAgentEventRecorder", () => {
 		assert.equal(modelErrorFromAgentEvent({ type: "message_end", message: { role: "user" } } as AgentEvent), undefined);
 	});
 
+	it("leaves live-only tool events out of the log", async () => {
+		const written: StoredAgentEvent[] = [];
+		const recorder = createAgentEventRecorder(async (event) => {
+			written.push(event);
+		});
+		const end: StoredAgentEvent = { type: "tool_execution_end", toolCallId: "t1", toolName: "bash", result: "ok", isError: false };
+
+		await recorder.record({ type: "message_update", assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: "{" } });
+		await recorder.record({ type: "tool_execution_update", toolCallId: "t1", toolName: "bash", args: {}, partialResult: "o" });
+		await recorder.record(end);
+		await recorder.flush();
+
+		assert.deepEqual(written, [end]);
+	});
+
 	it("coalesces adjacent deltas of the same kind", async () => {
 		const written: StoredAgentEvent[] = [];
 		const recorder = createAgentEventRecorder(async (event) => {

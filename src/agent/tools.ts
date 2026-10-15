@@ -1,5 +1,14 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { parseEnv } from "node:util";
 import type { Agent, AgentTool } from "@earendil-works/pi-agent-core";
-import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@earendil-works/pi-coding-agent";
+import {
+	type BashSpawnHook,
+	createBashTool,
+	createEditTool,
+	createReadTool,
+	createWriteTool,
+} from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOLS, MCP_EXPOSURES } from "../config/enums.js";
 import type { Config, ToolReach } from "../config/index.js";
 import type { StoredAttachment } from "../conversation/chat-log.js";
@@ -28,6 +37,17 @@ export interface ToolContext {
 	paused: ReadonlySet<string>;
 }
 
+/** bash runs without the keys the workspace .env holds; mcp servers still inherit them from process.env */
+function withoutWorkspaceSecrets(workspacePath: string): BashSpawnHook {
+	return (context) => {
+		const envPath = resolve(workspacePath, ".env");
+		if (!existsSync(envPath)) return context;
+		const env = { ...context.env };
+		for (const key of Object.keys(parseEnv(readFileSync(envPath, "utf8")))) delete env[key];
+		return { ...context, env };
+	};
+}
+
 function withDescription(tool: AgentTool<any>, description: string): AgentTool<any> {
 	tool.description = description;
 	return tool;
@@ -45,7 +65,10 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 	const { config, mediaSink, mcp, paused } = ctx;
 	// every built-in but codemode, which wraps the others; names match BUILTIN_TOOLS
 	const builtins: AgentTool<any>[] = [
-		withDescription(createBashTool(config.workspacePath), BASH_DESCRIPTION),
+		withDescription(
+			createBashTool(config.workspacePath, { spawnHook: withoutWorkspaceSecrets(config.workspacePath) }),
+			BASH_DESCRIPTION,
+		),
 		withDescription(createReadTool(config.workspacePath), READ_DESCRIPTION),
 		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
 		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),

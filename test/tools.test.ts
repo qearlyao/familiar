@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createFamiliarTools, deferredToolNames, type ToolContext, toolReach, VOICE_CALL_SESSION_PREFIX } from "../src/agent/tools.js";
 import { BUILTIN_TOOLS } from "../src/config/enums.js";
 import type { Config } from "../src/config/index.js";
 import type { McpHub } from "../src/tools/mcp.js";
-import { configWithDataDir, createTempDataDir, stubMemoryService } from "./helpers.js";
+import { configWithDataDir, createTempDataDir, stubMemoryService, withEnv } from "./helpers.js";
 
 const tool = (name: string): AgentTool<any> => ({
 	name,
@@ -73,5 +75,17 @@ describe("built-in tool registry", () => {
 		const memory = stubMemoryService({ memoryTools: () => [tool("memory_recall"), tool("memory_open")] });
 		const names = createFamiliarTools(context({ ...config, tools: { reach: {} } }, { memory })).map((t) => t.name);
 		assert.deepEqual([...names].sort(), [...BUILTIN_TOOLS].sort());
+	});
+});
+
+describe("bash environment", () => {
+	it("hides the workspace .env keys from bash, leaving ordinary variables", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		await writeFile(resolve(config.workspacePath, ".env"), "FAMILIAR_TEST_SECRET=sk-hidden\n", "utf8");
+		const bash = createFamiliarTools(context(config)).find((t) => t.name === "bash")!;
+		const result = await withEnv("FAMILIAR_TEST_SECRET", "sk-hidden", () =>
+			bash.execute("call", { command: 'echo "${FAMILIAR_TEST_SECRET:-unset} ${HOME:+home}"' }),
+		);
+		assert.match(JSON.stringify(result.content), /unset home/);
 	});
 });

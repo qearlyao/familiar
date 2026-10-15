@@ -9,461 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      color-scheme: light dark;
-      --bg: oklch(0.9582 0.0152 90.2357);
-      --surface: oklch(0.9914 0.0098 87.4695);
-      --text: oklch(0.3760 0.0225 64.3434);
-      --muted: oklch(0.5100 0.0320 69);
-      --accent: oklch(0.5700 0.0870 61);
-      --border: oklch(0.8348 0.0426 88.8064);
-      --code-bg: oklch(0.3237 0.0155 59.0603);
-      --code-text: oklch(0.9239 0.0190 83.0636);
-      --display: Lora, Georgia, "Times New Roman", serif;
-      --body: "Libre Baskerville", Georgia, "Times New Roman", serif;
-      --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-      --space-xs: 0.5rem;
-      --space-sm: 0.75rem;
-      --space-md: 1rem;
-      --space-lg: 1.5rem;
-      --space-xl: 2rem;
-      --space-2xl: 3rem;
-      --space-3xl: 4rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: oklch(0.2747 0.0139 57.6523);
-        --surface: oklch(0.3237 0.0155 59.0603);
-        --text: oklch(0.9239 0.0190 83.0636);
-        --muted: oklch(0.7982 0.0243 82.1078);
-        --accent: oklch(0.7264 0.0581 66.6967);
-        --border: oklch(0.4186 0.0281 56.3404);
-        --code-bg: oklch(0.215 0.012 58);
-        --code-text: oklch(0.9239 0.0190 83.0636);
-      }
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--body);
-      font-size: 1.125rem;
-      line-height: 1.7;
-    }
-
-    a {
-      color: var(--accent);
-      text-underline-offset: 0.18em;
-      text-decoration-thickness: 1px;
-    }
-
-    a:hover {
-      text-decoration-thickness: 2px;
-    }
-
-    img {
-      display: block;
-      max-width: 100%;
-    }
-
-    .site-header {
-      border-bottom: 1px solid var(--border);
-    }
-
-    .site-header__inner,
-    main,
-    footer {
-      width: min(1120px, calc(100% - 48px));
-      margin-inline: auto;
-    }
-
-    .site-header__inner {
-      min-height: 72px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-lg);
-    }
-
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-sm);
-      color: var(--text);
-      font-size: 1.1rem;
-      font-weight: 700;
-      text-decoration: none;
-    }
-
-    .brand,
-    .repo-link,
-    .kicker,
-    h1,
-    h2,
-    h3,
-    .quick-path,
-    .toc,
-    .step-number,
-    summary,
-    footer {
-      font-family: var(--display);
-    }
-
-    .brand img {
-      width: 42px;
-      height: 42px;
-      object-fit: contain;
-      border-radius: 4px;
-    }
-
-    .repo-link {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .intro {
-      padding-block: clamp(48px, 7vw, 88px) var(--space-2xl);
-    }
-
-    .intro-copy {
-      max-width: 780px;
-    }
-
-    .kicker {
-      margin: 0 0 var(--space-sm);
-      color: var(--accent);
-      font-size: 0.9rem;
-      font-weight: 700;
-    }
-
-    h1,
-    h2,
-    h3,
-    p {
-      text-wrap: pretty;
-    }
-
-    h1 {
-      max-width: 15ch;
-      margin: 0;
-      font-size: clamp(2.5rem, 6vw, 4.8rem);
-      font-weight: 700;
-      line-height: 1.02;
-      letter-spacing: 0;
-      text-wrap: balance;
-    }
-
-    .intro-copy > p:last-child {
-      max-width: 62ch;
-      margin: var(--space-lg) 0 0;
-      color: var(--muted);
-      font-size: 1.15rem;
-      line-height: 1.65;
-    }
-
-    .quick-path {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
-      margin: var(--space-2xl) 0 0;
-      padding: var(--space-lg) 0;
-      border-block: 1px solid var(--border);
-      list-style: none;
-    }
-
-    .quick-path li {
-      display: flex;
-      gap: var(--space-sm);
-      align-items: baseline;
-      padding-inline: var(--space-lg);
-    }
-
-    .quick-path li:first-child {
-      padding-left: 0;
-    }
-
-    .quick-path li + li {
-      border-left: 1px solid var(--border);
-    }
-
-    .quick-path span {
-      color: var(--accent);
-      font-size: 0.85rem;
-      font-weight: 700;
-    }
-
-    .quick-path strong {
-      font-size: 1rem;
-    }
-
-    .content-layout {
-      display: grid;
-      grid-template-columns: 210px minmax(0, 720px);
-      gap: clamp(48px, 8vw, 96px);
-      align-items: start;
-      padding-block: var(--space-xl) var(--space-3xl);
-    }
-
-    .toc {
-      position: sticky;
-      top: var(--space-xl);
-      font-size: 0.9rem;
-      line-height: 1.45;
-    }
-
-    .toc h2 {
-      margin: 0 0 var(--space-md);
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .toc ol {
-      display: grid;
-      gap: var(--space-sm);
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .toc a {
-      display: block;
-      padding-left: var(--space-sm);
-      border-left: 1px solid transparent;
-      color: var(--muted);
-      text-decoration: none;
-    }
-
-    .toc a[aria-current="location"] {
-      border-left-color: var(--accent);
-      color: var(--accent);
-      font-weight: 700;
-    }
-
-    .toc a:hover {
-      color: var(--accent);
-      text-decoration: underline;
-    }
-
-    article {
-      min-width: 0;
-    }
-
-    .requirements {
-      padding-bottom: var(--space-2xl);
-    }
-
-    article h2 {
-      margin: 0 0 var(--space-md);
-      font-size: 1.85rem;
-      line-height: 1.2;
-      letter-spacing: 0;
-      text-wrap: balance;
-    }
-
-    article h3 {
-      margin: var(--space-xl) 0 var(--space-xs);
-      font-size: 1.15rem;
-      line-height: 1.3;
-    }
-
-    article p {
-      margin: 0 0 var(--space-md);
-    }
-
-    article ul,
-    article ol {
-      margin: 0 0 var(--space-lg);
-      padding-left: 1.4rem;
-    }
-
-    article li {
-      padding-left: 0.25rem;
-    }
-
-    article li + li {
-      margin-top: var(--space-xs);
-    }
-
-    .step {
-      display: grid;
-      grid-template-columns: 48px minmax(0, 1fr);
-      gap: var(--space-lg);
-      padding-block: var(--space-2xl);
-      border-top: 1px solid var(--border);
-      scroll-margin-top: var(--space-xl);
-    }
-
-    .step-number {
-      color: var(--accent);
-      font-size: 1rem;
-      font-weight: 700;
-      line-height: 2.2;
-    }
-
-    .note {
-      margin-block: var(--space-lg);
-      padding: var(--space-md) var(--space-lg);
-      background: color-mix(in oklch, var(--surface) 80%, var(--accent) 20%);
-      border-radius: 4px;
-    }
-
-    code {
-      font-family: var(--mono);
-      font-size: 0.88em;
-    }
-
-    :not(pre) > code {
-      padding: 0.1em 0.3em;
-      background: var(--surface);
-      border-radius: 3px;
-    }
-
-    pre {
-      margin: var(--space-sm) 0 var(--space-lg);
-      padding: var(--space-md) var(--space-lg);
-      overflow-x: auto;
-      background: var(--code-bg);
-      color: var(--code-text);
-      border-radius: 4px;
-      font-family: var(--mono);
-      font-size: 0.88rem;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .success {
-      margin-block: var(--space-lg);
-      padding-block: var(--space-lg);
-      border-block: 1px solid var(--border);
-    }
-
-    .success strong {
-      display: block;
-      margin-bottom: var(--space-xs);
-      color: var(--accent);
-    }
-
-    .feature,
-    .troubleshooting {
-      padding-block: var(--space-2xl);
-      border-top: 1px solid var(--border);
-      scroll-margin-top: var(--space-xl);
-    }
-
-    details {
-      border-bottom: 1px solid var(--border);
-    }
-
-    summary {
-      padding-block: var(--space-md);
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    details p {
-      margin: 0;
-      padding: 0 0 var(--space-lg) var(--space-lg);
-      color: var(--muted);
-    }
-
-    footer {
-      padding-block: var(--space-xl);
-      border-top: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    @media (max-width: 800px) {
-      .content-layout {
-        grid-template-columns: 1fr;
-        gap: var(--space-xl);
-      }
-
-      .toc {
-        position: static;
-        padding-bottom: var(--space-lg);
-        border-bottom: 1px solid var(--border);
-      }
-
-      .toc ol {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-sm) var(--space-lg);
-      }
-
-      .quick-path {
-        grid-template-columns: repeat(2, 1fr);
-        gap: var(--space-md) var(--space-lg);
-      }
-
-      .quick-path li {
-        padding-inline: 0;
-      }
-
-      .quick-path li + li {
-        border-left: 0;
-      }
-    }
-
-    @media (max-width: 600px) {
-      body {
-        font-size: 1.0625rem;
-      }
-
-      .site-header__inner,
-      main,
-      footer {
-        width: min(100% - 32px, 720px);
-      }
-
-      .intro {
-        padding-top: var(--space-2xl);
-      }
-
-      h1 {
-        font-size: 2.65rem;
-      }
-
-      .quick-path {
-        grid-template-columns: 1fr;
-        gap: var(--space-sm);
-      }
-
-      .quick-path li {
-        padding: 0;
-      }
-
-      .quick-path li + li {
-        border-left: 0;
-      }
-
-      .step {
-        grid-template-columns: 1fr;
-        gap: var(--space-xs);
-      }
-
-      .step-number {
-        line-height: 1;
-      }
-
-      pre {
-        margin-inline: 0;
-        padding: var(--space-md);
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="site-header">
@@ -481,32 +27,92 @@
       <div class="intro-copy">
         <p class="kicker">Beginner guide</p>
         <h1 id="page-title">Your first conversation with Familiar</h1>
-        <p>Install Familiar, add a model key, and shape who your companion is before your first conversation in the WebUI. Chat platforms like Discord or QQ are optional and set up later.</p>
+        <p>Four steps take you from nothing to your first conversation in the WebUI. Everything after that, from phone access to Discord and QQ, is optional and can wait.</p>
       </div>
       <ol class="quick-path" aria-label="Quick start overview">
-        <li><span>1</span><strong>Install Familiar</strong></li>
-        <li><span>2</span><strong>Add your model key</strong></li>
-        <li><span>3</span><strong>Make it yours</strong></li>
-        <li><span>4</span><strong>Start a conversation</strong></li>
+        <li><span>1</span><a href="#install">Install Familiar</a></li>
+        <li><span>2</span><a href="#configure">Add your model key</a></li>
+        <li><span>3</span><a href="#personalize">Make it yours</a></li>
+        <li><span>4</span><a href="#start">Start a conversation</a></li>
       </ol>
     </section>
 
     <div class="content-layout">
       <nav class="toc" aria-label="On this page">
-        <h2>On this page</h2>
-        <ol>
-          <li><a href="#requirements">Before you begin</a></li>
-          <li><a href="#install">Install Familiar</a></li>
-          <li><a href="#configure">Add a model key</a></li>
-          <li><a href="#personalize">Make Familiar yours</a></li>
-          <li><a href="#start">Start Familiar</a></li>
-          <li><a href="#mobile">Use the WebUI on your phone</a></li>
-          <li><a href="#heartbeat">Enable heartbeat</a></li>
-          <li><a href="#platforms">Connect chat platforms</a></li>
-          <li><a href="#advanced">Advanced setup</a></li>
-          <li><a href="#upgrade">Upgrade Familiar</a></li>
-          <li><a href="#troubleshooting">Troubleshooting</a></li>
-        </ol>
+        <details class="toc-panel" open>
+          <summary><span class="toc-title">On this page</span><span class="toc-current"></span></summary>
+          <div class="toc-list">
+            <p class="toc-group">Get started</p>
+            <ol>
+              <li><a href="#requirements">Before you begin</a></li>
+              <li>
+                <a href="#install"><span class="toc-step">1</span>Install Familiar</a>
+                <ol>
+                  <li><a href="#install-unix">macOS or Linux</a></li>
+                  <li><a href="#install-windows">Windows</a></li>
+                </ol>
+              </li>
+              <li><a href="#configure"><span class="toc-step">2</span>Add your model key</a></li>
+              <li>
+                <a href="#personalize"><span class="toc-step">3</span>Make Familiar yours</a>
+                <ol>
+                  <li><a href="#soul">SOUL.md</a></li>
+                  <li><a href="#user">USER.md</a></li>
+                  <li><a href="#later-files">Files that can wait</a></li>
+                </ol>
+              </li>
+              <li><a href="#start"><span class="toc-step">4</span>Start Familiar</a></li>
+            </ol>
+            <p class="toc-group">Go further</p>
+            <ol>
+              <li>
+                <a href="#mobile">Use the WebUI on your phone</a>
+                <ol>
+                  <li><a href="#mobile-tailscale">With Tailscale</a></li>
+                  <li><a href="#mobile-lan">On your local network</a></li>
+                  <li><a href="#mobile-login">Require a login secret</a></li>
+                  <li><a href="#mobile-home-screen">Add to the home screen</a></li>
+                </ol>
+              </li>
+              <li>
+                <a href="#heartbeat">Let Familiar wake up on its own</a>
+                <ol>
+                  <li><a href="#heartbeat-menu">Choose what waking up means</a></li>
+                  <li><a href="#heartbeat-timing">Enable and set the timing</a></li>
+                </ol>
+              </li>
+              <li>
+                <a href="#platforms">Connect chat platforms</a>
+                <ol>
+                  <li><a href="#discord">Discord</a></li>
+                  <li><a href="#qq">QQ (OneBot 11)</a></li>
+                </ol>
+              </li>
+              <li>
+                <a href="#advanced">Add more capabilities</a>
+                <ol>
+                  <li><a href="#voice-replies">Voice replies</a></li>
+                  <li><a href="#transcription">Voice transcription</a></li>
+                  <li><a href="#web-search">Web search and fetching</a></li>
+                  <li><a href="#image-generation">Image generation</a></li>
+                  <li><a href="#browser">Browser control</a></li>
+                </ol>
+              </li>
+            </ol>
+            <p class="toc-group">Maintain</p>
+            <ol>
+              <li><a href="#upgrade">Upgrade Familiar</a></li>
+              <li>
+                <a href="#troubleshooting">If something goes wrong</a>
+                <ol>
+                  <li><a href="#trouble-general">Starting and replies</a></li>
+                  <li><a href="#trouble-discord">Discord</a></li>
+                  <li><a href="#trouble-qq">QQ</a></li>
+                </ol>
+              </li>
+            </ol>
+          </div>
+        </details>
       </nav>
 
       <article>
@@ -524,12 +130,12 @@
           <div class="step-number">1</div>
           <div>
             <h2>Install Familiar</h2>
-            <h3>macOS or Linux</h3>
+            <h3 id="install-unix">macOS or Linux</h3>
             <p>Open Terminal and run:</p>
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh</code></pre>
-            <h3>Windows</h3>
+            <pre data-label="Terminal"><code>curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh</code></pre>
+            <h3 id="install-windows">Windows</h3>
             <p>Open PowerShell and run:</p>
-            <pre><code>irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1 | iex</code></pre>
+            <pre data-label="PowerShell"><code>irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1 | iex</code></pre>
             <p>The installer checks Node.js and npm, installs Familiar, and creates your workspace at <code>~/.familiar</code>. You do not need to run <code>familiar init</code> afterward.</p>
           </div>
         </section>
@@ -540,12 +146,12 @@
             <h2>Add your model key</h2>
             <p>Open the <code>.familiar</code> folder in your home directory:</p>
             <ul>
-              <li><strong>macOS:</strong> In Finder, press <code>Command + Shift + G</code>, enter <code>~/.familiar</code>, and press Return.</li>
+              <li><strong>macOS:</strong> In Finder, press <code>Command + Shift + G</code>, enter <code>~/.familiar</code>, and press Return. Finder hides files whose names start with a dot, so press <code>Command + Shift + .</code> to show <code>.env</code>.</li>
               <li><strong>Windows:</strong> Paste <code>%USERPROFILE%\.familiar</code> into the File Explorer address bar.</li>
               <li><strong>Linux:</strong> Show hidden files in your file manager, then open <code>.familiar</code> in your home folder.</li>
             </ul>
             <p>Open <code>.env</code> in a text editor and fill in the model key line:</p>
-            <pre><code>ANTHROPIC_API_KEY=paste-your-link-api-key-here</code></pre>
+            <pre data-label=".env"><code>ANTHROPIC_API_KEY=paste-your-link-api-key-here</code></pre>
             <p class="note">With the generated default configuration, your Link API key goes after <code>ANTHROPIC_API_KEY=</code>. The name comes from the model's Anthropic-compatible credential slot.</p>
             <p>Leave the other <code>.env</code> lines and the rest of <code>config.toml</code> unchanged for now. If you want to add Discord or QQ, do that later in <a href="#platforms">Connect chat platforms</a>.</p>
           </div>
@@ -556,19 +162,19 @@
           <div>
             <h2>Make Familiar yours</h2>
             <p>Do this before the first launch. <code>SOUL.md</code> and <code>USER.md</code> become part of Familiar's core instructions (the system prompt), so the first reply can already sound like the companion you intended.</p>
-            <h3><code>SOUL.md</code>: who Familiar is</h3>
+            <h3 id="soul"><code>SOUL.md</code>: who Familiar is</h3>
             <p>Replace the defaults with a name, voice, temperament, values, boundaries, and the kinds of things you want your companion to notice. The WebUI reads the companion's name from this exact field:</p>
-            <pre><code>- **Name:** [companion name]</code></pre>
+            <pre data-label="SOUL.md"><code>- **Name:** [companion name]</code></pre>
             <p>Keep the <code>**Name:**</code> label and change only its value. Keep the other parts of the template that fit; rewrite the parts that do not.</p>
-            <h3><code>USER.md</code>: who Familiar knows</h3>
+            <h3 id="user"><code>USER.md</code>: who Familiar knows</h3>
             <p>Add your name, current priorities, important people, response preferences, recurring difficulties, and what you want help remembering. Do not store passwords, API keys, or other secrets here.</p>
-            <h3><code>MEMORY.md</code>: durable context</h3>
-            <p>Familiar updates this file with facts worth carrying across conversations. You can review or correct it, but you do not need to fill it before the first launch.</p>
-            <h3><code>CONTACT.md</code>: a private name for you</h3>
-            <p>This optional one-line file is the private nickname Familiar keeps for you, like a contact-book entry. You can write or change the name yourself, or leave it blank and ask your companion to choose a name for you.</p>
-            <h3><code>HEARTBEAT.md</code>: what to do while awake</h3>
-            <p>This is the action menu Familiar uses during an idle-triggered heartbeat. Review its suggestions before enabling heartbeat, especially whether Familiar may reach out, write a diary entry, pursue a curiosity, or sit the turn out.</p>
-            <p class="note"><code>SOUL.md</code> and <code>USER.md</code> are not profiles shown after onboarding. They are core context Familiar reads when deciding how to speak and respond.</p>
+            <h3 id="later-files">Files that can wait</h3>
+            <p>The workspace has three more files. You do not need to touch them before the first launch:</p>
+            <ul>
+              <li><strong><code>MEMORY.md</code>: durable context.</strong> Familiar updates this file with facts worth carrying across conversations. You can review or correct it at any time.</li>
+              <li><strong><code>CONTACT.md</code>: a private name for you.</strong> This one-line file is the nickname Familiar keeps for you, like a contact-book entry. Write it yourself, or leave it blank and ask your companion to choose one.</li>
+              <li><strong><code>HEARTBEAT.md</code>: what to do while awake.</strong> The action menu for heartbeat, which is off by default. Review it when you reach <a href="#heartbeat">Let Familiar wake up on its own</a>.</li>
+            </ul>
           </div>
         </section>
 
@@ -577,16 +183,17 @@
           <div>
             <h2>Start Familiar</h2>
             <p>Open a fresh Terminal or PowerShell window and run:</p>
-            <pre><code>familiar run</code></pre>
+            <pre data-label="Terminal or PowerShell"><code>familiar run</code></pre>
             <p>Keep this window open while you use Familiar. A successful start prints messages similar to:</p>
-            <pre><code>Web side-door listening on http://127.0.0.1:8787
+            <pre data-label="Expected output" data-nocopy><code>Web side-door listening on http://127.0.0.1:8787
 familiar running for workspace ...</code></pre>
             <p>Open the WebUI at <a href="http://127.0.0.1:8787">http://127.0.0.1:8787</a> on the same computer. Tailscale is not required for local access.</p>
             <div class="success">
               <strong>Success check</strong>
               Send a short message such as <code>Hello</code>. A normal reply means the installation, your model key, and model access are all working.
             </div>
-            <p>Press <code>Ctrl + C</code> in the terminal to stop Familiar. After changing <code>.env</code>, stop Familiar and run <code>familiar run</code> again.</p>
+            <p>Press <code>Ctrl + C</code> in the terminal to stop Familiar. Whenever this guide says to restart Familiar, after changing <code>.env</code> or <code>config.toml</code>, stop it this way and run <code>familiar run</code> again.</p>
+            <p class="note">That is the whole setup. Everything below is optional: come back once you have talked for a while and want Familiar on your phone, in Discord or QQ, or with more abilities.</p>
           </div>
         </section>
 
@@ -594,7 +201,7 @@ familiar running for workspace ...</code></pre>
           <h2>Use the WebUI on your phone</h2>
           <p>There are two ways to reach Familiar from another device, and they work at the same time. With Tailscale, one address works both at home and away, so nothing needs to be switched when you leave or come back. The local-network option is for devices without Tailscale, and only works at home.</p>
 
-          <h3>Recommended: one address everywhere with Tailscale</h3>
+          <h3 id="mobile-tailscale">Recommended: one address everywhere with Tailscale</h3>
           <p>Tailscale gives your phone a private connection to the computer running Familiar. When both devices are on your home network, the connection travels directly over the LAN; when you are away, it travels through your private tailnet. You open the same address either way, so one bookmark or home-screen app keeps working wherever you are. This does not expose Familiar to the public internet.</p>
           <ol>
             <li>On the home computer, download Tailscale from the <a href="https://tailscale.com/download">official download page</a> (macOS, Windows, and Linux installers are listed there) and install it.</li>
@@ -603,15 +210,15 @@ familiar running for workspace ...</code></pre>
             <li>Check that both devices show as connected — the Tailscale app lists every device in your tailnet. If you have customized tailnet access rules (ACLs), make sure they allow the phone to reach the home computer; a fresh account needs no changes.</li>
             <li>On the home computer, run:</li>
           </ol>
-          <pre><code>tailscale serve --bg http://127.0.0.1:8787
+          <pre data-label="Terminal, on the home computer"><code>tailscale serve --bg http://127.0.0.1:8787
 tailscale serve status</code></pre>
           <p>Open the HTTPS address shown by <code>tailscale serve status</code> on the phone, at home or away. No <code>config.toml</code> change is needed: Tailscale forwards to Familiar on the computer itself, so <code>bind_address</code> can stay at its default <code>127.0.0.1</code> and nothing extra is opened to your network. Keep the computer awake with both Tailscale and Familiar running. See the <a href="https://tailscale.com/docs/reference/tailscale-cli/serve">Tailscale Serve reference</a> for other Serve options.</p>
-          <p class="note">Do not use <code>tailscale funnel</code> for this private setup. Tailscale ACLs decide which devices can reach the computer; the optional Familiar bearer login below adds a second login boundary.</p>
+          <p class="note warning">Do not use <code>tailscale funnel</code> for this private setup. Tailscale ACLs decide which devices can reach the computer; the optional Familiar bearer login below adds a second login boundary.</p>
 
-          <h3>Without Tailscale: your local network</h3>
+          <h3 id="mobile-lan">Without Tailscale: your local network</h3>
           <p>Use this for a phone or laptop that does not run Tailscale and is on the same Wi-Fi or wired LAN as the computer. It does not provide access when you are away from home.</p>
           <p>Open <code>config.toml</code> and change <code>bind_address</code> in its existing <code>[web]</code> section:</p>
-          <pre><code>[web]
+          <pre data-label="config.toml"><code>[web]
 port = 8787
 bind_address = "0.0.0.0"</code></pre>
           <p>Restart Familiar after saving. If your computer asks about firewall access, allow private or local networks only. Then, from the nearby device:</p>
@@ -620,18 +227,18 @@ bind_address = "0.0.0.0"</code></pre>
             <li>Find the computer's local IP address in its network or Wi-Fi settings. It usually looks like <code>192.168.x.x</code>.</li>
             <li>On the phone, open <code>http://192.168.x.x:8787</code>, replacing the example IP with the computer's address.</li>
           </ol>
-          <p class="note"><code>0.0.0.0</code> is the address Familiar listens on, not an address to open in the phone's browser. It makes the WebUI available to other devices on the network, so use this only on a home network you trust.</p>
+          <p class="note warning"><code>0.0.0.0</code> is the address Familiar listens on, not an address to open in the phone's browser. It makes the WebUI available to other devices on the network, so use this only on a home network you trust.</p>
           <p>The two setups are independent and can be combined: <code>bind_address = "0.0.0.0"</code> does not interfere with Tailscale, and coming home or leaving never requires changing it. If every remote device runs Tailscale, you do not need <code>0.0.0.0</code> at all.</p>
 
-          <h3>Optional: require a login secret</h3>
+          <h3 id="mobile-login">Optional: require a login secret</h3>
           <p>You can skip this on a trusted home network. For Tailscale, it is optional defense-in-depth; use it if you do not want every permitted tailnet device to open the WebUI automatically. If the computer uses a shared or public network, either return <code>bind_address</code> to <code>127.0.0.1</code> or protect the WebUI with bearer login.</p>
           <p>Add a long password to <code>.env</code>:</p>
-          <pre><code>FAMILIAR_WEB_BEARER_TOKEN=choose-a-long-random-password</code></pre>
+          <pre data-label=".env"><code>FAMILIAR_WEB_BEARER_TOKEN=choose-a-long-random-password</code></pre>
           <p>Then change these lines in the existing <code>[web]</code> section of <code>config.toml</code> and restart Familiar:</p>
-          <pre><code>auth_mode = "bearer"
+          <pre data-label="config.toml"><code>auth_mode = "bearer"
 bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN}"</code></pre>
 
-          <h3>Install Familiar on the home screen</h3>
+          <h3 id="mobile-home-screen">Install Familiar on the home screen</h3>
           <ul>
             <li><strong>iPhone or iPad:</strong> Open Familiar in Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</li>
             <li><strong>Android:</strong> Open Familiar in Edge or Chrome, open the browser menu, then choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
@@ -644,28 +251,28 @@ bearer_token = "${FAMILIAR_WEB_BEARER_TOKEN}"</code></pre>
           <p>Heartbeat is optional and disabled for new workspaces. Once the first conversation works, customize <code>HEARTBEAT.md</code>, then enable the scheduler in <code>config.toml</code>.</p>
           <p>When a heartbeat becomes due, Familiar starts an agent turn and points the companion to <code>HEARTBEAT.md</code> as its menu. The companion can proactively message you, reflect in its diary, pursue a curiosity with available tools, or choose to stay silent.</p>
 
-          <h3>Choose what waking up means</h3>
+          <h3 id="heartbeat-menu">Choose what waking up means</h3>
           <p>Open <code>HEARTBEAT.md</code> and review each section. Remove actions you do not want, add boundaries, and write the instructions in a voice that fits the companion.</p>
 
-          <h3>Enable heartbeat and set the timing</h3>
+          <h3 id="heartbeat-timing">Enable heartbeat and set the timing</h3>
           <p>Open <code>config.toml</code> and set:</p>
-          <pre><code>[heartbeat]
+          <pre data-label="config.toml"><code>[heartbeat]
 enabled = true
 idle_threshold_minutes = 60
 interval_minutes = 240</code></pre>
           <ul>
-            <li><code>idle_threshold_minutes</code> is how long the owner must be idle before the first heartbeat becomes eligible.</li>
-            <li><code>interval_minutes</code> is the minimum time between later heartbeats while the owner remains idle.</li>
-            <li>Only owner messages reset the idle timer. Familiar's replies and tool work do not.</li>
+            <li><code>idle_threshold_minutes</code> is how long you must be quiet before the first heartbeat becomes eligible.</li>
+            <li><code>interval_minutes</code> is the minimum time between later heartbeats while you stay quiet.</li>
+            <li>Only your messages reset the idle timer. Familiar's replies and tool work do not.</li>
           </ul>
-          <p>Save the file and restart Familiar if it is already running. With the example above, the first heartbeat becomes eligible after 60 minutes of owner inactivity; later heartbeats can repeat every 240 minutes until the owner sends another message.</p>
+          <p>Save the file and restart Familiar if it is already running. With the example above, the first heartbeat becomes eligible after 60 minutes without a message from you; later heartbeats can repeat every 240 minutes until you send another message.</p>
         </section>
 
         <section class="feature" id="platforms">
           <h2>Connect chat platforms (optional)</h2>
           <p>Familiar lives in the WebUI by default. If you also want it in Discord or QQ, connect one or both — the same companion, memories, and sessions carry across every platform. Each platform has an <code>enabled</code> switch; set it to <code>false</code> to stop that platform connecting without deleting its config. The WebUI is always on and cannot be disabled.</p>
 
-          <h3>Discord</h3>
+          <h3 id="discord">Discord</h3>
           <ol>
             <li>Open the <a href="https://discord.com/developers/applications">Discord Developer Portal</a> and select <strong>New Application</strong>.</li>
             <li>Open <strong>Bot</strong>, create the bot, then select <strong>Reset Token</strong> and copy the token. Treat it like a password.</li>
@@ -676,32 +283,31 @@ interval_minutes = 240</code></pre>
             <li>Right-click your own profile and select <strong>Copy User ID</strong>.</li>
           </ol>
           <p>Add the bot token to <code>.env</code>:</p>
-          <pre><code>DISCORD_TOKEN=paste-your-bot-token-here</code></pre>
+          <pre data-label=".env"><code>DISCORD_TOKEN=paste-your-bot-token-here</code></pre>
           <p>Then set your user ID in the <code>[discord]</code> section of <code>config.toml</code>:</p>
-          <pre><code>[discord]
+          <pre data-label="config.toml"><code>[discord]
 enabled = true
 owner_id = "paste-your-discord-user-id-here"</code></pre>
           <p>Familiar ignores Discord server channels unless you allow them. With Developer Mode enabled, right-click a server text channel, select <strong>Copy Channel ID</strong>, and add the ID to <code>allowed_channels</code>:</p>
-          <pre><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
+          <pre data-label="config.toml"><code>allowed_channels = ["paste-channel-id-here"]</code></pre>
           <p>Add more IDs inside the brackets, separated by commas. Make sure the bot can view and send messages in each channel, then restart Familiar. The generated configuration uses <code>channel_trigger = "always"</code>; change it to <code>"mention"</code> if you want Familiar to respond only when someone mentions the bot.</p>
 
-          <h3>QQ (OneBot 11)</h3>
+          <h3 id="qq">QQ (OneBot 11)</h3>
           <p>Familiar connects to any OneBot 11 server's forward WebSocket, so <a href="https://napneko.github.io/">NapCat</a> and <a href="https://lagrangedev.github.io/Lagrange.Doc/">Lagrange.OneBot</a> are interchangeable. Set up the server first, then point Familiar at it. Two accounts are involved and they are <em>different</em>: the <strong>bot account</strong> (a dedicated small account that logs into the OneBot server) and your own QQ number in <code>owner_id</code> (the human whose DMs Familiar responds to).</p>
 
           <h4>1. Install the OneBot server (NapCat)</h4>
           <p><strong>Windows</strong> — use the manual Shell package, not the one-key installer:</p>
           <ol>
-            <li>Download <code>NapCat.Shell.zip</code> from the <a href="https://github.com/NapNeko/NapCatQQ/releases">NapCat releases page</a> and extract it. (The <code>NapCat.Shell.Windows.OneKey.zip</code> installer currently fails with a 404 — see troubleshooting below.)</li>
+            <li>Download <code>NapCat.Shell.zip</code> from the <a href="https://github.com/NapNeko/NapCatQQ/releases">NapCat releases page</a> and extract it. (The <code>NapCat.Shell.Windows.OneKey.zip</code> installer currently fails with a 404 — see <a href="#trouble-qq">QQ troubleshooting</a>.)</li>
             <li>Install the latest <a href="https://im.qq.com/">QQ</a> and log in once normally.</li>
             <li>Double-click <code>launcher.bat</code> (Windows 10: <code>launcher-win10.bat</code>). To log straight into an account you have used before, pass its number: <code>launcher.bat -q 123456789</code>.</li>
           </ol>
           <p><strong>Linux (VPS)</strong> — run the installer over SSH:</p>
-          <pre><code>curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh \
+          <pre data-label="Terminal, on the VPS"><code>curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh \
   && sudo bash napcat.sh --docker n --cli y --proxy 0</code></pre>
           <p><code>--docker n</code> installs the Shell version, which stores the login session on disk under <code>~/Napcat</code> so you only scan the QR code once. <code>--cli y</code> adds the <code>napcat</code> TUI for configuring from a terminal. The Docker image works too but does not persist your login unless you bind-mount its data directories.</p>
           <p>The Shell version runs in the background with <code>screen</code>, which does not survive a reboot or restart after a crash on its own. Add a systemd user service so it comes back automatically:</p>
-          <pre><code># ~/.config/systemd/user/napcat.service
-[Unit]
+          <pre data-label="~/.config/systemd/user/napcat.service"><code>[Unit]
 Description=NapCat (QQ OneBot server)
 After=network-online.target
 Wants=network-online.target
@@ -715,7 +321,7 @@ RestartSec=10
 [Install]
 WantedBy=default.target</code></pre>
           <p>Copy <code>&lt;QQ_EXECUTABLE&gt;</code> and the <code>-q</code> argument from the startup command the installer prints at the end, then enable it and allow it to run while logged out:</p>
-          <pre><code>systemctl --user daemon-reload
+          <pre data-label="Terminal, on the VPS"><code>systemctl --user daemon-reload
 systemctl --user enable --now napcat
 loginctl enable-linger $USER</code></pre>
           <p><code>loginctl enable-linger</code> is required — without it the user service stops when your SSH session ends.</p>
@@ -731,37 +337,37 @@ loginctl enable-linger $USER</code></pre>
 
           <h4>3. Point Familiar at it</h4>
           <p>Add the <code>[qq]</code> section to <code>config.toml</code>:</p>
-          <pre><code>[qq]
+          <pre data-label="config.toml"><code>[qq]
 enabled = true
 ws_url = "ws://127.0.0.1:3001"
 owner_id = "your QQ number"
 allowed_groups = []</code></pre>
           <p>If the OneBot server has an access token, put it in <code>.env</code>:</p>
-          <pre><code>QQ_ONEBOT_TOKEN=paste-your-onebot-token-here</code></pre>
+          <pre data-label=".env"><code>QQ_ONEBOT_TOKEN=paste-your-onebot-token-here</code></pre>
           <p>Non-owner DMs and groups outside the allowlist are ignored. Use a dedicated small account rather than your main QQ, keep it logged in from one place only, and let it idle a few days before adding it to groups.</p>
         </section>
 
         <section class="feature" id="advanced">
-          <h2>Optional: add more capabilities</h2>
+          <h2>Add more capabilities (optional)</h2>
           <p>These are not required for your first conversation. Add only the credentials for features you want to use, then restart Familiar.</p>
 
-          <h3>ElevenLabs voice replies</h3>
+          <h3 id="voice-replies">ElevenLabs voice replies</h3>
           <p>Create an API key in <a href="https://elevenlabs.io/app/developers/api-keys">ElevenLabs API keys</a>, choose a voice, and add its voice ID alongside the key in <code>.env</code>:</p>
-          <pre><code>ELEVENLABS_API_KEY=paste-your-elevenlabs-api-key
+          <pre data-label=".env"><code>ELEVENLABS_API_KEY=paste-your-elevenlabs-api-key
 ELEVENLABS_VOICE_ID=paste-your-voice-id</code></pre>
 
-          <h3>Groq voice transcription</h3>
+          <h3 id="transcription">Groq voice transcription</h3>
           <p>Create a key in the <a href="https://console.groq.com/keys">Groq API Keys dashboard</a>, then add it to <code>.env</code>. Familiar uses it to transcribe incoming audio:</p>
-          <pre><code>GROQ_API_KEY=paste-your-groq-api-key</code></pre>
+          <pre data-label=".env"><code>GROQ_API_KEY=paste-your-groq-api-key</code></pre>
 
-          <h3>Web search and page fetching</h3>
+          <h3 id="web-search">Web search and page fetching</h3>
           <p>Use <a href="https://app.tavily.com/home">Tavily</a> for web search and <a href="https://www.tinyfish.ai/">TinyFish</a> for page fetching. Add either or both keys to <code>.env</code>:</p>
-          <pre><code>TAVILY_API_KEY=paste-your-tavily-api-key
+          <pre data-label=".env"><code>TAVILY_API_KEY=paste-your-tavily-api-key
 TINYFISH_API_KEY=paste-your-tinyfish-api-key</code></pre>
 
-          <h3>Image generation</h3>
+          <h3 id="image-generation">Image generation</h3>
           <p>The generated configuration uses Link API image models. Add your Link API key to <code>.env</code>; you can reuse the same key you entered for the default chat model:</p>
-          <pre><code>LINK_API_KEY=paste-your-link-api-key</code></pre>
+          <pre data-label=".env"><code>LINK_API_KEY=paste-your-link-api-key</code></pre>
           <p>To give Familiar visual references for people, characters, outfits, or other recurring subjects:</p>
           <ol>
             <li>Create <code>ref-images</code> inside your Familiar workspace. The default location is <code>~/.familiar/ref-images</code>.</li>
@@ -769,52 +375,64 @@ TINYFISH_API_KEY=paste-your-tinyfish-api-key</code></pre>
             <li>Open <code>~/.familiar/skills/image-gen/SKILL.md</code> and find <strong>Reference Images</strong>.</li>
             <li>Replace the entire placeholder list with the exact filename and a short description for each of your images.</li>
           </ol>
-          <pre><code>Available refs:
+          <pre data-label="skills/image-gen/SKILL.md"><code>Available refs:
 - `person-face.jpg` - clear close-up portrait
 - `person-full-body.png` - full-body reference and usual outfit</code></pre>
           <p class="note">The filenames in the bundled skill are examples only. Remove them and add your real files; entries that do not match files in <code>ref-images</code> cannot be used. Clear descriptions help Familiar choose the best one to three references for a scene.</p>
 
-          <h3>Browser control</h3>
+          <h3 id="browser">Browser control</h3>
           <p>Familiar can use a real browser through <a href="https://github.com/vercel-labs/agent-browser">agent-browser</a>. Install it, then let it download Chrome:</p>
-          <pre><code>npm install -g agent-browser
+          <pre data-label="Terminal"><code>npm install -g agent-browser
 agent-browser install</code></pre>
           <p>On Linux, use <code>agent-browser install --with-deps</code> so the system libraries Chrome needs are installed too.</p>
           <p>Then add these lines at the end of <code>config.toml</code>:</p>
-          <pre><code>[mcp.servers.browser]
+          <pre data-label="config.toml"><code>[mcp.servers.browser]
 command = "agent-browser"
 args = ["mcp"]
 env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }</code></pre>
           <p>The profile folder keeps Familiar's logins between sessions. Restart Familiar to load it.</p>
-          <p class="note">Familiar only closes the browser when asked; otherwise it stays open for up to an hour after the last use. To make closing a habit, add a line like <em>"Close the browser when you're done with it."</em> to <code>MEMORY.md</code>, in your own words. A closed browser frees memory sooner, stops Browser Use billing straight away, and saves any logins refreshed during the session to a Browser Use profile.</p>
           <p class="note">Already have Chrome or Chromium installed? Skip <code>agent-browser install</code> and add its path to the <code>env</code> line, for example <code>AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/chromium"</code> on Debian. Ubuntu's snap Chromium cannot use hidden folders like <code>~/.familiar</code>, so use <code>agent-browser install</code> there.</p>
-          <p><strong>Sites blocking or logging you out?</strong> These make the local browser look more like a person's. Try them in order, and stop once your sites behave:</p>
-          <ol>
-            <li><strong>Show a real window instead of running headless.</strong> Headless Chrome is easy for sites to spot. Add <code>AGENT_BROWSER_HEADED = "1"</code> to the <code>env</code> line. On a Linux server with no screen, install Xvfb first (<code>sudo apt install xvfb</code> on Debian or Ubuntu); agent-browser starts a virtual screen with it automatically. This uses more memory than headless.</li>
-            <li><strong>Look like an ordinary browser in your part of the world.</strong> Prefer regular Google Chrome over a distro Chromium, and match the browser's language and time zone to where you are, for example <code>TZ = "Europe/London"</code> and <code>AGENT_BROWSER_ARGS = "--lang=en-GB"</code>.</li>
-            <li><strong>Bring your logins with you.</strong> The profile folder already keeps logins. To copy the ones from your own computer, start Chrome there with remote debugging (see the <a href="https://github.com/vercel-labs/agent-browser#import-auth-from-your-browser">agent-browser guide</a>), run <code>agent-browser --auto-connect state save ./my-auth.json</code>, copy the file to the server, and add <code>AGENT_BROWSER_STATE = "/path/to/my-auth.json"</code> to the <code>env</code> line. The file holds your login cookies, so keep it private.</li>
-            <li><strong>Step in when it gets stuck.</strong> For a CAPTCHA or a two-factor prompt, open the live view and finish it yourself. On the server, run <code>agent-browser dashboard start</code>. From your computer, run <code>ssh -L 4848:127.0.0.1:4848 you@your-server</code>, then open <code>http://localhost:4848</code> to watch and click in Familiar's browser.</li>
-            <li><strong>Extra stealth, only if a site still blocks you.</strong> agent-browser has stealth plugins and an experimental <code>obscura</code> engine with a stealth mode. See its README for setup.</li>
-          </ol>
-          <p>With the first two applied, the <code>env</code> line might look like:</p>
-          <pre><code>env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile", AGENT_BROWSER_HEADED = "1", AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/google-chrome", TZ = "Europe/London", AGENT_BROWSER_ARGS = "--lang=en-GB" }</code></pre>
-          <p><strong>Low on memory, or still blocked?</strong> A local Chrome needs a few hundred MB of RAM, and some sites block server IP addresses. A <a href="https://browser-use.com">Browser Use</a> cloud browser avoids both. Replace the <code>env</code> line with:</p>
-          <pre><code>env = { AGENT_BROWSER_PROVIDER = "browseruse" }</code></pre>
-          <p>Then add <code>BROWSER_USE_API_KEY</code> to your workspace <code>.env</code>, plus <code>BROWSER_USE_PROFILE_ID</code> to keep your logins. Browser Use charges for browser time and proxy traffic from a prepaid credit balance.</p>
+          <details class="more">
+            <summary>Sites blocking or logging you out?</summary>
+            <p>These make the local browser look more like a person's. Try them in order, and stop once your sites behave:</p>
+            <ol>
+              <li><strong>Show a real window instead of running headless.</strong> Headless Chrome is easy for sites to spot. Add <code>AGENT_BROWSER_HEADED = "1"</code> to the <code>env</code> line. On a Linux server with no screen, install Xvfb first (<code>sudo apt install xvfb</code> on Debian or Ubuntu); agent-browser starts a virtual screen with it automatically. This uses more memory than headless.</li>
+              <li><strong>Look like an ordinary browser in your part of the world.</strong> Prefer regular Google Chrome over a distro Chromium, and match the browser's language and time zone to where you are, for example <code>TZ = "Europe/London"</code> and <code>AGENT_BROWSER_ARGS = "--lang=en-GB"</code>.</li>
+              <li><strong>Bring your logins with you.</strong> The profile folder already keeps logins. To copy the ones from your own computer, start Chrome there with remote debugging (see the <a href="https://github.com/vercel-labs/agent-browser#import-auth-from-your-browser">agent-browser guide</a>), run <code>agent-browser --auto-connect state save ./my-auth.json</code>, copy the file to the server, and add <code>AGENT_BROWSER_STATE = "/path/to/my-auth.json"</code> to the <code>env</code> line. The file holds your login cookies, so keep it private.</li>
+              <li><strong>Step in when it gets stuck.</strong> For a CAPTCHA or a two-factor prompt, open the live view and finish it yourself. On the server, run <code>agent-browser dashboard start</code>. From your computer, run <code>ssh -L 4848:127.0.0.1:4848 you@your-server</code>, then open <code>http://localhost:4848</code> to watch and click in Familiar's browser.</li>
+              <li><strong>Extra stealth, only if a site still blocks you.</strong> agent-browser has stealth plugins and an experimental <code>obscura</code> engine with a stealth mode. See its README for setup.</li>
+            </ol>
+            <p>With the first two applied, the <code>env</code> line might look like:</p>
+            <pre data-label="config.toml"><code>env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile", AGENT_BROWSER_HEADED = "1", AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/google-chrome", TZ = "Europe/London", AGENT_BROWSER_ARGS = "--lang=en-GB" }</code></pre>
+          </details>
+          <details class="more">
+            <summary>Low on memory, or still blocked?</summary>
+            <p>A local Chrome needs a few hundred MB of RAM, and some sites block server IP addresses. A <a href="https://browser-use.com">Browser Use</a> cloud browser avoids both. Replace the <code>env</code> line with:</p>
+            <pre data-label="config.toml"><code>env = { AGENT_BROWSER_PROVIDER = "browseruse" }</code></pre>
+            <p>Then add <code>BROWSER_USE_API_KEY</code> to your workspace <code>.env</code>, plus <code>BROWSER_USE_PROFILE_ID</code> to keep your logins. Browser Use charges for browser time and proxy traffic from a prepaid credit balance.</p>
+          </details>
+          <p class="note">Familiar only closes the browser when asked; otherwise it stays open for up to an hour after the last use. To make closing a habit, add a line like <em>"Close the browser when you're done with it."</em> to <code>MEMORY.md</code>, in your own words. A closed browser frees memory sooner and, with Browser Use, stops billing straight away and saves any logins refreshed during the session to your Browser Use profile.</p>
         </section>
 
         <section class="feature" id="upgrade">
           <h2>Upgrade Familiar</h2>
           <p>When a new version is available, stop Familiar and run:</p>
-          <pre><code>familiar upgrade</code></pre>
+          <pre data-label="Terminal"><code>familiar upgrade</code></pre>
           <p>This updates Familiar, then adds any missing workspace defaults without overwriting your existing configuration, persona files, or skills. Start Familiar again with <code>familiar run</code>, or use <code>familiar restart</code> if you installed it as a service.</p>
         </section>
 
         <section class="troubleshooting" id="troubleshooting">
           <h2>If something goes wrong</h2>
+          <h3 id="trouble-general">Starting and replies</h3>
           <details>
             <summary><code>familiar</code> is not found</summary>
             <p>Close and reopen the terminal. If it still fails, check that npm's global bin directory is on your <code>PATH</code>.</p>
           </details>
+          <details>
+            <summary>Familiar starts but never replies</summary>
+            <p>Recheck the Link API key after <code>ANTHROPIC_API_KEY=</code> in <code>.env</code>, then restart Familiar.</p>
+          </details>
+          <h3 id="trouble-discord">Discord</h3>
           <details>
             <summary>Discord doesn't connect</summary>
             <p>Confirm the file is named exactly <code>.env</code>, is inside <code>~/.familiar</code>, and contains the <code>DISCORD_TOKEN=...</code> line. Discord is optional — without a token, Familiar still runs and the WebUI is the whole interface.</p>
@@ -827,24 +445,21 @@ env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }</code></pr
             <summary>The bot ignores your DM</summary>
             <p>Confirm <code>owner_id</code> is your user ID, not the bot ID or application ID.</p>
           </details>
+          <h3 id="trouble-qq">QQ</h3>
           <details>
-            <summary>The bot starts but cannot answer</summary>
-            <p>Recheck the Link API key after <code>ANTHROPIC_API_KEY=</code> in <code>.env</code>.</p>
-          </details>
-          <details>
-            <summary>QQ: the NapCat one-key installer returns a 404</summary>
+            <summary>The NapCat one-key installer returns a 404</summary>
             <p><code>NapCatInstaller.exe</code> pins a QQ download URL (<code>QQ9.9.19.34231</code>) that Tencent has removed, so the one-key package fails on download. Use <code>NapCat.Shell.zip</code> instead, which needs you to install QQ yourself.</p>
           </details>
           <details>
-            <summary>QQ: NapCat asks you to log in every launch</summary>
+            <summary>NapCat asks you to log in every launch</summary>
             <p>Quick login only happens when you pass the account number with <code>-q</code>; without it NapCat defaults to QR login even if a session exists. Start with <code>launcher.bat -q 123456789</code>.</p>
           </details>
           <details>
-            <summary>QQ: sent messages never arrive</summary>
+            <summary>Sent messages never arrive</summary>
             <p>A freshly logged-in account is throttled by QQ anti-spam — the send reports success but the other side sees nothing. Wait a day or two and test with a real person, not just the bot account.</p>
           </details>
           <details>
-            <summary>QQ: everything looks right but nothing connects</summary>
+            <summary>Everything looks right but nothing connects</summary>
             <p>Check <code>messagePostFormat</code> is <code>array</code>, and confirm the <code>ws_url</code> port matches the WebSocket server you added in the WebUI (not the 6099 WebUI port).</p>
           </details>
         </section>
@@ -857,30 +472,89 @@ env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }</code></pr
     Familiar beginner guide
   </footer>
   <script>
-    const tocLinks = [...document.querySelectorAll('.toc a[href^="#"]')];
-    const tocSections = tocLinks
-      .map((link) => document.getElementById(link.hash.slice(1)))
-      .filter(Boolean);
+    const toc = document.querySelector(".toc");
+    const tocPanel = toc.querySelector(".toc-panel");
+    const tocCurrent = toc.querySelector(".toc-current");
+    const tocLinks = [...toc.querySelectorAll('a[href^="#"]')];
+    const tocTopItems = [...toc.querySelectorAll(".toc-list > ol > li")];
+    const tocTargets = tocLinks
+      .map((link) => [link, document.getElementById(link.hash.slice(1))])
+      .filter(([, target]) => target);
+    const narrow = matchMedia("(max-width: 800px)");
+    // a clicked link stays active until the reader scrolls by hand; short sections near the end never reach the top
+    let pinned = null;
 
-    function setActiveSection(id) {
-      for (const link of tocLinks) {
-        if (link.hash === `#${id}`) link.setAttribute("aria-current", "location");
-        else link.removeAttribute("aria-current");
+    function setActive(link) {
+      for (const other of tocLinks) {
+        if (other === link) other.setAttribute("aria-current", "location");
+        else other.removeAttribute("aria-current");
       }
+      const open = link.closest(".toc-list > ol > li");
+      for (const item of tocTopItems) item.classList.toggle("is-open", item === open);
+      const sectionLink = open?.querySelector(":scope > a") ?? link;
+      tocCurrent.textContent = [...sectionLink.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join("")
+        .trim();
     }
 
-    const sectionObserver = new IntersectionObserver(
-      (entries) => {
-        const current = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (current) setActiveSection(current.target.id);
-      },
-      { rootMargin: "-25% 0px -65%" },
-    );
+    function updateActive() {
+      if (pinned) return;
+      const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+      let active = tocTargets[0];
+      for (const entry of tocTargets) {
+        if (atBottom || entry[1].getBoundingClientRect().top <= innerHeight * 0.25) active = entry;
+      }
+      setActive(active[0]);
+    }
 
-    for (const section of tocSections) sectionObserver.observe(section);
-    setActiveSection(location.hash.slice(1) || tocSections[0]?.id);
+    // the panel only folds on phones; on wider screens it is a fixed sidebar
+    function syncPanel() {
+      tocPanel.open = !narrow.matches;
+    }
+
+    tocPanel.querySelector("summary").addEventListener("click", (event) => {
+      if (!narrow.matches) event.preventDefault();
+    });
+    toc.addEventListener("click", (event) => {
+      const link = event.target.closest('a[href^="#"]');
+      if (!link) return;
+      pinned = link;
+      setActive(link);
+      if (narrow.matches) tocPanel.open = false;
+    });
+    for (const type of ["wheel", "touchstart", "keydown"]) {
+      addEventListener(type, () => { pinned = null; }, { passive: true });
+    }
+    addEventListener("scroll", () => requestAnimationFrame(updateActive), { passive: true });
+    narrow.addEventListener("change", syncPanel);
+
+    syncPanel();
+    toc.classList.add("is-collapsible");
+    pinned = tocLinks.find((link) => link.hash === location.hash) ?? null;
+    if (pinned) setActive(pinned);
+    else updateActive();
+
+    for (const pre of document.querySelectorAll("pre:not([data-nocopy])")) {
+      const code = pre.querySelector("code");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy-button";
+      button.textContent = "Copy";
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent);
+          button.textContent = "Copied";
+        } catch {
+          // clipboard needs a secure context; select the text so a manual copy still works
+          getSelection().selectAllChildren(code);
+          button.textContent = "Selected";
+        }
+        setTimeout(() => { button.textContent = "Copy"; }, 1600);
+      });
+      pre.append(button);
+    }
   </script>
 </body>
 </html>

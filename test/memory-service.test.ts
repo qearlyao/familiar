@@ -615,6 +615,7 @@ describe("MemoryService", () => {
 				});
 				assert.equal(calls, 1);
 				assert.deepEqual(second.map((message) => message.role), first.map((message) => message.role));
+				assert.deepEqual(service.liveMessages("room-a", messages), [messages[2]]);
 
 				const summaries = service.lcmStore.listSummaries();
 				assert.equal(summaries.length, 1);
@@ -628,6 +629,26 @@ describe("MemoryService", () => {
 				assert.equal(sources.every((source) => source.recordId !== null), true);
 				for (const source of sources) assert.ok(service.lcmStore.getRecord(source.recordId as number));
 			});
+		});
+	});
+
+	it("keeps context within budget when LCM is disabled", async (t) => {
+		const baseConfig = await memoryConfig(t);
+		const config = { ...baseConfig, memory: { ...baseConfig.memory, lcm: { ...baseConfig.memory.lcm, enabled: false, freshTailCount: 1 } } };
+		await withMemoryService(config, {}, async (service) => {
+			const messages = Array.from({ length: 50 }, (_, index) => ({
+				role: "user" as const,
+				content: `message ${index} ${"x".repeat(400)}`,
+				timestamp: index + 1,
+			}));
+			const sent = await service.transformContext(messages, undefined, {
+				sessionKey: "room-disabled",
+				sessionId: "session-a",
+				skipAmbient: true,
+				model: { contextWindow: 1_000 } as any,
+			});
+			assert.ok(sent.length > 0 && sent.length < messages.length);
+			assert.equal(sent.at(-1), messages.at(-1));
 		});
 	});
 

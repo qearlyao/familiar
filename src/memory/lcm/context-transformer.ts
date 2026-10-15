@@ -116,8 +116,9 @@ export class LcmContextTransformer {
 		const settings = this.settings;
 		const sessionKey = options.sessionKey ?? options.sessionId ?? "default";
 		this.recordMessages(messages, { sessionKey, sessionId: options.sessionId });
-		if (!settings.enabled) return messages;
 		const state = this.contextState(sessionKey);
+		// without compaction, still never send more than the budget: the oldest messages drop off
+		if (!settings.enabled) return assembleWithinBudget(state, settings, options.model);
 		const now = this.now();
 		const previousCacheTouchedAt = state.cacheTouchedAt;
 		state.cacheTouchedAt = now;
@@ -401,6 +402,16 @@ export class LcmContextTransformer {
 		if (breakdown) breakdown.other = tokens;
 	}
 
+	/** the messages a request can still use: a summary already stands in for the rest, whose records stay in the store */
+	liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[] {
+		const covered = new Set(
+			this.contextState(sessionKey).items.flatMap((item) => (item.type === "summary" ? item.sourceIds : [])),
+		);
+		if (covered.size === 0) return messages;
+		const items = createRawContextItems(messages);
+		return messages.filter((_, index) => !covered.has(items[index]?.id ?? ""));
+	}
+
 	invalidateSession(sessionKey: string): void {
 		this.contextStates.delete(sessionKey);
 	}
@@ -512,10 +523,9 @@ function syncContextState(state: LcmContextState, messages: AgentMessage[]): voi
 		if (replacement && !covered.has(item.id)) next.push(replacement);
 	}
 
+	const kept = new Set(next.flatMap((item) => (item.type === "raw" ? [item.id] : [])));
 	for (const item of rawItems) {
-		if (!covered.has(item.id) && !next.some((existing) => existing.type === "raw" && existing.id === item.id)) {
-			next.push(item);
-		}
+		if (!covered.has(item.id) && !kept.has(item.id)) next.push(item);
 	}
 
 	state.items = next;

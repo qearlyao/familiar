@@ -785,6 +785,7 @@ command = "agent-browser"
 args = ["mcp"]
 env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }</code></pre>
           <p>The profile folder keeps Familiar's logins between sessions. Restart Familiar to load it.</p>
+          <p class="note">Familiar only closes the browser when asked; otherwise it stays open for up to an hour after the last use. To make closing a habit, add a line like <em>"Close the browser when you're done with it."</em> to <code>MEMORY.md</code>, in your own words. A closed browser frees memory sooner, stops Browser Use billing straight away, and saves any logins refreshed during the session to a Browser Use profile.</p>
           <p class="note">Already have Chrome or Chromium installed? Skip <code>agent-browser install</code> and add its path to the <code>env</code> line, for example <code>AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/chromium"</code> on Debian. Ubuntu's snap Chromium cannot use hidden folders like <code>~/.familiar</code>, so use <code>agent-browser install</code> there.</p>
           <p><strong>Sites blocking or logging you out?</strong> These make the local browser look more like a person's. Try them in order, and stop once your sites behave:</p>
           <ol>

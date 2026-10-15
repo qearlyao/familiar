@@ -207,7 +207,6 @@ retention_days = 30
 
 [data.chat]
 # Every runtime loads its channel's whole chat log at startup, so keep it bounded; 0 keeps everything.
-# Matches media.generated, after which older messages' attachments are gone anyway.
 retention_days = 30
 
 [data.transcripts]

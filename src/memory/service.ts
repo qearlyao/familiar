@@ -31,6 +31,8 @@ export interface MemoryService {
 		options?: MemoryTransformOptions,
 	): Promise<AgentMessage[]>;
 	recordMessages(messages: AgentMessage[], options: { sessionKey: string; sessionId?: string }): void;
+	/** drops the messages LCM summaries already cover; their records stay in the store */
+	liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[];
 	getContextBreakdown(sessionKey: string): ContextBreakdown | undefined;
 	serviceCompactionDebt(sessionKey: string): Promise<void>;
 	flush(): Promise<void>;
@@ -199,6 +201,10 @@ class DefaultMemoryService implements MemoryOperatorService {
 
 	recordMessages(messages: AgentMessage[], options: { sessionKey: string; sessionId?: string }): void {
 		this.contextTransformer.recordMessages(messages, options);
+	}
+
+	liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[] {
+		return this.contextTransformer.liveMessages(sessionKey, messages);
 	}
 
 	async flush(): Promise<void> {

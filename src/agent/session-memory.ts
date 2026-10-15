@@ -77,11 +77,13 @@ export function createSessionMemory(memory: MemoryService) {
 			}
 			if (event.type === "agent_end" && !activeOptions.get(sessionKey)?.ephemeral) {
 				const messages = agent.state.messages;
+				const head = messages[0]?.role === "system" ? messages[0] : undefined;
+				const body = head ? messages.slice(1) : messages;
 				try {
-					memory.recordMessages(messages[0]?.role === "system" ? messages.slice(1) : messages, {
-						sessionKey,
-						sessionId,
-					});
+					memory.recordMessages(body, { sessionKey, sessionId });
+					// summarized history lives in LCM; holding it here too grows the process without bound
+					const live = memory.liveMessages(sessionKey, body);
+					if (live.length < body.length) agent.state.messages = head ? [head, ...live] : live;
 				} catch (error) {
 					console.error(`memory LCM turn recording failed for ${sessionKey}`, error);
 				}
@@ -92,6 +94,10 @@ export function createSessionMemory(memory: MemoryService) {
 		contextBreakdown(sessionKey: string, tokens: number): ContextBreakdown | undefined {
 			const completed = completedContexts.get(sessionKey);
 			return completed?.tokens === tokens ? completed.breakdown : undefined;
+		},
+
+		liveMessages(sessionKey: string, messages: AgentMessage[]): AgentMessage[] {
+			return memory.liveMessages(sessionKey, messages);
 		},
 
 		forget(sessionKey: string): void {

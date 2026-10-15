@@ -102,7 +102,8 @@ export async function loadStoredMessages(dataDir: string, sessionId: string): Pr
 			continue;
 		}
 		for (const [index, line] of contents.split(/\r?\n/).entries()) {
-			if (!line.trim()) continue;
+			// other sessions share these files; skip their lines without parsing them
+			if (!line.includes(sessionId)) continue;
 			try {
 				const parsed = JSON.parse(line) as unknown;
 				if (!isStoredMessageRecord(parsed) && !isStoredResetRecord(parsed) && !isStoredSupersedeRecord(parsed)) {

@@ -170,7 +170,7 @@ describe("loadConfig tts", () => {
 		});
 		assert.equal(config.media.generatedRetentionDays, 30);
 		assert.deepEqual(config.data, {
-			chat: { retentionDays: 0 },
+			chat: { retentionDays: 30 },
 			transcripts: { retentionDays: 0 },
 			payloads: { retentionDays: 7 },
 		});

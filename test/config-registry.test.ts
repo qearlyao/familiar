@@ -106,8 +106,8 @@ describe("tools.reach config registry", () => {
 		const config = await configWithDataDir(t, await createTempDataDir(t));
 		const reach = CONFIG_REGISTRY["tools.reach"];
 
-		reach.write(config, reach.validate({ bash: "pinned", browser: "loadable", image_gen: "off" }, config));
-		assert.deepEqual(reach.read(config), { browser: "loadable", image_gen: "off" });
+		reach.write(config, reach.validate({ bash: "pinned", search_web: "loadable", image_gen: "off" }, config));
+		assert.deepEqual(reach.read(config), { search_web: "loadable", image_gen: "off" });
 		assert.throws(() => reach.validate({ teapot: "off" }, config), /unknown tool teapot/);
 		assert.throws(() => reach.validate({ bash: "gone" }, config), /tools\.reach\.bash must be one of/);
 		assert.throws(() => reach.validate("bash", config), /must be an object/);

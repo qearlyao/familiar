@@ -3,7 +3,7 @@ import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
-import { browserScreenshotsDir, generatedAttachmentsDir } from "../src/media/generated-media.js";
+import { generatedAttachmentsDir } from "../src/media/generated-media.js";
 import { serveAttachment, serveStatic } from "../src/web/static.js";
 import { configWithDataDir, createTempDataDir, FakeResponse } from "./helpers.js";
 
@@ -52,22 +52,6 @@ describe("serveAttachment", () => {
 		assert.equal(response.headers?.["content-length"], "4");
 		assert.equal(response.headers?.["content-range"], "bytes 2-5/10");
 		assert.equal(response.headers?.["accept-ranges"], "bytes");
-	});
-
-	it("serves browser screenshot files", async (t) => {
-		const root = await createTempDataDir(t);
-		const config = await configWithDataDir(t, root);
-		const dir = browserScreenshotsDir(config);
-		await rm(dir, { recursive: true, force: true });
-		await mkdir(dir, { recursive: true });
-		await writeFile(resolve(dir, "screen.png"), "png", "utf8");
-		const response = new FakeResponse();
-
-		const handled = await serveAttachment(config, response as any, "/api/web/attachments/screenshot/screen.png");
-
-		assert.equal(handled, true);
-		assert.equal(response.statusCode, 200);
-		assert.equal(response.headers?.["content-type"], "image/png");
 	});
 
 	it("serves sent pages and pdfs inline for the viewer", async (t) => {

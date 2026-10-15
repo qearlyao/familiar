@@ -8,7 +8,6 @@ import { createImageGenTool } from "../media/image-gen.js";
 import { createSendFileTool } from "../media/send-file.js";
 import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
-import { createBrowserTools } from "../tools/browser-tools.js";
 import { createCodemodeTool } from "../tools/codemode.js";
 import { createCronTool } from "../tools/cron.js";
 import { loadedToolNames, type McpHub } from "../tools/mcp.js";
@@ -57,7 +56,6 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 			: []),
 		createSendFileTool(config, mediaSink),
 		...createWebTools(),
-		...createBrowserTools(config, mediaSink),
 		...ctx.memory.memoryTools(),
 	];
 	const reach = (name: string) => toolReach(config, paused, name);

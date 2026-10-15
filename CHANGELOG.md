@@ -9,6 +9,7 @@
 ### Removed
 
 - Drop the chat-completions image route and the recovery of images from reply text that came with it. `openrouter-images` now means OpenRouter's Image API, and models it does not list no longer work through OpenRouter.
+- Remove the built-in `browser` tool, its `[browser]` config section, the installer's browser-helper options, and `familiar upgrade --with-opencli`. Browser control now comes from [agent-browser](https://github.com/vercel-labs/agent-browser) added as an MCP server; see the README's Browser section.
 
 ### Fixed
 

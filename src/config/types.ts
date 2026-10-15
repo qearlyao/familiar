@@ -29,8 +29,6 @@ export type ToolReach = "pinned" | "loadable" | "off";
 export type McpExposure = "codemode" | "codemode-deferred" | "deferred" | "direct";
 export type MediaUnderstandingProvider = "groq" | "google";
 export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
-export type BrowserBackend = "opencli" | "browser-harness";
-export type BrowserHarnessMode = "attach" | "cdp" | "cloud";
 export type DefaultPlatform = "discord" | "qq" | "web";
 
 export type ConfiguredModelInput = "text" | "image";
@@ -60,24 +58,6 @@ export interface ConfiguredProviderDefinition {
 	compat?: AnthropicModelCompat;
 	models: ConfiguredModelDefinition[];
 }
-
-export type BrowserHarnessTargetConfig =
-	| { mode: "attach" }
-	| {
-			mode: "cdp";
-			cdpUrl?: string;
-			cdpWs?: string;
-			launchCommand?: string;
-			launchArgs: string[];
-	  }
-	| {
-			mode: "cloud";
-			apiKeyEnv: string;
-			profileId?: string;
-			profileName?: string;
-			timeoutMinutes?: number;
-			proxyCountryCode?: string;
-	  };
 
 export interface TtsVoiceSettings {
 	stability: number;
@@ -135,20 +115,6 @@ export interface Config {
 		bearerToken?: string;
 		totpSecret?: string;
 		bindAddress: string;
-	};
-	browser: {
-		enabled: boolean;
-		backend: BrowserBackend;
-		harnessTarget: BrowserHarnessTargetConfig;
-		opencliCommand: string;
-		harnessCommand: string;
-		session: string;
-		profile?: string;
-		windowMode: "foreground" | "background";
-		timeoutMs: number;
-		maxOutputChars: number;
-		readWrite: boolean;
-		allowedSites: Record<string, true>;
 	};
 	agent: {
 		model: string;

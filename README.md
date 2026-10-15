@@ -98,8 +98,8 @@ with sample content.
   TTS supports ElevenLabs and Cartesia, and voice replies play in both
   Discord and the WebUI. Image attachments are passed through to the model.
   Web search and page fetch are built-in tools. Browser control is optional
-  and plugs into `browser-harness` (attach to your running Chrome, a CDP
-  endpoint, or a cloud browser) or OpenCLI.
+  and runs through [agent-browser](https://github.com/vercel-labs/agent-browser)
+  as an MCP server.
   </details>
 
 - **Keeps your schedule.** Cron jobs deliver reminders straight into the
@@ -152,10 +152,9 @@ Install the latest package directly with npm:
 npm install -g @qearlyao/familiar@latest
 ```
 
-The macOS/Linux installer accepts `--workspace <path>`, `--with-browser`,
-`--install-browser-deps`, `--skip-init`, and `--package <spec>`. The Windows
-PowerShell equivalents are `-Workspace`, `-WithBrowser`, `-InstallBrowserDeps`,
-`-SkipInit`, `-Package`, and `-BrowserHarnessDir`.
+The macOS/Linux installer accepts `--workspace <path>`, `--skip-init`, and
+`--package <spec>`. The Windows PowerShell equivalents are `-Workspace`,
+`-SkipInit`, and `-Package`.
 
 `--package` / `-Package` installs the exact npm package spec you provide. Use
 trusted specs only.
@@ -388,34 +387,45 @@ macOS uses `launchd`; Linux uses user `systemd`. Windows users should run
 `<workspace>/logs`; service installs configure weekly log rotation on macOS and
 on Linux when `logrotate` is available.
 
-## Browser Backends
+## Browser
 
-The [Beginner Quick Start](https://qearlyao.github.io/familiar/#advanced) covers
-installing and enabling browser control. Familiar supports two browser helpers:
+Browser control comes from
+[agent-browser](https://github.com/vercel-labs/agent-browser), added as an MCP
+server. It gives the agent compact page snapshots with element refs and
+screenshots. By default it runs a local headless Chrome:
 
-- `browser-harness` is best for attaching to your already-running Chrome via
-  CDP.
-- OpenCLI is best for site adapters, owned sessions, and unattended Browser
-  Bridge flows.
-- OpenCLI: [jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)
-- browser-harness:
-  [browser-use/browser-harness](https://github.com/browser-use/browser-harness)
+```sh
+npm install -g agent-browser
+agent-browser install   # downloads Chrome; on Linux add --with-deps for system libraries
+```
 
-`browser-harness` can run in three Familiar modes:
+Then add the server to `config.toml` (or the WebUI MCP tab):
 
-- `harness_mode = "attach"` lets browser-harness discover your already-running
-  Chrome/Chromium.
-- `harness_mode = "cdp"` points browser-harness at an explicit CDP endpoint. For
-  VPS/headless use, set `harness_cdp_url` plus an optional
-  `harness_launch_command`/`harness_launch_args`; Familiar starts that command
-  when the endpoint is not reachable, then attaches through `BU_CDP_URL`.
-- `harness_mode = "cloud"` provisions a Browser Use cloud browser before the
-  tool call and passes its CDP WebSocket to browser-harness. Set
-  `BROWSER_USE_API_KEY` and optionally `harness_cloud_profile_id` or
-  `harness_cloud_profile_name` to start with a logged-in cloud profile.
+```toml
+[mcp.servers.browser]
+command = "agent-browser"
+args = ["mcp"]
+env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }
+```
 
-Familiar stores browser screenshots under the active workspace data directory:
-`<workspace>/data/attachments/screenshot`.
+The profile directory keeps cookies and logins between sessions. If Chrome or
+Chromium is already installed (for example Debian's `/usr/bin/chromium`), skip
+`agent-browser install` and add
+`AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/chromium"` to `env`. Ubuntu's snap
+Chromium cannot use hidden folders like `~/.familiar`; use
+`agent-browser install` there instead.
+
+A local Chrome needs a few hundred MB of RAM and browses from your machine's IP,
+which some sites block on a VPS. For a cloud browser with stealth and CAPTCHA
+handling, use [Browser Use](https://browser-use.com) instead:
+
+```toml
+env = { AGENT_BROWSER_PROVIDER = "browseruse" }
+```
+
+Put `BROWSER_USE_API_KEY` in your workspace `.env`, plus
+`BROWSER_USE_PROFILE_ID` to keep your logins between sessions; MCP servers
+inherit Familiar's environment. See the agent-browser docs for other providers.
 
 ## Cron Jobs
 

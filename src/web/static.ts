@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Config } from "../config/index.js";
-import { attachmentsDir, browserScreenshotsDir, generatedAttachmentsDir } from "../media/generated-media.js";
+import { attachmentsDir, generatedAttachmentsDir } from "../media/generated-media.js";
 import { contentTypeForPath } from "../util/mime.js";
 import { sendText } from "./http.js";
 
@@ -93,7 +93,6 @@ export async function serveAttachment(
 	const candidates = [
 		{ root: generatedAttachmentsDir(config), relativePath },
 		{ root: attachmentsDir(config), relativePath },
-		{ root: browserScreenshotsDir(config), relativePath: relativePath.replace(/^screenshot[\\/]/, "") },
 	];
 	for (const { root, relativePath: candidateRelativePath } of candidates) {
 		let rootRealPath = rootRealPathCache.get(root);

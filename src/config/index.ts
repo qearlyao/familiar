@@ -7,9 +7,6 @@ import { isBuiltInOrDefaultProvider, PROVIDER_DEFAULTS, resolveProviderSetting }
 import { isOpenRouterBaseUrl, OPENROUTER_BASE_URL } from "../models/openrouter-routing.js";
 import { readEnum } from "../util/guards.js";
 import {
-	BROWSER_BACKENDS,
-	BROWSER_HARNESS_MODES,
-	BROWSER_WINDOW_MODES,
 	CACHE_RETENTIONS,
 	DEFAULT_IMAGE_GEN_APIS,
 	DEFAULT_PLATFORMS,
@@ -40,7 +37,6 @@ import {
 	readNumberInRange,
 	readOptionalConfigString,
 	readOptionalInteger,
-	readOptionalIntegerInRange,
 	readOptionalString,
 	readPositiveNumber,
 	readString,
@@ -48,11 +44,9 @@ import {
 	readStringRecord,
 	resolveWorkspacePath,
 } from "./readers.js";
-import { defaultBrowserAllowedSites, readCronJobs, readPromptOverrides } from "./sections.js";
+import { readCronJobs, readPromptOverrides } from "./sections.js";
 import type {
 	AnthropicModelCompat,
-	BrowserHarnessMode,
-	BrowserHarnessTargetConfig,
 	Config,
 	ConfiguredModelDefinition,
 	ConfiguredModelInput,
@@ -62,9 +56,6 @@ import type {
 } from "./types.js";
 
 export type {
-	BrowserBackend,
-	BrowserHarnessMode,
-	BrowserHarnessTargetConfig,
 	CacheRetention,
 	Config,
 	ConfiguredModelDefinition,
@@ -99,113 +90,6 @@ const DEFAULT_MEMORY_EMBEDDING_API_KEY_ENVS: Record<string, string> = {
 };
 
 const DEFAULT_AUDIO_TRANSCRIPTION_API_KEY_ENVS: Record<string, string> = { groq: "GROQ_API_KEY" };
-
-type BrowserHarnessFlatConfig = {
-	mode: BrowserHarnessMode;
-	cdpUrl?: string;
-	cdpWs?: string;
-	launchCommand?: string;
-	launchArgs: string[];
-	cloudApiKeyEnv: string;
-	cloudProfileId?: string;
-	cloudProfileName?: string;
-	cloudTimeoutMinutes?: number;
-	cloudProxyCountryCode?: string;
-};
-
-function rejectDefined(path: string, value: unknown, mode: BrowserHarnessMode): void {
-	if (value !== undefined) throw new Error(`Config value ${path} is only valid when browser.harness_mode = "${mode}"`);
-}
-
-function readBrowserHarnessTarget(browser: Record<string, unknown>): BrowserHarnessTargetConfig {
-	const mode = readEnum(
-		readOptionalString(browser.harness_mode, "attach"),
-		"browser.harness_mode",
-		BROWSER_HARNESS_MODES,
-	);
-	const flat: BrowserHarnessFlatConfig = {
-		mode,
-		cdpUrl: readOptionalConfigString(browser.harness_cdp_url, "browser.harness_cdp_url"),
-		cdpWs: readOptionalConfigString(browser.harness_cdp_ws, "browser.harness_cdp_ws"),
-		launchCommand: readOptionalConfigString(browser.harness_launch_command, "browser.harness_launch_command"),
-		launchArgs: readStringArray(browser.harness_launch_args, "browser.harness_launch_args"),
-		cloudApiKeyEnv: readOptionalString(browser.harness_cloud_api_key_env, "BROWSER_USE_API_KEY"),
-		cloudProfileId: readOptionalConfigString(browser.harness_cloud_profile_id, "browser.harness_cloud_profile_id"),
-		cloudProfileName: readOptionalConfigString(
-			browser.harness_cloud_profile_name,
-			"browser.harness_cloud_profile_name",
-		),
-		cloudTimeoutMinutes: readOptionalIntegerInRange(
-			browser.harness_cloud_timeout_minutes,
-			"browser.harness_cloud_timeout_minutes",
-			1,
-			240,
-		),
-		cloudProxyCountryCode: readOptionalConfigString(
-			browser.harness_cloud_proxy_country_code,
-			"browser.harness_cloud_proxy_country_code",
-		),
-	};
-
-	if (flat.cdpUrl && flat.cdpWs) {
-		throw new Error("Use browser.harness_cdp_url or browser.harness_cdp_ws, not both.");
-	}
-	if (flat.cloudProfileId && flat.cloudProfileName) {
-		throw new Error("Use browser.harness_cloud_profile_id or browser.harness_cloud_profile_name, not both.");
-	}
-	if (flat.launchArgs.length > 0 && !flat.launchCommand) {
-		throw new Error("Config value browser.harness_launch_args requires browser.harness_launch_command.");
-	}
-	if (flat.launchCommand && !flat.cdpUrl) {
-		throw new Error("Config value browser.harness_launch_command requires browser.harness_cdp_url.");
-	}
-
-	const rejectCdpFields = () => {
-		rejectDefined("browser.harness_cdp_url", flat.cdpUrl, "cdp");
-		rejectDefined("browser.harness_cdp_ws", flat.cdpWs, "cdp");
-		rejectDefined("browser.harness_launch_command", flat.launchCommand, "cdp");
-		if (browser.harness_launch_args !== undefined)
-			rejectDefined("browser.harness_launch_args", flat.launchArgs, "cdp");
-	};
-	const rejectCloudFields = () => {
-		if (browser.harness_cloud_api_key_env !== undefined) {
-			rejectDefined("browser.harness_cloud_api_key_env", flat.cloudApiKeyEnv, "cloud");
-		}
-		rejectDefined("browser.harness_cloud_profile_id", flat.cloudProfileId, "cloud");
-		rejectDefined("browser.harness_cloud_profile_name", flat.cloudProfileName, "cloud");
-		rejectDefined("browser.harness_cloud_timeout_minutes", flat.cloudTimeoutMinutes, "cloud");
-		rejectDefined("browser.harness_cloud_proxy_country_code", flat.cloudProxyCountryCode, "cloud");
-	};
-
-	switch (flat.mode) {
-		case "attach":
-			rejectCdpFields();
-			rejectCloudFields();
-			return { mode: "attach" };
-		case "cdp":
-			if (!flat.cdpUrl && !flat.cdpWs) {
-				throw new Error('browser.harness_mode = "cdp" requires browser.harness_cdp_url or browser.harness_cdp_ws.');
-			}
-			rejectCloudFields();
-			return {
-				mode: "cdp",
-				cdpUrl: flat.cdpUrl,
-				cdpWs: flat.cdpWs,
-				launchCommand: flat.launchCommand,
-				launchArgs: flat.launchArgs,
-			};
-		case "cloud":
-			rejectCdpFields();
-			return {
-				mode: "cloud",
-				apiKeyEnv: flat.cloudApiKeyEnv,
-				profileId: flat.cloudProfileId,
-				profileName: flat.cloudProfileName,
-				timeoutMinutes: flat.cloudTimeoutMinutes,
-				proxyCountryCode: flat.cloudProxyCountryCode,
-			};
-	}
-}
 
 function readConfiguredModelInputs(value: unknown, path: string): ConfiguredModelInput[] | undefined {
 	if (value === undefined) return undefined;
@@ -451,7 +335,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const discord = (parsed.discord ?? {}) as Record<string, unknown>;
 	const qq = (parsed.qq ?? {}) as Record<string, unknown>;
 	const web = (parsed.web ?? {}) as Record<string, unknown>;
-	const browser = (parsed.browser ?? {}) as Record<string, unknown>;
 	const agent = (parsed.agent ?? {}) as Record<string, unknown>;
 	const heartbeat = (parsed.heartbeat ?? {}) as Record<string, unknown>;
 	const mcp = (parsed.mcp ?? {}) as Record<string, unknown>;
@@ -473,29 +356,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 	const persona = (parsed.persona ?? {}) as Record<string, unknown>;
 	const workspace = (parsed.workspace ?? {}) as Record<string, unknown>;
 	const memory = (parsed.memory ?? {}) as Record<string, unknown>;
-	assertKnownKeys(browser, "browser", [
-		"enabled",
-		"backend",
-		"harness_mode",
-		"opencli_command",
-		"harness_command",
-		"session",
-		"profile",
-		"harness_cdp_url",
-		"harness_cdp_ws",
-		"harness_launch_command",
-		"harness_launch_args",
-		"harness_cloud_api_key_env",
-		"harness_cloud_profile_id",
-		"harness_cloud_profile_name",
-		"harness_cloud_timeout_minutes",
-		"harness_cloud_proxy_country_code",
-		"window",
-		"timeout_ms",
-		"max_output_chars",
-		"read_write",
-	]);
-	const browserHarnessTarget = readBrowserHarnessTarget(browser);
 	const memoryEmbedding = (memory.embedding ?? {}) as Record<string, unknown>;
 	const memoryAmbient = (memory.ambient ?? {}) as Record<string, unknown>;
 	const memoryLcm = (memory.lcm ?? {}) as Record<string, unknown>;
@@ -674,20 +534,6 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			bearerToken: readOptionalString(web.bearer_token, "") || undefined,
 			totpSecret: readOptionalString(web.totp_secret, "") || undefined,
 			bindAddress: readOptionalString(web.bind_address, "127.0.0.1"),
-		},
-		browser: {
-			enabled: readBoolean(browser.enabled, false, "browser.enabled"),
-			backend: readEnum(readOptionalString(browser.backend, "opencli"), "browser.backend", BROWSER_BACKENDS),
-			harnessTarget: browserHarnessTarget,
-			opencliCommand: readOptionalString(browser.opencli_command, "opencli"),
-			harnessCommand: readOptionalString(browser.harness_command, "browser-harness"),
-			session: readOptionalString(browser.session, "familiar"),
-			profile: readOptionalString(browser.profile, "") || undefined,
-			windowMode: readEnum(readOptionalString(browser.window, "background"), "browser.window", BROWSER_WINDOW_MODES),
-			timeoutMs: readInteger(browser.timeout_ms, 60_000, "browser.timeout_ms", 1),
-			maxOutputChars: readInteger(browser.max_output_chars, 12_000, "browser.max_output_chars", 1000),
-			readWrite: readBoolean(browser.read_write, false, "browser.read_write"),
-			allowedSites: defaultBrowserAllowedSites(),
 		},
 		agent: {
 			model: agentModel,

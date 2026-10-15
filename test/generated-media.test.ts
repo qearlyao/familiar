@@ -5,7 +5,6 @@ import { join, resolve } from "node:path";
 
 import {
 	attachmentsDir,
-	browserScreenshotsDir,
 	cleanupGeneratedAttachments,
 	createGeneratedMediaSink,
 	generatedAttachmentsDir,
@@ -33,13 +32,6 @@ describe("generated media", () => {
 		const config = await configWithDataDir(t, "/workspace/data");
 
 		assert.throws(() => publicAttachmentPath(config, "/tmp/outside.mp3"), /outside generated attachments dir/);
-	});
-
-	it("creates public URLs for browser screenshots", async (t) => {
-		const config = await configWithDataDir(t, "/workspace/data");
-		const localPath = resolve(browserScreenshotsDir(config), "screen one.png");
-
-		assert.equal(publicAttachmentPath(config, localPath), "/api/web/attachments/screenshot/screen%20one.png");
 	});
 
 	it("removes attachments older than the retention window", async (t) => {

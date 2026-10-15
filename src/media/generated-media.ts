@@ -39,18 +39,8 @@ export function attachmentsDir(config: Config): string {
 	return resolve(config.workspace.dataDir, "attachments");
 }
 
-export function browserScreenshotsDir(config: Config): string {
-	return resolve(config.workspace.dataDir, "attachments", "screenshot");
-}
-
 export async function ensureGeneratedAttachmentsDir(config: Config): Promise<string> {
 	const dir = generatedAttachmentsDir(config);
-	await mkdir(dir, { recursive: true });
-	return dir;
-}
-
-export async function ensureBrowserScreenshotsDir(config: Config): Promise<string> {
-	const dir = browserScreenshotsDir(config);
 	await mkdir(dir, { recursive: true });
 	return dir;
 }
@@ -64,13 +54,6 @@ export function publicAttachmentPath(config: Config, localPath: string): string 
 	const generatedRelativePath = relative(generatedAttachmentsDir(config), absolutePath);
 	if (generatedRelativePath && !generatedRelativePath.startsWith("..") && !isAbsolute(generatedRelativePath)) {
 		return `/api/web/attachments/${generatedRelativePath
-			.split(/[\\/]+/)
-			.map(encodeURIComponent)
-			.join("/")}`;
-	}
-	const screenshotRelativePath = relative(browserScreenshotsDir(config), absolutePath);
-	if (screenshotRelativePath && !screenshotRelativePath.startsWith("..") && !isAbsolute(screenshotRelativePath)) {
-		return `/api/web/attachments/screenshot/${screenshotRelativePath
 			.split(/[\\/]+/)
 			.map(encodeURIComponent)
 			.join("/")}`;

@@ -775,21 +775,37 @@ TINYFISH_API_KEY=paste-your-tinyfish-api-key</code></pre>
           <p class="note">The filenames in the bundled skill are examples only. Remove them and add your real files; entries that do not match files in <code>ref-images</code> cannot be used. Clear descriptions help Familiar choose the best one to three references for a scene.</p>
 
           <h3>Browser control</h3>
-          <p>Run the installer again with the browser option to add OpenCLI and browser-harness.</p>
-          <p><strong>macOS or Linux:</strong></p>
-          <pre><code>curl -fsSL https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.sh | sh -s -- --with-browser</code></pre>
-          <p><strong>Windows PowerShell:</strong></p>
-          <pre><code>&amp; ([scriptblock]::Create((irm https://raw.githubusercontent.com/qearlyao/familiar/main/scripts/install.ps1))) -WithBrowser</code></pre>
-          <p>Install the <a href="https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk">OpenCLI browser extension</a>, then change these existing lines under <code>[browser]</code> in <code>config.toml</code>:</p>
-          <pre><code>[browser]
-enabled = true</code></pre>
+          <p>Familiar can use a real browser through <a href="https://github.com/vercel-labs/agent-browser">agent-browser</a>. Install it, then let it download Chrome:</p>
+          <pre><code>npm install -g agent-browser
+agent-browser install</code></pre>
+          <p>On Linux, use <code>agent-browser install --with-deps</code> so the system libraries Chrome needs are installed too.</p>
+          <p>Then add these lines at the end of <code>config.toml</code>:</p>
+          <pre><code>[mcp.servers.browser]
+command = "agent-browser"
+args = ["mcp"]
+env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile" }</code></pre>
+          <p>The profile folder keeps Familiar's logins between sessions. Restart Familiar to load it.</p>
+          <p class="note">Already have Chrome or Chromium installed? Skip <code>agent-browser install</code> and add its path to the <code>env</code> line, for example <code>AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/chromium"</code> on Debian. Ubuntu's snap Chromium cannot use hidden folders like <code>~/.familiar</code>, so use <code>agent-browser install</code> there.</p>
+          <p><strong>Sites blocking or logging you out?</strong> These make the local browser look more like a person's. Try them in order, and stop once your sites behave:</p>
+          <ol>
+            <li><strong>Show a real window instead of running headless.</strong> Headless Chrome is easy for sites to spot. Add <code>AGENT_BROWSER_HEADED = "1"</code> to the <code>env</code> line. On a Linux server with no screen, install Xvfb first (<code>sudo apt install xvfb</code> on Debian or Ubuntu); agent-browser starts a virtual screen with it automatically. This uses more memory than headless.</li>
+            <li><strong>Look like an ordinary browser in your part of the world.</strong> Prefer regular Google Chrome over a distro Chromium, and match the browser's language and time zone to where you are, for example <code>TZ = "Europe/London"</code> and <code>AGENT_BROWSER_ARGS = "--lang=en-GB"</code>.</li>
+            <li><strong>Bring your logins with you.</strong> The profile folder already keeps logins. To copy the ones from your own computer, start Chrome there with remote debugging (see the <a href="https://github.com/vercel-labs/agent-browser#import-auth-from-your-browser">agent-browser guide</a>), run <code>agent-browser --auto-connect state save ./my-auth.json</code>, copy the file to the server, and add <code>AGENT_BROWSER_STATE = "/path/to/my-auth.json"</code> to the <code>env</code> line. The file holds your login cookies, so keep it private.</li>
+            <li><strong>Step in when it gets stuck.</strong> For a CAPTCHA or a two-factor prompt, open the live view and finish it yourself. On the server, run <code>agent-browser dashboard start</code>. From your computer, run <code>ssh -L 4848:127.0.0.1:4848 you@your-server</code>, then open <code>http://localhost:4848</code> to watch and click in Familiar's browser.</li>
+            <li><strong>Extra stealth, only if a site still blocks you.</strong> agent-browser has stealth plugins and an experimental <code>obscura</code> engine with a stealth mode. See its README for setup.</li>
+          </ol>
+          <p>With the first two applied, the <code>env</code> line might look like:</p>
+          <pre><code>env = { AGENT_BROWSER_PROFILE = "${HOME}/.familiar/browser-profile", AGENT_BROWSER_HEADED = "1", AGENT_BROWSER_EXECUTABLE_PATH = "/usr/bin/google-chrome", TZ = "Europe/London", AGENT_BROWSER_ARGS = "--lang=en-GB" }</code></pre>
+          <p><strong>Low on memory, or still blocked?</strong> A local Chrome needs a few hundred MB of RAM, and some sites block server IP addresses. A <a href="https://browser-use.com">Browser Use</a> cloud browser avoids both. Replace the <code>env</code> line with:</p>
+          <pre><code>env = { AGENT_BROWSER_PROVIDER = "browseruse" }</code></pre>
+          <p>Then add <code>BROWSER_USE_API_KEY</code> to your workspace <code>.env</code>, plus <code>BROWSER_USE_PROFILE_ID</code> to keep your logins. Browser Use charges for browser time and proxy traffic from a prepaid credit balance.</p>
         </section>
 
         <section class="feature" id="upgrade">
           <h2>Upgrade Familiar</h2>
           <p>When a new version is available, stop Familiar and run:</p>
-          <pre><code>familiar upgrade [--with-opencli]</code></pre>
-          <p>This updates Familiar, then adds any missing workspace defaults without overwriting your existing configuration, persona files, or skills. Add <code>--with-opencli</code> when the OpenCLI browser helper should also be upgraded. Start Familiar again with <code>familiar run</code>, or use <code>familiar restart</code> if you installed it as a service.</p>
+          <pre><code>familiar upgrade</code></pre>
+          <p>This updates Familiar, then adds any missing workspace defaults without overwriting your existing configuration, persona files, or skills. Start Familiar again with <code>familiar run</code>, or use <code>familiar restart</code> if you installed it as a service.</p>
         </section>
 
         <section class="troubleshooting" id="troubleshooting">

@@ -354,23 +354,4 @@ describe("service management", () => {
 		assert.ok(manifests.every((path) => path.endsWith("/package.json")));
 		assert.ok(manifests.every((path) => !path.includes("/node_modules/@qearlyao/familiar/")));
 	});
-
-	it("upgrades OpenCLI only when requested", async () => {
-		const calls: Array<{ command: string; args: string[] }> = [];
-
-		await upgradeFamiliar("/tmp/familiar workspace", {
-			platform: "linux",
-			upgradeOpenCli: true,
-			runCommand: async (command, args) => {
-				calls.push({ command, args });
-			},
-			readJsonFile: async () => ({ version: "0.9.0" }),
-		});
-
-		assert.deepEqual(calls, [
-			{ command: "npm", args: ["install", "-g", "@qearlyao/familiar@latest"] },
-			{ command: "npm", args: ["install", "-g", "@jackwener/opencli"] },
-			{ command: "familiar", args: ["init", "/tmp/familiar workspace"] },
-		]);
-	});
 });

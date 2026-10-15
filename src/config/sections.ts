@@ -136,17 +136,3 @@ export function readCronJob(
 		...(job.day !== undefined ? { day: readOptionalIntegerInRange(job.day, at("day"), 1, 31) } : {}),
 	};
 }
-
-export function defaultBrowserAllowedSites(): Config["browser"]["allowedSites"] {
-	return {
-		twitter: true,
-		xiaohongshu: true,
-		rednote: true,
-		reddit: true,
-		bilibili: true,
-		youtube: true,
-		tiktok: true,
-		douyin: true,
-		spotify: true,
-	};
-}

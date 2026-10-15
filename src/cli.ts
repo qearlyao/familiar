@@ -383,7 +383,7 @@ function usage(): string {
 		"  familiar stop [workspace]",
 		"  familiar restart [workspace]",
 		"  familiar status [workspace]",
-		"  familiar upgrade [workspace] [--with-opencli]",
+		"  familiar upgrade [workspace]",
 		"",
 		`Default workspace: ${DEFAULT_WORKSPACE_PATH}`,
 	].join("\n");
@@ -460,17 +460,13 @@ async function main(): Promise<void> {
 	}
 	if (command === "upgrade") {
 		const upgradeArgs = [workspace, ...rest].filter((arg): arg is string => arg !== undefined);
-		const upgradeOpenCli = upgradeArgs.includes("--with-opencli");
-		const workspaceArgs = upgradeArgs.filter((arg) => arg !== "--with-opencli");
-		if (workspaceArgs.length > 1 || upgradeArgs.some((arg) => arg.startsWith("-") && arg !== "--with-opencli")) {
+		if (upgradeArgs.length > 1 || upgradeArgs.some((arg) => arg.startsWith("-"))) {
 			console.error(usage());
 			process.exitCode = 1;
 			return;
 		}
-		console.log(`Upgrading @qearlyao/familiar${upgradeOpenCli ? " and OpenCLI" : ""} globally...`);
-		console.log(
-			formatServiceResult(await upgradeFamiliar(resolveWorkspaceInput(workspaceArgs[0]), { upgradeOpenCli })),
-		);
+		console.log("Upgrading @qearlyao/familiar globally...");
+		console.log(formatServiceResult(await upgradeFamiliar(resolveWorkspaceInput(upgradeArgs[0]))));
 		return;
 	}
 	console.error(usage());

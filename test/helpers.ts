@@ -35,7 +35,7 @@ export function withDiscordToken<T>(run: () => Promise<T>): Promise<T> {
 }
 
 type ConfigOverrides = Partial<{
-	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "browser" | "imageGen">]: Partial<
+	[K in Exclude<keyof Config, "data" | "heartbeat" | "cron" | "memory" | "imageGen">]: Partial<
 		Config[K]
 	>;
 }> & {
@@ -46,7 +46,6 @@ type ConfigOverrides = Partial<{
 	};
 	heartbeat?: Partial<Config["heartbeat"]>;
 	cron?: Partial<Config["cron"]>;
-	browser?: Partial<Config["browser"]>;
 	imageGen?: Partial<Config["imageGen"]>;
 	memory?: Omit<Partial<Config["memory"]>, "embedding" | "lcm"> & {
 		embedding?: Partial<Config["memory"]["embedding"]>;
@@ -102,7 +101,6 @@ data_dir = "${dataDir.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"
 			discord: { ...config.discord, ...overrides.discord },
 			qq: { ...config.qq, ...overrides.qq },
 			web: { ...config.web, ...overrides.web },
-			browser: { ...config.browser, ...overrides.browser },
 			agent: { ...config.agent, ...overrides.agent },
 			heartbeat: { ...config.heartbeat, ...overrides.heartbeat },
 			cron: { ...config.cron, ...overrides.cron },

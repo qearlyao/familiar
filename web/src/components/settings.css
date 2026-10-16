@@ -433,6 +433,7 @@
 .cron-textarea { height: auto; min-height: 6rem; padding: 0.625rem 0.875rem; border-radius: 0.875rem; font: 0.875rem/1.5 var(--font-sans); resize: vertical; }
 @media (max-width: 700px) {
   .cron-last { flex-basis: 100%; }
+  /* iOS Safari won't shrink a date input below its own width, so side by side the date runs into the time */
+  .cron-at { flex-direction: column; }
   .cron-at .pill-input:not(.is-number) { width: 100%; }
-  .cron-at > .settings-field { flex: 1; }
 }

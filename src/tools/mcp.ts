@@ -42,14 +42,17 @@ const MAX_TOOL_NAME_LENGTH = 64;
 
 /**
  * `mcp__<server>__<tool>`, as pi names them: sanitized, and shortened with a hash suffix when too
- * long or when sanitizing collides with a name already taken.
+ * long or when sanitizing collides with a name already taken. a tool that already carries its
+ * server's name (`github_create_issue` on `github`) drops it, so the name isn't said twice.
  */
 export function createMcpToolName(
 	server: string,
 	tool: string,
 	isTaken: (name: string) => boolean = () => false,
 ): string {
-	const name = `mcp__${server}__${tool}`.replace(/[^A-Za-z0-9_-]/g, "_");
+	const owned = tool.toLowerCase().startsWith(server.toLowerCase()) && /[_.-]/.test(tool[server.length] ?? "");
+	const short = (owned && tool.slice(server.length).replace(/^[_.-]+/, "")) || tool;
+	const name = `mcp__${server}__${short}`.replace(/[^A-Za-z0-9_-]/g, "_");
 	if (name.length <= MAX_TOOL_NAME_LENGTH && !isTaken(name)) return name;
 	const hash = createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
 	return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;

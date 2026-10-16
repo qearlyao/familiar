@@ -61,6 +61,11 @@ describe("mcp", () => {
 		const long = createMcpToolName("server", "x".repeat(80));
 		assert.equal(long.length, 64);
 		assert.notEqual(createMcpToolName("a", "b.c", (name) => name === "mcp__a__b_c"), "mcp__a__b_c");
+		assert.equal(createMcpToolName("github", "github_create_issue"), "mcp__github__create_issue");
+		assert.equal(createMcpToolName("GitHub", "github-get_me"), "mcp__GitHub__get_me");
+		assert.equal(createMcpToolName("github", "github"), "mcp__github__github");
+		assert.equal(createMcpToolName("git", "github_create_issue"), "mcp__git__github_create_issue");
+		assert.equal(createMcpToolName("my_docs", "my_docs_search"), "mcp__my_docs__search");
 	});
 
 	it("codemode scripts call tools and only their output comes back", async (t) => {

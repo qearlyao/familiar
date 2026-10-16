@@ -95,7 +95,8 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 	const codemodeReach = reach(codemode.name);
 	if (codemodeReach === "pinned") direct.push(codemode);
 	if (codemodeReach === "loadable") loadable.push(codemode);
-	const searchable = [...loadable, ...mcpTools(mcp, true)];
+	// a pinned codemode already holds the codemode exposures, so tool_search only offers what was left to it
+	const searchable = [...loadable, ...(codemodeReach === "pinned" ? mcp.tools("deferred") : mcpTools(mcp, true))];
 	// tool_search earns its place when something waits on it that a pinned codemode can't reach for
 	const needsSearch =
 		loadable.length > 0 || mcp.tools("deferred").length > 0 || (codemodeReach !== "pinned" && searchable.length > 0);

@@ -50,7 +50,8 @@ export function createMcpToolName(
 	tool: string,
 	isTaken: (name: string) => boolean = () => false,
 ): string {
-	const owned = tool.toLowerCase().startsWith(server.toLowerCase()) && /[_.-]/.test(tool[server.length] ?? "");
+	const fold = (text: string) => text.toLowerCase().replace(/[.-]/g, "_");
+	const owned = fold(tool).startsWith(fold(server)) && /[_.-]/.test(tool[server.length] ?? "");
 	const short = (owned && tool.slice(server.length).replace(/^[_.-]+/, "")) || tool;
 	const name = `mcp__${server}__${short}`.replace(/[^A-Za-z0-9_-]/g, "_");
 	if (name.length <= MAX_TOOL_NAME_LENGTH && !isTaken(name)) return name;

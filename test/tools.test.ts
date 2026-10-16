@@ -56,6 +56,21 @@ describe("built-in tool reach", () => {
 		const everything = createFamiliarTools(context({ ...config, tools: { reach: {} } })).map((t) => t.name);
 		assert.ok(!everything.includes("tool_search"));
 	});
+
+	it("leaves codemode's mcp tools to codemode while it's pinned, and offers tool_search only the fetched ones", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t), { imageGen: { enabled: false } });
+		const byExposure: Record<string, AgentTool<any>[]> = {
+			codemode: [tool("mcp__browser__get_url")],
+			deferred: [tool("mcp__docs__search")],
+		};
+		const mcp = { tools: (exposure: string) => byExposure[exposure] ?? [], namespaceOf: () => undefined } as unknown as McpHub;
+		const search = (reach: Record<string, "pinned" | "loadable">) =>
+			createFamiliarTools(context({ ...config, tools: { reach } }, { mcp })).find((t) => t.name === "tool_search")!;
+		const pinned = search({});
+		assert.match(pinned.description, /mcp__docs__search/);
+		assert.doesNotMatch(pinned.description, /mcp__browser__get_url/);
+		assert.match(search({ codemode: "loadable" }).description, /mcp__browser__get_url/);
+	});
 });
 
 describe("voice call tools", () => {

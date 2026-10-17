@@ -137,6 +137,8 @@ export function stubMemoryService(overrides: Partial<MemoryService> = {}): Memor
 		memoryTools: () => [],
 		indexDiaries: async () => {},
 		watchDiaries: () => {},
+		indexNotes: async () => {},
+		watchNotes: () => {},
 		subscribeRuntime: () => () => {},
 		transformContext: async (messages) => messages,
 		recordMessages: () => {},

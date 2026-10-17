@@ -13,6 +13,7 @@ import { readMeta, writeMeta } from "./index/schema.js";
 import type { MemoryIndexStore } from "./index/store.js";
 import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
+import { indexNoteFiles, NOTE_CORPUS } from "./notes.js";
 import { type MemoryOperatorService, MemoryService } from "./service.js";
 import { runInTransaction } from "./util.js";
 
@@ -173,7 +174,7 @@ async function reindex(
 	embeddingProvider?: EmbeddingProvider,
 	signal?: AbortSignal,
 ): Promise<void> {
-	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
+	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk", NOTE_CORPUS];
 	const run = reindexRun(config, corpora, options.force);
 	const mode = beginReindex(service.memoryStore, run, options.restart ?? false);
 	console.log(`${mode} ${formatReindexRun(run)}`);
@@ -231,6 +232,10 @@ async function reindex(
 				chunks += file.result.ids.length;
 				printProgress(chunks);
 			}
+		}
+		if (corpora.includes(NOTE_CORPUS) && !signal?.aborted) {
+			chunks += (await indexNoteFiles({ config, indexer, store: service.memoryStore, signal })).chunks;
+			printProgress(chunks);
 		}
 		if (signal?.aborted) {
 			console.log(`Reindexed ${chunks} chunk(s)`);
@@ -442,11 +447,7 @@ function formatReindexRun(run: ReindexRun): string {
 }
 
 function deleteCorpus(store: MemoryIndexStore, corpus: string): void {
-	const rows = store.db.prepare("SELECT source_id FROM memory_index_sources WHERE corpus = ?").all(corpus) as {
-		source_id: string;
-	}[];
-	const sourceIds = new Set(rows.map((row) => row.source_id));
-	for (const sourceId of sourceIds) store.deleteBySourceUnsafe(corpus, sourceId);
+	for (const sourceId of store.sourceIds(corpus)) store.deleteBySourceUnsafe(corpus, sourceId);
 	const orphanRows = store.db.prepare("SELECT id FROM memory_chunks WHERE corpus = ?").all(corpus) as { id: number }[];
 	for (const row of orphanRows) {
 		store.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);

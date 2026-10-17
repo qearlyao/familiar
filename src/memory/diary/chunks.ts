@@ -26,6 +26,8 @@ export interface DiaryMarkdownChunkOptions {
 	date?: string;
 	metadata?: DiaryChunkMetadata;
 	maxChars?: number;
+	/** false keeps `Date:`-style lines and frontmatter as text instead of reading them as metadata. */
+	metadataLines?: boolean;
 }
 
 export interface IndexDiaryMarkdownOptions extends DiaryMarkdownChunkOptions {
@@ -51,7 +53,10 @@ const SUPPORTED_METADATA_KEYS = new Set(["date", "heading", "valence", "intensit
 export function chunkDiaryMarkdown(markdown: string, options: DiaryMarkdownChunkOptions = {}): DiaryMarkdownChunk[] {
 	const sourceId = options.sourceId ?? "diary.md";
 	const sourceRef = options.sourceRef ?? sourceId;
-	const { body, metadata: documentMetadata } = stripFrontmatter(markdown);
+	const parseMetadata = options.metadataLines !== false;
+	const { body, metadata: documentMetadata } = parseMetadata
+		? stripFrontmatter(markdown)
+		: { body: markdown, metadata: {} };
 	const baseMetadata = normalizeMetadata({
 		date: options.date ?? dateFromSourceId(sourceId),
 		...documentMetadata,
@@ -63,7 +68,7 @@ export function chunkDiaryMarkdown(markdown: string, options: DiaryMarkdownChunk
 	const maxChars = positiveIntegerOrDefault(options.maxChars, DEFAULT_MAX_CHARS);
 
 	for (const section of sections) {
-		const { metadata: sectionMetadata, lines } = peelMetadataLines(section.lines);
+		const { metadata: sectionMetadata, lines } = peelMetadataLines(section.lines, parseMetadata);
 		const text = lines.join("\n").trim();
 		if (!text) continue;
 
@@ -138,7 +143,7 @@ function splitMarkdownSections(markdown: string): MarkdownSection[] {
 	return sections;
 }
 
-function peelMetadataLines(lines: string[]): { metadata: DiaryChunkMetadata; lines: string[] } {
+function peelMetadataLines(lines: string[], parseMetadata: boolean): { metadata: DiaryChunkMetadata; lines: string[] } {
 	const metadata: DiaryChunkMetadata = {};
 	const body: string[] = [];
 	let inMetadataLead = true;
@@ -147,7 +152,7 @@ function peelMetadataLines(lines: string[]): { metadata: DiaryChunkMetadata; lin
 		if (isMarkdownHeading(line)) {
 			continue;
 		}
-		const parsed = parseMetadataLine(line);
+		const parsed = parseMetadata ? parseMetadataLine(line) : null;
 		if (inMetadataLead && parsed) {
 			metadata[parsed.key] = parsed.value;
 			continue;

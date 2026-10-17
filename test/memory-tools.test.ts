@@ -103,7 +103,7 @@ describe("memory tools", () => {
 					embedding: vector([0, 1, 0]),
 				},
 				{
-					corpus: "atomic_fact",
+					corpus: "note",
 					sourceId: "fact:tea",
 					text: "The user prefers jasmine tea.",
 					metadata: { confidence: "high" },
@@ -171,7 +171,7 @@ describe("memory tools", () => {
 					embedding: vector([1, 0, 0]),
 				},
 				{
-					corpus: "atomic_fact",
+					corpus: "note",
 					sourceId: "fact:2",
 					text: "timeline marker from later fact",
 					metadata: { timestamp: "2026-05-10T03:00:00.000Z" },
@@ -191,7 +191,7 @@ describe("memory tools", () => {
 
 			assert.deepEqual(Object.keys(result.details).sort(), ["ids", "resultCount"]);
 			assert.equal(result.details.resultCount, 2);
-			assert.match(text, /type=fact/);
+			assert.match(text, /type=note/);
 			assert.match(text, /type=diary/);
 			assert.match(text, /private diary/);
 			assert.doesNotMatch(text, /early chat/);

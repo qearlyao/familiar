@@ -6,6 +6,7 @@ import {
 	retrieveMemory,
 } from "../index/retrieval.js";
 import type { StoredMemoryChunk } from "../index/store.js";
+import { NOTE_CORPUS } from "../notes.js";
 import { positiveIntegerOrDefault } from "../util.js";
 import { DIARY_CHUNK_CORPUS } from "./chunks.js";
 export interface AmbientDiaryRecallOptions {
@@ -63,7 +64,7 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 		query: options.query,
 		store: options.store,
 		embeddingProvider: options.embeddingProvider,
-		scope: { corpora: [DIARY_CHUNK_CORPUS] },
+		scope: { corpora: [DIARY_CHUNK_CORPUS, NOTE_CORPUS] },
 		limit: candidateLimit,
 		candidateLimit,
 		useLexical: options.useLexical,
@@ -77,7 +78,12 @@ export async function retrieveAmbientDiary(options: AmbientDiaryRecallOptions): 
 	const scored = hits.map((hit) => scoreAmbientHit(hit, { now, halfLifeDays, weights }));
 	const relevant = scored.filter(hasAmbientRelevance);
 	debugAmbientHits(options.query, scored, relevant);
-	return relevant.sort(compareAmbientHits).slice(0, limit);
+	const ranked = relevant.sort(compareAmbientHits);
+	const top = ranked.slice(0, limit);
+	// Notes carry no valence or intensity, so diaries outscore them on ties; keep a slot for the best note.
+	const bestNote = ranked.find((hit) => hit.chunk.corpus === NOTE_CORPUS);
+	if (bestNote && limit > 1 && !top.includes(bestNote)) top[top.length - 1] = bestNote;
+	return top;
 }
 
 function hasAmbientRelevance(hit: AmbientDiaryHit): boolean {

@@ -18,12 +18,15 @@ import { type ChatRecordSource, LcmSegmentManager } from "./lcm/segment-manager.
 import { LcmStore } from "./lcm/store.js";
 import { DefaultLcmSummarizer, type LcmSummarizer } from "./lcm/summarizer.js";
 import type { ContextBreakdown } from "./lcm/types.js";
+import { indexNoteFiles } from "./notes.js";
 import { createMemoryTools } from "./tools.js";
 
 export interface MemoryService {
 	memoryTools(): AgentTool<any>[];
 	indexDiaries(): Promise<void>;
 	watchDiaries(): void;
+	indexNotes(): Promise<void>;
+	watchNotes(): void;
 	subscribeRuntime(runtime: ChatRecordSource, sessionId?: string): () => void;
 	transformContext(
 		messages: AgentMessage[],
@@ -86,6 +89,10 @@ class DefaultMemoryService implements MemoryOperatorService {
 	private readonly diaryWatchDebounceMs: number;
 	private diaryWatcher?: FSWatcher;
 	private diaryWatchTimers = new Map<string, NodeJS.Timeout>();
+	private notesWatcher?: FSWatcher;
+	private notesWatchTimer?: NodeJS.Timeout;
+	// Runs are chained so a slow run can't write back a note that a later run already dropped.
+	private notesIndexing: Promise<void> = Promise.resolve();
 
 	constructor(
 		private readonly config: Config,
@@ -145,6 +152,28 @@ class DefaultMemoryService implements MemoryOperatorService {
 		});
 	}
 
+	async indexNotes(): Promise<void> {
+		await indexNoteFiles({ config: this.config, indexer: this.indexer, store: this.memoryStore });
+	}
+
+	watchNotes(): void {
+		if (this.notesWatcher) return;
+		// Notes are few and small, so any change reindexes the folder; that also catches renames and deletes.
+		this.notesWatcher = watch(this.config.memory.notesDir, { persistent: true }, () => {
+			clearTimeout(this.notesWatchTimer);
+			this.notesWatchTimer = setTimeout(() => {
+				this.notesIndexing = this.notesIndexing
+					.then(() => this.indexNotes())
+					.catch((error) => console.error("notes indexing failed", error));
+			}, this.diaryWatchDebounceMs);
+		});
+		this.notesWatcher.on("error", (error) => {
+			console.error("notes watcher failed", error);
+			this.notesWatcher?.close();
+			this.notesWatcher = undefined;
+		});
+	}
+
 	memoryTools(): AgentTool<any>[] {
 		return createMemoryTools({ store: this.memoryStore, embeddingProvider: this.embeddingProvider });
 	}
@@ -195,6 +224,9 @@ class DefaultMemoryService implements MemoryOperatorService {
 		this.diaryWatcher = undefined;
 		for (const timer of this.diaryWatchTimers.values()) clearTimeout(timer);
 		this.diaryWatchTimers.clear();
+		this.notesWatcher?.close();
+		this.notesWatcher = undefined;
+		clearTimeout(this.notesWatchTimer);
 		this.memoryStore.close();
 		this.lcmStore.close();
 	}

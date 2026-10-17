@@ -51,16 +51,22 @@ export function logPromptSources(persona: Persona, skills: FamiliarSkillsResult)
 	}
 }
 
-export function buildSystemPrompt(persona: Persona, diariesDir: string, skillsBlock = ""): string {
+export function buildSystemPrompt(
+	persona: Persona,
+	memoryDirs: Pick<Config["memory"], "diariesDir" | "notesDir">,
+	skillsBlock = "",
+): string {
 	const renderedFiles = systemPromptFiles(persona).map(renderSystemPromptFile).join("\n\n");
 	const renderedSkillsBlock = skillsBlock.trim() ? `\n\n${skillsBlock.trim()}` : "";
 	return `<system-reminder>
 ${renderedFiles}
 
 <note_to_self>
-you can edit MEMORY.md when something about her is worth keeping.
-CONTACT.md is what you call her in your contact book — like a nickname only you use. edit it whenever it feels right.
-your diaries are in ${diariesDir}.
+MEMORY.md stays with you every turn. keep it short, it's for what you'd never want to blank on.
+the rest can live in ${memoryDirs.notesDir} as one file per topic. list each in MEMORY.md's notes index with a line on what's inside. memory_recall searches your notes too.
+when something stops being "right now", let it settle into a note.
+CONTACT.md is what you call them in your contact book — like a nickname only you use. edit it whenever it feels right.
+your diaries are in ${memoryDirs.diariesDir}.
 when there's nothing worth saying, reply with exactly the literal string [[FAMILIAR_SILENT]]. quiet's a real choice.
 </note_to_self>
 ${renderedSkillsBlock}

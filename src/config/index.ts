@@ -651,6 +651,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 			indexDir: resolve(memoryRootDir, "index"),
 			lcmDir: resolve(memoryRootDir, "lcm"),
 			diariesDir: resolve(memoryRootDir, "diaries"),
+			notesDir: resolve(memoryRootDir, "notes"),
 			archiveDir: resolve(memoryRootDir, "archive"),
 			embedding: {
 				format: memoryEmbeddingFormat,

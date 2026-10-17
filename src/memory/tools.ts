@@ -11,7 +11,7 @@ const MAX_CONTEXT_LABEL_CHARS = 120;
 const MAX_SOURCE_LABEL_CHARS = 160;
 const MEMORY_SCOPE_CORPORA = {
 	diary: ["diary_chunk"],
-	factual: ["atomic_fact", "lcm_record", "lcm_summary"],
+	factual: ["note", "lcm_record", "lcm_summary"],
 	all: undefined,
 } as const;
 
@@ -22,7 +22,7 @@ const memoryRecallSchema = Type.Object(
 			Type.Union([Type.Literal("diary"), Type.Literal("factual"), Type.Literal("all")], {
 				default: "all",
 				description:
-					"all searches every memory corpus; diary searches long-term diary memory; factual searches facts and conversation memory.",
+					"all searches every memory corpus; diary searches long-term diary memory; factual searches notes and conversation memory.",
 			}),
 		),
 		mode: Type.Optional(
@@ -94,7 +94,7 @@ function makeMemoryRecallTool(deps: MemoryToolDeps): AgentTool<typeof memoryReca
 		name: "memory_recall",
 		label: "Memory Recall",
 		description:
-			"search memory for diary, fact, or conversation chunks. returns previews and ids; use memory_open for full text and source details.",
+			"search memory for diary, note, or conversation chunks. returns previews and ids; use memory_open for full text and source details.",
 		parameters: memoryRecallSchema,
 		async execute(_toolCallId, input: MemoryRecallInput, signal?: AbortSignal) {
 			const query = input.query.trim();
@@ -199,7 +199,6 @@ function memoryTypeLabel(chunk: StoredMemoryChunk): string {
 	if (chunk.corpus === "diary_chunk") return "diary";
 	if (chunk.corpus === "lcm_record") return "conversation";
 	if (chunk.corpus === "lcm_summary") return "conversation_summary";
-	if (chunk.corpus === "atomic_fact") return "fact";
 	return chunk.corpus;
 }
 

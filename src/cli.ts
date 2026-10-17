@@ -58,6 +58,7 @@ interface WorkspaceDirs {
 	memoryIndexDir: string;
 	memoryLcmDir: string;
 	memoryDiariesDir: string;
+	memoryNotesDir: string;
 	memoryArchiveDir: string;
 }
 
@@ -68,6 +69,7 @@ function defaultWorkspaceDirs(workspacePath: string): WorkspaceDirs {
 		memoryIndexDir: resolve(memoryRoot, "index"),
 		memoryLcmDir: resolve(memoryRoot, "lcm"),
 		memoryDiariesDir: resolve(memoryRoot, "diaries"),
+		memoryNotesDir: resolve(memoryRoot, "notes"),
 		memoryArchiveDir: resolve(memoryRoot, "archive"),
 	};
 }
@@ -78,6 +80,7 @@ function configuredWorkspaceDirs(config: Awaited<ReturnType<typeof loadConfig>>)
 		memoryIndexDir: config.memory.indexDir,
 		memoryLcmDir: config.memory.lcmDir,
 		memoryDiariesDir: config.memory.diariesDir,
+		memoryNotesDir: config.memory.notesDir,
 		memoryArchiveDir: config.memory.archiveDir,
 	};
 }
@@ -88,6 +91,7 @@ async function ensureWorkspaceDirs(dirs: WorkspaceDirs): Promise<void> {
 		mkdir(dirs.memoryIndexDir, { recursive: true }),
 		mkdir(dirs.memoryLcmDir, { recursive: true }),
 		mkdir(dirs.memoryDiariesDir, { recursive: true }),
+		mkdir(dirs.memoryNotesDir, { recursive: true }),
 		mkdir(dirs.memoryArchiveDir, { recursive: true }),
 	]);
 }
@@ -327,6 +331,8 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	const memoryService = createMemoryService(config, { modelRuntime });
 	await memoryService.indexDiaries().catch((error) => console.error("initial diary indexing failed", error));
 	memoryService.watchDiaries();
+	await memoryService.indexNotes().catch((error) => console.error("initial notes indexing failed", error));
+	memoryService.watchNotes();
 	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig, modelRuntime });
 	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
 	const agentCore = createAgentCore({ config, familiarAgent, memoryService });

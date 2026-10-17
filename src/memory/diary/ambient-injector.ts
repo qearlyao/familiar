@@ -3,6 +3,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import { harnessNoteMessage } from "../../models/messages.js";
 import type { EmbeddingProvider } from "../index/embedding-provider.js";
 import type { MemoryIndexStore } from "../index/store.js";
+import { NOTE_CORPUS } from "../notes.js";
 import { positiveIntegerOrDefault } from "../util.js";
 import { retrieveAmbientDiary } from "./ambient.js";
 
@@ -138,8 +139,13 @@ function debugAmbientQuery(sessionKey: string, query: string): void {
 }
 
 function renderAmbientDiaryRecall(hits: Awaited<ReturnType<typeof retrieveAmbientDiary>>): string {
-	const lines = [INJECTED_MEMORY_OPEN, "<!-- these surfaced from your own diaries -->"];
+	const lines = [INJECTED_MEMORY_OPEN, "<!-- these surfaced from your own diaries or notes -->"];
 	for (const [index, hit] of hits.entries()) {
+		if (hit.chunk.corpus === NOTE_CORPUS) {
+			const text = hit.chunk.snippet || hit.chunk.text;
+			lines.push(`${escapeXmlText(`${index + 1}. ${hit.chunk.sourceId}`)}: ${escapeXmlText(text)}`);
+			continue;
+		}
 		const date = typeof hit.chunk.metadata?.date === "string" ? hit.chunk.metadata.date : undefined;
 		const heading = typeof hit.chunk.metadata?.heading === "string" ? hit.chunk.metadata.heading : undefined;
 		const rawLabel = [date, heading].filter(Boolean).join(" ");

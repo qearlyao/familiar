@@ -58,8 +58,8 @@ describe("ambient diary retrieval", () => {
 		});
 
 		assert.deepEqual(provider.queries, ["lantern"]);
-		assert.deepEqual(store.lexicalCorpora, ["diary_chunk"]);
-		assert.deepEqual(store.semanticCorpora, ["diary_chunk"]);
+		assert.deepEqual(store.lexicalCorpora, ["diary_chunk", "note"]);
+		assert.deepEqual(store.semanticCorpora, ["diary_chunk", "note"]);
 		assert.deepEqual(
 			results.map((result) => result.id),
 			[2, 1],
@@ -197,6 +197,38 @@ describe("ambient diary retrieval", () => {
 		assert.match(text, /1\. 2026-05-12: quiet thread/);
 		assert.doesNotMatch(text, /2026-05-12 2026-05-12/);
 		assert.doesNotMatch(text, /2026-05-12: 2026-05-12/);
+	});
+
+	it("keeps a slot for the best note when boosted diaries would crowd it out", async () => {
+		const diaries = [1, 2, 3].map((id) =>
+			hit(id, "diary_chunk", `2026-05-0${id}.md`, `crumpets diary ${id}`, 0.1, { valence: 1, intensity: 1 }),
+		);
+		const note = hit(4, "note", "uk.md", "crumpets promise", 0.1, {});
+		const store = new FakeStore([], new Map([["diary_chunk", diaries], ["note", [note]]]));
+
+		const results = await retrieveAmbientDiary({
+			query: "crumpets",
+			store,
+			embeddingProvider: new FakeEmbeddingProvider(),
+			limit: 3,
+			useLexical: false,
+		});
+
+		assert.deepEqual(
+			results.map((result) => result.id),
+			[1, 2, 4],
+		);
+	});
+
+	it("labels injected notes with their file name", () => {
+		const text = __ambientDiaryInjectorTest.renderAmbientDiaryRecall([
+			ambientHit(hit(1, "diary_chunk", "2026-05-12.md", "quiet", 0.1, { date: "2026-05-12" }), "2026-05-12: quiet"),
+			ambientHit(hit(2, "note", "uk.md", "crumpets", 0.1, {}), "Crumpets: first UK morning"),
+		]);
+
+		assert.match(text, /these surfaced from your own diaries or notes/);
+		assert.match(text, /1\. 2026-05-12: quiet/);
+		assert.match(text, /2\. uk\.md: Crumpets: first UK morning/);
 	});
 
 	it("strips repeated prefixes from already-indexed ambient snippets", () => {

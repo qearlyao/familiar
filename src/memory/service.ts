@@ -158,23 +158,15 @@ class DefaultMemoryService implements MemoryOperatorService {
 
 	watchNotes(): void {
 		if (this.notesWatcher) return;
-		try {
-			// Notes are few and small, so any change reindexes the folder; that also catches renames and deletes.
-			this.notesWatcher = watch(this.config.memory.notesDir, { persistent: true }, () => {
-				clearTimeout(this.notesWatchTimer);
-				this.notesWatchTimer = setTimeout(() => {
-					this.notesIndexing = this.notesIndexing
-						.then(() => this.indexNotes())
-						.catch((error) => console.error("notes indexing failed", error));
-				}, this.diaryWatchDebounceMs);
-			});
-		} catch (error) {
-			if (isEnoent(error)) {
-				console.info(`notes watcher found no notes directory at ${this.config.memory.notesDir}; disabled`);
-				return;
-			}
-			throw error;
-		}
+		// Notes are few and small, so any change reindexes the folder; that also catches renames and deletes.
+		this.notesWatcher = watch(this.config.memory.notesDir, { persistent: true }, () => {
+			clearTimeout(this.notesWatchTimer);
+			this.notesWatchTimer = setTimeout(() => {
+				this.notesIndexing = this.notesIndexing
+					.then(() => this.indexNotes())
+					.catch((error) => console.error("notes indexing failed", error));
+			}, this.diaryWatchDebounceMs);
+		});
 		this.notesWatcher.on("error", (error) => {
 			console.error("notes watcher failed", error);
 			this.notesWatcher?.close();

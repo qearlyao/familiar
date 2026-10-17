@@ -447,11 +447,7 @@ function formatReindexRun(run: ReindexRun): string {
 }
 
 function deleteCorpus(store: MemoryIndexStore, corpus: string): void {
-	const rows = store.db.prepare("SELECT source_id FROM memory_index_sources WHERE corpus = ?").all(corpus) as {
-		source_id: string;
-	}[];
-	const sourceIds = new Set(rows.map((row) => row.source_id));
-	for (const sourceId of sourceIds) store.deleteBySourceUnsafe(corpus, sourceId);
+	for (const sourceId of store.sourceIds(corpus)) store.deleteBySourceUnsafe(corpus, sourceId);
 	const orphanRows = store.db.prepare("SELECT id FROM memory_chunks WHERE corpus = ?").all(corpus) as { id: number }[];
 	for (const row of orphanRows) {
 		store.db.prepare("DELETE FROM memory_fts WHERE rowid = ?").run(row.id);

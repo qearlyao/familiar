@@ -199,7 +199,6 @@ function memoryTypeLabel(chunk: StoredMemoryChunk): string {
 	if (chunk.corpus === "diary_chunk") return "diary";
 	if (chunk.corpus === "lcm_record") return "conversation";
 	if (chunk.corpus === "lcm_summary") return "conversation_summary";
-	if (chunk.corpus === "note") return "note";
 	return chunk.corpus;
 }
 

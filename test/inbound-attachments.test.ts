@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { join, resolve } from "node:path";
 
 import {
+	MAX_INBOUND_ATTACHMENT_BYTES,
 	MAX_INBOUND_ATTACHMENTS,
 	MAX_INLINE_IMAGE_BASE64_BYTES,
 	materializeInboundAttachments,
@@ -142,7 +143,7 @@ describe("inbound attachments", () => {
 					{
 						name: "two.bin",
 						mimeType: "text/plain",
-						buffer: Buffer.alloc(33 * 1024 * 1024, 2),
+						buffer: Buffer.alloc(MAX_INBOUND_ATTACHMENT_BYTES + 1, 2),
 						source: "web",
 					},
 				]),

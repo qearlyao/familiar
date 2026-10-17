@@ -356,6 +356,13 @@ export class MemoryIndexStore {
 		this.deleteBySourceInternal(corpus, sourceId);
 	}
 
+	sourceIds(corpus: string): string[] {
+		const rows = this.db
+			.prepare("SELECT DISTINCT source_id FROM memory_index_sources WHERE corpus = ?")
+			.all(corpus) as Array<{ source_id: string }>;
+		return rows.map((row) => row.source_id);
+	}
+
 	getSourceState(corpus: string, sourceId: string): MemorySourceState | null {
 		const row = this.db
 			.prepare(

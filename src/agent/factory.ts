@@ -46,11 +46,7 @@ export async function createFamiliarAgent(
 	let persona = await loadPersona(config);
 	let skillsResult = loadFamiliarSkills(config);
 	logPromptSources(persona, skillsResult);
-	let systemPrompt = buildSystemPrompt(
-		persona,
-		config.memory.diariesDir,
-		formatFamiliarSkillsForPrompt(skillsResult.skills),
-	);
+	let systemPrompt = buildSystemPrompt(persona, config.memory, formatFamiliarSkillsForPrompt(skillsResult.skills));
 	setMcpServersPath(config.workspace.dataDir);
 	const mcp = createMcpHub(() => rebuildSessionTools());
 	let defaultModel = createConfiguredModel(config, modelRuntime);
@@ -134,7 +130,7 @@ export async function createFamiliarAgent(
 		const nextSkillsResult = loadFamiliarSkills(nextConfig);
 		const nextSystemPrompt = buildSystemPrompt(
 			nextPersona,
-			nextConfig.memory.diariesDir,
+			nextConfig.memory,
 			formatFamiliarSkillsForPrompt(nextSkillsResult.skills),
 		);
 		const nextDefaultModel = createConfiguredModel(nextConfig, modelRuntime);

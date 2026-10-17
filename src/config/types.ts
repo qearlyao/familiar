@@ -208,6 +208,7 @@ export interface Config {
 		indexDir: string;
 		lcmDir: string;
 		diariesDir: string;
+		notesDir: string;
 		archiveDir: string;
 		embedding: {
 			format: MemoryEmbeddingFormat;

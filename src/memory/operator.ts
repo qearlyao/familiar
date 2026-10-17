@@ -13,6 +13,7 @@ import { readMeta, writeMeta } from "./index/schema.js";
 import type { MemoryIndexStore } from "./index/store.js";
 import { indexLcmRecords, indexLcmSummaries } from "./lcm/indexer.js";
 import { type LcmStore, lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./lcm/store.js";
+import { indexNoteFiles, NOTE_CORPUS } from "./notes.js";
 import { type MemoryOperatorService, MemoryService } from "./service.js";
 import { runInTransaction } from "./util.js";
 
@@ -173,7 +174,7 @@ async function reindex(
 	embeddingProvider?: EmbeddingProvider,
 	signal?: AbortSignal,
 ): Promise<void> {
-	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk"];
+	const corpora = options.corpus ? [options.corpus] : ["lcm_record", "lcm_summary", "diary_chunk", NOTE_CORPUS];
 	const run = reindexRun(config, corpora, options.force);
 	const mode = beginReindex(service.memoryStore, run, options.restart ?? false);
 	console.log(`${mode} ${formatReindexRun(run)}`);
@@ -231,6 +232,10 @@ async function reindex(
 				chunks += file.result.ids.length;
 				printProgress(chunks);
 			}
+		}
+		if (corpora.includes(NOTE_CORPUS) && !signal?.aborted) {
+			chunks += (await indexNoteFiles({ config, indexer, store: service.memoryStore, signal })).chunks;
+			printProgress(chunks);
 		}
 		if (signal?.aborted) {
 			console.log(`Reindexed ${chunks} chunk(s)`);

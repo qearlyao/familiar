@@ -53,6 +53,14 @@ describe("note indexer", () => {
 		assert.deepEqual(search("direwolf"), []);
 		assert.equal(search("arya").length, 1);
 
+		await writeFile(
+			resolve(notesDir, "her.md"),
+			"## Kyoto trip\nDate: 2025-04-12\nStayed in Gion\n\n## Anniversary\nDate: June 14\n",
+			"utf8",
+		);
+		await indexNoteFiles(options);
+		assert.deepEqual(search("date").sort(), ["her / Anniversary\nDate: June 14", "her / Kyoto trip\nDate: 2025-04-12"]);
+
 		await rename(resolve(notesDir, "her.md"), resolve(notesDir, "shows.md"));
 		await indexNoteFiles(options);
 		assert.deepEqual(store.sourceIds(NOTE_CORPUS), ["shows.md"]);

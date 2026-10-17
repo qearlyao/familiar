@@ -27,13 +27,15 @@ export async function indexNoteFiles(options: IndexNoteFilesOptions): Promise<{ 
 		const markdown = await readFile(path, "utf8");
 		const topic = basename(name, ".md");
 		// Bullets are chunked one by one, so carry the topic and heading into the text the index embeds.
-		const inputs = chunkDiaryMarkdown(markdown, { sourceId: name, sourceRef: path }).map((chunk) => ({
-			sourceRef: chunk.sourceRef,
-			chunkIndex: chunk.chunkIndex,
-			text: `${[topic, chunk.metadata.heading].filter(Boolean).join(" / ")}\n${chunk.text}`,
-			snippet: chunk.snippet,
-			metadata: { heading: chunk.metadata.heading },
-		}));
+		const inputs = chunkDiaryMarkdown(markdown, { sourceId: name, sourceRef: path, metadataLines: false }).map(
+			(chunk) => ({
+				sourceRef: chunk.sourceRef,
+				chunkIndex: chunk.chunkIndex,
+				text: `${[topic, chunk.metadata.heading].filter(Boolean).join(" / ")}\n${chunk.text}`,
+				snippet: chunk.snippet,
+				metadata: { heading: chunk.metadata.heading },
+			}),
+		);
 		const result = await options.indexer.replaceSource(NOTE_CORPUS, name, inputs, options.signal);
 		chunks += result.ids.length;
 	}

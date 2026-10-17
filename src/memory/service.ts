@@ -91,6 +91,8 @@ class DefaultMemoryService implements MemoryOperatorService {
 	private diaryWatchTimers = new Map<string, NodeJS.Timeout>();
 	private notesWatcher?: FSWatcher;
 	private notesWatchTimer?: NodeJS.Timeout;
+	// Runs are chained so a slow run can't write back a note that a later run already dropped.
+	private notesIndexing: Promise<void> = Promise.resolve();
 
 	constructor(
 		private readonly config: Config,
@@ -161,7 +163,9 @@ class DefaultMemoryService implements MemoryOperatorService {
 			this.notesWatcher = watch(this.config.memory.notesDir, { persistent: true }, () => {
 				clearTimeout(this.notesWatchTimer);
 				this.notesWatchTimer = setTimeout(() => {
-					void this.indexNotes().catch((error) => console.error("notes indexing failed", error));
+					this.notesIndexing = this.notesIndexing
+						.then(() => this.indexNotes())
+						.catch((error) => console.error("notes indexing failed", error));
 				}, this.diaryWatchDebounceMs);
 			});
 		} catch (error) {

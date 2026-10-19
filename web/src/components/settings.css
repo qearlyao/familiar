@@ -282,7 +282,7 @@
 
 /* a dialog in the middle of the room on desktop; on a phone the same panel rises as a bottom sheet */
 .mcp-add-panel.is-sheet {
-  position: fixed; z-index: 60; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(26rem, calc(100vw - 2rem)); max-height: 85dvh; overflow-y: auto;
+  position: fixed; z-index: 60; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(26rem, calc(100vw - 2rem)); max-height: 85dvh; overflow: hidden auto;
   padding: 1.375rem 1.5rem; border-radius: 1.25rem; background: var(--panel); color: var(--ink); box-shadow: 0 1.5rem 3rem -1rem rgba(43, 25, 1, 0.5);
 }
 .mcp-add-panel.is-sheet[data-state="open"] { animation: mcp-add-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
@@ -429,7 +429,9 @@
 .cron-fields { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .cron-fields .seg { flex-wrap: wrap; }
 .cron-at { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.cron-at .pill-input:not(.is-number) { width: 12rem; }
+/* iOS Safari sizes a natively styled date or time input past its width: 100%, so it drops that styling */
+.cron-at .pill-input:not(.is-number) { width: 12rem; min-width: 0; -webkit-appearance: none; appearance: none; }
+.cron-at .pill-input::-webkit-date-and-time-value { text-align: left; }
 .cron-textarea { height: auto; min-height: 6rem; padding: 0.625rem 0.875rem; border-radius: 0.875rem; font: 0.875rem/1.5 var(--font-sans); resize: vertical; }
 @media (max-width: 700px) {
   .cron-last { flex-basis: 100%; }

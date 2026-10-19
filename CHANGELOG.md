@@ -1,19 +1,26 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 - 2026-10-20
 
 ### Added
 
-- Generate images through OpenRouter's Image API (`POST /api/v1/images`), so models offered only there, such as FLUX.3, work.
+- Keep MEMORY.md short, with details in topic notes under `memories/notes/`. Notes are indexed so `memory_recall` finds them, and ambient recall now searches them alongside diaries.
+
+### Changed
+
+- Raise inbound attachment limits to 100MB per file and 128MB per message.
+- Drop an MCP tool's own server name from its prefixed name, so `github_create_issue` on a server named `github` becomes `mcp__github__create_issue`. The match treats `-` and `_` alike.
+- Run the agent's bash without the keys loaded from the workspace `.env`, so commands like `env` can't print API keys into transcripts and payload logs. MCP servers still inherit them.
 
 ### Removed
 
-- Drop the chat-completions image route and the recovery of images from reply text that came with it. `openrouter-images` now means OpenRouter's Image API, and models it does not list no longer work through OpenRouter.
 - Remove the built-in `browser` tool, its `[browser]` config section, the installer's browser-helper options, and `familiar upgrade --with-opencli`. Browser control now comes from [agent-browser](https://github.com/vercel-labs/agent-browser) added as an MCP server; see the README's Browser section.
 
 ### Fixed
 
-- Stop new recurring cron jobs from firing at once on a slot that passed before they existed; a new job, or one whose timing changes, now waits for its next slot. Jobs whose timing is unchanged still catch up after downtime with `missed=`.
+- Keep memory use bounded on busy chats: drop messages LCM summaries already cover, cap requests to the context budget even with LCM off, and stop reading every chat log and transcript into memory at startup.
+- Keep `tool_search` from offering MCP tools that codemode scripts already reach while codemode is pinned.
+- Stack the cron editor's date and time fields on phones, so the time no longer runs past the sheet edge.
 
 ## 1.5.2 - 2026-10-14
 
@@ -27,6 +34,10 @@
 - Call OpenRouter's dedicated Image API for `image_gen`, so newer image models such as FLUX.3 are reachable.
 - Fold derived attachment text in chat behind an expand toggle; voice transcripts stay open behind the transcribed pill.
 - Show a first-frame poster and the clip length on video attachments.
+
+### Removed
+
+- Drop the chat-completions image route and the recovery of images from reply text that came with it. `openrouter-images` now means OpenRouter's Image API, and models it does not list no longer work through OpenRouter.
 
 ### Fixed
 

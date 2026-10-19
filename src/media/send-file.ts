@@ -45,7 +45,7 @@ export function createSendFileTool(
 		name: "send_file",
 		label: "send_file",
 		description:
-			"attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits. documents also stay on their library shelf; resending the same file updates that copy.",
+			"attach a file (html, pdf, slides, anything) to your reply. it's copied, so resend after edits.",
 		parameters: sendFileSchema,
 		executionMode: "sequential",
 		async execute(_toolCallId, input: SendFileToolInput) {

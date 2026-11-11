@@ -613,7 +613,7 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 .tool-pill .tool-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-pill .tool-pill-count { color: #525833; flex: none; }
 .tool-pill.is-active > svg:first-child { animation: fernpulse 1.6s ease-in-out infinite; }
-.tool-patch { padding: 1rem 1.125rem 0.875rem; border-radius: 1.25rem; background: rgba(82, 88, 51, 0.13); display: flex; flex-direction: column; gap: 0.875rem; min-width: 0; }
+.tool-patch { padding: 1rem 1.125rem 0.875rem; border-radius: 1.25rem; background: rgba(82, 88, 51, 0.13); display: flex; flex-direction: column; gap: 0.875rem; min-width: 0; cursor: pointer; }
 .tool-patch-head { display: flex; align-items: center; gap: 0.625rem; color: #2b1901; font-size: 0.875rem; }
 .tool-patch-head > svg { width: 0.9375rem; height: 0.9375rem; color: #525833; flex: none; }
 .tool-patch-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -643,7 +643,7 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
 }
 .tool-step-toggle:hover { background: rgba(43, 25, 1, 0.14); }
 .tool-step-toggle svg { width: 0.75rem; height: 0.75rem; }
-.tool-detail { padding: 0.6875rem 0.8125rem; border-radius: 0.8125rem; background: #e7e0d5; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.tool-detail { cursor: auto; padding: 0.6875rem 0.8125rem; border-radius: 0.8125rem; background: #e7e0d5; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
 .tool-detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--font-weight-normal) 0.75rem/1.55 var(--font-mono); color: #2b1901; }
 .tool-detail pre.is-error { color: #a85b2a; }
 .tool-detail .is-thinking { font: var(--font-weight-normal) 0.78125rem/1.6 Figtree, sans-serif; color: #4c3e2c; white-space: pre-wrap; }

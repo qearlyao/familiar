@@ -178,7 +178,14 @@ export function EventStream({ steps }: { steps: GutterStep[] }) {
   }
 
   return (
-    <div className="tool-patch">
+    <div
+      className="tool-patch"
+      // Tapping anywhere that isn't a control or step output folds the block; a text selection is not a tap.
+      onClick={(event) => {
+        if ((event.target as Element).closest("button, .tool-detail") || !window.getSelection()?.isCollapsed) return;
+        setOpen(false);
+      }}
+    >
       <div className="tool-patch-head">
         {/* eslint-disable-next-line react-hooks/static-components */}
         <Icon strokeWidth={2.75} />

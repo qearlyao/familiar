@@ -13,3 +13,7 @@ Use existing local reference clones when available; do not create fresh clones f
 - `earendil-works/pi`: `/Users/qearl/pi`. Remote is `upstream`.
 
 These directories are reference clones, not Familiar worktrees. It is fine to overwrite them with upstream state.
+
+## Commit message
+
+Format: `<type>(<scope>): <subject>`. Scope is optional but useful in large files

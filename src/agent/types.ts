@@ -3,7 +3,7 @@ import type { ImageContent, Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Config, ThinkingLevel } from "../config/index.js";
 import type { EffectiveSetting } from "../config/settings.js";
-import type { StoredAttachment } from "../conversation/chat-log.js";
+import type { ChatLogRecord, StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedAttachment, GeneratedMediaSink } from "../media/generated-media.js";
 import type { ContextBreakdown } from "../memory/lcm/types.js";
 import type { loadPersona } from "../prompting/persona.js";
@@ -90,6 +90,8 @@ export interface FamiliarAgentSession {
 export interface FamiliarAgentOptions {
 	reloadConfig?: () => Promise<Config>;
 	modelRuntime?: ModelRuntime;
+	/** the chat records behind a session, for tools that look back over the conversation itself */
+	records?: (sessionKey: string) => Promise<readonly ChatLogRecord[] | undefined>;
 }
 
 export interface ReloadSnapshot {

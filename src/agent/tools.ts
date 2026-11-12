@@ -11,7 +11,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOLS, MCP_EXPOSURES } from "../config/enums.js";
 import type { Config, ToolReach } from "../config/index.js";
-import type { StoredAttachment } from "../conversation/chat-log.js";
+import type { ChatLogRecord, StoredAttachment } from "../conversation/chat-log.js";
 import type { GeneratedMediaSink } from "../media/generated-media.js";
 import { createImageGenTool } from "../media/image-gen.js";
 import { createSendFileTool } from "../media/send-file.js";
@@ -19,6 +19,7 @@ import { createTtsTool } from "../media/tts.js";
 import type { MemoryService } from "../memory/service.js";
 import { createCodemodeTool } from "../tools/codemode.js";
 import { createCronTool } from "../tools/cron.js";
+import { createKeepMomentTool } from "../tools/keep-moment.js";
 import { loadedToolNames, type McpHub } from "../tools/mcp.js";
 import { createToolSearchTool } from "../tools/tool-search.js";
 import { createWebTools } from "../web-tools/index.js";
@@ -35,6 +36,9 @@ export interface ToolContext {
 	mcp: McpHub;
 	agent: () => Agent;
 	paused: ReadonlySet<string>;
+	/** the conversation a session is having, when it has one (a voice call or a one-off job doesn't) */
+	records: (sessionKey: string) => Promise<readonly ChatLogRecord[] | undefined>;
+	personaName: () => string;
 }
 
 /** bash runs without the keys the workspace .env holds; mcp servers still inherit them from process.env */
@@ -63,6 +67,7 @@ export function toolReach(config: Config, paused: ReadonlySet<string>, name: str
 
 export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 	const { config, mediaSink, mcp, paused } = ctx;
+	const voiceCall = ctx.sessionKey.startsWith(VOICE_CALL_SESSION_PREFIX);
 	// every built-in but codemode, which wraps the others; names match BUILTIN_TOOLS
 	const builtins: AgentTool<any>[] = [
 		withDescription(
@@ -73,11 +78,20 @@ export function createFamiliarTools(ctx: ToolContext): AgentTool<any>[] {
 		withDescription(createWriteTool(config.workspacePath), WRITE_DESCRIPTION),
 		withDescription(createEditTool(config.workspacePath), EDIT_DESCRIPTION),
 		createCronTool(config),
-		...(ctx.sessionKey.startsWith(VOICE_CALL_SESSION_PREFIX) ? [] : [createTtsTool(config, mediaSink)]),
+		...(voiceCall ? [] : [createTtsTool(config, mediaSink)]),
 		...(config.imageGen.enabled
 			? [createImageGenTool(config, mediaSink, { referenceAttachments: ctx.referenceAttachments })]
 			: []),
 		createSendFileTool(config, mediaSink),
+		// a call has no written talk to keep from until it is over
+		...(voiceCall
+			? []
+			: [
+					createKeepMomentTool(config, {
+						records: () => ctx.records(ctx.sessionKey),
+						personaName: ctx.personaName,
+					}),
+				]),
 		...createWebTools(),
 		...ctx.memory.memoryTools(),
 	];

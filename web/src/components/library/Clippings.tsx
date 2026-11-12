@@ -45,7 +45,7 @@ function saving(current: string | undefined, save: (value: string) => void) {
 }
 
 /** One kept moment: opens as the talk looked, can be named and given a line of your own there,
-    and rides back into the draft as a quote. */
+    and rides back into the draft as a quote. One they kept says so, and its line stays theirs. */
 export function ClippingTile({ clipping, personaName, onBring, onEdit, onRemove }: {
   clipping: Clipping;
   personaName: string;
@@ -56,6 +56,8 @@ export function ClippingTile({ clipping, personaName, onBring, onEdit, onRemove 
   const turns = clipping.messages.filter((message) => message.role !== "system" && !message.call);
   const title = clipping.title || clipping.note || said(turns[0] ?? clipping.messages[0]).split("\n")[0] || "a moment";
   const count = `${clipping.messages.length} ${clipping.messages.length === 1 ? "turn" : "turns"}`;
+  const theirs = clipping.keptBy === "them";
+  const kept = theirs ? `kept by ${personaName}` : "kept";
   return (
     <ShelfItem title={title} farewell={FAREWELL} onRemove={onRemove}>
       {/* the span keeps the context menu and the viewer from fighting over one trigger */}
@@ -66,7 +68,7 @@ export function ClippingTile({ clipping, personaName, onBring, onEdit, onRemove 
               <ClippingCover turns={turns.slice(-PEEK_TURNS)} />
               <span className="library-shelf-copy">
                 <strong>{title}</strong>
-                <span>{count} · kept {noteAge(clipping.createdAt)}</span>
+                <span>{count} · {kept} {noteAge(clipping.createdAt)}</span>
               </span>
             </button>
           }
@@ -80,7 +82,7 @@ export function ClippingTile({ clipping, personaName, onBring, onEdit, onRemove 
               {...saving(clipping.title, (value) => onEdit({ title: value }))}
             />
           }
-          subtitle={`${moment(clipping)} · ${count}`}
+          subtitle={`${moment(clipping)} · ${count}${theirs ? ` · ${kept}` : ""}`}
           closeLabel="back to the library"
           extraActions={
             <Dialog.Close asChild>
@@ -97,14 +99,19 @@ export function ClippingTile({ clipping, personaName, onBring, onEdit, onRemove 
                   {/* chat-room carries the talk's own styles; it clips, so the paper around it does the scrolling */}
                   <div className="chat-room">
                     <MessageRows messages={clipping.messages} personaName={personaName} dated />
-                    <textarea
-                      className="library-clipping-note"
-                      rows={2}
-                      maxLength={280}
-                      placeholder="add a line of your own…"
-                      aria-label="a line of your own"
-                      {...saving(clipping.note, (value) => onEdit({ note: value }))}
-                    />
+                    {/* a moment they kept carries their line, as they wrote it; yours is always open to write in */}
+                    {theirs ? (
+                      clipping.note && <p className="library-clipping-note">{clipping.note} <span>— {personaName}</span></p>
+                    ) : (
+                      <textarea
+                        className="library-clipping-note"
+                        rows={2}
+                        maxLength={280}
+                        placeholder="add a line of your own…"
+                        aria-label="a line of your own"
+                        {...saving(clipping.note, (value) => onEdit({ note: value }))}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

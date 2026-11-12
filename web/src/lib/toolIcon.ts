@@ -1,4 +1,5 @@
 import {
+  Bookmark,
   BookOpen,
   Clock,
   Compass,
@@ -28,6 +29,7 @@ const RULES: IconRule[] = [
   { match: (n) => /^(image|meme|picture|photo)/.test(n), icon: ImageIcon },
   { match: (n) => /^skill/.test(n), icon: Compass },
   { match: (n) => /^send_file/.test(n), icon: Paperclip },
+  { match: (n) => /^keep_/.test(n), icon: Bookmark },
 ];
 
 export function iconForTool(name: string): LucideIcon {

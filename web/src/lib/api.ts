@@ -594,6 +594,8 @@ export interface Clipping {
   createdAt: number;
   title?: string;
   note?: string;
+  /** set when they kept it themselves, and the line under it is theirs */
+  keptBy?: "them";
   messages: Message[];
 }
 

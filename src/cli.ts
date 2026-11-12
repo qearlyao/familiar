@@ -31,7 +31,7 @@ import { cleanupGeneratedAttachments } from "./media/generated-media.js";
 import { memoryHelp, runMemoryOperator } from "./memory/operator.js";
 import { createMemoryService } from "./memory/service.js";
 import { createModelRuntime, refreshModelCatalogs } from "./models/runtime.js";
-import { createAgentCore } from "./runtime/agent-core.js";
+import { type AgentCore, createAgentCore } from "./runtime/agent-core.js";
 import type { Channel } from "./runtime/channel.js";
 
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -333,9 +333,16 @@ async function runDaemon(workspaceInput?: string): Promise<void> {
 	memoryService.watchDiaries();
 	await memoryService.indexNotes().catch((error) => console.error("initial notes indexing failed", error));
 	memoryService.watchNotes();
-	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, { reloadConfig, modelRuntime });
+	// the agent is built first, so its tools reach the conversations through the core once that exists
+	const conversations: { core?: AgentCore } = {};
+	const familiarAgent = await createFamiliarAgent(config, settings, memoryService, {
+		reloadConfig,
+		modelRuntime,
+		records: async (sessionKey) => (await conversations.core?.peekRuntime(sessionKey))?.getRecords(),
+	});
 	const hotReload = startWorkspaceHotReload({ workspacePath: config.workspacePath, familiarAgent });
 	const agentCore = createAgentCore({ config, familiarAgent, memoryService });
+	conversations.core = agentCore;
 	let stopping = false;
 	const channels: Channel[] = [];
 	const stop = async (exitCode = 0) => {

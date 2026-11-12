@@ -10,7 +10,7 @@ import { setAddedModelsPath } from "../models/added-models.js";
 import { createConfiguredModel } from "../models/index.js";
 import { harnessNoteMessage, userTextMessage } from "../models/messages.js";
 import { assertModelCanAuthenticateWithRuntime, createModelRuntime } from "../models/runtime.js";
-import { buildSystemPrompt, loadPersona, logPromptSources } from "../prompting/persona.js";
+import { buildSystemPrompt, loadPersona, logPromptSources, parsePersonaName } from "../prompting/persona.js";
 import { formatFamiliarSkillsForPrompt, loadFamiliarSkills } from "../prompting/skills.js";
 import { createMcpHub } from "../tools/mcp.js";
 import { mcpServerSpecs, setMcpServersPath } from "../tools/mcp-servers.js";
@@ -57,7 +57,15 @@ export async function createFamiliarAgent(
 	// built-ins set aside until the next restart; never written anywhere
 	const pausedTools = new Set<string>();
 	const buildTools = (cfg: Config, parts: SessionToolParts) =>
-		createFamiliarTools({ config: cfg, memory: memoryService, mcp, paused: pausedTools, ...parts });
+		createFamiliarTools({
+			config: cfg,
+			memory: memoryService,
+			mcp,
+			paused: pausedTools,
+			records: async (sessionKey) => options.records?.(sessionKey),
+			personaName: () => parsePersonaName(persona.soul),
+			...parts,
+		});
 	const toolsFor = (cfg: Config, session: FamiliarAgentSession) =>
 		buildTools(cfg, {
 			sessionKey: session.sessionKey,

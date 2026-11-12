@@ -26,6 +26,8 @@ const context = (config: Config, overrides: Partial<ToolContext> = {}): ToolCont
 	mcp: hub(),
 	agent: emptyAgent,
 	paused: new Set(),
+	records: async () => undefined,
+	personaName: () => "june",
 	...overrides,
 });
 

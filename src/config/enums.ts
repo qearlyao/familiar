@@ -88,6 +88,7 @@ export const BUILTIN_TOOLS = [
 	"tts",
 	"image_gen",
 	"send_file",
+	"keep_moment",
 	"search_web",
 	"fetch_web",
 	"memory_recall",

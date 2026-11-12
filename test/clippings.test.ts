@@ -6,7 +6,17 @@ import { describe, it } from "node:test";
 
 import { ensureGeneratedAttachmentsDir, publicAttachmentPath } from "../src/media/generated-media.js";
 import type { WebAuth } from "../src/web/auth.js";
-import { clippingSpan, editClipping, keepClipping, listClippings, removeClipping } from "../src/web/clippings.js";
+import type { ChatLogRecord } from "../src/conversation/chat-log.js";
+import { createKeepMomentTool } from "../src/tools/keep-moment.js";
+import {
+	clippingSpan,
+	clippingSpanByWords,
+	editClipping,
+	keepClipping,
+	listClippings,
+	MAX_KEPT_BY_THEM,
+	removeClipping,
+} from "../src/web/clippings.js";
 import { createWebRouteRegistry } from "../src/web/routes.js";
 import type { WebMessage } from "../src/web/types.js";
 import { clippingQuote, clippingQuoteCitation, QUOTE_CHARS, QUOTE_MESSAGE_CHARS } from "../web/src/lib/clippingQuote.js";
@@ -77,7 +87,7 @@ describe("clippings", () => {
 					],
 				}),
 			],
-			"  this one  ",
+			{ note: "  this one  " },
 		);
 
 		assert.equal(kept.note, "this one");
@@ -106,6 +116,66 @@ describe("clippings", () => {
 		assert.equal(await removeClipping(config, kept.id), true);
 		assert.equal(await removeClipping(config, kept.id), false);
 		assert.deepEqual(await listClippings(config), []);
+	});
+});
+
+describe("a moment they keep", () => {
+	const talk = [
+		message("a", { role: "user", who: "you", text: "do you like pastry" }),
+		message("b", { text: "I do. Flaky things especially." }),
+		message("n", { role: "system", who: "", text: "pastry", notice: "heartbeat" }),
+		message("c", { role: "user", who: "you", text: "then it\u2019s  settled:\ncroissants" }),
+		message("d", { text: "croissants it is." }),
+		message("e", { role: "user", who: "you", text: "🥐" }),
+	];
+	const ids = (span: WebMessage[]) => span.map((kept) => kept.id);
+
+	it("is named by a few words from where it starts, and where it ends if that isn't now", () => {
+		// case, spacing and punctuation don't have to match; a notice is never what was meant
+		assert.deepEqual(ids(clippingSpanByWords(talk, "FLAKY things")), ["b", "n", "c", "d", "e"]);
+		assert.deepEqual(ids(clippingSpanByWords(talk, "pastry", "it's settled: croissants")), ["a", "b", "n", "c"]);
+		// the latest message holding the words wins, and the start is looked for no later than the end
+		assert.deepEqual(ids(clippingSpanByWords(talk, "croissants")), ["d", "e"]);
+		assert.deepEqual(ids(clippingSpanByWords(talk, "croissants", "settled")), ["c"]);
+		assert.throws(() => clippingSpanByWords(talk, "bagels"), /no message contains "bagels"/);
+		assert.throws(() => clippingSpanByWords(talk, "croissants it is", "pastry"), /before that end/);
+		assert.throws(() => clippingSpanByWords(talk, "pastry", "bagels"), /no message here contains "bagels"/);
+		assert.throws(() => clippingSpanByWords([], "anything"), /nothing has been said/);
+	});
+
+	it("goes on the shelf under their name, with their title and line", async (t) => {
+		const config = await configWithDataDir(t, await createTempDataDir(t));
+		const at = (recordId: number) => ({
+			recordId,
+			ts: new Date(Date.UTC(2026, 10, 3, 12, recordId)).toISOString(),
+			service: "web" as const,
+			scope: "web" as const,
+			channelId: "main",
+		});
+		const said = (recordId: number, text: string): ChatLogRecord =>
+			recordId % 2
+				? { type: "inbound", ...at(recordId), messageId: `u${recordId}`, authorId: "owner", text, isBot: false, mentionedBot: false, attachments: [] }
+				: { type: "outbound", ...at(recordId), messageIds: [`a${recordId}`], text, thinking: "hm" };
+		let records: ChatLogRecord[] | undefined = [said(1, "i nerver do daft things"), said(2, '"nerver." right.'), said(3, "hush")];
+		const tool = createKeepMomentTool(config, { records: async () => records, personaName: () => "june" });
+
+		const result = await tool.execute("call", { from: "daft things", to: "nerver. right", title: " nerver ", note: "she can't spell it" });
+
+		const [kept] = await listClippings(config);
+		assert.equal(kept?.id, result.details.id);
+		assert.equal(kept?.keptBy, "them");
+		assert.equal(kept?.title, "nerver");
+		assert.equal(kept?.note, "she can't spell it");
+		assert.deepEqual(kept?.messages.map((turn) => turn.text), ["i nerver do daft things", '"nerver." right.']);
+		assert.equal(kept?.messages[1]?.thinking, "hm");
+		assert.match(JSON.stringify(result.content), /2 messages, from you: .*daft things.* to june: /);
+
+		await assert.rejects(tool.execute("call", { from: "bagels" }), /keep_moment: no message contains "bagels"/);
+		records = Array.from({ length: MAX_KEPT_BY_THEM + 1 }, (_, index) => said(index + 1, index ? "and on" : "it began"));
+		await assert.rejects(tool.execute("call", { from: "it began" }), /limit 40/);
+		records = undefined;
+		await assert.rejects(tool.execute("call", { from: "daft" }), /no conversation here/);
+		assert.equal((await listClippings(config)).length, 1);
 	});
 });
 

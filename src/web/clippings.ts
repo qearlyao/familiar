@@ -29,8 +29,13 @@ export interface Clipping {
 	title?: string;
 	/** a line of your own under it */
 	note?: string;
+	/** set when they kept it themselves; yours carry no mark */
+	keptBy?: "them";
 	messages: WebMessage[];
 }
+
+/** the most they can keep in one go */
+export const MAX_KEPT_BY_THEM = 40;
 
 const CLIPPING_ID_RE = /^[a-f0-9]{12}$/;
 const ATTACHMENT_URL_PREFIX = "/api/web/attachments/";
@@ -54,6 +59,35 @@ export function clippingSpan(messages: readonly WebMessage[], from: string, to: 
 	}));
 }
 
+/** how words are compared when a moment is named by quoting it: only the letters and digits count */
+function plain(text: string): string {
+	return text
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
+		.trim()
+		.toLowerCase();
+}
+
+/**
+ * The span a few quoted words name: it ends at the latest message holding `to` (or the latest of all),
+ * and starts at the latest message holding `from` at or before that. Throws with what couldn't be found.
+ */
+export function clippingSpanByWords(messages: readonly WebMessage[], from: string, to?: string): WebMessage[] {
+	const spoken = (message: WebMessage) => message.role !== "system";
+	const said = messages.map((message) => (spoken(message) ? plain(message.text) : ""));
+	const latest = (words: string, before: number): number => {
+		const needle = plain(words);
+		if (!needle) return -1;
+		for (let index = before; index >= 0; index -= 1) if (said[index]?.includes(needle)) return index;
+		return -1;
+	};
+	const ending = to?.trim();
+	const end = ending ? latest(ending, messages.length - 1) : messages.findLastIndex(spoken);
+	if (end < 0) throw new Error(ending ? `no message here contains "${ending}"` : "nothing has been said here yet");
+	const start = latest(from, end);
+	if (start < 0) throw new Error(`no message ${ending ? "before that end " : ""}contains "${from.trim()}"`);
+	return clippingSpan(messages, messages[start]!.id, messages[end]!.id)!;
+}
+
 /** where a chat attachment url lives on disk; the url comes from our own records, never from a request */
 async function attachmentFile(config: Config, url: string): Promise<string | undefined> {
 	const relativePath = decodeURIComponent(url.slice(ATTACHMENT_URL_PREFIX.length).split("?")[0] ?? "");
@@ -66,7 +100,11 @@ async function attachmentFile(config: Config, url: string): Promise<string | und
 	return undefined;
 }
 
-export async function keepClipping(config: Config, messages: WebMessage[], note?: string): Promise<Clipping> {
+export async function keepClipping(
+	config: Config,
+	messages: WebMessage[],
+	about: Pick<Clipping, "title" | "note" | "keptBy"> = {},
+): Promise<Clipping> {
 	const id = randomBytes(6).toString("hex");
 	const dir = clippingsDir(config, id);
 	await mkdir(resolve(dir, "files"), { recursive: true });
@@ -87,7 +125,9 @@ export async function keepClipping(config: Config, messages: WebMessage[], note?
 		const clipping: Clipping = {
 			id,
 			createdAt: Date.now(),
-			note: note?.trim().slice(0, MAX_NOTE_CHARS) || undefined,
+			title: about.title?.trim().slice(0, MAX_TITLE_CHARS) || undefined,
+			note: about.note?.trim().slice(0, MAX_NOTE_CHARS) || undefined,
+			keptBy: about.keptBy,
 			messages,
 		};
 		await atomicWriteJson(resolve(dir, "clipping.json"), clipping);
@@ -166,7 +206,7 @@ export function registerWebClippingRoutes(
 		);
 		if (!span) throw new HttpError(404, "those messages are no longer in this conversation");
 		const note = typeof body.note === "string" ? body.note : undefined;
-		sendJson(response, 200, { clipping: await keepClipping(config, span, note) });
+		sendJson(response, 200, { clipping: await keepClipping(config, span, { note }) });
 	});
 
 	route("PUT", path, async (request, response) => {

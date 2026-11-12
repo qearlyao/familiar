@@ -44,7 +44,7 @@
   text-align: left;
   overscroll-behavior: contain;
 }
-/* your line under the moment: always there to write in, quiet until it has something */
+/* the line under the moment: yours is always there to write in, quiet until it has something; theirs is signed */
 .library-clipping-note {
   display: block;
   width: 100%;
@@ -59,6 +59,7 @@
   resize: none;
   outline: none;
 }
+.library-clipping-note > span { font-style: normal; white-space: nowrap; opacity: 0.75; }
 .library-clipping-note::placeholder { color: rgba(76, 62, 44, 0.55); }
 .library-clipping-note:focus { border-top-color: #525833; }
 /* its name, written straight into the viewer's head where the title sits */

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.6.1 - 2026-11-13
+
+### Added
+
+- Keep stretches of a conversation as clippings on the library shelf. "keep" on the latest reply picks a span; clippings keep words and thoughts, drop tool calls, and copy media in so it outlives retention. The shelf gains a "kept from the talk" section, a moments filter, and search; an open clipping can be named, given a note, and brought back to the talk as a quoted chip.
+- `keep_moment` tool, so the agent can keep a stretch of the talk as their own clipping by quoting where it starts (and optionally ends). Voice calls don't get it.
+- Scroll back through older turns in web chat, up to 200, and jump back to the latest with a floating arrow that marks new arrivals.
+
+### Changed
+
+- Fold a tool-calls block by clicking anywhere inside it, ignoring clicks on buttons, step output, and text selections.
+- Fit the four reply actions on one row on phones, and stack multi-paragraph blockquotes.
+- Fold `send_file`'s shortened description onto one line.
+
+### Fixed
+
+- Keep the cron sheet's date and time fields inside it on iPhone, and stop the sheet from scrolling sideways.
+- Follow a streaming reply in a thread that was empty until its first turn.
+
 ## 1.6.0 - 2026-10-20
 
 ### Added

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import type { Message } from "../types";
+import { BrowserTurn, usesBrowser } from "@/lib/browserTurn";
 import { CallEntry } from "./CallEntry";
 import { MessageBubble } from "./MessageBubble";
 
@@ -66,7 +67,9 @@ export function MessageRows({
 }) {
   const latestAssistantIndex = streaming || keep ? -1 : messages.findLastIndex((message) => message.role === "assistant");
   const last = messages.length - 1;
+  const browserTurn = useMemo(() => messages.findLast((message) => message.steps.some(usesBrowser))?.id, [messages]);
   return (
+    <BrowserTurn value={browserTurn}>
     <div className="chat-message-list" data-keeping={keep ? (keep.range ? "picked" : "") : undefined}>
       {messages.map((m, i) => {
         const prev = messages[i - 1];
@@ -114,6 +117,7 @@ export function MessageRows({
         );
       })}
     </div>
+    </BrowserTurn>
   );
 }
 

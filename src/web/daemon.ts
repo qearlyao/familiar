@@ -10,6 +10,7 @@ import { registerWebAgentRoutes } from "./agent-routes.js";
 import { createAuth, loadWebSessionStore } from "./auth.js";
 import { registerWebAuthRoutes } from "./auth-routes.js";
 import { registerWebBookRoutes } from "./book-routes.js";
+import { attachWebSocketBrowser, browserPageCommand, browserViewport } from "./browser-stream.js";
 import { registerWebClippingRoutes } from "./clippings.js";
 import { registerWebConfigRoutes } from "./config-routes.js";
 import { registerWebConversationRoutes } from "./conversation-routes.js";
@@ -131,6 +132,11 @@ export async function startWebDaemon({
 		authorize: (request, pathname) => auth.authorize(request, pathname),
 		config,
 		call: voiceCall,
+	});
+	attachWebSocketBrowser(server, {
+		authorize: (request, pathname) => auth.authorize(request, pathname),
+		viewport: (session) => browserViewport(familiarAgent.mcp, session),
+		page: (session, command) => browserPageCommand(familiarAgent.mcp, session, command),
 	});
 	attachWebSocketStream(server, {
 		authorize: (request, pathname) => auth.authorize(request, pathname),

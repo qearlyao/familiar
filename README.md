@@ -427,6 +427,13 @@ Put `BROWSER_USE_API_KEY` in your workspace `.env`, plus
 `BROWSER_USE_PROFILE_ID` to keep your logins between sessions; MCP servers
 inherit Familiar's environment. See the agent-browser docs for other providers.
 
+While the browser is open, the WebUI shows it live under the turn that used it.
+Step in to click, scroll, and type in the page yourself, for a login, a payment
+form, or a CAPTCHA the agent should not handle; an address bar with back,
+forward, and reload sits above the page. It works with both the local and
+the Browser Use browser. What you type goes to the page, not into the
+conversation, though the agent can read whatever the page shows afterwards.
+
 ## Cron Jobs
 
 Manage schedules in **Settings → cron jobs**, or ask the agent to use its

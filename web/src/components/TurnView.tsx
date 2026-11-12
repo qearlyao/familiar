@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import type { Message } from "../types";
+import { BrowserTurn, usesBrowser } from "@/lib/browserTurn";
 import { chunkSteps, type StepChunk } from "@/lib/chunkSteps";
+import { BrowserBox } from "./BrowserBox";
 import { EventStream } from "./EventStream";
 import { ErrorNotice } from "./steps/ErrorNotice";
 import { TextStep } from "./steps/TextStep";
@@ -28,6 +30,7 @@ export function TurnView({ message, children }: { message: Message; children?: R
   const blocks = blocksOf(chunkSteps(steps));
   if (children && !blocks.some((b) => b.kind === "body")) blocks.push({ kind: "body", chunks: [] });
   const lastBody = blocks.findLastIndex((b) => b.kind === "body");
+  const browserTurn = useContext(BrowserTurn) === message.id;
 
   return (
     <>
@@ -49,6 +52,12 @@ export function TurnView({ message, children }: { message: Message; children?: R
             {i === lastBody && children}
           </div>
         ),
+      )}
+      {browserTurn && (
+        <div className="chat-turn-steps">
+          {/* each browser step that settles is a fresh chance the browser has opened */}
+          <BrowserBox attempt={steps.filter((step) => usesBrowser(step) && step.tool.status !== "running" && step.tool.status !== "pending").length} />
+        </div>
       )}
     </>
   );

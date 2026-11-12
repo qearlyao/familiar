@@ -295,6 +295,29 @@ const fixtures: Message[] = [
   },
   { id: "call-discarded", role: "system", who: "system", ts: now - 6 * minute, steps: [], call: { kept: false, durationMs: 252_000 } },
   {
+    // its live box only shows while a real browser is open behind the backend
+    id: "a-browser",
+    role: "assistant",
+    who: "ghost",
+    ts: now - 2 * minute,
+    steps: [
+      {
+        kind: "tool",
+        id: "a-browser-tool",
+        tool: {
+          id: "a-browser-tool",
+          name: "mcp__browser__agent_browser_open",
+          status: "completed",
+          args: { url: "https://example.com" },
+          result: "Example Domain",
+          startedAt: now - 2 * minute - 2000,
+          completedAt: now - 2 * minute,
+        },
+      },
+      { kind: "text", id: "a-browser-t", text: "the page is open — it wants you to sign in. step in whenever you like.", complete: true },
+    ],
+  },
+  {
     id: "a-5",
     role: "assistant",
     who: "ghost",

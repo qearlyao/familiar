@@ -3,6 +3,7 @@ import type { Socket } from "node:net";
 
 import type { ConversationRuntime } from "../runtime/conversation-runtime.js";
 import { isRecord } from "../util/guards.js";
+import { WEB_BROWSER_PATH } from "./browser-stream.js";
 import type { WebEventHub } from "./event-hub.js";
 import { acceptWebSocket, decodeFrames, encodeFrame, type WebSocketClient } from "./events.js";
 import { parseRequestUrl } from "./http.js";
@@ -56,7 +57,7 @@ export function attachWebSocketStream(
 			netSocket.destroy();
 			return;
 		}
-		if (url.pathname === WEB_VOICE_PATH) return;
+		if (url.pathname === WEB_VOICE_PATH || url.pathname === WEB_BROWSER_PATH) return;
 		if (url.pathname !== "/api/web/stream") {
 			netSocket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
 			netSocket.destroy();

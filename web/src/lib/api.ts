@@ -318,17 +318,20 @@ export async function sendControlCommand(
   return { message, channelKey: channel };
 }
 
-export function streamUrl(channelKey?: string): string {
+function socketUrl(path: string, params = ""): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const params = channelKey ? `?channelKey=${encodeURIComponent(channelKey)}` : "";
-  return `${proto}//${window.location.host}/api/web/stream${params}`;
+  return `${proto}//${window.location.host}/api/web/${path}${params}`;
+}
+
+export function streamUrl(channelKey?: string): string {
+  return socketUrl("stream", channelKey ? `?channelKey=${encodeURIComponent(channelKey)}` : "");
 }
 
 export function voiceUrl(languageCode?: string): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const params = languageCode ? `?language_code=${encodeURIComponent(languageCode)}` : "";
-  return `${proto}//${window.location.host}/api/web/voice${params}`;
+  return socketUrl("voice", languageCode ? `?language_code=${encodeURIComponent(languageCode)}` : "");
 }
+
+export const browserUrl = (): string => socketUrl("browser");
 
 export type VoiceKeep = "ask" | "transcript" | "summary" | "discard";
 

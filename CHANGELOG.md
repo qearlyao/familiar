@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Show the agent's browser live in web chat, under the turn that used it, while an [agent-browser](https://github.com/vercel-labs/agent-browser) session is open. Step in to click, scroll, and type in the page yourself, with an address bar and back, forward, and reload, for logins, payment forms, and CAPTCHAs; works with local Chrome and Browser Use.
+
 ## 1.6.1 - 2026-11-13
 
 ### Added

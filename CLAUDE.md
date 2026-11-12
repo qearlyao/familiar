@@ -1,5 +1,7 @@
 # Core Prompt
 
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it. Improve the structure as you work: merge repeated code, simplify, and rework anything you see a better way to build, rather than adding around it.
+
 - Keep files cohesive. Do not push a file from under 1000 lines to over 1000 lines without a strong structural reason; extract focused modules or helpers first.
 - Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
 - Any test that creates temporary files or directories must register cleanup in the same test (`t.after(() => rm(dir, { recursive: true, force: true }))`). Prefer the helpers in `test/helpers.ts` (`createTempDataDir`, `createWorkspace`, `configWithDataDir`), which self-clean when given the node:test `t` context.

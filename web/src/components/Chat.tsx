@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { Composer, type ComposerHandle } from "./Composer";
 import { DiaryShelf } from "./diaries/DiaryShelf";
 import { SkillShelf } from "./SkillShelf";
 import { Header } from "./Header";
 import { KeepBar } from "./KeepBar";
-import { MessageList } from "./MessageList";
+import { MessageList, type MessageListHandle } from "./MessageList";
+import { IconChevronDown } from "./organicIcons";
 import { SettingsSurface, type SettingsTabId } from "./SettingsSurface";
 import { useChat } from "@/lib/useChat";
 import type { WebAuthDevice } from "@/lib/api";
@@ -43,6 +44,8 @@ export function Chat({
     sessions,
     activeSessionKey,
     historyLoaded,
+    hasOlder,
+    loadOlder,
     streaming,
     pendingLatestAssistantAction,
     selectSession,
@@ -53,6 +56,15 @@ export function Chat({
     deleteLatest,
     editLatest,
   } = useChat();
+
+  // scrolled a screen or more up from the newest turn: the draft offers a way back down
+  const list = useRef<MessageListHandle>(null);
+  const [away, setAway] = useState(false);
+  // the newest turn as of the last time the view was down there; a later one marks the way back
+  const latestId = messages.at(-1)?.id;
+  const [seenId, setSeenId] = useState(latestId);
+  if (!away && seenId !== latestId) setSeenId(latestId);
+  const fresh = seenId !== latestId;
 
   // the ends of a stretch being picked out to keep; undefined when nothing is being kept
   const [picked, setPicked] = useState<string[]>();
@@ -102,11 +114,33 @@ export function Chat({
             onRetry={retry}
             onDelete={deleteLatest}
             onEdit={editLatest}
+            handle={list}
+            onAwayChange={setAway}
+            hasOlder={hasOlder}
+            onLoadOlder={() => void loadOlder()}
             onKeep={() => setPicked([])}
             keep={picked ? { range: keepRange, onPick: pick } : undefined}
           />
           {/* the composer stays mounted underneath, so a half-written draft is still there afterwards */}
-          <Composer onSend={send} onAbort={abort} streaming={streaming} handle={composer} />
+          <Composer
+            onSend={send}
+            onAbort={abort}
+            streaming={streaming}
+            handle={composer}
+            above={
+              away && messages.length > 0 ? (
+                <button
+                  type="button"
+                  className="chat-latest"
+                  data-fresh={fresh ? "" : undefined}
+                  aria-label={fresh ? "back to the latest, there’s something new" : "back to the latest"}
+                  onClick={() => list.current?.toLatest()}
+                >
+                  <IconChevronDown size={17} />
+                </button>
+              ) : null
+            }
+          />
           {picked && (
             <KeepBar
               channelKey={activeSessionKey}

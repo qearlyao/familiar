@@ -178,9 +178,11 @@ export async function fetchSessions(): Promise<SessionInfo[]> {
   return body.sessions;
 }
 
-export async function fetchHistory(channelKey?: string, limit = 50): Promise<HistoryResponse> {
+/** the latest `limit` messages, or with `before` the `limit` that came just ahead of that message */
+export async function fetchHistory(channelKey?: string, limit = 50, before?: string): Promise<HistoryResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (channelKey) params.set("channelKey", channelKey);
+  if (before) params.set("before", before);
   const body = await getJson<{ messages: WireMessage[]; hasMore: boolean; channelKey: string }>(
     `/api/web/history?${params.toString()}`,
     "history",

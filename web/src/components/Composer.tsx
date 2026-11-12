@@ -1,4 +1,4 @@
-import { useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { DraftEditor } from "@/components/DraftEditor";
 import { SlashCommandMenu } from "@/components/SlashCommandMenu";
 import { VoiceRecordingBar } from "@/components/VoiceRecordingStatus";
@@ -57,7 +57,10 @@ export function Composer({
   onAbort,
   streaming,
   handle,
+  above,
 }: {
+  /** something small that floats just over the box and rises with it, like the way back to the latest turn */
+  above?: ReactNode;
   onSend: (text: string, attachments: File[]) => Promise<void>;
   onAbort: () => void;
   streaming: boolean;
@@ -201,6 +204,7 @@ export function Composer({
     <div className="composer">
       <div className="composer-veil" aria-hidden><i /><i /><i /><i /></div>
       <div className="composer-inner">
+        {above}
         <input
           ref={fileRef}
           type="file"

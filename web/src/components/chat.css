@@ -687,6 +687,14 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   mask-image: linear-gradient(to bottom, transparent 2.0625rem, #000 2.75rem); }
 
 .composer-inner { position: relative; max-width: 45rem; margin: 0 auto; }
+/* a screen or more up the talk: the way back to now, floating just over the draft, dotted once something is said down there */
+.chat-latest {
+  position: absolute; left: 50%; bottom: calc(100% + 0.625rem); transform: translateX(-50%); width: 2rem; height: 2rem; border-radius: 62.4375rem;
+  border: 0.09375rem solid rgba(76, 62, 44, 0.22); background: #e7e0d5; color: #4c3e2c; display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0.625rem 1.625rem -1.25rem rgba(43, 25, 1, 0.7); transition: background 0.15s; animation: sheet-dim-in 0.18s ease;
+}
+.chat-latest:hover { background: #efe9df; }
+.chat-latest[data-fresh]::after { content: ""; position: absolute; top: -0.125rem; right: -0.125rem; width: 0.5rem; height: 0.5rem; border-radius: 62.4375rem; background: #c67139; box-shadow: 0 0 0 0.125rem #d3c9ba; }
 .composer-box {
   display: flex; align-items: flex-end; gap: 0.625rem; padding: 0.75rem 0.75rem 0.75rem 1rem; border-radius: 1.625rem; background: #e7e0d5;
   border: 0.09375rem solid rgba(76, 62, 44, 0.22); box-shadow: 0 0.625rem 1.625rem -1.25rem rgba(43, 25, 1, 0.7); transition: border-color 0.15s, background 0.2s;

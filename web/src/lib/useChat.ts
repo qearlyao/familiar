@@ -14,6 +14,7 @@ import {
   type LatestAssistantAction,
   type LatestAssistantControlAction,
   type SessionInfo,
+  type HistoryResponse,
   type StreamEvent,
   type StreamFrame,
 } from "./api";
@@ -25,6 +26,9 @@ const HEARTBEAT_INTERVAL_MS = 25_000;
 const HEARTBEAT_TIMEOUT_MS = 45_000;
 const STALE_SOCKET_MS = 60_000;
 const SEND_RESYNC_DELAY_MS = 1500;
+/** how many messages one fetch brings, and how far back scrolling may reach in all */
+const HISTORY_PAGE = 50;
+const HISTORY_MAX = 200;
 
 function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -112,6 +116,9 @@ export interface ChatHook {
   sessions: SessionInfo[];
   activeSessionKey: string | undefined;
   historyLoaded: boolean;
+  /** there is more of the talk above what's loaded, and room left to load it */
+  hasOlder: boolean;
+  loadOlder: () => Promise<void>;
   streaming: boolean;
   pendingLatestAssistantAction: LatestAssistantAction | undefined;
   selectSession: (key: string) => void;
@@ -130,6 +137,8 @@ export function useChat(): ChatHook {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeSessionKey, setActiveSessionKey] = useState<string | undefined>(undefined);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
+  const loadingOlderRef = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [pendingLatestAssistantAction, setPendingLatestAssistantAction] = useState<
     LatestAssistantAction | undefined
@@ -220,6 +229,45 @@ export function useChat(): ChatHook {
     },
     [clearPendingLatestAssistantAction],
   );
+
+  /** a fresh page of history replaces what's shown: the first load, and every resync after it */
+  const applyHistory = useCallback(
+    (res: HistoryResponse) => {
+      reconcilePendingLatestAssistantAction(res.messages);
+      setMessages(res.messages);
+      setHasOlder(res.hasMore && res.messages.length < HISTORY_MAX);
+      setHistoryLoaded(true);
+      lastEventAtRef.current = Date.now();
+    },
+    [reconcilePendingLatestAssistantAction],
+  );
+
+  /** a resync asks for as much as is on screen, so older turns already scrolled back to stay put */
+  const loadedDepth = useCallback(
+    () => Math.min(Math.max(messagesRef.current.length, HISTORY_PAGE), HISTORY_MAX),
+    [],
+  );
+
+  const loadOlder = useCallback(async () => {
+    const first = messagesRef.current[0];
+    const room = HISTORY_MAX - messagesRef.current.length;
+    if (!activeSessionKey || !first || room <= 0 || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
+    try {
+      const res = await fetchHistory(activeSessionKey, Math.min(HISTORY_PAGE, room), first.id);
+      // a resync or another thread may have replaced the list while this was in flight: only join onto the same head
+      if (messagesRef.current[0]?.id !== first.id) return;
+      setMessages((prev) => {
+        const known = new Set(prev.map((message) => message.id));
+        return [...res.messages.filter((message) => !known.has(message.id)), ...prev];
+      });
+      setHasOlder(res.hasMore && room > res.messages.length);
+    } catch {
+      // the top of the list stays as it is; scrolling up again asks once more
+    } finally {
+      loadingOlderRef.current = false;
+    }
+  }, [activeSessionKey]);
 
   const resolvePendingLatestAssistantAction = useCallback(
     (event: StreamEvent) => {
@@ -454,19 +502,14 @@ export function useChat(): ChatHook {
           lastEventIdRef.current = null;
           activeAssistantMessageIdsRef.current.clear();
           setStreaming(false);
-          fetchHistory(activeSessionKey)
-            .then((res) => {
-              reconcilePendingLatestAssistantAction(res.messages);
-              setMessages(res.messages);
-              setHistoryLoaded(true);
-              lastEventAtRef.current = Date.now();
-            })
+          fetchHistory(activeSessionKey, loadedDepth())
+            .then(applyHistory)
             .catch(() => undefined);
           break;
         }
       }
     },
-    [activeSessionKey, personaName, patchSteps, reconcilePendingLatestAssistantAction, resolvePendingLatestAssistantAction, refreshContext],
+    [activeSessionKey, personaName, patchSteps, applyHistory, loadedDepth, resolvePendingLatestAssistantAction, refreshContext],
   );
 
   const handleEventRef = useRef(handleEvent);
@@ -526,30 +569,22 @@ export function useChat(): ChatHook {
       if (cancelled) return;
       setPendingLatestAssistantAction(undefined);
       setMessages([]);
+      setHasOlder(false);
       setHistoryLoaded(false);
       setStreaming(false);
     }, 0);
 
-    fetchHistory(activeSessionKey)
+    fetchHistory(activeSessionKey, HISTORY_PAGE)
       .then((res) => {
-        if (!cancelled) {
-          reconcilePendingLatestAssistantAction(res.messages);
-          setMessages(res.messages);
-          setHistoryLoaded(true);
-          lastEventAtRef.current = Date.now();
-        }
+        if (!cancelled) applyHistory(res);
       })
       .catch(() => {
         if (!cancelled) setHistoryLoaded(true);
       });
 
     const refreshHistory = async (): Promise<void> => {
-      const res = await fetchHistory(activeSessionKey);
-      if (cancelled) return;
-      reconcilePendingLatestAssistantAction(res.messages);
-      setMessages(res.messages);
-      setHistoryLoaded(true);
-      lastEventAtRef.current = Date.now();
+      const res = await fetchHistory(activeSessionKey, loadedDepth());
+      if (!cancelled) applyHistory(res);
     };
 
     const refreshHistoryQuietly = (): void => {
@@ -718,7 +753,8 @@ export function useChat(): ChatHook {
   }, [
     activeSessionKey,
     appendSystemMessage,
-    reconcilePendingLatestAssistantAction,
+    applyHistory,
+    loadedDepth,
     resetPendingLatestAssistantAction,
     sendControlFrame,
     refreshContext,
@@ -814,6 +850,8 @@ export function useChat(): ChatHook {
     sessions,
     activeSessionKey,
     historyLoaded,
+    hasOlder,
+    loadOlder,
     streaming,
     pendingLatestAssistantAction,
     selectSession,

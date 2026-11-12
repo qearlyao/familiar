@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { MediaPreview } from "@/components/MediaPreview";
 import { marginQuoteCitation } from "@/components/reader/marginCitation";
+import { clippingQuoteCitation } from "@/lib/clippingQuote";
+import { IconKeep } from "./organicIcons";
 import { CHAT_MARKDOWN_LINK_CARD_CLASS, remarkImageParagraphs, remarkLinkCards } from "@/lib/chatMarkdownLayout";
 import { cn } from "@/lib/utils";
 
@@ -82,19 +84,27 @@ function markdownComponents(align: "start" | "end"): Components {
         />
       );
     },
-    // A passage sent from a book's margin is context, not conversation: fold it
-    // behind its citation line so the exchange stays readable.
+    // A passage sent from a book's margin, or a kept moment brought back, is context, not
+    // conversation: fold it behind its citation line so the exchange stays readable.
     blockquote(props) {
       const { node, children, ...blockquoteProps } = props;
-      const citation = marginQuoteCitation(hastText(node));
-      if (!citation) return <blockquote {...blockquoteProps}>{children}</blockquote>;
+      const text = hastText(node);
+      const margin = marginQuoteCitation(text);
+      const citation = margin ?? clippingQuoteCitation(text);
+      // the inner div is what chat.css stacks: without it a quote of several paragraphs lays them out side by side
+      const quote = (
+        <blockquote {...blockquoteProps}>
+          <div>{children}</div>
+        </blockquote>
+      );
+      if (!citation) return quote;
       return (
         <details>
           <summary className="flex w-fit max-w-full cursor-pointer list-none items-center gap-1.5 font-serif text-xs italic text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <BookOpenText className="size-3.5 shrink-0" />
+            {margin ? <BookOpenText className="size-3.5 shrink-0" /> : <IconKeep size={14} className="shrink-0" />}
             <span className="truncate">{citation}</span>
           </summary>
-          <blockquote {...blockquoteProps}>{children}</blockquote>
+          {quote}
         </details>
       );
     },

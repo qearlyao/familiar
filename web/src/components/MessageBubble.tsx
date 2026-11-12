@@ -8,7 +8,7 @@ import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 import { ErrorNotice } from "./steps/ErrorNotice";
 import { withoutSilentMarker } from "@/lib/silentMarker";
-import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconEdit, IconFern, IconMic, IconX } from "./organicIcons";
+import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconEdit, IconFern, IconKeep, IconMic, IconX } from "./organicIcons";
 
 type ImageAttachment = Attachment & { url: string };
 
@@ -176,6 +176,7 @@ export const MessageBubble = memo(function MessageBubble({
   onRetry,
   onDelete,
   onEdit,
+  onKeep,
   pendingLatestAssistantAction,
   live,
 }: {
@@ -183,6 +184,7 @@ export const MessageBubble = memo(function MessageBubble({
   onRetry?: () => void;
   onDelete?: () => void;
   onEdit?: (text: string) => Promise<void>;
+  onKeep?: () => void;
   pendingLatestAssistantAction?: "retry" | "delete" | "edit";
   /** a heartbeat or cron pill still breathes while he's waking */
   live?: boolean;
@@ -213,7 +215,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   // A turn that has only tool steps so far (tts/image_gen still running) gets no speaker block of its own.
   const hasBody = message.steps.some((step) => (step.kind === "text" && withoutSilentMarker(step.text)) || step.kind === "error");
-  const showActions = (onRetry || onDelete || canEdit) && (hasBody || attachments.length > 0);
+  const showActions = (onRetry || onDelete || canEdit || onKeep) && (hasBody || attachments.length > 0);
   if (attachments.length === 0 && !showActions) return <TurnView message={message} />;
   return (
     <TurnView message={message}>
@@ -236,6 +238,11 @@ export const MessageBubble = memo(function MessageBubble({
           {canEdit && (
             <button type="button" className="chat-action" disabled={pending} onClick={() => setEditing(true)} title="edit the latest reply">
               <IconEdit /> edit
+            </button>
+          )}
+          {onKeep && (
+            <button type="button" className="chat-action" disabled={pending} onClick={onKeep} title="keep a stretch of this for the library">
+              <IconKeep /> keep
             </button>
           )}
           {onDelete && (

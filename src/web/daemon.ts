@@ -10,6 +10,7 @@ import { registerWebAgentRoutes } from "./agent-routes.js";
 import { createAuth, loadWebSessionStore } from "./auth.js";
 import { registerWebAuthRoutes } from "./auth-routes.js";
 import { registerWebBookRoutes } from "./book-routes.js";
+import { registerWebClippingRoutes } from "./clippings.js";
 import { registerWebConfigRoutes } from "./config-routes.js";
 import { registerWebConversationRoutes } from "./conversation-routes.js";
 import { registerWebDiaryRoutes } from "./diary-routes.js";
@@ -104,6 +105,7 @@ export async function startWebDaemon({
 	registerWebFileRoutes(route, config);
 	registerWebGalleryRoutes(route, config);
 	registerWebKeptFileRoutes(route, config);
+	registerWebClippingRoutes(route, config, { getRuntime, personaName });
 	registerWebSkillRoutes(route, config);
 	registerWebVoiceRoutes(route, config);
 	const voiceCall: VoiceCallDeps = {

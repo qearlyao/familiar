@@ -1,0 +1,90 @@
+/* clippings: stretches of the talk, kept looking the way they did.
+   this sheet loads before library.css, so anything that overrides a shelf rule names both classes. */
+
+.library-shelf-grid.library-clipping-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.library-clipping-cover {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.4375rem;
+  padding: 0.75rem;
+  overflow: hidden;
+  background: #e7e0d5;
+  /* it opens mid-talk: whatever came before fades off the top */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 2.25rem);
+}
+.library-clipping-cover > span {
+  flex: none;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: #2b1901;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.library-clipping-cover > [data-role="assistant"] { padding-left: 0.5rem; border-left: 0.125rem solid rgba(82, 88, 51, 0.45); }
+.library-clipping-paper > .chat-room { background: none; }
+.library-clipping-cover > [data-role="user"] {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 0.3125rem 0.5625rem;
+  border-radius: 0.75rem 0.75rem 0.25rem 0.75rem;
+  background: #d6bd8a;
+}
+.library-clipping-paper {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: clamp(1.25rem, 4vw, 2.75rem);
+  border-radius: 1rem;
+  background: #d3c9ba;
+  color: #2b1901;
+  text-align: left;
+  overscroll-behavior: contain;
+}
+/* your line under the moment: always there to write in, quiet until it has something */
+.library-clipping-note {
+  display: block;
+  width: 100%;
+  max-width: 45rem;
+  margin: 2.25rem auto 0;
+  padding: 1.125rem 0 0;
+  border: 0;
+  border-top: 0.0625rem solid rgba(76, 62, 44, 0.28);
+  background: transparent;
+  color: #4c3e2c;
+  font: italic var(--font-weight-normal) 1.0625rem/1.5 var(--font-display);
+  resize: none;
+  outline: none;
+}
+.library-clipping-note::placeholder { color: rgba(76, 62, 44, 0.55); }
+.library-clipping-note:focus { border-top-color: #525833; }
+/* its name, written straight into the viewer's head where the title sits */
+.library-clipping-title {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 0.0625rem solid transparent;
+  background: transparent;
+  color: inherit;
+  font: var(--font-weight-normal) 1.25rem/1.2 var(--font-display);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  outline: none;
+}
+.library-clipping-title::placeholder { color: rgba(231, 224, 213, 0.5); }
+.library-clipping-title:is(:hover, :focus) { border-bottom-color: rgba(231, 224, 213, 0.4); }
+.viewer .library-clipping-title:focus-visible { outline: none; }
+@media (min-width: 768px) {
+  .library-clipping-title { font: var(--font-weight-normal) 0.90625rem/1.3 Figtree, sans-serif; letter-spacing: 0; }
+}
+
+@media (max-width: 900px) {
+  .library-shelf-grid.library-clipping-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .library-shelf-grid.library-clipping-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

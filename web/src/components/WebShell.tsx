@@ -30,6 +30,8 @@ export type NavTarget = ShellPage | "settings";
 interface RoomProps {
   /** hand something to the talk, and land there */
   onBring: (text: string) => void;
+  /** hand the talk something to quote: it sits on the draft as a chip and goes out as quoted text */
+  onBringQuote: (name: string, quote: string) => void;
   /** the way back out of a pushed page */
   onBack: () => void;
   /** land on this room without leaving the one it was held from */
@@ -171,11 +173,14 @@ export function WebShell({
   const showing = selectedPage === "chat" && !settingsOpen ? shelf : undefined;
 
   // a day, a page, a keepsake — whatever a room hands over lands in the draft, and you land there too
-  const bring = (text: string) => {
-    composer.current?.append(text);
+  const toTalk = (hand: (draft: ComposerHandle) => void) => {
+    if (composer.current) hand(composer.current);
     setShelf(undefined);
     open("chat");
   };
+  const bring = (text: string) => toTalk((draft) => draft.append(text));
+  // a kept moment comes back as a chip on the draft, not as words in it
+  const bringQuote = (name: string, quote: string) => toTalk((draft) => draft.quote(name, quote));
 
   const navigate = (target: NavTarget) => {
     if (target === "settings") {
@@ -225,6 +230,7 @@ export function WebShell({
           <section key={id} className={cn("room-surface min-w-0 flex-1 flex-col", selectedPage === id ? "flex" : "hidden")}>
             <Page
               onBring={bring}
+              onBringQuote={bringQuote}
               onBack={() => open("chat")}
               onShow={() => open(id)}
               onOpenSettings={(tab) => {

@@ -4,6 +4,7 @@ import type { Config } from "../config/index.js";
 import { KEPT_FILE_URL_PREFIX } from "../media/kept-files.js";
 import type { WebAuth } from "./auth.js";
 import { serveBookAsset } from "./book-routes.js";
+import { CLIPPING_URL_PREFIX, serveClippingFile } from "./clippings.js";
 import { HttpError, sendJson } from "./http.js";
 import { serveKeptFile } from "./kept-file-routes.js";
 import { serveAttachment } from "./static.js";
@@ -38,6 +39,10 @@ export function createWebRouteRegistry(
 			}
 			if (request.method === "GET" && url.pathname.startsWith(KEPT_FILE_URL_PREFIX)) {
 				await serveKeptFile(config, response, url.pathname, request.headers.range);
+				return true;
+			}
+			if (request.method === "GET" && url.pathname.startsWith(CLIPPING_URL_PREFIX)) {
+				await serveClippingFile(config, response, url.pathname, request.headers.range);
 				return true;
 			}
 			const handler = webRoutes.get(`${request.method} ${url.pathname}`);

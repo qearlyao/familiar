@@ -586,6 +586,43 @@ export async function deleteKeptFile(id: string): Promise<void> {
   await jsonRequest<{ ok: true }>("/api/web/library/kept", "DELETE", { id }, "library/kept");
 }
 
+/** a stretch of the conversation kept on the library shelf, drawn the way the chat drew it */
+export interface Clipping {
+  id: string;
+  createdAt: number;
+  title?: string;
+  note?: string;
+  messages: Message[];
+}
+
+type WireClipping = Omit<Clipping, "messages"> & { messages: WireMessage[] };
+
+const CLIPPINGS = "/api/web/library/clippings";
+
+function wireToClipping(wire: WireClipping): Clipping {
+  return { ...wire, messages: wire.messages.map(wireToMessage) };
+}
+
+export async function fetchClippings(): Promise<Clipping[]> {
+  const body = await getJson<{ clippings: WireClipping[] }>(CLIPPINGS, "library/clippings");
+  return body.clippings.map(wireToClipping);
+}
+
+/** keeps everything between two messages of a conversation, ends included */
+export async function keepClipping(span: { channelKey?: string; from: string; to: string; note?: string }): Promise<Clipping> {
+  const body = await jsonRequest<{ clipping: WireClipping }>(CLIPPINGS, "POST", span, "library/clippings");
+  return wireToClipping(body.clipping);
+}
+
+/** renames it or rewrites your line; an empty string clears that one */
+export async function editClipping(id: string, edit: { title?: string; note?: string }): Promise<void> {
+  await jsonRequest<{ clipping: WireClipping }>(CLIPPINGS, "PUT", { id, ...edit }, "library/clippings");
+}
+
+export async function deleteClipping(id: string): Promise<void> {
+  await jsonRequest<{ ok: true }>(CLIPPINGS, "DELETE", { id }, "library/clippings");
+}
+
 export async function deleteBook(id: string): Promise<void> {
   await jsonRequest<{ ok: true }>("/api/web/book", "DELETE", { id }, "book");
 }

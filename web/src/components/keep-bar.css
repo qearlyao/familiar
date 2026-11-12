@@ -1,0 +1,10 @@
+/* keeping: picking out a stretch of the talk for the library. everything outside the span falls back, like a crop. */
+.chat-message-list[data-keeping] .chat-turn-group { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 0.75rem; transition: opacity 0.2s; }
+.chat-message-list[data-keeping="picked"] .chat-turn-group:not([data-kept]) { opacity: 0.35; }
+.chat-room[data-keeping] .composer:not(.keep-bar) { display: none; }
+.keep-bar-hint { font-size: 0.9375rem; line-height: 1.625rem; color: #4c3e2c; }
+.keep-bar .composer-left input {
+  width: 100%; border: 0; background: transparent; padding: 0; outline: none;
+  font: var(--font-weight-normal) 1.03125rem/1.55 Figtree, sans-serif; color: #2b1901;
+}
+.keep-bar .composer-left input::placeholder { color: #525833; }

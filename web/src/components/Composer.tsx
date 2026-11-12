@@ -45,7 +45,12 @@ function slashCommandText(command: ControlCommandDefinition): string {
 
 export interface ComposerHandle {
   append: (text: string) => void;
+  /** rides along as a chip like an attachment, and goes out as quoted text ahead of whatever is typed */
+  quote: (name: string, text: string) => void;
 }
+
+/** marks a chip that is a quote to send as words, not a file to upload */
+const QUOTE_TYPE = "text/x-quote";
 
 export function Composer({
   onSend,
@@ -96,7 +101,8 @@ export function Composer({
     setSending(true);
     setDraft((d) => emptyDraft(d.revision + 1));
     try {
-      await onSend(text, submitted.attachments);
+      const quotes = await Promise.all(submitted.attachments.filter((file) => file.type === QUOTE_TYPE).map((file) => file.text()));
+      await onSend([...quotes, text].filter(Boolean).join("\n\n"), submitted.attachments.filter((file) => file.type !== QUOTE_TYPE));
     } catch (err) {
       setDraft((current) => (isClearedDraft(current, clearedRevision) ? submitted : current));
       setError(sendErrorMessage(err));
@@ -126,8 +132,6 @@ export function Composer({
       return next === prev.blocks ? prev : { ...prev, blocks: next, revision: prev.revision + 1 };
     });
   };
-
-  useImperativeHandle(handle, () => ({ append: (text: string) => updateBlocks((blocks) => appendDraftText(blocks, text)) }));
 
   const applyCommandSuggestion = (command: ControlCommandDefinition) => {
     const nextText = slashCommandText(command);
@@ -170,6 +174,11 @@ export function Composer({
     setError(undefined);
     setDraft((prev) => ({ ...prev, attachments: [...prev.attachments, ...files], revision: prev.revision + 1 }));
   };
+
+  useImperativeHandle(handle, () => ({
+    append: (text: string) => updateBlocks((blocks) => appendDraftText(blocks, text)),
+    quote: (name: string, text: string) => addAttachments([new File([text], name, { type: QUOTE_TYPE })]),
+  }));
 
   const removeAttachment = (index: number) => {
     setError(undefined);

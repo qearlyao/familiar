@@ -1,14 +1,5 @@
 import { useState, type ReactNode } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog } from "radix-ui";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -34,20 +25,20 @@ export function ShelfItem({ title, farewell, onRemove, children }: {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-serif font-normal">let "{title}" go?</AlertDialogTitle>
-            <AlertDialogDescription className="font-serif italic">{farewell}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>keep it</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={onRemove}>
-              let it go
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* the same panel the other pop-ups are: sand card over the dimmed room, a sheet on a phone */}
+      <AlertDialog.Root open={confirming} onOpenChange={setConfirming}>
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="sheet-dim" />
+          <AlertDialog.Content className="chat-theme shelf-ask">
+            <AlertDialog.Title>let “{title}” go?</AlertDialog.Title>
+            <AlertDialog.Description>{farewell}</AlertDialog.Description>
+            <div className="threads-ask">
+              <AlertDialog.Action className="threads-new" onClick={onRemove}>let it go</AlertDialog.Action>
+              <AlertDialog.Cancel className="threads-nevermind">keep it</AlertDialog.Cancel>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </>
   );
 }

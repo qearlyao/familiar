@@ -56,6 +56,8 @@ export async function createAgentSession(setup: AgentSessionSetup): Promise<Fami
 			thinkingLevel,
 		},
 		sessionId,
+		// pi-agent-core attributes requests to pi.dev by default (OpenRouter, NVIDIA NIM, OpenCode); send none.
+		identity: { attribution: null },
 		// tool_search grows state.tools mid-run; the loop works from a snapshot, so refresh it each turn.
 		prepareNextTurnWithContext: (turn) => ({ context: { ...turn.context, tools: current().state.tools.slice() } }),
 		streamFn: createProviderStreamFn(config, setup.modelRuntime, { sessionId, sessionKey }),

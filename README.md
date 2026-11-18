@@ -5,7 +5,7 @@
   <p>
     <a href="https://www.npmjs.com/package/@qearlyao/familiar"><img src="https://img.shields.io/npm/v/%40qearlyao%2Ffamiliar?style=flat-square&color=b58900" alt="npm version" /></a>
     <a href="https://github.com/qearlyao/familiar/blob/main/LICENSE"><img src="https://img.shields.io/github/license/qearlyao/familiar?style=flat-square" alt="license" /></a>
-    <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%E2%89%A522.19.0-5fa04e?style=flat-square" alt="node >=22.19.0" /></a>
+    <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%E2%89%A524-5fa04e?style=flat-square" alt="node >=24" /></a>
   </p>
 </div>
 
@@ -161,8 +161,7 @@ trusted specs only.
 
 ## Source Checkout
 
-Source builds require Node.js 22.19.0 or newer. Node.js 24 LTS is recommended and is
-the primary tested runtime.
+Source builds require Node.js 24 or newer.
 
 ```sh
 npm install

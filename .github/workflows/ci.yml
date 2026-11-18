@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: |
             npm-shrinkwrap.json
@@ -26,7 +26,7 @@ jobs:
 
       - run: npm ci
 
-      # Native deps such as better-sqlite3 and sharp should build on ubuntu-latest with Node 22.
+      # Native deps such as better-sqlite3 and sharp should build on ubuntu-latest with Node 24.
       - run: npm ci --prefix web
 
       - run: npm run lint

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Require Node.js 24 or newer, and run CI and release builds on it.
+
 ## 1.6.2 - 2026-11-18
 
 ### Added

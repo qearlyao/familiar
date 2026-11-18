@@ -17,11 +17,8 @@ Require-Command npm
 
 $nodeVersion = (& node -p "process.versions.node").Trim()
 $nodeMajor = [int](& node -p "Number(process.versions.node.split('.')[0])")
-if ($nodeMajor -lt 22) {
-	throw "Familiar requires Node.js 22 or newer. Found Node.js $nodeVersion. Node.js 24 LTS is recommended."
-}
 if ($nodeMajor -lt 24) {
-	Write-Host "Found Node.js $nodeVersion. Familiar supports Node.js 22+, but Node.js 24 LTS is recommended."
+	throw "Familiar requires Node.js 24 or newer. Found Node.js $nodeVersion."
 }
 
 Write-Host "Installing $Package globally..."

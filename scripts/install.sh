@@ -64,13 +64,9 @@ need_command npm
 
 NODE_VERSION="$(node -p "process.versions.node")"
 NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])")"
-if [ "$NODE_MAJOR" -lt 22 ]; then
-	echo "Familiar requires Node.js 22 or newer. Found Node.js ${NODE_VERSION}." >&2
-	echo "Node.js 24 LTS is recommended for the smoothest install." >&2
-	exit 1
-fi
 if [ "$NODE_MAJOR" -lt 24 ]; then
-	echo "Found Node.js ${NODE_VERSION}. Familiar supports Node.js 22+, but Node.js 24 LTS is recommended."
+	echo "Familiar requires Node.js 24 or newer. Found Node.js ${NODE_VERSION}." >&2
+	exit 1
 fi
 
 echo "Installing ${PACKAGE} globally..."

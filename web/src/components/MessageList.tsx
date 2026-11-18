@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Message } from "../types";
 import { BrowserTurn, usesBrowser } from "@/lib/browserTurn";
 import { CallEntry } from "./CallEntry";
@@ -68,6 +68,8 @@ export function MessageRows({
   const latestAssistantIndex = streaming || keep ? -1 : messages.findLastIndex((message) => message.role === "assistant");
   const last = messages.length - 1;
   const browserTurn = useMemo(() => messages.findLast((message) => message.steps.some(usesBrowser))?.id, [messages]);
+  // touch has no hover: a tap on a turn shows its actions, a second tap hides them
+  const [tapped, setTapped] = useState<string>();
   return (
     <BrowserTurn value={browserTurn}>
     <div className="chat-message-list" data-keeping={keep ? (keep.range ? "picked" : "") : undefined}>
@@ -81,6 +83,11 @@ export function MessageRows({
           <div
             key={m.id}
             className="chat-turn-group"
+            data-tapped={tapped === m.id || undefined}
+            onClick={(event) => {
+              if ((event.target as Element).closest("button, a, input, textarea, audio, video")) return;
+              setTapped((was) => (was === m.id ? undefined : m.id));
+            }}
             {...(keep && {
               role: "button",
               tabIndex: 0,

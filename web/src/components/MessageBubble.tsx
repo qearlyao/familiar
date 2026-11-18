@@ -8,7 +8,7 @@ import { MediaPreview, type PreviewMedia } from "./MediaPreview";
 import { TurnView } from "./TurnView";
 import { ErrorNotice } from "./steps/ErrorNotice";
 import { withoutSilentMarker } from "@/lib/silentMarker";
-import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconEdit, IconFern, IconKeep, IconMic, IconX } from "./organicIcons";
+import { IconAgain, IconCheck, IconChevronDown, IconChevronUp, IconClock, IconCopy, IconEdit, IconFern, IconKeep, IconMic, IconX } from "./organicIcons";
 
 type ImageAttachment = Attachment & { url: string };
 
@@ -190,6 +190,7 @@ export const MessageBubble = memo(function MessageBubble({
   live?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const pending = pendingLatestAssistantAction != null;
   const text = messageText(message);
   const canEdit = !!onEdit && !!text.trim();
@@ -216,6 +217,12 @@ export const MessageBubble = memo(function MessageBubble({
   // A turn that has only tool steps so far (tts/image_gen still running) gets no speaker block of its own.
   const hasBody = message.steps.some((step) => (step.kind === "text" && withoutSilentMarker(step.text)) || step.kind === "error");
   const showActions = (onRetry || onDelete || canEdit || onKeep) && (hasBody || attachments.length > 0);
+  const copyText = withoutSilentMarker(text).trim();
+  const copy = () =>
+    void navigator.clipboard.writeText(copyText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
   if (attachments.length === 0 && !showActions) return <TurnView message={message} />;
   return (
     <TurnView message={message}>
@@ -230,24 +237,29 @@ export const MessageBubble = memo(function MessageBubble({
               ))}
             </span>
           )}
+          {copyText && (
+            <button type="button" className="chat-action icon-only" onClick={copy} title={copied ? "copied" : "copy the words"} aria-label={copied ? "copied" : "copy"}>
+              {copied ? <IconCheck /> : <IconCopy />}
+            </button>
+          )}
           {onRetry && (
-            <button type="button" className="chat-action" disabled={pending} onClick={onRetry} title="say it again">
-              <IconAgain /> again
+            <button type="button" className="chat-action icon-only" disabled={pending} onClick={onRetry} title="say it again" aria-label="again">
+              <IconAgain />
             </button>
           )}
           {canEdit && (
-            <button type="button" className="chat-action" disabled={pending} onClick={() => setEditing(true)} title="edit the latest reply">
-              <IconEdit /> edit
+            <button type="button" className="chat-action icon-only" disabled={pending} onClick={() => setEditing(true)} title="edit the latest reply" aria-label="edit">
+              <IconEdit />
             </button>
           )}
           {onKeep && (
-            <button type="button" className="chat-action" disabled={pending} onClick={onKeep} title="keep a stretch of this for the library">
-              <IconKeep /> keep
+            <button type="button" className="chat-action icon-only" disabled={pending} onClick={onKeep} title="keep a stretch of this for the library" aria-label="keep">
+              <IconKeep />
             </button>
           )}
           {onDelete && (
-            <button type="button" className="chat-action" disabled={pending} onClick={onDelete} title="let it go">
-              <IconX /> let go
+            <button type="button" className="chat-action icon-only" disabled={pending} onClick={onDelete} title="let it go" aria-label="let go">
+              <IconX />
             </button>
           )}
         </div>

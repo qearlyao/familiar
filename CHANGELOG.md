@@ -1,10 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.6.2 - 2026-11-18
 
 ### Added
 
 - Show the agent's browser live in web chat, under the turn that used it, while an [agent-browser](https://github.com/vercel-labs/agent-browser) session is open. Step in to click, scroll, and type in the page yourself, with an address bar and back, forward, and reload, for logins, payment forms, and CAPTCHAs; works with local Chrome and Browser Use.
+- Copy the latest reply's words from its action row in web chat.
+
+### Changed
+
+- Show the latest reply's actions as icons only, hidden until the reply is hovered, or tapped on a phone; the reply's left rule grows to take them in.
+- Upgrade pi to 1.5.2, and patch the vite, undici, zod, and fast-xml-parser advisories.
+
+### Fixed
+
+- Stop OpenRouter, NVIDIA NIM, and OpenCode requests from being attributed to pi.dev.
 
 ## 1.6.1 - 2026-11-13
 

@@ -5,6 +5,7 @@
 ### Changed
 
 - Require Node.js 24 or newer, and run CI and release builds on it.
+- Type-check the WebUI with TypeScript 7, keeping TypeScript 6 beside it for typescript-eslint, and move its lint tooling past the minimatch advisory.
 
 ## 1.6.2 - 2026-11-18
 

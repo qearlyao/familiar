@@ -3,9 +3,9 @@ import { after, before, describe, it } from "node:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { loadConfig } from "../src/config/index.js";
-import { createConfiguredModel } from "../src/models/index.js";
-import { resolveOpenRouterRouting } from "../src/models/openrouter-routing.js";
+import { createConfiguredModel, parseModelRef, resolveModel } from "../src/models/index.js";
 import { createWorkspace, minimalConfigToml, withDiscordToken, withoutEnv } from "./helpers.js";
 
 describe("loadConfig platform setup", () => {
@@ -773,42 +773,7 @@ model = "gemini-embedding-2"
 		assert.equal(config.memory.embedding.apiKeyEnv, "GOOGLE_EMBEDDING_KEY");
 	});
 
-	it("configures OpenRouter routing with model-specific precedence", async (t) => {
-		process.env.DISCORD_TOKEN = "discord-token";
-		const workspacePath = await createWorkspace(
-			t,
-			`
-[discord]
-owner_id = "owner"
-
-[agent]
-model = "anthropic/claude-fable-5"
-
-[models.base_urls]
-anthropic = "https://openrouter.ai/api/"
-
-[models.openrouter_routing]
-anthropic = { order = ["anthropic"], allow_fallbacks = true }
-"anthropic/claude-fable-5" = { order = ["anthropic"], allow_fallbacks = false }
-`,
-		);
-
-		const config = await loadConfig(workspacePath);
-		const model = createConfiguredModel(config);
-
-		assert.deepEqual(config.models.openRouterRouting, {
-			anthropic: { order: ["anthropic"], allowFallbacks: true },
-			"anthropic/claude-fable-5": { order: ["anthropic"], allowFallbacks: false },
-		});
-		assert.deepEqual(resolveOpenRouterRouting(config, model), {
-			order: ["anthropic"],
-			allowFallbacks: false,
-		});
-		assert.equal(model.baseUrl, "https://openrouter.ai/api/");
-		assert.equal((model.compat as { forceAdaptiveThinking?: boolean } | undefined)?.forceAdaptiveThinking, true);
-	});
-
-	it("configures routing for the built-in OpenRouter provider", async (t) => {
+	it("hands OpenRouter routing to pi with model-specific precedence", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
 			t,
@@ -820,16 +785,46 @@ owner_id = "owner"
 model = "openrouter/anthropic/claude-sonnet-4"
 
 [models.openrouter_routing]
-openrouter = { order = ["anthropic"], allow_fallbacks = false }
-"openrouter/anthropic/claude-sonnet-4" = { order = ["deepinfra"], allow_fallbacks = true }
+openrouter = { order = ["anthropic"], allow_fallbacks = false, sort = "price" }
+"openrouter/anthropic/claude-sonnet-4" = { only = ["deepinfra"], sort = { by = "throughput", partition = "none" } }
 `,
 		);
 
 		const config = await loadConfig(workspacePath);
-		assert.deepEqual(resolveOpenRouterRouting(config, createConfiguredModel(config)), {
-			order: ["deepinfra"],
-			allowFallbacks: true,
+		const routingOf = (model: Model<any>) =>
+			(model.compat as { openRouterRouting?: unknown } | undefined)?.openRouterRouting;
+
+		assert.deepEqual(routingOf(createConfiguredModel(config)), {
+			only: ["deepinfra"],
+			sort: { by: "throughput", partition: "none" },
 		});
+		for (const ref of ["openrouter/google/gemini-2.5-pro", "openrouter/anthropic/claude-fable-5"]) {
+			const other = parseModelRef(ref);
+			assert.ok(other);
+			assert.deepEqual(routingOf(resolveModel(other, config)), {
+				order: ["anthropic"],
+				allow_fallbacks: false,
+				sort: "price",
+			});
+		}
+	});
+
+	it("rejects unknown or malformed OpenRouter routing fields", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		for (const [entry, message] of [
+			['{ sorting = "price" }', /Unknown config value: models\.openrouter_routing\.openrouter\.sorting/],
+			["{ sort = 3 }", /Invalid config value models\.openrouter_routing\.openrouter/],
+			['{ order = "anthropic" }', /Invalid config value models\.openrouter_routing\.openrouter/],
+		] as const) {
+			const workspacePath = await createWorkspace(
+				t,
+				minimalConfigToml(`
+[models.openrouter_routing]
+openrouter = ${entry}
+`),
+			);
+			await assert.rejects(() => loadConfig(workspacePath), message);
+		}
 	});
 
 	it("rejects OpenRouter routing for non-OpenRouter base URLs", async (t) => {
@@ -865,6 +860,26 @@ anthropic = { order = ["anthropic"] }
 		await assert.rejects(
 			() => loadConfig(workspacePath),
 			/models\.openrouter_routing\.anthropic applies to anthropic\/claude-sonnet-4-5/,
+		);
+	});
+
+	it("rejects OpenRouter routing when the model's API and OpenRouter endpoint disagree", async (t) => {
+		process.env.DISCORD_TOKEN = "discord-token";
+		const workspacePath = await createWorkspace(
+			t,
+			minimalConfigToml(`
+[models.base_urls]
+anthropic = "https://openrouter.ai/api/v1"
+
+[models.openrouter_routing]
+anthropic = { order = ["anthropic"] }
+`),
+		);
+
+		const config = await loadConfig(workspacePath);
+		assert.throws(
+			() => createConfiguredModel(config),
+			/requires https:\/\/openrouter\.ai\/api for anthropic-messages, received https:\/\/openrouter\.ai\/api\/v1/,
 		);
 	});
 

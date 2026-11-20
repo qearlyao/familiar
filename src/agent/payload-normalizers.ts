@@ -1,6 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai/compat";
-import type { OpenRouterRoutingConfig } from "../config/index.js";
-import { addOpenRouterRouting } from "../models/openrouter-routing.js";
+import { addAnthropicOpenRouterRouting } from "../models/openrouter-routing.js";
 import { isRecord } from "../util/guards.js";
 
 // a mid-conversation system note is only accepted directly after a user turn, and never behind
@@ -73,16 +72,12 @@ function isInjectedMemoryTextBlock(value: unknown): value is Record<string, unkn
 	return value.text.trim().startsWith("<injected_memory>");
 }
 
-export function normalizeProviderPayload(
-	payload: unknown,
-	model: Model<any>,
-	routing?: OpenRouterRoutingConfig,
-): unknown {
+export function normalizeProviderPayload(payload: unknown, model: Model<any>): unknown {
 	// both passes rewrite the same message list, the second reading what the first settled
 	if (model.api === "anthropic-messages" && isRecord(payload) && Array.isArray(payload.messages)) {
 		const messages = settleAnthropicSystemNotes(payload.messages);
 		payload.messages = messages;
 		moveAnthropicCacheControlBeforeInjectedMemory(messages);
 	}
-	return addOpenRouterRouting(payload, model, routing);
+	return addAnthropicOpenRouterRouting(payload, model);
 }

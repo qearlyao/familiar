@@ -12,6 +12,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
 import { loadAddedModels } from "./added-models.js";
+import { applyOpenRouterRouting } from "./openrouter-routing.js";
 
 export interface ModelRef {
 	provider: string;
@@ -188,11 +189,14 @@ function resolveConfiguredProviderModel(
 
 export function resolveModel(ref: ModelRef, config?: Config, runtime?: ModelRuntime): Model<any> {
 	const builtInModel = runtime ? runtime.getModel(ref.provider, ref.id) : findBuiltInModel(ref);
-	if (builtInModel) return config ? applyConfiguredBaseUrl(config, builtInModel) : builtInModel;
-	const providerConfig = config?.models.providers[ref.provider];
-	if (config && providerConfig) return resolveConfiguredProviderModel(config, ref, providerConfig);
-	const model = createFallbackModel(ref);
-	return config ? applyConfiguredBaseUrl(config, model) : model;
+	if (!config) return builtInModel ?? createFallbackModel(ref);
+	const providerConfig = config.models.providers[ref.provider];
+	const model = builtInModel
+		? applyConfiguredBaseUrl(config, builtInModel)
+		: providerConfig
+			? resolveConfiguredProviderModel(config, ref, providerConfig)
+			: applyConfiguredBaseUrl(config, createFallbackModel(ref));
+	return applyOpenRouterRouting(config, model);
 }
 
 export function createConfiguredModel(config: Config, runtime?: ModelRuntime): Model<any> {

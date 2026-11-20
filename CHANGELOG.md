@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Accept every OpenRouter provider-routing field under `[models.openrouter_routing]`, including `sort`, `only`, `ignore`, `quantizations`, `max_price`, and the throughput and latency preferences, checked against pi's routing schema. OpenAI-compatible OpenRouter models now hand their routing to pi; Claude models on OpenRouter's Anthropic endpoint still get it from Familiar.
+
 ### Changed
 
 - Require Node.js 24 or newer, and run CI and release builds on it.

@@ -226,16 +226,19 @@ base URL is an OpenRouter endpoint:
 model = "openrouter/anthropic/claude-fable-5"
 
 [models.openrouter_routing]
-openrouter = { order = ["anthropic"], allow_fallbacks = true }
-"openrouter/anthropic/claude-fable-5" = { order = ["deepinfra"], allow_fallbacks = false }
+openrouter = { sort = "throughput" }
+"openrouter/anthropic/claude-fable-5" = { order = ["anthropic"], allow_fallbacks = false }
+"openrouter/deepseek/deepseek-v4" = { sort = { by = "price", partition = "none" }, ignore = ["novita"] }
 ```
 
-Provider/model keys override provider-wide entries. Anthropic Messages requests
-must use `https://openrouter.ai/api`; OpenAI-compatible requests use
-`https://openrouter.ai/api/v1` (trailing slashes are accepted). With
-`allow_fallbacks = true`, OpenRouter tries the listed providers first and then
-its normal fallback pool. Direct provider endpoints do not receive this
-OpenRouter-specific routing field.
+Each entry is sent as OpenRouter's `provider` request object, so it takes
+OpenRouter's own field names: `order`, `allow_fallbacks`, `sort`,
+`only`, `ignore`, `quantizations`, `max_price`, `require_parameters`,
+`data_collection`, `zdr`, and the rest. Provider/model keys replace
+provider-wide entries rather than merging with them. Anthropic Messages
+requests must use `https://openrouter.ai/api`; OpenAI-compatible requests use
+`https://openrouter.ai/api/v1` (trailing slashes are accepted). Direct provider
+endpoints do not receive this OpenRouter-specific routing field.
 
 Custom providers can be declared under `models.providers.<name>`. Use a bare
 provider name there, not a `provider/model` string. This is only for provider

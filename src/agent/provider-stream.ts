@@ -2,7 +2,6 @@ import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { getCurrentTools } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Config } from "../config/index.js";
-import { resolveOpenRouterRouting } from "../models/openrouter-routing.js";
 import { modelRuntimeEnv } from "../models/runtime.js";
 import { normalizeProviderPayload } from "./payload-normalizers.js";
 import { buildAnthropicMetadata } from "./session-helpers.js";
@@ -29,8 +28,7 @@ export function createProviderStreamFn(
 			maxRetries: options?.maxRetries ?? PROVIDER_MAX_RETRIES,
 			maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,
 			onPayload: (payload, payloadModel) => {
-				const routing = resolveOpenRouterRouting(config, payloadModel);
-				const requestPayload = normalizeProviderPayload(payload, payloadModel, routing);
+				const requestPayload = normalizeProviderPayload(payload, payloadModel);
 				writePayloadLog(config, {
 					ts: new Date().toISOString(),
 					direction: "request",

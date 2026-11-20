@@ -2,9 +2,15 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import type { OpenRouterRouting } from "@earendil-works/pi-ai";
 import { parse } from "smol-toml";
 import { isBuiltInOrDefaultProvider, PROVIDER_DEFAULTS, resolveProviderSetting } from "../models/index.js";
-import { isOpenRouterBaseUrl, OPENROUTER_BASE_URL } from "../models/openrouter-routing.js";
+import {
+	isOpenRouterBaseUrl,
+	OPENROUTER_BASE_URL,
+	OPENROUTER_ROUTING_KEYS,
+	parseOpenRouterRouting,
+} from "../models/openrouter-routing.js";
 import { readEnum } from "../util/guards.js";
 import {
 	CACHE_RETENTIONS,
@@ -52,7 +58,6 @@ import type {
 	ConfiguredModelInput,
 	ConfiguredProviderDefinition,
 	ImageGenApi,
-	OpenRouterRoutingConfig,
 } from "./types.js";
 
 export type {
@@ -72,7 +77,6 @@ export type {
 	McpExposure,
 	MediaUnderstandingProvider,
 	MemoryEmbeddingFormat,
-	OpenRouterRoutingConfig,
 	ThinkingLevel,
 	ToolReach,
 	TtsProvider,
@@ -273,12 +277,9 @@ function readConfiguredProviders(value: unknown): Record<string, ConfiguredProvi
 	return configured;
 }
 
-function readOpenRouterRouting(
-	value: unknown,
-	baseUrls: Record<string, string>,
-): Record<string, OpenRouterRoutingConfig> {
+function readOpenRouterRouting(value: unknown, baseUrls: Record<string, string>): Record<string, OpenRouterRouting> {
 	const entries = readConfigTable(value, "models.openrouter_routing");
-	const routing: Record<string, OpenRouterRoutingConfig> = {};
+	const routing: Record<string, OpenRouterRouting> = {};
 	for (const [target, rawEntry] of Object.entries(entries)) {
 		const path = `models.openrouter_routing.${target}`;
 		const ref = maybeParseProviderModelRef(target);
@@ -287,11 +288,7 @@ function readOpenRouterRouting(
 		}
 		const provider = ref?.provider ?? target;
 		const entry = readConfigTable(rawEntry, path);
-		assertKnownKeys(entry, path, ["order", "allow_fallbacks"]);
-		const order = readStringArray(entry.order, `${path}.order`).map((provider) => provider.trim());
-		if (order.length === 0 || order.some((provider) => provider === "")) {
-			throw new Error(`Config value ${path}.order must be a non-empty string array`);
-		}
+		assertKnownKeys(entry, path, OPENROUTER_ROUTING_KEYS);
 		const baseUrl =
 			(ref ? resolveProviderSetting(baseUrls, ref.provider, ref.modelId) : baseUrls[provider]) ??
 			(ref?.provider === "openrouter" || provider === "openrouter"
@@ -302,10 +299,7 @@ function readOpenRouterRouting(
 				`Config value ${path} requires its models.base_urls target to be https://openrouter.ai/api (or https://openrouter.ai/api/v1)`,
 			);
 		}
-		routing[target] = {
-			order,
-			allowFallbacks: readBoolean(entry.allow_fallbacks, true, `${path}.allow_fallbacks`),
-		};
+		routing[target] = parseOpenRouterRouting(entry, path);
 	}
 	for (const routingTarget of Object.keys(routing)) {
 		if (routingTarget.includes("/")) continue;

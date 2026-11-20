@@ -80,12 +80,8 @@ describe("LCM context helpers", () => {
 		await withEnv("OPENROUTER_API_KEY", "openrouter-test", async () => {
 			const dataDir = await createTempDataDir(t);
 			const config = await configWithDataDir(t, dataDir, {
-				models: {
-					baseUrls: { anthropic: "https://openrouter.ai/api" },
-					apiKeyEnvs: { anthropic: "OPENROUTER_API_KEY" },
-					openRouterRouting: { anthropic: { order: ["anthropic"], allowFallbacks: true } },
-				},
-				memory: { lcm: { enabled: true, model: "anthropic/claude-fable-5" } },
+				models: { openRouterRouting: { openrouter: { order: ["anthropic"], sort: "latency" } } },
+				memory: { lcm: { enabled: true, model: "openrouter/anthropic/claude-fable-5" } },
 			});
 			let requestPayload: unknown;
 			const summarizer = new DefaultLcmSummarizer(config, async (model, _context, options) => {
@@ -103,10 +99,7 @@ describe("LCM context helpers", () => {
 			});
 
 			assert.equal(await summarizer.summarizeLeaf({ text: "old conversation", targetTokens: 40 }), "short continuity summary");
-			assert.deepEqual(requestPayload, {
-				messages: [],
-				provider: { order: ["anthropic"], allow_fallbacks: true },
-			});
+			assert.deepEqual(requestPayload, { messages: [], provider: { order: ["anthropic"], sort: "latency" } });
 		});
 	});
 

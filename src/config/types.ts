@@ -1,3 +1,4 @@
+import type { OpenRouterRouting } from "@earendil-works/pi-ai";
 import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai/compat";
 
 export type CacheRetention = "none" | "short" | "long";
@@ -33,11 +34,6 @@ export type DefaultPlatform = "discord" | "qq" | "web";
 
 export type ConfiguredModelInput = "text" | "image";
 export type AnthropicModelCompat = NonNullable<Model<"anthropic-messages">["compat"]>;
-
-export interface OpenRouterRoutingConfig {
-	order: string[];
-	allowFallbacks: boolean;
-}
 
 export interface ConfiguredModelDefinition {
 	id: string;
@@ -137,7 +133,7 @@ export interface Config {
 		allow: string[];
 		baseUrls: Record<string, string>;
 		apiKeyEnvs: Record<string, string>;
-		openRouterRouting: Record<string, OpenRouterRoutingConfig>;
+		openRouterRouting: Record<string, OpenRouterRouting>;
 		providers: Record<string, ConfiguredProviderDefinition>;
 	};
 	tts: {

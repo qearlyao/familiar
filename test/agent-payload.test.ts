@@ -124,63 +124,29 @@ describe("provider payload normalization", () => {
 		assert.equal("cache_control" in (folded.messages[1]?.content.at(-1) ?? {}), false);
 	});
 
-	it("adds OpenRouter routing to Anthropic Messages and OpenAI Completions", () => {
-		const routing = { order: ["anthropic"], allowFallbacks: true };
-		const openRouterModel = { ...anthropicModel, baseUrl: "https://openrouter.ai/api/" };
-		const payload = { messages: [] };
-
-		assert.deepEqual(normalizeProviderPayload(payload, openRouterModel, routing), {
-			messages: [],
-			provider: { order: ["anthropic"], allow_fallbacks: true },
-		});
-
-		for (const baseUrl of [
-			"https://api.anthropic.com",
-			"https://proxy.example.test",
-			"https://openrouter.ai.evil.example/api",
-			"http://openrouter.ai/api",
-			"https://openrouter.ai/api/v1",
-		]) {
-			const untouched = { messages: [] };
-			assert.equal(normalizeProviderPayload(untouched, { ...anthropicModel, baseUrl }), untouched);
-			assert.equal("provider" in untouched, false);
-			assert.throws(
-				() => normalizeProviderPayload({ messages: [] }, { ...anthropicModel, baseUrl }, routing),
-				/OpenRouter routing requires https:\/\/openrouter\.ai\/api/,
-			);
-		}
-
+	it("sends OpenRouter routing on Anthropic Messages and leaves OpenAI Completions to pi", () => {
+		const openRouterRouting = { order: ["anthropic"], sort: { by: "price", partition: "none" } };
 		assert.deepEqual(
-			normalizeProviderPayload(
-				{ model: "anthropic/claude-sonnet-4", messages: [] },
-				{
-					id: "anthropic/claude-sonnet-4",
-					api: "openai-completions",
-					provider: "openrouter",
-					baseUrl: "https://openrouter.ai/api/v1",
-				} as Model<any>,
-				routing,
-			),
-			{
-				model: "anthropic/claude-sonnet-4",
-				messages: [],
-				provider: { order: ["anthropic"], allow_fallbacks: true },
-			},
+			normalizeProviderPayload({ messages: [] }, {
+				...anthropicModel,
+				baseUrl: "https://openrouter.ai/api",
+				compat: { openRouterRouting },
+			} as Model<any>),
+			{ messages: [], provider: openRouterRouting },
 		);
-		assert.throws(
-			() =>
-				normalizeProviderPayload(
-					{ input: [] },
-					{
-						id: "gpt-5",
-						api: "openai-responses",
-						provider: "openrouter",
-						baseUrl: "https://openrouter.ai/api/v1",
-					} as Model<any>,
-					routing,
-				),
-			/requires anthropic-messages or openai-completions/,
+		const untouched = { messages: [] };
+		assert.equal(normalizeProviderPayload(untouched, anthropicModel), untouched);
+		assert.equal("provider" in untouched, false);
+		const completions = { model: "google/gemini-2.5-pro", messages: [] };
+		assert.equal(
+			normalizeProviderPayload(completions, {
+				...anthropicModel,
+				api: "openai-completions",
+				compat: { openRouterRouting },
+			} as Model<any>),
+			completions,
 		);
+		assert.equal("provider" in completions, false);
 	});
 
 	it("adds Anthropic user metadata from the configured owner id", async (t) => {

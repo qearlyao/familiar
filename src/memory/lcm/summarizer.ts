@@ -11,7 +11,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 import type { Config } from "../../config/index.js";
 import { parseModelRef, resolveModel, resolveModelApiKey } from "../../models/index.js";
-import { addOpenRouterRouting, resolveOpenRouterRouting } from "../../models/openrouter-routing.js";
+import { addAnthropicOpenRouterRouting } from "../../models/openrouter-routing.js";
 import { assertModelCanAuthenticateWithRuntime, modelRuntimeEnv } from "../../models/runtime.js";
 
 export type LcmSummaryMode = "normal" | "aggressive";
@@ -128,7 +128,6 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 		if (!settings.enabled) throw new Error("LCM is disabled");
 		const model = this.resolveModel();
 		if (this.modelRuntime) await assertModelCanAuthenticateWithRuntime(this.config, this.modelRuntime, model);
-		const routing = resolveOpenRouterRouting(this.config, model);
 		const systemPrompt = (await this.readSystemPromptOverride()) ?? LCM_SUMMARIZER_SYSTEM_PROMPT;
 		const response = await this.complete(
 			model,
@@ -144,9 +143,7 @@ export class DefaultLcmSummarizer implements LcmSummarizer {
 				timeoutMs: settings.timeoutMs,
 				signal,
 				cacheRetention: "none",
-				onPayload: routing
-					? (payload, payloadModel) => addOpenRouterRouting(payload, payloadModel, routing)
-					: undefined,
+				onPayload: addAnthropicOpenRouterRouting,
 			},
 		);
 		if (response.stopReason === "error" || response.stopReason === "aborted") {

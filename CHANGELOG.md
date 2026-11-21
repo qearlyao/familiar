@@ -5,6 +5,7 @@
 ### Added
 
 - Accept every OpenRouter provider-routing field under `[models.openrouter_routing]`, including `sort`, `only`, `ignore`, `quantizations`, `max_price`, and the throughput and latency preferences, checked against pi's routing schema. OpenAI-compatible OpenRouter models now hand their routing to pi; Claude models on OpenRouter's Anthropic endpoint still get it from Familiar.
+- Accept `compat` on custom providers for every API pi has compat settings for, not only Anthropic Messages. Keys are pi's field names in snake_case and are checked against pi's schema for the provider's `api`; for example, `supports_developer_role = false` sends the system prompt with the `system` role to OpenAI-compatible servers that reject `developer`.
 
 ### Changed
 

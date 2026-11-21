@@ -8,6 +8,7 @@ import {
 	getSupportedThinkingLevels,
 	type Model,
 } from "@earendil-works/pi-ai/compat";
+import type { ProviderCompat } from "@earendil-works/pi-ai/providers/compat-schema";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { THINKING_LEVELS } from "../config/enums.js";
 import type { Config, ConfiguredModelInput, ConfiguredProviderDefinition, ThinkingLevel } from "../config/index.js";
@@ -69,7 +70,7 @@ interface ModelShapeOverrides {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
-	compat?: NonNullable<Model<"anthropic-messages">["compat"]>;
+	compat?: ProviderCompat;
 }
 
 export function parseModelRef(value: string): ModelRef | undefined {
@@ -141,10 +142,7 @@ function applyModelShapeOverrides(model: Model<any>, override: ModelShapeOverrid
 	const compat =
 		override.compat !== undefined
 			? {
-					compat: {
-						...((model as { compat?: NonNullable<Model<"anthropic-messages">["compat"]> }).compat ?? {}),
-						...override.compat,
-					},
+					compat: { ...((model.compat as ProviderCompat | undefined) ?? {}), ...override.compat },
 				}
 			: {};
 	return {

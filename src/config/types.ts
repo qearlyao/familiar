@@ -1,5 +1,6 @@
 import type { OpenRouterRouting } from "@earendil-works/pi-ai";
-import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai/compat";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai/compat";
+import type { ProviderCompat } from "@earendil-works/pi-ai/providers/compat-schema";
 
 export type CacheRetention = "none" | "short" | "long";
 export type ThinkingLevel = ModelThinkingLevel;
@@ -33,7 +34,6 @@ export type MemoryEmbeddingFormat = "gemini" | "openai" | "voyage";
 export type DefaultPlatform = "discord" | "qq" | "web";
 
 export type ConfiguredModelInput = "text" | "image";
-export type AnthropicModelCompat = NonNullable<Model<"anthropic-messages">["compat"]>;
 
 export interface ConfiguredModelDefinition {
 	id: string;
@@ -42,7 +42,7 @@ export interface ConfiguredModelDefinition {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
-	compat?: AnthropicModelCompat;
+	compat?: ProviderCompat;
 }
 
 export interface ConfiguredProviderDefinition {
@@ -51,7 +51,7 @@ export interface ConfiguredProviderDefinition {
 	input?: ConfiguredModelInput[];
 	contextWindow?: number;
 	maxTokens?: number;
-	compat?: AnthropicModelCompat;
+	compat?: ProviderCompat;
 	models: ConfiguredModelDefinition[];
 }
 

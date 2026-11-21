@@ -31,6 +31,7 @@ import {
 } from "./enums.js";
 import { interpolateValue } from "./interpolate.js";
 import { maybeParseProviderModelRef, parseProviderModelRef } from "./model-refs.js";
+import { readProviderCompat } from "./provider-compat.js";
 import {
 	assertKnownKeys,
 	readBoolean,
@@ -52,7 +53,6 @@ import {
 } from "./readers.js";
 import { readCronJobs, readPromptOverrides } from "./sections.js";
 import type {
-	AnthropicModelCompat,
 	Config,
 	ConfiguredModelDefinition,
 	ConfiguredModelInput,
@@ -106,61 +106,17 @@ function readConfiguredModelInputs(value: unknown, path: string): ConfiguredMode
 	return input as ConfiguredModelInput[];
 }
 
-function readOptionalBoolean(value: unknown, path: string): boolean | undefined {
-	if (value === undefined) return undefined;
-	if (typeof value !== "boolean") throw new Error(`Config value ${path} must be a boolean`);
-	return value;
-}
-
-function readConfiguredAnthropicCompat(value: unknown, path: string): AnthropicModelCompat | undefined {
-	if (value === undefined) return undefined;
-	const compat = readConfigTable(value, path);
-	assertKnownKeys(compat, path, [
-		"supports_eager_tool_input_streaming",
-		"supports_long_cache_retention",
-		"send_session_affinity_headers",
-		"supports_cache_control_on_tools",
-		"supports_temperature",
-		"force_adaptive_thinking",
-		"allow_empty_signature",
-	]);
-	const supportsEagerToolInputStreaming = readOptionalBoolean(
-		compat.supports_eager_tool_input_streaming,
-		`${path}.supports_eager_tool_input_streaming`,
-	);
-	const supportsLongCacheRetention = readOptionalBoolean(
-		compat.supports_long_cache_retention,
-		`${path}.supports_long_cache_retention`,
-	);
-	const sendSessionAffinityHeaders = readOptionalBoolean(
-		compat.send_session_affinity_headers,
-		`${path}.send_session_affinity_headers`,
-	);
-	const supportsCacheControlOnTools = readOptionalBoolean(
-		compat.supports_cache_control_on_tools,
-		`${path}.supports_cache_control_on_tools`,
-	);
-	const supportsTemperature = readOptionalBoolean(compat.supports_temperature, `${path}.supports_temperature`);
-	const forceAdaptiveThinking = readOptionalBoolean(compat.force_adaptive_thinking, `${path}.force_adaptive_thinking`);
-	const allowEmptySignature = readOptionalBoolean(compat.allow_empty_signature, `${path}.allow_empty_signature`);
-	return {
-		...(supportsEagerToolInputStreaming !== undefined ? { supportsEagerToolInputStreaming } : {}),
-		...(supportsLongCacheRetention !== undefined ? { supportsLongCacheRetention } : {}),
-		...(sendSessionAffinityHeaders !== undefined ? { sendSessionAffinityHeaders } : {}),
-		...(supportsCacheControlOnTools !== undefined ? { supportsCacheControlOnTools } : {}),
-		...(supportsTemperature !== undefined ? { supportsTemperature } : {}),
-		...(forceAdaptiveThinking !== undefined ? { forceAdaptiveThinking } : {}),
-		...(allowEmptySignature !== undefined ? { allowEmptySignature } : {}),
-	};
-}
-
-function readConfiguredModelDefinition(value: Record<string, unknown>, path: string): ConfiguredModelDefinition {
+function readConfiguredModelDefinition(
+	value: Record<string, unknown>,
+	path: string,
+	api: string | undefined,
+): ConfiguredModelDefinition {
 	assertKnownKeys(value, path, ["id", "name", "reasoning", "input", "context_window", "max_tokens", "compat"]);
 	const name = readOptionalConfigString(value.name, `${path}.name`);
 	const input = readConfiguredModelInputs(value.input, `${path}.input`);
 	const contextWindow = readOptionalInteger(value.context_window, `${path}.context_window`, 1);
 	const maxTokens = readOptionalInteger(value.max_tokens, `${path}.max_tokens`, 1);
-	const compat = readConfiguredAnthropicCompat(value.compat, `${path}.compat`);
+	const compat = readProviderCompat(value.compat, `${path}.compat`, api);
 	return {
 		id: readString(value.id, `${path}.id`),
 		...(name !== undefined ? { name } : {}),
@@ -245,16 +201,10 @@ function readConfiguredProviders(value: unknown): Record<string, ConfiguredProvi
 		const input = readConfiguredModelInputs(provider.input, `${path}.input`);
 		const contextWindow = readOptionalInteger(provider.context_window, `${path}.context_window`, 1);
 		const maxTokens = readOptionalInteger(provider.max_tokens, `${path}.max_tokens`, 1);
-		const compat = readConfiguredAnthropicCompat(provider.compat, `${path}.compat`);
+		const compat = readProviderCompat(provider.compat, `${path}.compat`, api);
 		const models = readConfigTableArray(provider.models, `${path}.models`).map((entry, index) =>
-			readConfiguredModelDefinition(entry, `${path}.models[${index}]`),
+			readConfiguredModelDefinition(entry, `${path}.models[${index}]`, api),
 		);
-		if (
-			(compat !== undefined || models.some((model) => model.compat !== undefined)) &&
-			api !== "anthropic-messages"
-		) {
-			throw new Error(`Config value ${path}.compat is only valid when ${path}.api = "anthropic-messages"`);
-		}
 		const seenModelIds = new Set<string>();
 		for (const model of models) {
 			if (seenModelIds.has(model.id)) {

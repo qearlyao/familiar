@@ -275,6 +275,21 @@ there for custom Anthropic-compatible aliases that route to adaptive-thinking
 Claude models, or at provider level only when every model behind the provider
 needs it.
 
+`compat` takes pi's compatibility settings for the provider's `api`, with field
+names in snake_case (`supportsDeveloperRole` becomes `supports_developer_role`);
+nested values keep the shape pi documents. pi lists the fields per API in
+[models-configuration.md](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models-configuration.md#compatibility).
+Familiar rejects fields that do not belong to that API. For example, an
+OpenAI-compatible server that rejects the `developer` role for a reasoning
+model:
+
+```toml
+[models.providers.featherless]
+api = "openai-completions"
+reasoning = true
+compat = { supports_developer_role = false }
+```
+
 ## Image Generation
 
 `[image_gen]` picks the model used by the `image_gen` tool, with an optional

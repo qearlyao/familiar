@@ -941,7 +941,7 @@ compat = { send_session_affinity_headers = true, supports_eager_tool_input_strea
 		});
 	});
 
-	it("rejects compat for non-Anthropic custom providers", async (t) => {
+	it("reads compat for OpenAI-compatible custom providers against pi's schema for that api", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";
 		const workspacePath = await createWorkspace(
 			t,
@@ -950,25 +950,72 @@ compat = { send_session_affinity_headers = true, supports_eager_tool_input_strea
 owner_id = "owner"
 
 [agent]
-model = "proxy/claude-opus-4"
+model = "proxy/mistral-small"
 
 [models.base_urls]
-proxy = "https://proxy.example.com"
+proxy = "https://proxy.example.com/v1"
 
 [models.api_key_envs]
 proxy = "PROXY_API_KEY"
 
 [models.providers.proxy]
 api = "openai-completions"
-compat = { send_session_affinity_headers = true }
+reasoning = true
+compat = { supports_developer_role = false, max_tokens_field = "max_tokens", supports_open_ai_grammar_tools = false }
+
+[[models.providers.proxy.models]]
+id = "mistral-small"
+compat = { thinking_format = "chat-template", chat_template_kwargs = { enable_thinking = { "$var" = "thinking.enabled" } } }
 `,
 		);
 
-		await assert.rejects(
-			() => loadConfig(workspacePath),
-			/Config value models\.providers\.proxy\.compat is only valid when models\.providers\.proxy\.api = "anthropic-messages"/,
-		);
+		const model = createConfiguredModel(await loadConfig(workspacePath));
+
+		assert.equal(model.api, "openai-completions");
+		assert.deepEqual(model.compat, {
+			supportsDeveloperRole: false,
+			maxTokensField: "max_tokens",
+			supportsOpenAIGrammarTools: false,
+			thinkingFormat: "chat-template",
+			chatTemplateKwargs: { enable_thinking: { $var: "thinking.enabled" } },
+		});
 	});
+
+	for (const [name, provider, error] of [
+		[
+			"compat fields another api defines",
+			'api = "openai-completions"\ncompat = { force_adaptive_thinking = true }',
+			/Unknown config value: models\.providers\.proxy\.compat\.force_adaptive_thinking/,
+		],
+		[
+			"compat values pi's schema rejects",
+			'api = "openai-completions"\ncompat = { max_tokens_field = "tokens" }',
+			/Config value models\.providers\.proxy\.compat\.max_tokens_field is invalid/,
+		],
+		[
+			"compat without an api",
+			"compat = { supports_store = false }",
+			/Config value models\.providers\.proxy\.compat needs the provider's api to be set/,
+		],
+		[
+			"compat for an api without compat settings",
+			'api = "google-generative-ai"\ncompat = { supports_store = false }',
+			/Config value models\.providers\.proxy\.compat is not supported for api "google-generative-ai"/,
+		],
+	] as const) {
+		it(`rejects ${name}`, async (t) => {
+			process.env.DISCORD_TOKEN = "discord-token";
+			const workspacePath = await createWorkspace(
+				t,
+				minimalConfigToml(`
+[models.providers.proxy]
+${provider}
+`),
+			);
+
+			await assert.rejects(() => loadConfig(workspacePath), error);
+		});
+	}
 
 	it("rejects models.providers entries for built-in providers", async (t) => {
 		process.env.DISCORD_TOKEN = "discord-token";

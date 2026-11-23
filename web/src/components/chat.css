@@ -830,6 +830,15 @@ html:has(.familiar-shell), body:has(.familiar-shell) { background: #d3c9ba; }
   .room-mobile-nav button[data-slot="flip"] { animation: nav-flip-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
   .room-mobile-nav[data-swapped] button[data-slot="flip"] { animation-name: nav-flip-in-rtl; }
   .room-mobile-nav button[data-swapped] svg { transition: transform 0.24s ease; transform: rotate(90deg); }
+  /* On a touch phone a focused text field means the keyboard is up: the bar steps aside so the
+     composer can sit on the keyboard, and the thread's tail follows it down. */
+  @media (pointer: coarse) {
+    .familiar-shell:has(:is(textarea, [contenteditable="true"], input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"])):focus) {
+      .room-mobile-nav { display: none; }
+      .composer { padding-bottom: 0.625rem; }
+      .chat-scroll { padding-bottom: calc(0.5rem + 4.0625rem + 0.625rem); }
+    }
+  }
 
   .chat-header { padding: var(--mobile-page-top) 1.25rem 0.875rem; gap: 0.8125rem; align-items: center; }
   .chat-persona-avatar { width: 2.75rem; height: 2.75rem; font-size: 1.1875rem; }

@@ -38,6 +38,9 @@ export function DraftEditor({
   onStickersOpenChange: (open: boolean) => void;
 }) {
   const textRefs = useRef(new Map<number, HTMLTextAreaElement>());
+  // A phone won't raise its keyboard for a focus nobody tapped, so a held focus there only
+  // leaves the draft looking active (and hides the room bar) with no keyboard under it.
+  const touch = window.matchMedia("(pointer: coarse)").matches;
   const activeTextIndexRef = useRef(0);
   const pendingFocusIndexRef = useRef<number | null>(null);
   const emptyVisibleDraft = !hasDraftBlocksContent(blocks);
@@ -138,7 +141,7 @@ export function DraftEditor({
             onKeyDown={(e) => {
               if (onCommandKeyDown?.(e)) return;
               if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-              if (window.matchMedia("(pointer: coarse)").matches) return;
+              if (touch) return;
               if (!e.shiftKey) {
                 e.preventDefault();
                 onSubmit();
@@ -147,7 +150,7 @@ export function DraftEditor({
             aria-label="message"
             placeholder={emptyVisibleDraft ? "say something…" : undefined}
             rows={1}
-            autoFocus={index === 0}
+            autoFocus={index === 0 && !touch}
           />
         ),
       )}

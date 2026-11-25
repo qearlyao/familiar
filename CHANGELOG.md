@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.3 - 2026-11-25
 
 ### Added
 
@@ -10,6 +10,7 @@
 ### Changed
 
 - Require Node.js 24 or newer, and run CI and release builds on it.
+- Hide the phone room bar while typing, so the composer sits on the keyboard, and stop autofocusing the composer on touch devices.
 - Type-check the WebUI with TypeScript 7, keeping TypeScript 6 beside it for typescript-eslint, and move its lint tooling past the minimatch advisory.
 
 ## 1.6.2 - 2026-11-18

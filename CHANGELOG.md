@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Stop logging provider request payloads by default. Writing each one serialized the whole context again, which could run Node out of memory on small hosts. Set `enabled = true` under `[data.payloads]` to turn them back on for `npm run payload:pretty`. When on, base64 images are logged as a size and a short sha256, and records are written one at a time. Response status and headers are still always logged.
+
 ## 1.6.3 - 2026-11-25
 
 ### Added

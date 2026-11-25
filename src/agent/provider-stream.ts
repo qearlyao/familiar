@@ -11,8 +11,8 @@ import { writePayloadLog } from "./transcript-log.js";
 const PROVIDER_MAX_RETRIES = 2;
 const PROVIDER_MAX_RETRY_DELAY_MS = 60_000;
 
-/** one session's path to the provider: normalizes and logs each request, logs response metadata,
-    and maps tool names the model echoes back onto the declared ones */
+/** one session's path to the provider: normalizes each request (logging it when payload logs are
+    on), logs response metadata, and maps tool names the model echoes back onto the declared ones */
 export function createProviderStreamFn(
 	config: Config,
 	modelRuntime: ModelRuntime,
@@ -29,14 +29,16 @@ export function createProviderStreamFn(
 			maxRetryDelayMs: options?.maxRetryDelayMs ?? PROVIDER_MAX_RETRY_DELAY_MS,
 			onPayload: (payload, payloadModel) => {
 				const requestPayload = normalizeProviderPayload(payload, payloadModel);
-				writePayloadLog(config, {
-					ts: new Date().toISOString(),
-					direction: "request",
-					sessionId,
-					sessionKey,
-					model: payloadModel.id,
-					payload: requestPayload,
-				});
+				if (config.data.payloads.enabled) {
+					writePayloadLog(config, {
+						ts: new Date().toISOString(),
+						direction: "request",
+						sessionId,
+						sessionKey,
+						model: payloadModel.id,
+						payload: requestPayload,
+					});
+				}
 				return requestPayload;
 			},
 			onResponse: (response, responseModel) => {

@@ -200,6 +200,9 @@ retention_days = 30
 retention_days = 0
 
 [data.payloads]
+# Logs every full provider request for `npm run payload:pretty`. Each request re-serializes the whole
+# context, which is heavy on small hosts; response status and headers are always logged.
+enabled = false
 retention_days = 7
 
 [media.understanding.audio]

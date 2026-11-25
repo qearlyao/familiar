@@ -584,6 +584,7 @@ export async function loadConfig(workspacePathInput: string): Promise<Config> {
 				retentionDays: readInteger(dataTranscripts.retention_days, 0, "data.transcripts.retention_days"),
 			},
 			payloads: {
+				enabled: readBoolean(dataPayloads.enabled, false, "data.payloads.enabled"),
 				retentionDays: readInteger(dataPayloads.retention_days, 7, "data.payloads.retention_days"),
 			},
 		},

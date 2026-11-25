@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -12,15 +13,43 @@ function dailyLogPath(dataDir: string, streamName: "payloads" | "transcripts", n
 	return resolve(dataDir, streamName, `${date}.jsonl`);
 }
 
-async function appendJsonl(path: string, record: unknown): Promise<void> {
+type JsonReplacer = (key: string, value: unknown) => unknown;
+
+async function appendJsonl(path: string, record: unknown, replacer?: JsonReplacer): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
-	await appendFile(path, `${JSON.stringify(record)}\n`, "utf8");
+	await appendFile(path, `${JSON.stringify(record, replacer)}\n`, "utf8");
 }
 
+const BASE64_MIN_LENGTH = 1024;
+const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/;
+const BASE64_DATA_URL_PREFIX = /^data:[^;,]+;base64,/;
+
+/** a payload carries every image still in context, re-sent on every request; the log keeps a
+    fingerprint so diffs still see a changed image, without writing megabytes of it each time */
+function elideBase64(_key: string, value: unknown): unknown {
+	if (typeof value !== "string" || value.length < BASE64_MIN_LENGTH) return value;
+	const prefix = BASE64_DATA_URL_PREFIX.exec(value)?.[0] ?? "";
+	const body = value.slice(prefix.length);
+	if (!BASE64_BODY.test(body)) return value;
+	const bytes = Math.floor((body.replace(/=+$/, "").length * 3) / 4);
+	const digest = createHash("sha256").update(body).digest("hex").slice(0, 12);
+	return `${prefix}[base64 ${bytes} bytes sha256:${digest}]`;
+}
+
+// one record serialized at a time, so a burst of tool-loop requests never holds several
+// serialized contexts in memory at once
+let payloadWrites: Promise<void> = Promise.resolve();
+
 export function writePayloadLog(config: Config, record: Record<string, unknown>): void {
-	appendJsonl(dailyLogPath(config.workspace.dataDir, "payloads"), record).catch((err) =>
-		console.error("payload log write failed", err),
-	);
+	const path = dailyLogPath(config.workspace.dataDir, "payloads");
+	payloadWrites = payloadWrites
+		.then(() => appendJsonl(path, record, elideBase64))
+		.catch((err) => console.error("payload log write failed", err));
+}
+
+/** settles once every payload record queued so far is on disk */
+export function flushPayloadLog(): Promise<void> {
+	return payloadWrites;
 }
 
 export function writeTranscriptLog(config: Config, record: Record<string, unknown>): void {

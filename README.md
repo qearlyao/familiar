@@ -608,6 +608,18 @@ Use `familiar memory help` for the full list.
 
 ## Inspect Payloads
 
+Request payloads are only logged when you turn them on. Writing each one
+serializes the whole context again, which is heavy on small hosts:
+
+```toml
+[data.payloads]
+enabled = true
+```
+
+Base64 images and other long base64 strings are logged as a size and a short
+sha256, so `--diff` still flags a changed image. Response status and headers
+are always logged.
+
 Pretty-print the latest provider request that Familiar sent from a source
 checkout:
 

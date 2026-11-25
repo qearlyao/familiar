@@ -172,7 +172,7 @@ describe("loadConfig tts", () => {
 		assert.deepEqual(config.data, {
 			chat: { retentionDays: 30 },
 			transcripts: { retentionDays: 0 },
-			payloads: { retentionDays: 7 },
+			payloads: { enabled: false, retentionDays: 7 },
 		});
 		assert.deepEqual(config.heartbeat, {
 			enabled: false,
@@ -1370,6 +1370,7 @@ retention_days = 14
 retention_days = 30
 
 [data.payloads]
+enabled = true
 retention_days = 3
 `),
 		);
@@ -1379,7 +1380,7 @@ retention_days = 3
 		assert.deepEqual(config.data, {
 			chat: { retentionDays: 14 },
 			transcripts: { retentionDays: 30 },
-			payloads: { retentionDays: 3 },
+			payloads: { enabled: true, retentionDays: 3 },
 		});
 	});
 

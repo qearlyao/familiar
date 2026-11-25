@@ -193,6 +193,8 @@ export interface Config {
 			retentionDays: number;
 		};
 		payloads: {
+			/** full request bodies; off by default since each one re-serializes the whole context */
+			enabled: boolean;
 			retentionDays: number;
 		};
 	};

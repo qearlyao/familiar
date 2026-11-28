@@ -181,8 +181,8 @@ describe("MemoryService", () => {
 				assert.equal(messages.length, 1);
 				assert.equal(messages[0]?.role, "user");
 				await service.flush();
-				// the turn's own record is indexed; ambient retrieval would add a query embedding
-				assert.equal(embeddingCalls, 1);
+				// the turn's own record is indexed keyword-only; ambient retrieval would add a query embedding
+				assert.equal(embeddingCalls, 0);
 			});
 		} finally {
 			globalThis.fetch = previousFetch;

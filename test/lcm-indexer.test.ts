@@ -88,7 +88,7 @@ describe("LCM indexer", () => {
 			const result = await indexLcmSummaries({ indexer, summaries: lcmStore.listSummaries() });
 
 			assert.deepEqual(result.ids.length, 1);
-			assert.equal(result.embedded, 1);
+			assert.equal(result.embedded, 0);
 			const hits = memoryStore.searchLexical("compact", { corpus: LCM_SUMMARY_CORPUS, limit: 10 });
 			assert.equal(hits.length, 1);
 			assert.equal(hits[0]?.chunk.sourceId, lcmSummaryIndexSourceId(readyId));
@@ -167,12 +167,11 @@ describe("LCM indexer", () => {
 				records: [userRecord, visibleAssistant, planningOnlyAssistant, toolResult, quotedThinking],
 			});
 
-			assert.equal(result.embedded, 3);
-			assert.deepEqual(provider.batches[0], [
-				"noooo, it's called Stargazy pie",
-				"Stargazy pie is Cornish and tied to Mousehole.",
-				"[thinking] is a literal tag I want to discuss, not an internal block.",
-			]);
+			assert.equal(result.ids.length, 3);
+			assert.equal(result.embedded, 0);
+			assert.deepEqual(provider.batches, []);
+			assert.equal(memoryStore.stats().vectorRows, 0);
+			assert.deepEqual(memoryStore.searchSemantic(new Float32Array([1, 0, 0]), { corpus: LCM_RECORD_CORPUS }), []);
 			assert.equal(memoryStore.searchLexical("Mousehole", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 1);
 			assert.equal(memoryStore.searchLexical("planning", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
 			assert.equal(memoryStore.searchLexical("tool_call", { corpus: LCM_RECORD_CORPUS, limit: 10 }).length, 0);
@@ -224,6 +223,7 @@ describe("LCM indexer", () => {
 			const summary = lcmStore.getSummary(summaryId);
 			assert.ok(summary);
 			await indexLcmSummaries({ indexer, summaries: [summary] });
+			assert.deepEqual(provider.batches, []);
 
 			const summaryHit = memoryStore.searchLexical("coverage", { corpus: LCM_SUMMARY_CORPUS, limit: 10 })[0];
 			assert.equal(summaryHit?.chunk.metadata?.coverageFromHappenedAt, "2026-05-10T01:00:00.000Z");

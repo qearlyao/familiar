@@ -318,7 +318,7 @@ function findEmbeddingMismatches(stores: DoctorStores, findings: DoctorFinding[]
 		.prepare(
 			`SELECT id, corpus, embedding_model, embedding_dimensions
 			 FROM memory_chunks
-			 WHERE embedding_model != ? OR embedding_dimensions != ?
+			 WHERE embedding_dimensions > 0 AND (embedding_model != ? OR embedding_dimensions != ?)
 			 ORDER BY id`,
 		)
 		.all(current.model, current.dimensions) as Array<{

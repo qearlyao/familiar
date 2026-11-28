@@ -2,6 +2,7 @@ import type { ChunkIndexer, ChunkIndexResult, MemoryChunkIndexInput } from "../i
 import { lcmRecordIndexSourceId, lcmSummaryIndexSourceId } from "./store.js";
 import type { LcmRecordPart, StoredLcmRecord, StoredLcmSummary } from "./types.js";
 
+// Conversation memory is keyword-only: LCM already keeps it in context, so recall only needs its words.
 export const LCM_RECORD_CORPUS = "lcm_record";
 export const LCM_SUMMARY_CORPUS = "lcm_summary";
 
@@ -43,6 +44,7 @@ export function lcmRecordToIndexInput(record: StoredLcmRecord): MemoryChunkIndex
 		chunkIndex: 0,
 		text,
 		snippet: lcmRecordSnippet(record),
+		lexicalOnly: true,
 		metadata: {
 			id: record.id,
 			kind: record.kind,
@@ -68,6 +70,7 @@ export function lcmSummaryToIndexInput(summary: StoredLcmSummary): MemoryChunkIn
 		chunkIndex: 0,
 		text,
 		snippet: lcmSummarySnippet(summary),
+		lexicalOnly: true,
 		metadata: {
 			id: summary.id,
 			segmentId: summary.segmentId,

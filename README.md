@@ -589,6 +589,11 @@ with:
 familiar memory reindex --force
 ```
 
+Conversation memory (raw LCM turns and summaries) is indexed for keyword search
+only; diaries and notes are embedded. Conversation chunks from older installs
+keep their vectors until `familiar memory reindex --corpus lcm_record` and
+`familiar memory reindex --corpus lcm_summary` rebuild them keyword-only.
+
 Reindexing is resumable. If the process is interrupted or an embedding request
 fails, rerun the same command with the same corpus scope and embedding config.
 Familiar reuses completed embeddings and requests only the unfinished work.

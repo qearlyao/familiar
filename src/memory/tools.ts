@@ -28,7 +28,8 @@ const memoryRecallSchema = Type.Object(
 		mode: Type.Optional(
 			Type.Union([Type.Literal("lexical"), Type.Literal("semantic"), Type.Literal("hybrid")], {
 				default: "hybrid",
-				description: "hybrid uses lexical and semantic recall; lexical and semantic restrict to one mode.",
+				description:
+					"hybrid uses lexical and semantic recall; lexical and semantic restrict to one mode. conversation memory matches by its words only, so semantic alone never returns it.",
 			}),
 		),
 		before: Type.Optional(

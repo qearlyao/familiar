@@ -19,7 +19,8 @@ export interface MemoryChunkInput {
 	snippet?: string;
 	tokenCount?: number | null;
 	metadata?: Record<string, unknown> | null;
-	embedding: Float32Array;
+	/** omitted for lexical-only chunks: FTS row only, no vector, never a semantic hit */
+	embedding?: Float32Array;
 }
 
 export interface StoredMemoryChunk {
@@ -189,6 +190,15 @@ export class MemoryIndexStore {
 		};
 	}
 
+	contentHash(corpus: string, text: string, embedded: boolean): string {
+		return createMemoryContentHash({
+			corpus,
+			text,
+			embeddingModel: embedded ? this.embeddingModel : "",
+			embeddingDimensions: embedded ? this.embeddingDimensions : 0,
+		});
+	}
+
 	insertChunk(input: MemoryChunkInput): number {
 		return this.insertChunks([input])[0] as number;
 	}
@@ -321,9 +331,8 @@ export class MemoryIndexStore {
 		normalized: { limit: number; corpus?: string },
 	): MemorySearchHit[] {
 		const stmt = this.db.prepare(
-			normalized.corpus
-				? `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c WHERE c.corpus = ?`
-				: `SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c`,
+			`SELECT c.*, ${sourcesJsonSelect("c.id")} FROM memory_chunks c
+			 WHERE c.embedding_dimensions > 0 ${normalized.corpus ? "AND c.corpus = ?" : ""}`,
 		);
 		const best: MemorySearchHit[] = [];
 		for (const row of stmt.iterate(
@@ -516,7 +525,7 @@ export class MemoryIndexStore {
 			.get() as { bytes: number };
 		const dimensionsRaw = readMeta(this.db, "embedding_dimensions");
 		const vectorCapability = this.vectorCapability();
-		const vectorRows = vectorCapability === "sqlite-vec" ? this.vectorRowCount() : indexed;
+		const vectorRows = vectorCapability === "sqlite-vec" ? this.vectorRowCount() : this.embeddedChunkCount();
 		return {
 			indexed,
 			ftsRows,
@@ -535,6 +544,11 @@ export class MemoryIndexStore {
 		return this.vectorCapabilityValue;
 	}
 
+	private embeddedChunkCount(): number {
+		const row = this.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks WHERE embedding_dimensions > 0").get();
+		return (row as { n: number }).n;
+	}
+
 	private vectorRowCount(): number {
 		try {
 			const row = this.db.prepare("SELECT COUNT(*) AS n FROM memory_vec").get() as { n: number };
@@ -545,7 +559,7 @@ export class MemoryIndexStore {
 	}
 
 	private normalizeInput(input: MemoryChunkInput): NormalizedChunkInput {
-		if (input.embedding.length !== this.embeddingDimensions) {
+		if (input.embedding && input.embedding.length !== this.embeddingDimensions) {
 			throw new Error(
 				`Embedding dimension mismatch: expected ${this.embeddingDimensions}, got ${input.embedding.length}`,
 			);
@@ -564,12 +578,7 @@ export class MemoryIndexStore {
 			tokenCount: input.tokenCount ?? null,
 			metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
 			embedding: input.embedding,
-			contentHash: createMemoryContentHash({
-				corpus: input.corpus,
-				text,
-				embeddingModel: this.embeddingModel,
-				embeddingDimensions: this.embeddingDimensions,
-			}),
+			contentHash: this.contentHash(input.corpus, text, input.embedding !== undefined),
 		};
 	}
 
@@ -598,13 +607,13 @@ export class MemoryIndexStore {
 			item.snippet,
 			item.tokenCount,
 			item.metadataJson,
-			this.embeddingModel,
-			this.embeddingDimensions,
-			encodeVector(item.embedding),
+			item.embedding ? this.embeddingModel : "",
+			item.embedding ? this.embeddingDimensions : 0,
+			item.embedding ? encodeVector(item.embedding) : Buffer.alloc(0),
 		);
 		const id = Number(result.lastInsertRowid);
 		this.insertFtsStmt.run(id, item.text, item.snippet);
-		if (this.vectorCapability() === "sqlite-vec") {
+		if (item.embedding && this.vectorCapability() === "sqlite-vec") {
 			this.insertMemoryVecStmt.run(id, encodeVector(item.embedding));
 		}
 		knownIds.set(item.contentHash, id);
@@ -657,7 +666,7 @@ interface NormalizedChunkInput {
 	snippet: string;
 	tokenCount: number | null;
 	metadataJson: string | null;
-	embedding: Float32Array;
+	embedding: Float32Array | undefined;
 }
 
 export function createMemoryContentHash(input: {

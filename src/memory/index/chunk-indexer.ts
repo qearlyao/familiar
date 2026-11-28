@@ -1,5 +1,5 @@
 import type { EmbeddingInput, EmbeddingProvider } from "./embedding-provider.js";
-import { createMemoryContentHash, type MemoryChunkInput, type MemoryIndexStore } from "./store.js";
+import type { MemoryChunkInput, MemoryIndexStore } from "./store.js";
 
 export interface MemoryChunkIndexInput {
 	corpus: string;
@@ -11,6 +11,8 @@ export interface MemoryChunkIndexInput {
 	tokenCount?: number | null;
 	metadata?: Record<string, unknown> | null;
 	embedding?: Float32Array;
+	/** keyword-searchable only: stored without a vector, so indexing costs no embedding request */
+	lexicalOnly?: boolean;
 }
 
 export interface ChunkIndexerOptions {
@@ -73,28 +75,20 @@ export class ChunkIndexer {
 	}
 
 	private prepare(inputs: MemoryChunkIndexInput[]): PreparedChunk[] {
-		const embeddingConfig = this.store.embeddingConfig();
-
 		const prepared: PreparedChunk[] = [];
 		for (const input of inputs) {
 			const text = input.text.trim();
 			if (!text) continue;
 			const chunkIndex = input.chunkIndex ?? 0;
 			const sourceId = input.sourceId ?? null;
-			const contentHash = createMemoryContentHash({
-				corpus: input.corpus,
-				text,
-				embeddingModel: embeddingConfig.model,
-				embeddingDimensions: embeddingConfig.dimensions,
-			});
 			prepared.push({
 				input,
 				text,
 				chunkIndex,
 				sourceId,
-				contentHash,
+				contentHash: this.store.contentHash(input.corpus, text, !input.lexicalOnly),
 				existingId: null,
-				embedding: input.embedding,
+				embedding: input.lexicalOnly ? undefined : input.embedding,
 			});
 		}
 		return prepared;
@@ -120,6 +114,7 @@ export class ChunkIndexer {
 		const pendingEmbeddings = new Map<string, PreparedChunk>();
 		const suppliedByHash = new Map<string, Float32Array>();
 		for (const item of prepared) {
+			if (item.input.lexicalOnly) continue;
 			if (item.embedding) {
 				suppliedByHash.set(item.contentHash, item.embedding);
 				pendingEmbeddings.delete(item.contentHash);
@@ -179,12 +174,16 @@ export class ChunkIndexer {
 					snippet: item.input.snippet,
 					tokenCount: item.input.tokenCount ?? null,
 					metadata: item.input.metadata ?? null,
-					embedding: item.embedding ?? new Float32Array(this.store.embeddingConfig().dimensions),
+					embedding: item.input.lexicalOnly
+						? undefined
+						: (item.embedding ?? new Float32Array(this.store.embeddingConfig().dimensions)),
 				});
 				continue;
 			}
-			const embedding = item.embedding ?? embeddedByHash.get(item.contentHash);
-			if (!embedding) throw new Error("Missing embedding for memory chunk");
+			const embedding = item.input.lexicalOnly
+				? undefined
+				: (item.embedding ?? embeddedByHash.get(item.contentHash));
+			if (!item.input.lexicalOnly && !embedding) throw new Error("Missing embedding for memory chunk");
 			insertPositions.push(resultIndex);
 			insertKnownMissing.add(item.contentHash);
 			toInsert.push({

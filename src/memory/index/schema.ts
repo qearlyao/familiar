@@ -130,7 +130,9 @@ function reconcileVectorTable(
 			}
 			if (previousCapability === "blob-js") {
 				db.prepare("DELETE FROM memory_vec").run();
-				db.prepare("INSERT INTO memory_vec(rowid, embedding) SELECT id, embedding FROM memory_chunks").run();
+				db.prepare(
+					"INSERT INTO memory_vec(rowid, embedding) SELECT id, embedding FROM memory_chunks WHERE embedding_dimensions > 0",
+				).run();
 			}
 			// Virtual tables cannot own FK constraints, so this mirrors ON DELETE
 			// CASCADE for direct memory_chunks deletes while sqlite-vec is loaded.

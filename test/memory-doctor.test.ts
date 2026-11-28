@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -44,6 +44,12 @@ function insertRecord(service: ReturnType<typeof MemoryService.createWithoutRunt
 		happenedAt: "2026-05-10T01:00:00.000Z",
 		source: source(text),
 	});
+}
+
+// Notes stay embedded, so they carry the reindex embedding-batch tests; one note file is one embed call.
+async function writeNote(config: Awaited<ReturnType<typeof tempConfig>>, name: string, text: string): Promise<void> {
+	await mkdir(config.memory.notesDir, { recursive: true });
+	await writeFile(resolve(config.memory.notesDir, `${name}.md`), `${text}\n`, "utf8");
 }
 
 function indexChunk(service: ReturnType<typeof MemoryService.createWithoutRuntime>, corpus: string, sourceId: string): number {
@@ -217,20 +223,23 @@ describe("memory doctor and operator", () => {
 		}
 	});
 
-	it("reindexes LCM records", async (t) => {
+	it("reindexes LCM records keyword-only, without embedding requests", async (t) => {
 		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			for (let index = 0; index < 5; index++) insertRecord(service, "seg-reindex", `record ${index}`);
 
-			await __memoryOperatorTest.reindex(config, service, { corpus: "lcm_record", force: false }, new FakeEmbeddingProvider());
+			const provider = new FakeEmbeddingProvider();
+			await __memoryOperatorTest.reindex(config, service, { corpus: "lcm_record", force: false }, provider);
 
 			const rows = service.memoryStore.db
-				.prepare("SELECT corpus, embedding_model FROM memory_chunks ORDER BY id")
-				.all() as Array<{ corpus: string; embedding_model: string }>;
+				.prepare("SELECT corpus, embedding_dimensions FROM memory_chunks ORDER BY id")
+				.all() as Array<{ corpus: string; embedding_dimensions: number }>;
 			assert.equal(rows.length, 5);
 			assert.ok(rows.every((row) => row.corpus === "lcm_record"));
-			assert.ok(rows.every((row) => row.embedding_model === "fake-embedding"));
+			assert.ok(rows.every((row) => row.embedding_dimensions === 0));
+			assert.deepEqual(provider.batches, []);
+			assert.equal(service.memoryStore.searchLexical("record", { corpus: "lcm_record" }).length, 5);
 		} finally {
 			service.close();
 		}
@@ -241,6 +250,7 @@ describe("memory doctor and operator", () => {
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
 			insertRecord(service, "seg-reindex-flag", "record to reindex");
+			await writeNote(config, "flag", "note to reindex");
 			service.memoryStore.db
 				.prepare("INSERT OR REPLACE INTO memory_meta(k, v) VALUES ('requires_reindex', '1')")
 				.run();
@@ -273,7 +283,7 @@ describe("memory doctor and operator", () => {
 		const config = await tempConfig(t, 2);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
-			for (let index = 0; index < 5; index++) insertRecord(service, "seg-resume", `record ${index}`);
+			for (let index = 0; index < 5; index++) await writeNote(config, `resume-${index}`, `resume note ${index}`);
 			const firstProvider = new FakeEmbeddingProvider();
 			const embed = firstProvider.embed.bind(firstProvider);
 			let calls = 0;
@@ -287,7 +297,7 @@ describe("memory doctor and operator", () => {
 				__memoryOperatorTest.reindex(config, service, { force: true }, firstProvider),
 				/second batch failed/,
 			);
-			assert.equal((service.memoryStore.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 2);
+			assert.equal((service.memoryStore.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n, 1);
 			assert.ok(
 				service.memoryStore.db.prepare("SELECT v FROM memory_meta WHERE k = 'reindex_in_progress'").get(),
 			);
@@ -295,21 +305,21 @@ describe("memory doctor and operator", () => {
 				__memoryOperatorTest.reindex(
 					config,
 					service,
-					{ corpus: "lcm_record", force: true },
+					{ corpus: "note", force: true },
 					new FakeEmbeddingProvider(),
 				),
 				/different reindex is already in progress/,
 			);
 			assert.equal(
 				(service.memoryStore.db.prepare("SELECT COUNT(*) AS n FROM memory_chunks").get() as { n: number }).n,
-				2,
+				1,
 			);
 
 			const resumedProvider = new FakeEmbeddingProvider();
 			await __memoryOperatorTest.reindex(config, service, { force: true }, resumedProvider);
 			assert.deepEqual(
 				resumedProvider.batches.map((batch) => batch.length),
-				[2, 1],
+				[1, 1, 1, 1],
 			);
 			assert.equal(
 				service.memoryStore.db.prepare("SELECT v FROM memory_meta WHERE k = 'reindex_in_progress'").get(),
@@ -320,7 +330,7 @@ describe("memory doctor and operator", () => {
 			await __memoryOperatorTest.reindex(config, service, { force: true }, nextProvider);
 			assert.deepEqual(
 				nextProvider.batches.map((batch) => batch.length),
-				[2, 2, 1],
+				[1, 1, 1, 1, 1],
 			);
 		} finally {
 			service.close();
@@ -331,7 +341,7 @@ describe("memory doctor and operator", () => {
 		const config = await tempConfig(t, 2);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
-			for (let index = 0; index < 3; index++) insertRecord(service, "seg-restart", `restart ${index}`);
+			for (let index = 0; index < 3; index++) await writeNote(config, `restart-${index}`, `restart note ${index}`);
 			const failingProvider = new FakeEmbeddingProvider();
 			const embed = failingProvider.embed.bind(failingProvider);
 			let calls = 0;
@@ -350,7 +360,7 @@ describe("memory doctor and operator", () => {
 			await __memoryOperatorTest.reindex(config, service, { force: true, restart: true }, restartedProvider);
 			assert.deepEqual(
 				restartedProvider.batches.map((batch) => batch.length),
-				[2, 1],
+				[1, 1, 1],
 			);
 		} finally {
 			service.close();
@@ -361,7 +371,7 @@ describe("memory doctor and operator", () => {
 		const config = await tempConfig(t);
 		const service = MemoryService.createWithoutRuntime(config);
 		try {
-			insertRecord(service, "seg-concurrent", "concurrent record");
+			await writeNote(config, "concurrent", "concurrent note");
 			const provider = new FakeEmbeddingProvider();
 			const embed = provider.embed.bind(provider);
 			let releaseBatch: () => void = () => {};

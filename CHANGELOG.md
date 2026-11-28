@@ -5,6 +5,7 @@
 ### Changed
 
 - Index conversation memory (raw LCM turns and summaries) for keyword search only, so recording a turn or a summary no longer sends an embedding request. Diaries and notes are still embedded for ambient and semantic recall. Older installs keep their conversation vectors until `familiar memory reindex --corpus lcm_record` and `--corpus lcm_summary` rebuild them.
+- Read meme links from any image host. Each line in the memes skill is now `name — link` with a full URL (an em dash, en dash, or hyphen works), instead of a catbox suffix. Existing workspaces keep their seeded memes skill, so its lines need the `https://files.catbox.moe/` prefix added.
 - Stop logging provider request payloads by default. Writing each one serialized the whole context again, which could run Node out of memory on small hosts. Set `enabled = true` under `[data.payloads]` to turn them back on for `npm run payload:pretty`. When on, base64 images are logged as a size and a short sha256, and records are written one at a time. Response status and headers are still always logged.
 
 ## 1.6.3 - 2026-11-25

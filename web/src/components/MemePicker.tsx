@@ -48,6 +48,8 @@ export function StickerPanel({ onPick, onClose }: { onPick: (meme: Meme) => void
         <p className="sticker-empty">{error}</p>
       ) : !families ? (
         <p className="sticker-empty">opening the drawer…</p>
+      ) : families.length === 0 ? (
+        <p className="sticker-empty">the drawer's empty — add "name — link" lines under a ## heading in the memes skill</p>
       ) : (
         <>
           <div className="sticker-filters">

@@ -12,6 +12,9 @@ export interface WebMemeFamily {
 	memes: WebMeme[];
 }
 
+// `- name — https://any.host/image.png`; an em dash, en dash, or plain hyphen separates name from link.
+const MEME_LINE_RE = /^- (.+?)\s+[—–-]\s+(https?:\/\/\S+)\s*$/;
+
 export function parseMemeCatalog(markdown: string): WebMemeFamily[] {
 	const families: WebMemeFamily[] = [];
 	let currentFamily: WebMemeFamily | undefined;
@@ -22,14 +25,11 @@ export function parseMemeCatalog(markdown: string): WebMemeFamily[] {
 			families.push(currentFamily);
 			continue;
 		}
-		if (!currentFamily || !line.startsWith("- ") || !line.includes(" — ")) continue;
-		const separator = line.indexOf(" — ");
-		const name = line.slice(2, separator).trim();
-		const suffix = line.slice(separator + " — ".length).trim();
-		if (!name || !suffix) continue;
-		currentFamily.memes.push({ name, url: `https://files.catbox.moe/${suffix}` });
+		const memeMatch = currentFamily ? line.trim().match(MEME_LINE_RE) : null;
+		if (!currentFamily || !memeMatch) continue;
+		currentFamily.memes.push({ name: (memeMatch[1] as string).trim(), url: memeMatch[2] as string });
 	}
-	return families;
+	return families.filter((family) => family.memes.length > 0);
 }
 
 export function memeCatalogPath(config: Config): string {
